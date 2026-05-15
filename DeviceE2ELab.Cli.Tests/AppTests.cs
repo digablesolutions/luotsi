@@ -321,6 +321,24 @@ public sealed class AppTests
         Assert.Equal(["pull", "/mnt/shell/emulated/0/device-e2e-fixed-recording-id.mp4", "capture.mp4"], adb.RunCommands[0]);
     }
 
+    [Fact]
+    public async Task RunAsync_WaitLog_Uses_Logcat_Failure_Instead_Of_Timeout()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        var console = new FakeConsole();
+        adb.EnqueueLogResult(new AdbLogStreamResult("ready", string.Empty, null, 0, 15, timeProvider.GetUtcNow(), "adb logcat", 1, "device offline"));
+        var app = new App(timeProvider, fileSystem, new DefaultProcessRunner(), new FakeDelay(timeProvider), new FakeAdbClientFactory(adb), console);
+
+        var exitCode = await app.RunAsync(["wait-log", "--contains", "ready", "--artifacts", "/tmp/test-artifacts"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal("configuration_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("device offline", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
     private static string CreateUiDump(string text) =>
         $"<hierarchy><node text=\"{text}\" content-desc=\"\" resource-id=\"id/{text}\" class=\"android.widget.TextView\" enabled=\"true\" clickable=\"false\" bounds=\"[0,0][100,100]\" /></hierarchy>";
 }
@@ -414,6 +432,7 @@ internal sealed class FakeAdbClient : IAdbClient
     private readonly Queue<ProcessResult> _shellResults = new();
     private readonly Queue<ProcessResult> _runResults = new();
     private readonly Queue<string[]> _logLines = new();
+    private readonly Queue<AdbLogStreamResult> _logResults = new();
 
     public List<string> ShellCommands { get; } = [];
 
@@ -426,6 +445,8 @@ internal sealed class FakeAdbClient : IAdbClient
     public void EnqueueRunResult(ProcessResult result) => _runResults.Enqueue(result);
 
     public void EnqueueLogLines(params string[] lines) => _logLines.Enqueue(lines);
+
+    public void EnqueueLogResult(AdbLogStreamResult result) => _logResults.Enqueue(result);
 
     public Task<AdbCommandResult> RunAsync(IEnumerable<string> args, CancellationToken cancellationToken = default)
     {
@@ -445,6 +466,11 @@ internal sealed class FakeAdbClient : IAdbClient
     public Task<AdbLogStreamResult> MonitorLogAsync(string containsText, DateTimeOffset since, int timeoutSec, CancellationToken cancellationToken = default)
     {
         LogRequests.Add((containsText, since, timeoutSec));
+        if (_logResults.Count > 0)
+        {
+            return Task.FromResult(_logResults.Dequeue());
+        }
+
         var lines = _logLines.Count > 0 ? _logLines.Dequeue() : [];
         var logOutput = string.Join(Environment.NewLine, lines);
         if (lines.Length > 0)
@@ -453,7 +479,7 @@ internal sealed class FakeAdbClient : IAdbClient
         }
 
         var matchedLine = lines.FirstOrDefault(line => line.Contains(containsText, StringComparison.OrdinalIgnoreCase));
-        return Task.FromResult(new AdbLogStreamResult(containsText, logOutput, matchedLine, lines.Length, timeoutSec, since, "adb logcat", string.Empty));
+        return Task.FromResult(new AdbLogStreamResult(containsText, logOutput, matchedLine, lines.Length, timeoutSec, since, "adb logcat", 0, string.Empty));
     }
 }
 

@@ -74,7 +74,7 @@ public sealed record AdbCommandResult(string Executable, string? Serial, IReadOn
         value.Any(static ch => char.IsWhiteSpace(ch) || ch == '"') ? $"\"{value.Replace("\"", "\\\"", StringComparison.Ordinal)}\"" : value;
 }
 
-public sealed record AdbLogStreamResult(string ContainsText, string LogOutput, string? MatchedLine, int LineCount, int TimeoutSec, DateTimeOffset Since, string Invocation, string Stderr);
+public sealed record AdbLogStreamResult(string ContainsText, string LogOutput, string? MatchedLine, int LineCount, int TimeoutSec, DateTimeOffset Since, string Invocation, int ExitCode, string Stderr);
 
 public sealed class TaskDelay(TimeProvider? timeProvider = null) : IDelay
 {

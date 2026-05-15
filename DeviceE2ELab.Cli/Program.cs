@@ -349,6 +349,7 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
             timeoutSec,
             since,
             string.Join(" ", [_executable, .. finalArgs]),
+            process.ExitCode,
             await stderrTask.ConfigureAwait(false));
     }
 
@@ -602,6 +603,11 @@ public sealed class DeviceRunner(
                 invocation = monitor.Invocation,
             }).ConfigureAwait(false);
 
+        if (monitor.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"adb logcat failed: {monitor.Stderr}".Trim());
+        }
+
         if (monitor.MatchedLine is null)
         {
             throw new LogWaitTimeoutException(text, timeoutSec);
@@ -762,7 +768,8 @@ public sealed class DeviceRunner(
         var target = _environment.GetEnvironmentVariable("DEVICE_E2E_EMULATED_STORAGE_TARGET")?.Trim();
         if (!string.IsNullOrWhiteSpace(source) &&
             !string.IsNullOrWhiteSpace(target) &&
-            normalized.StartsWith(target, StringComparison.Ordinal))
+            normalized.StartsWith(target, StringComparison.Ordinal) &&
+            (normalized.Length == target.Length || normalized[target.Length] == '/'))
         {
             return source + normalized[target.Length..];
         }
@@ -1081,6 +1088,7 @@ public sealed record ErrorInfo(string Type, string Message, string Category)
 
         if (message.Contains("not the foreground app", StringComparison.OrdinalIgnoreCase) ||
             message.Contains("not installed", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("device offline", StringComparison.OrdinalIgnoreCase) ||
             message.Contains("No such file or directory", StringComparison.OrdinalIgnoreCase) ||
             message.Contains("trying to start process", StringComparison.OrdinalIgnoreCase))
         {
