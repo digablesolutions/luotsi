@@ -1,7 +1,8 @@
-using System.Diagnostics;
+using System.Collections.Frozen;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Xml;
 using System.Xml.Linq;
 
 namespace DeviceE2ELab.Cli;
@@ -35,6 +36,21 @@ public sealed class App
         WriteIndented = false,
     };
 
+    private readonly TimeProvider _timeProvider;
+    private readonly IFileSystem _fileSystem;
+    private readonly IProcessRunner _processRunner;
+    private readonly IDelay _delay;
+    private readonly IAdbClientFactory _adbClientFactory;
+
+    public App(TimeProvider? timeProvider = null, IFileSystem? fileSystem = null, IProcessRunner? processRunner = null, IDelay? delay = null, IAdbClientFactory? adbClientFactory = null)
+    {
+        _timeProvider = timeProvider ?? TimeProvider.System;
+        _fileSystem = fileSystem ?? new PhysicalFileSystem();
+        _processRunner = processRunner ?? new DefaultProcessRunner();
+        _delay = delay ?? new TaskDelay(_timeProvider);
+        _adbClientFactory = adbClientFactory ?? new DefaultAdbClientFactory();
+    }
+
     /// <summary>
     /// Runs the command-line application.
     /// </summary>
@@ -42,7 +58,7 @@ public sealed class App
     /// <returns>The process exit code.</returns>
     public async Task<int> RunAsync(string[] args)
     {
-        var started = DateTimeOffset.UtcNow;
+        var started = _timeProvider.GetUtcNow();
         var options = CliOptions.Parse(args);
         if (options.Command is null || options.HasFlag("help") || options.HasFlag("h"))
         {
@@ -50,9 +66,10 @@ public sealed class App
             return options.HasFlag("help") || options.HasFlag("h") ? 0 : 2;
         }
 
-        var artifacts = ArtifactSession.Create(options);
-        var adb = new AdbClient(options.Get("adb") ?? Environment.GetEnvironmentVariable("DEVICE_E2E_ADB") ?? "adb", options.Get("device"));
-        var runner = new DeviceRunner(adb, artifacts);
+        var artifacts = ArtifactSession.Create(options, _fileSystem, _timeProvider);
+        var adb = _adbClientFactory.Create(options.Get("adb") ?? Environment.GetEnvironmentVariable("DEVICE_E2E_ADB") ?? "adb", options.Get("device"), _processRunner);
+        var runner = new DeviceRunner(adb, artifacts, _timeProvider, _delay, _fileSystem);
+        var scenarios = new ScenarioExecutor(runner, _fileSystem, _timeProvider, _delay);
 
         try
         {
@@ -68,21 +85,21 @@ public sealed class App
                 "keyevent" => await runner.KeyEventAsync(options.Require("code")).ConfigureAwait(false),
                 "logcat" => await runner.LogcatAsync(options.Int("tail", 200)).ConfigureAwait(false),
                 "record" => await runner.RecordAsync(options.Require("output"), options.Int("time-limit-sec", 30)).ConfigureAwait(false),
-                "run" => await runner.RunScenarioAsync(options.Require("file")).ConfigureAwait(false),
+                "run" => await scenarios.RunAsync(options.Require("file")).ConfigureAwait(false),
                 _ => throw new UsageException($"Unknown command '{options.Command}'."),
             };
 
-            WriteEnvelope(new CommandEnvelope(true, options.Command, started, DateTimeOffset.UtcNow, data, artifacts.ToData(), null));
+            WriteEnvelope(new CommandEnvelope(true, options.Command, started, _timeProvider.GetUtcNow(), data, artifacts.ToData(), null));
             return 0;
         }
         catch (UsageException ex)
         {
-            WriteEnvelope(new CommandEnvelope(false, options.Command, started, DateTimeOffset.UtcNow, null, artifacts.ToData(), ErrorInfo.From(ex, "usage_error")));
+            WriteEnvelope(new CommandEnvelope(false, options.Command, started, _timeProvider.GetUtcNow(), null, artifacts.ToData(), ErrorInfo.From(ex, "usage_error")));
             return 2;
         }
         catch (Exception ex)
         {
-            WriteEnvelope(new CommandEnvelope(false, options.Command, started, DateTimeOffset.UtcNow, null, artifacts.ToData(), ErrorInfo.From(ex, ErrorInfo.Classify(ex.Message))));
+            WriteEnvelope(new CommandEnvelope(false, options.Command, started, _timeProvider.GetUtcNow(), null, artifacts.ToData(), ErrorInfo.From(ex, ErrorInfo.Classify(ex.Message))));
             return 1;
         }
     }
@@ -98,6 +115,22 @@ public sealed class App
 /// </summary>
 public sealed class CliOptions
 {
+    private static readonly FrozenSet<string> KnownCommands =
+    new[]
+    {
+        "devices",
+        "preflight",
+        "screen-state",
+        "tap",
+        "tap-text",
+        "wait-visible",
+        "type-text",
+        "keyevent",
+        "logcat",
+        "record",
+        "run",
+    }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+
     private readonly Dictionary<string, string?> _values = new(StringComparer.OrdinalIgnoreCase);
 
     private CliOptions(string? command)
@@ -117,12 +150,17 @@ public sealed class CliOptions
     /// <returns>Parsed options.</returns>
     public static CliOptions Parse(string[] args)
     {
-        var command = args.FirstOrDefault(static a => !a.StartsWith("-", StringComparison.Ordinal));
+        var command = args.FirstOrDefault(static a => KnownCommands.Contains(a));
         var parsed = new CliOptions(command);
 
-        for (var i = command is null ? 0 : 1; i < args.Length; i++)
+        for (var i = 0; i < args.Length; i++)
         {
             var token = args[i];
+            if (string.Equals(token, command, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             if (!token.StartsWith("-", StringComparison.Ordinal))
             {
                 continue;
@@ -183,10 +221,11 @@ public sealed class CliOptions
 /// <summary>
 /// Executes ADB commands with stdout and stderr captured separately.
 /// </summary>
-public sealed class AdbClient(string executable, string? serial)
+public sealed class AdbClient(string executable, string? serial, IProcessRunner processRunner) : IAdbClient
 {
     private readonly string _executable = string.IsNullOrWhiteSpace(executable) ? throw new ArgumentException("ADB executable is required.", nameof(executable)) : executable;
     private readonly string? _serial = string.IsNullOrWhiteSpace(serial) ? null : serial;
+    private readonly IProcessRunner _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
 
     /// <summary>
     /// Runs adb and captures the result.
@@ -204,7 +243,7 @@ public sealed class AdbClient(string executable, string? serial)
         }
 
         finalArgs.AddRange(args);
-        return await ProcessRunner.RunAsync(_executable, finalArgs, cancellationToken).ConfigureAwait(false);
+        return await _processRunner.RunAsync(_executable, finalArgs, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -220,10 +259,13 @@ public sealed class AdbClient(string executable, string? serial)
 /// <summary>
 /// Device operation facade used by the command handlers.
 /// </summary>
-public sealed class DeviceRunner(AdbClient adb, ArtifactSession artifacts)
+public sealed class DeviceRunner(IAdbClient adb, ArtifactSession artifacts, TimeProvider? timeProvider = null, IDelay? delay = null, IFileSystem? fileSystem = null) : IScenarioActionHost
 {
-    private readonly AdbClient _adb = adb ?? throw new ArgumentNullException(nameof(adb));
+    private readonly IAdbClient _adb = adb ?? throw new ArgumentNullException(nameof(adb));
     private readonly ArtifactSession _artifacts = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+    private readonly IDelay _delay = delay ?? new TaskDelay(timeProvider);
+    private readonly IFileSystem _fileSystem = fileSystem ?? new PhysicalFileSystem();
 
     /// <summary>
     /// Lists connected devices.
@@ -283,14 +325,47 @@ public sealed class DeviceRunner(AdbClient adb, ArtifactSession artifacts)
     public async Task<ScreenState> GetScreenStateAsync()
     {
         var xml = await DumpUiAsync().ConfigureAwait(false);
-        var doc = XDocument.Parse(xml);
+        await _artifacts.WriteTextAsync("hierarchy.xml", xml).ConfigureAwait(false);
+
+        XDocument doc;
+        try
+        {
+            doc = XDocument.Parse(xml);
+        }
+        catch (Exception ex) when (ex is XmlException || ex is InvalidOperationException)
+        {
+            await _artifacts.WriteTextAsync("hierarchy-invalid.xml", xml).ConfigureAwait(false);
+            throw new InvalidOperationException("UI hierarchy dump was empty or invalid XML. See hierarchy-invalid.xml for the raw dump.", ex);
+        }
+
         var elements = doc.Descendants("node")
             .Select(static node => ScreenElement.From(node))
             .Where(static element => element.IsUseful)
             .ToArray();
-        var state = new ScreenState(DateTimeOffset.UtcNow, elements.Length, elements);
+        var state = new ScreenState(_timeProvider.GetUtcNow(), elements.Length, elements);
         await _artifacts.WriteJsonAsync("screen-state.json", state).ConfigureAwait(false);
-        await _artifacts.WriteTextAsync("hierarchy.xml", xml).ConfigureAwait(false);
+        return state;
+    }
+
+    private async Task<ScreenState> CaptureScreenStateAsync(string? snapshotPrefix)
+    {
+        var state = await GetScreenStateAsync().ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(snapshotPrefix))
+        {
+            return state;
+        }
+
+        var screenStatePath = Path.Combine(_artifacts.Root, "screen-state.json");
+        var hierarchyPath = Path.Combine(_artifacts.Root, "hierarchy.xml");
+        _fileSystem.CopyFile(screenStatePath, Path.Combine(_artifacts.Root, $"{snapshotPrefix}-screen-state.json"), true);
+        _fileSystem.CopyFile(hierarchyPath, Path.Combine(_artifacts.Root, $"{snapshotPrefix}-hierarchy.xml"), true);
+
+        var invalidHierarchyPath = Path.Combine(_artifacts.Root, "hierarchy-invalid.xml");
+        if (_fileSystem.FileExists(invalidHierarchyPath))
+        {
+            _fileSystem.CopyFile(invalidHierarchyPath, Path.Combine(_artifacts.Root, $"{snapshotPrefix}-hierarchy-invalid.xml"), true);
+        }
+
         return state;
     }
 
@@ -302,18 +377,20 @@ public sealed class DeviceRunner(AdbClient adb, ArtifactSession artifacts)
     /// <returns>Matched element.</returns>
     public async Task<ScreenElement> WaitVisibleAsync(string text, int timeoutSec)
     {
-        var deadline = DateTimeOffset.UtcNow.AddSeconds(timeoutSec);
+        var deadline = _timeProvider.GetUtcNow().AddSeconds(timeoutSec);
         ScreenElement? last = null;
-        while (DateTimeOffset.UtcNow < deadline)
+        var attempt = 0;
+        while (_timeProvider.GetUtcNow() < deadline)
         {
-            var state = await GetScreenStateAsync().ConfigureAwait(false);
+            attempt++;
+            var state = await CaptureScreenStateAsync($"wait-visible-{attempt:000}").ConfigureAwait(false);
             last = state.Elements.FirstOrDefault(e => e.Matches(text));
             if (last is not null)
             {
                 return last;
             }
 
-            await Task.Delay(500).ConfigureAwait(false);
+            await _delay.DelayAsync(500).ConfigureAwait(false);
         }
 
         throw new TimeoutException($"Timed out after {timeoutSec}s waiting for visible text '{text}'. Last seen: {last?.StableId ?? "none"}");
@@ -339,9 +416,19 @@ public sealed class DeviceRunner(AdbClient adb, ArtifactSession artifacts)
     /// <returns>Tap data.</returns>
     public async Task<object> TapAsync(string x, string y)
     {
-        var result = await _adb.ShellAsync($"input tap {int.Parse(x)} {int.Parse(y)}").ConfigureAwait(false);
+        if (!int.TryParse(x, out var parsedX))
+        {
+            throw new UsageException("Option --x must be an integer.");
+        }
+
+        if (!int.TryParse(y, out var parsedY))
+        {
+            throw new UsageException("Option --y must be an integer.");
+        }
+
+        var result = await _adb.ShellAsync($"input tap {parsedX} {parsedY}").ConfigureAwait(false);
         result.EnsureSuccess("tap failed");
-        return new { x = int.Parse(x), y = int.Parse(y) };
+        return new { x = parsedX, y = parsedY };
     }
 
     /// <summary>
@@ -400,34 +487,6 @@ public sealed class DeviceRunner(AdbClient adb, ArtifactSession artifacts)
         return new { output, time_limit_sec = clamped };
     }
 
-    /// <summary>
-    /// Runs a JSON scenario playbook.
-    /// </summary>
-    /// <param name="file">Scenario file path.</param>
-    /// <returns>Scenario result.</returns>
-    public async Task<object> RunScenarioAsync(string file)
-    {
-        var scenario = JsonSerializer.Deserialize<ScenarioFile>(await File.ReadAllTextAsync(file).ConfigureAwait(false), AppJson.Options)
-            ?? throw new UsageException($"Scenario file '{file}' was empty.");
-        var steps = new List<object>();
-        foreach (var step in scenario.Steps)
-        {
-            var started = DateTimeOffset.UtcNow;
-            object result = step.Action switch
-            {
-                "waitVisible" => await WaitVisibleAsync(step.Text ?? throw new UsageException("waitVisible requires text."), step.TimeoutSec ?? 15).ConfigureAwait(false),
-                "tapText" => await TapTextAsync(step.Text ?? throw new UsageException("tapText requires text."), step.TimeoutSec ?? 15).ConfigureAwait(false),
-                "typeText" => await TypeTextAsync(step.Text ?? throw new UsageException("typeText requires text.")).ConfigureAwait(false),
-                "keyevent" => await KeyEventAsync(step.Code ?? throw new UsageException("keyevent requires code.")).ConfigureAwait(false),
-                "sleep" => await SleepAsync(step.Milliseconds ?? 1000).ConfigureAwait(false),
-                _ => throw new UsageException($"Unknown scenario action '{step.Action}'."),
-            };
-            steps.Add(new { step = step.Name ?? step.Action, action = step.Action, duration_ms = (DateTimeOffset.UtcNow - started).TotalMilliseconds, result });
-        }
-
-        return new { scenario = scenario.Name, status = "passed", steps };
-    }
-
     private async Task<string> DumpUiAsync()
     {
         var command = "rm -f /sdcard/.device-e2e-dump.xml; uiautomator dump /sdcard/.device-e2e-dump.xml >/dev/null 2>&1; cat /sdcard/.device-e2e-dump.xml; rm -f /sdcard/.device-e2e-dump.xml";
@@ -443,47 +502,7 @@ public sealed class DeviceRunner(AdbClient adb, ArtifactSession artifacts)
         return result.Stdout.Trim();
     }
 
-    private static async Task<object> SleepAsync(int milliseconds)
-    {
-        await Task.Delay(Math.Max(0, milliseconds)).ConfigureAwait(false);
-        return new { milliseconds };
-    }
-
     private static string ShellQuote(string value) => "'" + value.Replace("'", "'\\''", StringComparison.Ordinal) + "'";
-}
-
-/// <summary>
-/// Cross-platform process runner.
-/// </summary>
-public static class ProcessRunner
-{
-    /// <summary>
-    /// Starts a process and captures stdout/stderr.
-    /// </summary>
-    /// <param name="fileName">Executable.</param>
-    /// <param name="args">Arguments.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Process result.</returns>
-    public static async Task<ProcessResult> RunAsync(string fileName, IEnumerable<string> args, CancellationToken cancellationToken = default)
-    {
-        var startInfo = new ProcessStartInfo(fileName)
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-        };
-
-        foreach (var arg in args)
-        {
-            startInfo.ArgumentList.Add(arg);
-        }
-
-        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Failed to start '{fileName}'.");
-        var stdout = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var stderr = process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-        return new ProcessResult(process.ExitCode, await stdout.ConfigureAwait(false), await stderr.ConfigureAwait(false));
-    }
 }
 
 /// <summary>
@@ -512,10 +531,13 @@ public sealed record ProcessResult(int ExitCode, string Stdout, string Stderr)
 /// </summary>
 public sealed class ArtifactSession
 {
-    private ArtifactSession(string root)
+    private readonly IFileSystem _fileSystem;
+
+    private ArtifactSession(string root, IFileSystem fileSystem)
     {
         Root = root;
-        Directory.CreateDirectory(root);
+        _fileSystem = fileSystem;
+        _fileSystem.CreateDirectory(root);
     }
 
     /// <summary>
@@ -528,11 +550,13 @@ public sealed class ArtifactSession
     /// </summary>
     /// <param name="options">CLI options.</param>
     /// <returns>Artifact session.</returns>
-    public static ArtifactSession Create(CliOptions options)
+    public static ArtifactSession Create(CliOptions options, IFileSystem? fileSystem = null, TimeProvider? timeProvider = null)
     {
-        var baseDir = options.Get("artifacts") ?? Path.Combine(Path.GetTempPath(), "device-e2e-lab");
-        var name = $"{DateTimeOffset.Now:yyyyMMdd-HHmmss}-{options.Command ?? "command"}";
-        return new ArtifactSession(Path.Combine(baseDir, name));
+        var activeFileSystem = fileSystem ?? new PhysicalFileSystem();
+        var activeTimeProvider = timeProvider ?? TimeProvider.System;
+        var baseDir = options.Get("artifacts") ?? Path.Combine(activeFileSystem.GetTempPath(), "device-e2e-lab");
+        var name = $"{activeTimeProvider.GetUtcNow():yyyyMMdd-HHmmss}-{options.Command ?? "command"}";
+        return new ArtifactSession(Path.Combine(baseDir, name), activeFileSystem);
     }
 
     /// <summary>
@@ -540,7 +564,7 @@ public sealed class ArtifactSession
     /// </summary>
     /// <param name="name">File name.</param>
     /// <param name="text">Text content.</param>
-    public Task WriteTextAsync(string name, string text) => File.WriteAllTextAsync(Path.Combine(Root, name), text, Encoding.UTF8);
+    public Task WriteTextAsync(string name, string text) => _fileSystem.WriteAllTextAsync(Path.Combine(Root, name), text, Encoding.UTF8);
 
     /// <summary>
     /// Writes a JSON artifact.
@@ -703,6 +727,15 @@ public sealed record ErrorInfo(string Type, string Message, string Category)
     /// <returns>Error category.</returns>
     public static string Classify(string message)
     {
+        if (message.Contains("must be an integer", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("does not exist", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("not valid JSON", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("Missing required option", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("Unknown command", StringComparison.OrdinalIgnoreCase))
+        {
+            return "usage_error";
+        }
+
         if (message.Contains("Timed out", StringComparison.OrdinalIgnoreCase))
         {
             return "selector_or_screen_state";
