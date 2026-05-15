@@ -1,4 +1,4 @@
-# Device E2E Lab
+# VisitLab
 
 Local-only experiment for a cross-platform on-device end-to-end harness.
 
@@ -14,41 +14,47 @@ This repo explores whether the next version should be a typed .NET CLI rather
 than PowerShell. It is intentionally separate from the kiosk repo while the
 shape is still experimental.
 
-## Why look at scrcpy?
+## Why look at this approach?
 
-scrcpy has a useful architecture lesson even if we do not copy its protocol:
+This approach has a useful architecture lesson even if we do not copy its protocol:
 
-- keep host orchestration separate from device execution
-- make device communication explicit and stream-friendly
-- treat video/control/logs as independent channels
-- avoid leaving a permanent app installed on the device
-- optimize for low startup cost and boring command-line operation
 
-V1 of this lab does **not** vendor scrcpy or implement its server protocol. It
-keeps boring ADB primitives first, with room to add an optional `scrcpy` binary
+V1 of this lab does **not** vendor any specific tool or implement its server protocol. It
+keeps boring ADB primitives first, with room to add an optional binary
 adapter later for low-latency mirroring, recording, or HID/OTG control.
+
+## Code layout
+
+- `VisitLab.Cli/Cli/` contains the entrypoint, command dispatch, help text, and inspect-mode session loop.
+- `VisitLab.Cli/Hosts/Android/` contains the Android transport and device interaction runtime.
+- `VisitLab.Cli/Artifacts/` contains artifact session management.
+- `VisitLab.Cli/Models/` contains shared records, envelopes, and screen/scenario data models.
+- `VisitLab.Cli/Scenarios/` contains scenario execution flow and scenario-specific failure plumbing.
+- `VisitLab.Cli/Telemetry/` contains telemetry parsing contracts and the kiosk telemetry parser.
+- `VisitLab.Cli/Errors/` contains typed command and wait exceptions.
+- `VisitLab.Cli/Infrastructure/` contains interfaces plus the default system-backed implementations used by the CLI.
 
 ## Current commands
 
 Run from WSL or PowerShell:
 
 ```bash
-cd /home/perttu/sources/repos/device-e2e-lab
-dotnet run --project DeviceE2ELab.Cli -- devices
-dotnet run --project DeviceE2ELab.Cli -- preflight --device <serial> --package fi.systam.visit
-dotnet run --project DeviceE2ELab.Cli -- screen-state --device <serial>
-dotnet run --project DeviceE2ELab.Cli -- telemetry-tail --device <serial> --tail 200
-dotnet run --project DeviceE2ELab.Cli -- telemetry-watch --device <serial> --timeout-sec 10
-dotnet run --project DeviceE2ELab.Cli -- tap-text --device <serial> --text "Sign in"
-dotnet run --project DeviceE2ELab.Cli -- wait-log --device <serial> --contains "DEVICE_READY" --timeout-sec 20
-dotnet run --project DeviceE2ELab.Cli -- run --device <serial> --file scenarios/idle-language-switch-finnish.json
+cd <repo-root>
+dotnet run --project VisitLab.Cli -- devices
+dotnet run --project VisitLab.Cli -- preflight --device <serial> --package fi.systam.visit
+dotnet run --project VisitLab.Cli -- screen-state --device <serial>
+dotnet run --project VisitLab.Cli -- telemetry-tail --device <serial> --tail 200
+dotnet run --project VisitLab.Cli -- telemetry-watch --device <serial> --timeout-sec 10
+dotnet run --project VisitLab.Cli -- tap-text --device <serial> --text "Sign in"
+dotnet run --project VisitLab.Cli -- wait-log --device <serial> --contains "DEVICE_READY" --timeout-sec 20
+dotnet run --project VisitLab.Cli -- run --device <serial> --file scenarios/idle-language-switch-finnish.json
 ```
 
 Inspect mode is intentionally different: it is a long-lived JSONL session over
 stdin/stdout rather than a single JSON envelope. Example:
 
 ```powershell
-dotnet run --project DeviceE2ELab.Cli -- inspect --device 192.168.0.134:5555
+dotnet run --project VisitLab.Cli -- inspect --device 192.168.0.134:5555
 ```
 
 Then send one JSON command per line:
@@ -70,12 +76,12 @@ Every command prints a single JSON envelope:
 
 ```json
 {
-  "schema": "device-e2e-lab-command.v1",
+  "schema": "visit-lab-command.v1",
   "ok": true,
   "command": "screen-state",
   "data": {},
   "artifacts": {
-    "artifact_root": "/tmp/device-e2e-lab/..."
+    "artifact_root": "/tmp/visit-lab/..."
   },
   "error": null
 }
@@ -173,15 +179,15 @@ The CLI can now be published as a self-contained single-file executable for the
 first supported host targets:
 
 ```powershell
-dotnet publish DeviceE2ELab.Cli -c Release -r win-x64
-dotnet publish DeviceE2ELab.Cli -c Release -r linux-x64
-dotnet publish DeviceE2ELab.Cli -c Release -r osx-arm64
+dotnet publish VisitLab.Cli -c Release -r win-x64
+dotnet publish VisitLab.Cli -c Release -r linux-x64
+dotnet publish VisitLab.Cli -c Release -r osx-arm64
 ```
 
 Publish outputs land under:
 
 ```text
-DeviceE2ELab.Cli/bin/Release/net10.0/<rid>/publish/
+VisitLab.Cli/bin/Release/net10.0/<rid>/publish/
 ```
 
 The published app is self-contained and single-file by default. If you want a
@@ -192,7 +198,5 @@ at publish time.
 
 - Build typed semantic waits such as `wait-step` and `wait-action-ready` on top
   of the raw `DEVICE_TEST_TELEMETRY` parser.
-- Add a `scrcpy` adapter that can launch `scrcpy --no-playback --record ...`
-  when installed, while preserving the same JSON envelope.
 - Expand inspect mode with optional event subscriptions and continuous polling.
 - Add an iOS host adapter if the new host interface holds up outside Android.

@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DeviceE2ELab.Cli\DeviceE2ELab.Cli.csproj" />
+    <ProjectReference Include="..\VisitLab.Cli\VisitLab.Cli.csproj" />
   </ItemGroup>
 
 </Project>

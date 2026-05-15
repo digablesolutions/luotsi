@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace DeviceE2ELab.Cli;
+namespace VisitLab.Cli;
 
 internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIO console, TimeProvider timeProvider)
 {

@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 
-namespace DeviceE2ELab.Cli;
+namespace VisitLab.Cli;
 
 public interface IScenarioActionHost
 {
@@ -363,12 +363,4 @@ public interface ICommandFailureDetails
     string CategoryOverride { get; }
 
     object? DataPayload { get; }
-}
-
-public sealed class ScenarioStepFailureException(string message, string categoryOverride, object dataPayload, Exception innerException)
-    : Exception(message, innerException), ICommandFailureDetails
-{
-    public string CategoryOverride { get; } = categoryOverride;
-
-    public object? DataPayload { get; } = dataPayload;
 }

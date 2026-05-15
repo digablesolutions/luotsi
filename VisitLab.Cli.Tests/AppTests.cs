@@ -1,8 +1,8 @@
 using System.Text.Json;
-using DeviceE2ELab.Cli;
+using VisitLab.Cli;
 using Xunit;
 
-namespace DeviceE2ELab.Cli.Tests;
+namespace VisitLab.Cli.Tests;
 
 public sealed class AppTests
 {
@@ -26,7 +26,7 @@ public sealed class AppTests
 
         Assert.Equal(2, exitCode);
         Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
-        Assert.Equal("device-e2e-lab-command.v1", envelope.RootElement.GetProperty("schema").GetString());
+        Assert.Equal("visit-lab-command.v1", envelope.RootElement.GetProperty("schema").GetString());
         Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
     }
 
@@ -49,7 +49,10 @@ public sealed class AppTests
     [Fact]
     public async Task ProcessRunner_Captures_Stdout_And_Exit_Code()
     {
-        var result = await new DefaultProcessRunner().RunAsync("/bin/sh", ["-c", "printf 'ok'"]);
+        var (fileName, args) = OperatingSystem.IsWindows()
+            ? ("powershell.exe", new[] { "-NoLogo", "-NoProfile", "-Command", "[Console]::Out.Write('ok')" })
+            : ("/bin/sh", new[] { "-c", "printf 'ok'" });
+        var result = await new DefaultProcessRunner().RunAsync(fileName, args);
 
         Assert.Equal(0, result.ExitCode);
         Assert.Equal("ok", result.Stdout);
@@ -509,7 +512,7 @@ public sealed class AppTests
 
         var result = await runner.PreflightAsync(null);
         var json = JsonDocument.Parse(JsonSerializer.Serialize(result)).RootElement;
-        var artifactRoot = Path.Combine("/tmp/device-e2e-lab", "20260515-120000-preflight");
+        var artifactRoot = Path.Combine("/tmp", "visit-lab", "20260515-120000-preflight");
 
         Assert.Equal("Pixel 9", json.GetProperty("model").GetString());
         Assert.Equal("google/pixel/device", json.GetProperty("fingerprint").GetString());
@@ -553,7 +556,7 @@ public sealed class AppTests
         Assert.Equal("failed", envelope.RootElement.GetProperty("data").GetProperty("status").GetString());
         Assert.Equal("wait for ready marker", envelope.RootElement.GetProperty("data").GetProperty("failed_step").GetProperty("name").GetString());
         var failureArtifacts = envelope.RootElement.GetProperty("data").GetProperty("failure_artifacts");
-        Assert.Equal("device-e2e-lab-failure-bundle.v1", failureArtifacts.GetProperty("schema").GetString());
+        Assert.Equal("visit-lab-failure-bundle.v1", failureArtifacts.GetProperty("schema").GetString());
         Assert.True(failureArtifacts.GetProperty("artifacts").GetArrayLength() >= 2);
     }
 
@@ -864,7 +867,7 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
         Task.FromResult(new DeviceFingerprint("device-fingerprint.v1", DateTimeOffset.UtcNow, "SER", "Model", "16", "36", "fingerprint", "arm64-v8a", "focus"));
 
     public Task<FailureArtifactBundle> CaptureFailureArtifactsAsync(FailureCaptureRequest request, Exception exception) =>
-        Task.FromResult(new FailureArtifactBundle("device-e2e-lab-failure-bundle.v1", DateTimeOffset.UtcNow, request.Scope, request.Name, request.File, request.StepIndex, request.StepName, request.Action, exception.GetType().FullName ?? exception.GetType().Name, exception.Message, Array.Empty<FailureArtifact>(), Array.Empty<FailureCaptureError>()));
+        Task.FromResult(new FailureArtifactBundle("visit-lab-failure-bundle.v1", DateTimeOffset.UtcNow, request.Scope, request.Name, request.File, request.StepIndex, request.StepName, request.Action, exception.GetType().FullName ?? exception.GetType().Name, exception.Message, Array.Empty<FailureArtifact>(), Array.Empty<FailureCaptureError>()));
 
     public Task<object> LogcatAsync(int tail) => Task.FromResult<object>(new { tail });
 }
