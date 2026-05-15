@@ -30,20 +30,41 @@ adapter later for low-latency mirroring, recording, or HID/OTG control.
 
 ## Current commands
 
-Run from WSL:
+Run from WSL or PowerShell:
 
 ```bash
 cd /home/perttu/sources/repos/device-e2e-lab
 dotnet run --project DeviceE2ELab.Cli -- devices
 dotnet run --project DeviceE2ELab.Cli -- preflight --device <serial> --package fi.systam.visit
 dotnet run --project DeviceE2ELab.Cli -- screen-state --device <serial>
+dotnet run --project DeviceE2ELab.Cli -- telemetry-tail --device <serial> --tail 200
+dotnet run --project DeviceE2ELab.Cli -- telemetry-watch --device <serial> --timeout-sec 10
 dotnet run --project DeviceE2ELab.Cli -- tap-text --device <serial> --text "Sign in"
 dotnet run --project DeviceE2ELab.Cli -- wait-log --device <serial> --contains "DEVICE_READY" --timeout-sec 20
 dotnet run --project DeviceE2ELab.Cli -- run --device <serial> --file examples/idle-language-fi.json
 ```
 
+Inspect mode is intentionally different: it is a long-lived JSONL session over
+stdin/stdout rather than a single JSON envelope. Example:
+
+```powershell
+dotnet run --project DeviceE2ELab.Cli -- inspect --device 192.168.0.134:5555
+```
+
+Then send one JSON command per line:
+
+```json
+{"id":"1","command":"refresh"}
+{"id":"2","command":"tap_text","text":"Sign in","timeout_sec":10}
+{"id":"3","command":"telemetry_tail","tail":200}
+{"id":"4","command":"exit"}
+```
+
 If WSL cannot see `adb`, pass a path with `--adb` or expose Android platform
 tools on WSL's `PATH`.
+
+The implementation currently supports `--platform android`. The host seam is in
+place so an iOS adapter can be added later without rewriting the command layer.
 
 Every command prints a single JSON envelope:
 
@@ -64,7 +85,14 @@ Runtime commands now also write richer artifacts when they interact with a devic
 
 - `device-fingerprint.json` for `preflight` and scenario runs
 - `wait-log.txt` / `wait-log.json` for log streaming waits
+- `telemetry-tail.txt` / `telemetry-tail.json` for semantic telemetry snapshots
+- `telemetry-watch.txt` / `telemetry-watch.json` for bounded telemetry collection
 - automatic failure bundles with screenshot, logcat, screen-state, hierarchy, and metadata when a runtime command fails after reaching the device
+
+Inspect sessions stream JSONL events instead of writing a final command envelope.
+They begin with `session_started` and `screen_snapshot`, then emit
+`command_result`, `screen_delta`, and `session_ended` events as the agent drives
+the device.
 
 ## Scenario playbook
 
@@ -92,12 +120,59 @@ Supported actions in this first slice:
 - `waitLog`
 - `sleep`
 
+## Telemetry support
+
+The CLI now understands the kiosk `DEVICE_TEST_TELEMETRY` logcat prefix.
+
+- `telemetry-tail` reads recent logcat lines, parses matching telemetry JSON,
+  and returns both parsed events and malformed telemetry lines.
+- `telemetry-watch` waits for a bounded window, then dumps and parses telemetry
+  emitted during that interval.
+
+This first slice intentionally focuses on raw event capture rather than kiosk
+parity helpers like `wait-step` and `wait-action-ready`. Those can now be built
+on top of the shared parser without changing the transport.
+
+## Inspect mode
+
+`inspect` opens a JSONL session intended for agent-driven exploration without a
+scenario file.
+
+- startup emits `session_started` and an initial `screen_snapshot`
+- incoming JSON commands can `refresh`, `tap`, `tap_text`, `wait_visible`,
+  `type_text`, `keyevent`, `telemetry_tail`, `telemetry_watch`, and `exit`
+- state-affecting commands emit a `command_result` followed by a `screen_delta`
+  containing the new snapshot and a diff summary
+
+This is enough to let an agent reason about the current UI, choose the next
+action, and keep iterating without authoring a scenario up front.
+
+## Packaging
+
+The CLI can now be published as a self-contained single-file executable for the
+first supported host targets:
+
+```powershell
+dotnet publish DeviceE2ELab.Cli -c Release -r win-x64
+dotnet publish DeviceE2ELab.Cli -c Release -r linux-x64
+dotnet publish DeviceE2ELab.Cli -c Release -r osx-arm64
+```
+
+Publish outputs land under:
+
+```text
+DeviceE2ELab.Cli/bin/Release/net10.0/<rid>/publish/
+```
+
+The published app is self-contained and single-file by default. If you want a
+framework-dependent or non-single-file build, override the MSBuild properties
+at publish time.
+
 ## Next experiment lanes
 
-- Add semantic telemetry commands compatible with the kiosk
-  `DEVICE_TEST_TELEMETRY` logcat contract.
+- Build typed semantic waits such as `wait-step` and `wait-action-ready` on top
+  of the raw `DEVICE_TEST_TELEMETRY` parser.
 - Add a `scrcpy` adapter that can launch `scrcpy --no-playback --record ...`
   when installed, while preserving the same JSON envelope.
-- Add an interactive inspect mode that streams screen-state deltas and lets an
-  agent choose the next action without writing a scenario.
-- Add host adapters for Android now, then iOS later if the interface holds.
+- Expand inspect mode with optional event subscriptions and continuous polling.
+- Add an iOS host adapter if the new host interface holds up outside Android.

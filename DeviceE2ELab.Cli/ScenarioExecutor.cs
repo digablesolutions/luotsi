@@ -16,9 +16,9 @@ public interface IScenarioActionHost
 /// <summary>
 /// Loads and executes JSON scenario files.
 /// </summary>
-public sealed class ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem fileSystem, TimeProvider timeProvider, IDelay delay)
+public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSystem, TimeProvider timeProvider, IDelay delay)
 {
-    private readonly IScenarioActionHost _actionHost = actionHost ?? throw new ArgumentNullException(nameof(actionHost));
+    private readonly IDeviceHost _actionHost = actionHost ?? throw new ArgumentNullException(nameof(actionHost));
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     private readonly IDelay _delay = delay ?? throw new ArgumentNullException(nameof(delay));

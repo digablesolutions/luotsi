@@ -228,6 +228,104 @@ public sealed class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_TelemetryTail_Parses_Events_And_ParseErrors()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        var console = new FakeConsole();
+        adb.EnqueueRunResult(new ProcessResult(
+            0,
+            "05-15 12:00:00.000 I/Test: DEVICE_TEST_TELEMETRY {\"schema\":\"systam-device-test-telemetry.v1\",\"seq\":1,\"session\":\"abc\",\"timestamp\":\"2026-05-15T12:00:00Z\",\"event\":\"step\",\"step\":\"STEP_IDLE\"}" + Environment.NewLine +
+            "05-15 12:00:00.100 I/Test: DEVICE_TEST_TELEMETRY {bad json}" + Environment.NewLine,
+            string.Empty));
+        var app = new App(timeProvider, fileSystem, new DefaultProcessRunner(), new FakeDelay(timeProvider), new FakeAdbClientFactory(adb), console);
+
+        var exitCode = await app.RunAsync(["telemetry-tail", "--tail", "50", "--artifacts", "/tmp/test-artifacts"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal(1, envelope.RootElement.GetProperty("data").GetProperty("event_count").GetInt32());
+        Assert.Equal(1, envelope.RootElement.GetProperty("data").GetProperty("parse_error_count").GetInt32());
+        Assert.Equal("step", envelope.RootElement.GetProperty("data").GetProperty("events")[0].GetProperty("event").GetString());
+        Assert.Equal("STEP_IDLE", envelope.RootElement.GetProperty("data").GetProperty("events")[0].GetProperty("step").GetString());
+        var artifactRoot = envelope.RootElement.GetProperty("artifacts").GetProperty("artifact_root").GetString();
+        Assert.NotNull(artifactRoot);
+        Assert.True(fileSystem.FileExists(Path.Combine(artifactRoot!, "telemetry-tail.txt")));
+        Assert.True(fileSystem.FileExists(Path.Combine(artifactRoot, "telemetry-tail.json")));
+        Assert.Equal(["logcat", "-d", "-v", "brief", "-t", "50"], adb.RunCommands[0]);
+    }
+
+    [Fact]
+    public async Task RunAsync_TelemetryWatch_Waits_And_Collects_Events()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var delay = new FakeDelay(timeProvider);
+        var adb = new FakeAdbClient();
+        var console = new FakeConsole();
+        adb.EnqueueRunResult(new ProcessResult(
+            0,
+            "05-15 12:00:03.000 I/Test: DEVICE_TEST_TELEMETRY {\"schema\":\"systam-device-test-telemetry.v1\",\"seq\":2,\"session\":\"abc\",\"timestamp\":\"2026-05-15T12:00:03Z\",\"event\":\"action_ready\",\"step\":\"STEP_IDLE\",\"action\":\"sign_in\"}" + Environment.NewLine,
+            string.Empty));
+        var app = new App(timeProvider, fileSystem, new DefaultProcessRunner(), delay, new FakeAdbClientFactory(adb), console);
+
+        var exitCode = await app.RunAsync(["telemetry-watch", "--timeout-sec", "3", "--artifacts", "/tmp/test-artifacts"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal(1, envelope.RootElement.GetProperty("data").GetProperty("event_count").GetInt32());
+        Assert.Equal("action_ready", envelope.RootElement.GetProperty("data").GetProperty("events")[0].GetProperty("event").GetString());
+        Assert.Equal("sign_in", envelope.RootElement.GetProperty("data").GetProperty("events")[0].GetProperty("action").GetString());
+        Assert.Equal([3000], delay.Calls);
+        Assert.Equal("logcat", adb.RunCommands[0][0]);
+        Assert.Contains("-T", adb.RunCommands[0]);
+        Assert.Contains("*:V", adb.RunCommands[0]);
+    }
+
+    [Fact]
+    public async Task RunAsync_Inspect_Streams_Snapshot_Command_Result_And_Delta()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        console.EnqueueInput(
+            "{\"id\":\"1\",\"command\":\"tap_text\",\"text\":\"Sign in\",\"timeout_sec\":5}",
+            "{\"id\":\"2\",\"command\":\"exit\"}");
+        var host = new FakeDeviceHost(
+            CreateScreenState(timeProvider.GetUtcNow(), "Sign in"),
+            CreateScreenState(timeProvider.GetUtcNow().AddSeconds(1), "Welcome"));
+        var app = new App(console: console, timeProvider: timeProvider, deviceHostFactory: new FakeDeviceHostFactory(host));
+
+        var exitCode = await app.RunAsync(["inspect"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.True(console.OutputLines.Count >= 5);
+
+        using var sessionStarted = JsonDocument.Parse(console.OutputLines[0]);
+        Assert.Equal("session_started", sessionStarted.RootElement.GetProperty("type").GetString());
+
+        using var initialSnapshot = JsonDocument.Parse(console.OutputLines[1]);
+        Assert.Equal("screen_snapshot", initialSnapshot.RootElement.GetProperty("type").GetString());
+        Assert.Equal("Sign in", initialSnapshot.RootElement.GetProperty("state").GetProperty("elements")[0].GetProperty("text").GetString());
+
+        using var commandResult = JsonDocument.Parse(console.OutputLines[2]);
+        Assert.Equal("command_result", commandResult.RootElement.GetProperty("type").GetString());
+        Assert.True(commandResult.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("tap_text", commandResult.RootElement.GetProperty("command").GetString());
+
+        using var delta = JsonDocument.Parse(console.OutputLines[3]);
+        Assert.Equal("screen_delta", delta.RootElement.GetProperty("type").GetString());
+        Assert.Equal("Welcome", delta.RootElement.GetProperty("state").GetProperty("elements")[0].GetProperty("text").GetString());
+        Assert.Equal(1, delta.RootElement.GetProperty("delta").GetProperty("added_count").GetInt32());
+
+        using var sessionEnded = JsonDocument.Parse(console.OutputLines[4]);
+        Assert.Equal("session_ended", sessionEnded.RootElement.GetProperty("type").GetString());
+        Assert.Equal(["Sign in"], host.TapTextRequests);
+    }
+
+    [Fact]
     public async Task PreflightAsync_Writes_Device_Fingerprint_Artifact()
     {
         var fileSystem = new FakeFileSystem();
@@ -341,6 +439,9 @@ public sealed class AppTests
 
     private static string CreateUiDump(string text) =>
         $"<hierarchy><node text=\"{text}\" content-desc=\"\" resource-id=\"id/{text}\" class=\"android.widget.TextView\" enabled=\"true\" clickable=\"false\" bounds=\"[0,0][100,100]\" /></hierarchy>";
+
+    private static ScreenState CreateScreenState(DateTimeOffset capturedAt, string text) =>
+        new(capturedAt, 1, [new ScreenElement(text, null, $"id/{text}", "android.widget.TextView", true, true, 0, 0, 100, 100)]);
 }
 
 internal sealed class ManualTimeProvider(DateTimeOffset utcNow) : TimeProvider
@@ -372,9 +473,21 @@ internal sealed class FakeConsole : IConsoleIO
 
     public List<string> ErrorLines { get; } = [];
 
+    private readonly Queue<string?> _inputLines = new();
+
     public void WriteLine(string value) => OutputLines.Add(value);
 
     public void WriteErrorLine(string value) => ErrorLines.Add(value);
+
+    public string? ReadLine() => _inputLines.Count > 0 ? _inputLines.Dequeue() : null;
+
+    public void EnqueueInput(params string[] lines)
+    {
+        foreach (var line in lines)
+        {
+            _inputLines.Enqueue(line);
+        }
+    }
 
     public JsonDocument ParseSingleOutputAsJson()
     {
@@ -496,4 +609,56 @@ internal sealed class FakeEnvironmentVariables(Dictionary<string, string> variab
 
     public string? GetEnvironmentVariable(string variable) =>
         _variables.TryGetValue(variable, out var value) ? value : null;
+}
+
+internal sealed class FakeDeviceHostFactory(IDeviceHost deviceHost) : IDeviceHostFactory
+{
+    private readonly IDeviceHost _deviceHost = deviceHost;
+
+    public IDeviceHost Create(DeviceHostConfiguration configuration, ArtifactSession artifacts) => _deviceHost;
+}
+
+internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDeviceHost
+{
+    private readonly Queue<ScreenState> _screenStates = new(screenStates);
+
+    public List<string> TapTextRequests { get; } = [];
+
+    public Task<object> GetDevicesAsync() => Task.FromResult<object>(new { devices = Array.Empty<object>() });
+
+    public Task<object> PreflightAsync(string? packageName) => Task.FromResult<object>(new { package = packageName });
+
+    public Task<ScreenState> GetScreenStateAsync() =>
+        Task.FromResult(_screenStates.Count > 1 ? _screenStates.Dequeue() : _screenStates.Peek());
+
+    public Task<object> TapAsync(string x, string y) => Task.FromResult<object>(new { x, y });
+
+    public Task<object> TelemetryTailAsync(int tail) => Task.FromResult<object>(new { tail, event_count = 0 });
+
+    public Task<object> TelemetryWatchAsync(int timeoutSec) => Task.FromResult<object>(new { timeout_sec = timeoutSec, event_count = 0 });
+
+    public Task<object> RecordAsync(string output, int timeLimitSec) => Task.FromResult<object>(new { output, time_limit_sec = timeLimitSec });
+
+    public Task<ScreenElement> WaitVisibleAsync(string text, int timeoutSec) =>
+        Task.FromResult(new ScreenElement(text, null, $"id/{text}", "android.widget.TextView", true, true, 0, 0, 100, 100));
+
+    public Task<object> TapTextAsync(string text, int timeoutSec)
+    {
+        TapTextRequests.Add(text);
+        return Task.FromResult<object>(new { text, timeout_sec = timeoutSec });
+    }
+
+    public Task<object> TypeTextAsync(string text) => Task.FromResult<object>(new { text });
+
+    public Task<object> KeyEventAsync(string code) => Task.FromResult<object>(new { code });
+
+    public Task<object> WaitForLogAsync(string text, int timeoutSec) => Task.FromResult<object>(new { text, timeout_sec = timeoutSec });
+
+    public Task<DeviceFingerprint> WriteDeviceFingerprintAsync() =>
+        Task.FromResult(new DeviceFingerprint("device-fingerprint.v1", DateTimeOffset.UtcNow, "SER", "Model", "16", "36", "fingerprint", "arm64-v8a", "focus"));
+
+    public Task<FailureArtifactBundle> CaptureFailureArtifactsAsync(FailureCaptureRequest request, Exception exception) =>
+        Task.FromResult(new FailureArtifactBundle("device-e2e-lab-failure-bundle.v1", DateTimeOffset.UtcNow, request.Scope, request.Name, request.File, request.StepIndex, request.StepName, request.Action, exception.GetType().FullName ?? exception.GetType().Name, exception.Message, Array.Empty<FailureArtifact>(), Array.Empty<FailureCaptureError>()));
+
+    public Task<object> LogcatAsync(int tail) => Task.FromResult<object>(new { tail });
 }

@@ -41,7 +41,7 @@ public sealed class App
     private readonly IFileSystem _fileSystem;
     private readonly IProcessRunner _processRunner;
     private readonly IDelay _delay;
-    private readonly IAdbClientFactory _adbClientFactory;
+    private readonly IDeviceHostFactory _deviceHostFactory;
     private readonly IConsoleIO _console;
     private readonly IEnvironmentVariables _environment;
     private readonly IUniqueIdGenerator _idGenerator;
@@ -54,16 +54,24 @@ public sealed class App
         IAdbClientFactory? adbClientFactory = null,
         IConsoleIO? console = null,
         IEnvironmentVariables? environment = null,
-        IUniqueIdGenerator? idGenerator = null)
+        IUniqueIdGenerator? idGenerator = null,
+        IDeviceHostFactory? deviceHostFactory = null)
     {
         _timeProvider = timeProvider ?? TimeProvider.System;
         _fileSystem = fileSystem ?? new PhysicalFileSystem();
         _processRunner = processRunner ?? new DefaultProcessRunner();
         _delay = delay ?? new TaskDelay(_timeProvider);
-        _adbClientFactory = adbClientFactory ?? new DefaultAdbClientFactory();
         _console = console ?? new SystemConsoleIO();
         _environment = environment ?? new SystemEnvironmentVariables();
         _idGenerator = idGenerator ?? new GuidUniqueIdGenerator();
+        _deviceHostFactory = deviceHostFactory ?? new DefaultDeviceHostFactory(
+            adbClientFactory ?? new DefaultAdbClientFactory(),
+            _processRunner,
+            _delay,
+            _fileSystem,
+            _timeProvider,
+            _environment,
+            _idGenerator);
     }
 
     /// <summary>
@@ -82,9 +90,19 @@ public sealed class App
         }
 
         var artifacts = ArtifactSession.Create(options, _fileSystem, _timeProvider);
-        var adb = _adbClientFactory.Create(options.Get("adb") ?? _environment.GetEnvironmentVariable("DEVICE_E2E_ADB") ?? "adb", options.Get("device"), _processRunner);
-        var runner = new DeviceRunner(adb, artifacts, _timeProvider, _delay, _fileSystem, _idGenerator, _environment);
+        var runner = _deviceHostFactory.Create(
+            new DeviceHostConfiguration(
+                options.Get("platform") ?? "android",
+                options.Get("adb") ?? _environment.GetEnvironmentVariable("DEVICE_E2E_ADB") ?? "adb",
+                options.Get("device")),
+            artifacts);
         var scenarios = new ScenarioExecutor(runner, _fileSystem, _timeProvider, _delay);
+
+        if (string.Equals(options.Command, "inspect", StringComparison.OrdinalIgnoreCase))
+        {
+            var inspectSession = new InspectSession(runner, _console, _timeProvider);
+            return await inspectSession.RunAsync().ConfigureAwait(false);
+        }
 
         try
         {
@@ -93,6 +111,8 @@ public sealed class App
                 "devices" => await runner.GetDevicesAsync().ConfigureAwait(false),
                 "preflight" => await runner.PreflightAsync(options.Get("package")).ConfigureAwait(false),
                 "screen-state" => await runner.GetScreenStateAsync().ConfigureAwait(false),
+                "telemetry-tail" => await runner.TelemetryTailAsync(options.Int("tail", 200)).ConfigureAwait(false),
+                "telemetry-watch" => await runner.TelemetryWatchAsync(options.Int("timeout-sec", 15)).ConfigureAwait(false),
                 "tap" => await runner.TapAsync(options.Require("x"), options.Require("y")).ConfigureAwait(false),
                 "tap-text" => await runner.TapTextAsync(options.Require("text"), options.Int("timeout-sec", 15)).ConfigureAwait(false),
                 "wait-visible" => await runner.WaitVisibleAsync(options.Require("text"), options.Int("timeout-sec", 15)).ConfigureAwait(false),
@@ -145,6 +165,9 @@ public sealed class CliOptions
         "devices",
         "preflight",
         "screen-state",
+        "inspect",
+        "telemetry-tail",
+        "telemetry-watch",
         "tap",
         "tap-text",
         "wait-visible",
@@ -377,7 +400,8 @@ public sealed class DeviceRunner(
     IDelay? delay = null,
     IFileSystem? fileSystem = null,
     IUniqueIdGenerator? idGenerator = null,
-    IEnvironmentVariables? environment = null) : IScenarioActionHost
+    IEnvironmentVariables? environment = null,
+    ITelemetryParser? telemetryParser = null) : IDeviceHost
 {
     private readonly IAdbClient _adb = adb ?? throw new ArgumentNullException(nameof(adb));
     private readonly ArtifactSession _artifacts = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
@@ -386,6 +410,7 @@ public sealed class DeviceRunner(
     private readonly IFileSystem _fileSystem = fileSystem ?? new PhysicalFileSystem();
     private readonly IUniqueIdGenerator _idGenerator = idGenerator ?? new GuidUniqueIdGenerator();
     private readonly IEnvironmentVariables _environment = environment ?? new SystemEnvironmentVariables();
+    private readonly ITelemetryParser _telemetryParser = telemetryParser ?? new DeviceTestTelemetryParser();
 
     /// <summary>
     /// Lists connected devices.
@@ -630,6 +655,56 @@ public sealed class DeviceRunner(
     }
 
     /// <summary>
+    /// Reads and parses recent semantic telemetry events.
+    /// </summary>
+    /// <param name="tail">Maximum logcat lines to inspect.</param>
+    /// <returns>Telemetry data.</returns>
+    public async Task<object> TelemetryTailAsync(int tail)
+    {
+        var result = await _adb.RunAsync(["logcat", "-d", "-v", "brief", "-t", tail.ToString()]).ConfigureAwait(false);
+        result.EnsureSuccess("telemetry tail failed");
+        return await CaptureTelemetryAsync(
+            "telemetry-tail",
+            result.Stdout,
+            new
+            {
+                schema = "device-e2e-lab-telemetry-tail.v1",
+                tail,
+                invocation = result.Invocation,
+            }).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Collects semantic telemetry events over a bounded watch window.
+    /// </summary>
+    /// <param name="timeoutSec">Duration to watch for telemetry events.</param>
+    /// <returns>Telemetry data.</returns>
+    public async Task<object> TelemetryWatchAsync(int timeoutSec)
+    {
+        var started = _timeProvider.GetUtcNow();
+        await _delay.DelayAsync(Math.Max(1, timeoutSec) * 1000).ConfigureAwait(false);
+        var result = await _adb.RunAsync([
+            "logcat",
+            "-v",
+            "brief",
+            "-T",
+            started.ToLocalTime().ToString("MM-dd HH:mm:ss.fff"),
+            "-d",
+            "*:V"]).ConfigureAwait(false);
+        result.EnsureSuccess("telemetry watch failed");
+        return await CaptureTelemetryAsync(
+            "telemetry-watch",
+            result.Stdout,
+            new
+            {
+                schema = "device-e2e-lab-telemetry-watch.v1",
+                started_at = started,
+                timeout_sec = timeoutSec,
+                invocation = result.Invocation,
+            }).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Records video with Android screenrecord.
     /// </summary>
     /// <param name="output">Local output path.</param>
@@ -748,6 +823,34 @@ public sealed class DeviceRunner(
         var result = await _adb.RunAsync(["logcat", "-d", "-t", tail.ToString()]).ConfigureAwait(false);
         result.EnsureSuccess("logcat failed");
         await _artifacts.WriteTextAsync(fileName, result.Stdout).ConfigureAwait(false);
+    }
+
+    private async Task<object> CaptureTelemetryAsync(string artifactBaseName, string logOutput, object metadata)
+    {
+        var parsed = _telemetryParser.ParseLog(logOutput);
+        await _artifacts.WriteTextAsync($"{artifactBaseName}.txt", logOutput).ConfigureAwait(false);
+        await _artifacts.WriteJsonAsync(
+            $"{artifactBaseName}.json",
+            new
+            {
+                metadata,
+                inspected_line_count = parsed.InspectedLineCount,
+                telemetry_line_count = parsed.TelemetryLineCount,
+                event_count = parsed.Events.Count,
+                parse_error_count = parsed.ParseErrors.Count,
+                events = parsed.Events,
+                parse_errors = parsed.ParseErrors,
+            }).ConfigureAwait(false);
+
+        return new
+        {
+            inspected_line_count = parsed.InspectedLineCount,
+            telemetry_line_count = parsed.TelemetryLineCount,
+            event_count = parsed.Events.Count,
+            parse_error_count = parsed.ParseErrors.Count,
+            events = parsed.Events,
+            parse_errors = parsed.ParseErrors,
+        };
     }
 
     private string NormalizeDevicePathForPull(string path)
@@ -1144,6 +1247,9 @@ Commands:
   devices
   preflight --package <app.id>
   screen-state
+    inspect
+    telemetry-tail [--tail 200]
+    telemetry-watch [--timeout-sec 15]
   wait-visible --text <label> [--timeout-sec 15]
   tap-text --text <label> [--timeout-sec 15]
   tap --x <px> --y <px>
@@ -1157,6 +1263,7 @@ Commands:
 Common options:
   --device <adb serial>
   --adb <adb executable>
+    --platform <android>
   --artifacts <directory>
 
 Design:
