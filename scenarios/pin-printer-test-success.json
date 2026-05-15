@@ -1,0 +1,14 @@
+{
+  "name": "pin-printer-test-success",
+  "steps": [
+    { "name": "maintenance action visible", "action": "waitVisible", "text": "Maintenance", "timeoutSec": 10 },
+    { "name": "clear logs", "action": "resetLog" },
+    { "name": "open maintenance", "action": "tapText", "text": "Maintenance", "timeoutSec": 15 },
+    { "name": "trigger print test badge when visible", "action": "tapText", "text": "Print test badge", "timeoutSec": 15, "continueOnError": true },
+    { "name": "done action visible", "action": "waitVisible", "text": "Done", "timeoutSec": 60 },
+    { "name": "capture success screenshot", "action": "takeScreenshot", "label": "printer-test-success" },
+    { "name": "printer success event logged", "action": "assertEvent", "event": "PRINTER_TEST_SUCCESS", "contains": ["eloSerial="], "timeoutSec": 60 },
+    { "name": "return to pin setup", "action": "tapText", "text": "Done", "timeoutSec": 10 },
+    { "name": "maintenance action restored", "action": "waitVisible", "text": "Maintenance", "timeoutSec": 10 }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "name": "idle-header-logo-sync-settings",
+  "steps": [
+    { "name": "idle screen visible", "action": "waitVisible", "text": "Sign out", "timeoutSec": 10 },
+    { "name": "open maintenance from header logo", "action": "doubleTapHeaderLogo" },
+    { "name": "sync settings visible", "action": "waitVisible", "text": "Sync settings", "timeoutSec": 10 },
+    { "name": "capture maintenance screen", "action": "takeScreenshot", "label": "maintenance-opened-from-header-logo" },
+    { "name": "start sync settings", "action": "tapText", "text": "Sync settings", "timeoutSec": 15 },
+    { "name": "let spinner appear", "action": "sleep", "milliseconds": 1000 },
+    { "name": "capture syncing screen", "action": "takeScreenshot", "label": "maintenance-sync-settings-spinning" },
+    { "name": "wait for sync settings to disappear", "action": "waitNotVisible", "text": "Sync settings", "timeoutSec": 90 },
+    { "name": "wait for maintenance header to disappear", "action": "waitNotVisible", "text": "Back", "timeoutSec": 5 },
+    { "name": "idle returns after sync", "action": "waitVisible", "text": "Sign out", "timeoutSec": 15 },
+    { "name": "capture idle screen", "action": "takeScreenshot", "label": "idle-after-sync-settings" },
+    { "name": "capture final artifacts", "action": "captureArtifacts", "label": "idle-header-logo-sync-settings" }
+  ]
+}

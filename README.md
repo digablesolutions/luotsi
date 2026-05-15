@@ -41,7 +41,7 @@ dotnet run --project DeviceE2ELab.Cli -- telemetry-tail --device <serial> --tail
 dotnet run --project DeviceE2ELab.Cli -- telemetry-watch --device <serial> --timeout-sec 10
 dotnet run --project DeviceE2ELab.Cli -- tap-text --device <serial> --text "Sign in"
 dotnet run --project DeviceE2ELab.Cli -- wait-log --device <serial> --contains "DEVICE_READY" --timeout-sec 20
-dotnet run --project DeviceE2ELab.Cli -- run --device <serial> --file examples/idle-language-fi.json
+dotnet run --project DeviceE2ELab.Cli -- run --device <serial> --file scenarios/idle-language-switch-finnish.json
 ```
 
 Inspect mode is intentionally different: it is a long-lived JSONL session over
@@ -97,27 +97,48 @@ the device.
 ## Scenario playbook
 
 The first playbook format is JSON to keep parsing unambiguous across OSes and
-agents:
+agents. The ported kiosk scenarios now live under `scenarios/`:
 
 ```json
 {
-  "name": "idle-language-fi",
+  "name": "idle-language-switch-finnish",
   "steps": [
     { "name": "open language menu", "action": "tapText", "text": "English", "timeoutSec": 10 },
     { "name": "choose Finnish", "action": "tapText", "text": "Suomi", "timeoutSec": 10 },
-    { "name": "wait for telemetry marker", "action": "waitLog", "text": "DEVICE_READY", "timeoutSec": 20 },
     { "name": "assert Finnish sign-in", "action": "waitVisible", "text": "Kirjaudu sisään", "timeoutSec": 15 }
   ]
 }
 ```
 
-Supported actions in this first slice:
+Scenario strings also support lightweight templating:
+
+- `${env:NAME}` for required environment variables
+- `${env:NAME|fallback}` for optional environment variables with a fallback
+- `${var:name}` for scenario variables from the root `variables` block
+- `${now:HHmmss}` for timestamp fragments used in live test data
+
+Supported actions:
 
 - `waitVisible`
+- `waitNotVisible`
 - `tapText`
+- `tapPoint`
+- `doubleTapHeaderLogo`
 - `typeText`
+- `typePin`
 - `keyevent`
 - `waitLog`
+- `waitStep`
+- `waitActionReady`
+- `resetLog`
+- `assertEvent`
+- `assertTextInputReady`
+- `screenState`
+- `assertBelow`
+- `assertAligned`
+- `assertAppVersion`
+- `takeScreenshot`
+- `captureArtifacts`
 - `sleep`
 
 ## Telemetry support
@@ -128,10 +149,9 @@ The CLI now understands the kiosk `DEVICE_TEST_TELEMETRY` logcat prefix.
   and returns both parsed events and malformed telemetry lines.
 - `telemetry-watch` waits for a bounded window, then dumps and parses telemetry
   emitted during that interval.
-
-This first slice intentionally focuses on raw event capture rather than kiosk
-parity helpers like `wait-step` and `wait-action-ready`. Those can now be built
-on top of the shared parser without changing the transport.
+- `wait-step` waits for a semantic kiosk step event.
+- `wait-action-ready` waits for a semantic kiosk action-ready event, optionally
+  scoped to a step.
 
 ## Inspect mode
 

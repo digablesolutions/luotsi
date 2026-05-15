@@ -1,0 +1,12 @@
+{
+  "name": "pin-maintenance-button-placement",
+  "steps": [
+    { "name": "no pin code action visible", "action": "waitVisible", "text": "I don't have a PIN code", "timeoutSec": 10 },
+    { "name": "maintenance action visible", "action": "waitVisible", "text": "Maintenance", "timeoutSec": 10 },
+    { "name": "capture current screen state", "action": "screenState" },
+    { "name": "maintenance sits below no pin code", "action": "assertBelow", "text": "Maintenance", "below": "I don't have a PIN code", "maxGapPx": 260 },
+    { "name": "maintenance is horizontally aligned", "action": "assertAligned", "text": "Maintenance", "with": "I don't have a PIN code", "maxDeltaPx": 160 },
+    { "name": "capture layout screenshot", "action": "takeScreenshot", "label": "pin-maintenance-button-placement" },
+    { "name": "capture layout artifacts", "action": "captureArtifacts", "label": "pin-maintenance-button-placement" }
+  ]
+}

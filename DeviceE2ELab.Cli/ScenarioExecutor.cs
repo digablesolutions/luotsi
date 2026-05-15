@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using System.Text.Json;
 
 namespace DeviceE2ELab.Cli;
@@ -5,10 +7,24 @@ namespace DeviceE2ELab.Cli;
 public interface IScenarioActionHost
 {
     Task<ScreenElement> WaitVisibleAsync(string text, int timeoutSec);
+    Task<object> WaitNotVisibleAsync(string text, int timeoutSec);
     Task<object> TapTextAsync(string text, int timeoutSec);
+    Task<object> TapPointAsync(string? label, int? x, int? y, double? xRatio, double? yRatio, int postTapDelayMs);
+    Task<object> DoubleTapHeaderLogoAsync();
     Task<object> TypeTextAsync(string text);
+    Task<object> TypePinAsync(string pin, int perDigitDelayMs);
     Task<object> KeyEventAsync(string code);
     Task<object> WaitForLogAsync(string text, int timeoutSec);
+    Task<object> WaitForStepAsync(string step, int timeoutSec);
+    Task<object> WaitForActionReadyAsync(string action, string? step, int timeoutSec);
+    Task<object> ResetLogAsync();
+    Task<object> AssertEventAsync(string name, IReadOnlyList<string> contains, string? detailsPattern, int timeoutSec);
+    Task<object> TakeScreenshotAsync(string label);
+    Task<object> CaptureArtifactsAsync(string label);
+    Task<object> AssertTextInputReadyAsync(bool requireKeyboard, int timeoutSec);
+    Task<object> AssertBelowAsync(string text, string referenceText, int maxGapPx);
+    Task<object> AssertAlignedAsync(string text, string referenceText, int maxDeltaPx);
+    Task<object> AssertAppVersionAsync(string? packageName, int maxTopInsetPx, int maxRightInsetPx);
     Task<DeviceFingerprint> WriteDeviceFingerprintAsync();
     Task<FailureArtifactBundle> CaptureFailureArtifactsAsync(FailureCaptureRequest request, Exception exception);
 }
@@ -16,12 +32,13 @@ public interface IScenarioActionHost
 /// <summary>
 /// Loads and executes JSON scenario files.
 /// </summary>
-public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSystem, TimeProvider timeProvider, IDelay delay)
+public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSystem, TimeProvider timeProvider, IDelay delay, IEnvironmentVariables? environment = null)
 {
     private readonly IDeviceHost _actionHost = actionHost ?? throw new ArgumentNullException(nameof(actionHost));
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     private readonly IDelay _delay = delay ?? throw new ArgumentNullException(nameof(delay));
+    private readonly IEnvironmentVariables _environment = environment ?? new SystemEnvironmentVariables();
 
     /// <summary>
     /// Runs a JSON scenario playbook.
@@ -30,7 +47,7 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
     /// <returns>Scenario result.</returns>
     public async Task<object> RunAsync(string file)
     {
-        var scenario = await LoadAsync(file).ConfigureAwait(false);
+        var scenario = ResolveTemplates(await LoadAsync(file).ConfigureAwait(false));
         var steps = new List<object>();
         await _actionHost.WriteDeviceFingerprintAsync().ConfigureAwait(false);
 
@@ -41,18 +58,21 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
 
             try
             {
-                object result = step.Action switch
-                {
-                    "waitVisible" => await _actionHost.WaitVisibleAsync(step.Text ?? throw new UsageException("waitVisible requires text."), step.TimeoutSec ?? 15).ConfigureAwait(false),
-                    "tapText" => await _actionHost.TapTextAsync(step.Text ?? throw new UsageException("tapText requires text."), step.TimeoutSec ?? 15).ConfigureAwait(false),
-                    "typeText" => await _actionHost.TypeTextAsync(step.Text ?? throw new UsageException("typeText requires text.")).ConfigureAwait(false),
-                    "keyevent" => await _actionHost.KeyEventAsync(step.Code ?? throw new UsageException("keyevent requires code.")).ConfigureAwait(false),
-                    "waitLog" => await _actionHost.WaitForLogAsync(step.Text ?? throw new UsageException("waitLog requires text."), step.TimeoutSec ?? 15).ConfigureAwait(false),
-                    "sleep" => await SleepAsync(step.Milliseconds ?? 1000).ConfigureAwait(false),
-                    _ => throw new UsageException($"Unknown scenario action '{step.Action}'."),
-                };
+                var result = await ExecuteStepAsync(step).ConfigureAwait(false);
 
                 steps.Add(new { step = step.Name ?? step.Action, action = step.Action, duration_ms = (_timeProvider.GetUtcNow() - started).TotalMilliseconds, result });
+            }
+            catch (Exception ex) when (step.ContinueOnError is true && ex is not UsageException)
+            {
+                var category = ex is ICommandFailureDetails continuedFailure ? continuedFailure.CategoryOverride : ErrorInfo.Classify(ex.Message);
+                steps.Add(new
+                {
+                    step = step.Name ?? step.Action,
+                    action = step.Action,
+                    status = "continued_on_error",
+                    duration_ms = (_timeProvider.GetUtcNow() - started).TotalMilliseconds,
+                    error = ErrorInfo.From(ex, category),
+                });
             }
             catch (UsageException)
             {
@@ -83,6 +103,36 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
         return new { scenario = scenario.Name, status = "passed", steps };
     }
 
+    private async Task<object> ExecuteStepAsync(ScenarioStep step)
+    {
+        return step.Action switch
+        {
+            "waitVisible" => await _actionHost.WaitVisibleAsync(step.Text ?? throw new UsageException("waitVisible requires text."), step.TimeoutSec ?? 15).ConfigureAwait(false),
+            "waitNotVisible" => await _actionHost.WaitNotVisibleAsync(step.Text ?? throw new UsageException("waitNotVisible requires text."), step.TimeoutSec ?? 15).ConfigureAwait(false),
+            "tapText" => await _actionHost.TapTextAsync(step.Text ?? throw new UsageException("tapText requires text."), step.TimeoutSec ?? 15).ConfigureAwait(false),
+            "tapPoint" => await _actionHost.TapPointAsync(step.Label ?? step.Name ?? step.Text, step.X, step.Y, step.XRatio, step.YRatio, step.PostTapDelayMs ?? 300).ConfigureAwait(false),
+            "doubleTapHeaderLogo" => await _actionHost.DoubleTapHeaderLogoAsync().ConfigureAwait(false),
+            "doubleTap" when step.HeaderLogo is true => await _actionHost.DoubleTapHeaderLogoAsync().ConfigureAwait(false),
+            "typeText" => await _actionHost.TypeTextAsync(step.Text ?? throw new UsageException("typeText requires text.")).ConfigureAwait(false),
+            "typePin" => await _actionHost.TypePinAsync(step.Text ?? throw new UsageException("typePin requires text."), step.IntervalMs ?? 120).ConfigureAwait(false),
+            "keyevent" => await _actionHost.KeyEventAsync(step.Code ?? throw new UsageException("keyevent requires code.")).ConfigureAwait(false),
+            "waitLog" => await _actionHost.WaitForLogAsync(step.Text ?? throw new UsageException("waitLog requires text."), step.TimeoutSec ?? 15).ConfigureAwait(false),
+            "waitStep" => await _actionHost.WaitForStepAsync(step.Step ?? step.Text ?? throw new UsageException("waitStep requires step."), step.TimeoutSec ?? 15).ConfigureAwait(false),
+            "waitActionReady" => await _actionHost.WaitForActionReadyAsync(step.Text ?? throw new UsageException("waitActionReady requires text."), step.Step, step.TimeoutSec ?? 15).ConfigureAwait(false),
+            "resetLog" => await _actionHost.ResetLogAsync().ConfigureAwait(false),
+            "assertEvent" => await _actionHost.AssertEventAsync(step.Event ?? step.Text ?? throw new UsageException("assertEvent requires event or text."), step.Contains ?? Array.Empty<string>(), step.DetailsPattern, step.TimeoutSec ?? 15).ConfigureAwait(false),
+            "takeScreenshot" => await _actionHost.TakeScreenshotAsync(step.Label ?? step.Text ?? step.Name ?? throw new UsageException("takeScreenshot requires label, text, or name.")).ConfigureAwait(false),
+            "captureArtifacts" => await _actionHost.CaptureArtifactsAsync(step.Label ?? step.Text ?? step.Name ?? throw new UsageException("captureArtifacts requires label, text, or name.")).ConfigureAwait(false),
+            "assertTextInputReady" => await _actionHost.AssertTextInputReadyAsync(step.RequireKeyboard ?? false, step.TimeoutSec ?? 15).ConfigureAwait(false),
+            "assertBelow" => await _actionHost.AssertBelowAsync(step.Text ?? throw new UsageException("assertBelow requires text."), step.Below ?? throw new UsageException("assertBelow requires below."), step.MaxGapPx ?? 260).ConfigureAwait(false),
+            "assertAligned" => await _actionHost.AssertAlignedAsync(step.Text ?? throw new UsageException("assertAligned requires text."), step.With ?? throw new UsageException("assertAligned requires with."), step.MaxDeltaPx ?? 160).ConfigureAwait(false),
+            "assertAppVersion" => await _actionHost.AssertAppVersionAsync(step.Package ?? step.Text, step.MaxTopInsetPx ?? 140, step.MaxRightInsetPx ?? 300).ConfigureAwait(false),
+            "screenState" => await _actionHost.GetScreenStateAsync().ConfigureAwait(false),
+            "sleep" => await SleepAsync(step.Milliseconds ?? 1000).ConfigureAwait(false),
+            _ => throw new UsageException($"Unknown scenario action '{step.Action}'."),
+        };
+    }
+
     private async Task<ScenarioFile> LoadAsync(string file)
     {
         if (!_fileSystem.FileExists(file))
@@ -105,6 +155,200 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
         {
             throw new UsageException($"Scenario file '{file}' is not valid JSON: {ex.Message}");
         }
+    }
+
+    private ScenarioFile ResolveTemplates(ScenarioFile scenario)
+    {
+        var resolvedVariables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        if (scenario.Variables is not null)
+        {
+            foreach (var key in scenario.Variables.Keys)
+            {
+                ResolveVariable(key, scenario.Variables, resolvedVariables, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            }
+        }
+
+        return scenario with
+        {
+            Name = ResolveValue(scenario.Name, scenario.Variables, resolvedVariables) ?? scenario.Name,
+            Steps = scenario.Steps.Select(step => step with
+            {
+                Name = ResolveValue(step.Name, scenario.Variables, resolvedVariables),
+                Action = ResolveValue(step.Action, scenario.Variables, resolvedVariables) ?? step.Action,
+                Text = ResolveValue(step.Text, scenario.Variables, resolvedVariables),
+                Code = ResolveValue(step.Code, scenario.Variables, resolvedVariables),
+                Step = ResolveValue(step.Step, scenario.Variables, resolvedVariables),
+                Label = ResolveValue(step.Label, scenario.Variables, resolvedVariables),
+                Event = ResolveValue(step.Event, scenario.Variables, resolvedVariables),
+                Contains = step.Contains?.Select(value => ResolveValue(value, scenario.Variables, resolvedVariables) ?? value).ToArray(),
+                DetailsPattern = ResolveValue(step.DetailsPattern, scenario.Variables, resolvedVariables),
+                Below = ResolveValue(step.Below, scenario.Variables, resolvedVariables),
+                With = ResolveValue(step.With, scenario.Variables, resolvedVariables),
+                Package = ResolveValue(step.Package, scenario.Variables, resolvedVariables),
+            }).ToArray(),
+        };
+    }
+
+    private string ResolveVariable(
+        string name,
+        IReadOnlyDictionary<string, string> variables,
+        IDictionary<string, string> resolvedVariables,
+        ISet<string> stack)
+    {
+        if (resolvedVariables.TryGetValue(name, out var resolved))
+        {
+            return resolved;
+        }
+
+        if (!variables.TryGetValue(name, out var template))
+        {
+            throw new UsageException($"Scenario variable '{name}' is not defined.");
+        }
+
+        if (!stack.Add(name))
+        {
+            throw new UsageException($"Scenario variable '{name}' is part of a cycle.");
+        }
+
+        resolved = ResolveValue(template, variables, resolvedVariables, stack) ?? string.Empty;
+        stack.Remove(name);
+        resolvedVariables[name] = resolved;
+        return resolved;
+    }
+
+    private string? ResolveValue(
+        string? value,
+        IReadOnlyDictionary<string, string>? variables,
+        IDictionary<string, string> resolvedVariables,
+        ISet<string>? stack = null)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        var builder = new StringBuilder();
+
+        for (var index = 0; index < value.Length; index++)
+        {
+            if (value[index] == '$' && index + 1 < value.Length && value[index + 1] == '{')
+            {
+                var endIndex = FindPlaceholderEnd(value, index + 2);
+                if (endIndex < 0)
+                {
+                    throw new UsageException($"Scenario template '{value}' has an unterminated placeholder.");
+                }
+
+                var token = value[(index + 2)..endIndex];
+                builder.Append(ResolvePlaceholder(token, variables, resolvedVariables, stack ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase)));
+                index = endIndex;
+                continue;
+            }
+
+            builder.Append(value[index]);
+        }
+
+        return builder.ToString();
+    }
+
+    private string ResolvePlaceholder(
+        string token,
+        IReadOnlyDictionary<string, string>? variables,
+        IDictionary<string, string> resolvedVariables,
+        ISet<string> stack)
+    {
+        if (token.StartsWith("env:", StringComparison.OrdinalIgnoreCase))
+        {
+            var expression = token[4..];
+            var splitIndex = FindTopLevelSeparator(expression, '|');
+            var envName = splitIndex >= 0 ? expression[..splitIndex] : expression;
+            var fallback = splitIndex >= 0 ? expression[(splitIndex + 1)..] : null;
+            var envValue = _environment.GetEnvironmentVariable(envName);
+
+            if (!string.IsNullOrWhiteSpace(envValue))
+            {
+                return envValue;
+            }
+
+            if (fallback is not null)
+            {
+                return ResolveValue(fallback, variables, resolvedVariables, stack) ?? string.Empty;
+            }
+
+            throw new UsageException($"Scenario requires environment variable '{envName}'.");
+        }
+
+        if (token.StartsWith("now:", StringComparison.OrdinalIgnoreCase))
+        {
+            return _timeProvider.GetUtcNow().ToLocalTime().ToString(token[4..], CultureInfo.InvariantCulture);
+        }
+
+        if (token.StartsWith("var:", StringComparison.OrdinalIgnoreCase))
+        {
+            if (variables is null)
+            {
+                throw new UsageException($"Scenario variable placeholder '{token}' has no variables block.");
+            }
+
+            return ResolveVariable(token[4..], variables, resolvedVariables, stack);
+        }
+
+        throw new UsageException($"Unsupported scenario placeholder '${{{token}}}'.");
+    }
+
+    private static int FindPlaceholderEnd(string value, int startIndex)
+    {
+        var depth = 1;
+
+        for (var index = startIndex; index < value.Length; index++)
+        {
+            if (value[index] == '$' && index + 1 < value.Length && value[index + 1] == '{')
+            {
+                depth++;
+                index++;
+                continue;
+            }
+
+            if (value[index] == '}')
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    return index;
+                }
+            }
+        }
+
+        return -1;
+    }
+
+    private static int FindTopLevelSeparator(string value, char separator)
+    {
+        var depth = 0;
+
+        for (var index = 0; index < value.Length; index++)
+        {
+            if (value[index] == '$' && index + 1 < value.Length && value[index + 1] == '{')
+            {
+                depth++;
+                index++;
+                continue;
+            }
+
+            if (value[index] == '}' && depth > 0)
+            {
+                depth--;
+                continue;
+            }
+
+            if (depth == 0 && value[index] == separator)
+            {
+                return index;
+            }
+        }
+
+        return -1;
     }
 
     private async Task<object> SleepAsync(int milliseconds)

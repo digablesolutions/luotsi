@@ -1,0 +1,39 @@
+{
+  "name": "idle-pin-code-sign-in-happy-path",
+  "variables": {
+    "pinCode": "${env:DEVICE_TEST_PIN_CODE|68057}",
+    "visitorFullName": "${env:DEVICE_TEST_PIN_VISITOR_NAME|Ggg ggg}",
+    "visitorSearchText": "${env:DEVICE_TEST_PIN_VISITOR_SEARCH|${var:visitorFullName}}"
+  },
+  "steps": [
+    { "name": "idle sign in visible", "action": "waitVisible", "text": "Sign in", "timeoutSec": 15 },
+    { "name": "clear logs", "action": "resetLog" },
+    { "name": "open sign in", "action": "tapText", "text": "Sign in", "timeoutSec": 15 },
+    { "name": "pin code question visible", "action": "waitVisible", "text": "Do you have a PIN code?", "timeoutSec": 15 },
+    { "name": "choose pin flow", "action": "tapText", "text": "Yes", "timeoutSec": 15 },
+    { "name": "pin prompt visible", "action": "waitVisible", "text": "Enter the PIN code from your pre-arrival email or text message", "timeoutSec": 15 },
+    { "name": "focus first pin box", "action": "tapPoint", "label": "pin-code-first-box-focus", "xRatio": 0.388, "yRatio": 0.316, "postTapDelayMs": 300 },
+    { "name": "enter pin code", "action": "typePin", "text": "${var:pinCode}", "intervalMs": 120 },
+    { "name": "continue after pin", "action": "tapText", "text": "Continue", "timeoutSec": 15 },
+    { "name": "take photo action visible", "action": "tapText", "text": "Take photo", "timeoutSec": 45 },
+    { "name": "camera settle", "action": "sleep", "milliseconds": 2000 },
+    { "name": "save photo", "action": "tapText", "text": "Save photo", "timeoutSec": 25 },
+    { "name": "post save settle", "action": "sleep", "milliseconds": 1000 },
+    { "name": "continue after photo", "action": "tapText", "text": "Continue", "timeoutSec": 30 },
+    { "name": "clear logs before terms", "action": "resetLog" },
+    { "name": "agree to terms", "action": "tapText", "text": "I agree to the terms of visit", "timeoutSec": 30 },
+    { "name": "printing succeeded", "action": "assertEvent", "event": "PRINTING_SUCCESSFUL", "timeoutSec": 60 },
+    { "name": "return to main page shortcut", "action": "tapText", "text": "Go to the main page", "timeoutSec": 45, "continueOnError": true },
+    { "name": "sign out action visible", "action": "waitVisible", "text": "Sign out", "timeoutSec": 60 },
+    { "name": "clear logs before sign out", "action": "resetLog" },
+    { "name": "open sign out", "action": "tapText", "text": "Sign out", "timeoutSec": 15 },
+    { "name": "sign out prompt visible", "action": "waitVisible", "text": "Enter your name to sign out", "timeoutSec": 15 },
+    { "name": "search input ready", "action": "assertTextInputReady", "requireKeyboard": true, "timeoutSec": 10 },
+    { "name": "type visitor name", "action": "typeText", "text": "${var:visitorSearchText}" },
+    { "name": "visitor suggestion visible", "action": "waitVisible", "text": "${var:visitorFullName}", "timeoutSec": 45 },
+    { "name": "select visitor suggestion", "action": "tapText", "text": "${var:visitorFullName}", "timeoutSec": 15 },
+    { "name": "clear logs before final sign out", "action": "resetLog" },
+    { "name": "confirm sign out", "action": "tapText", "text": "Sign out", "timeoutSec": 10 },
+    { "name": "idle sign in restored", "action": "waitVisible", "text": "Sign in", "timeoutSec": 25 }
+  ]
+}

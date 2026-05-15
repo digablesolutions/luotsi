@@ -96,7 +96,7 @@ public sealed class App
                 options.Get("adb") ?? _environment.GetEnvironmentVariable("DEVICE_E2E_ADB") ?? "adb",
                 options.Get("device")),
             artifacts);
-        var scenarios = new ScenarioExecutor(runner, _fileSystem, _timeProvider, _delay);
+        var scenarios = new ScenarioExecutor(runner, _fileSystem, _timeProvider, _delay, _environment);
 
         if (string.Equals(options.Command, "inspect", StringComparison.OrdinalIgnoreCase))
         {
@@ -113,6 +113,8 @@ public sealed class App
                 "screen-state" => await runner.GetScreenStateAsync().ConfigureAwait(false),
                 "telemetry-tail" => await runner.TelemetryTailAsync(options.Int("tail", 200)).ConfigureAwait(false),
                 "telemetry-watch" => await runner.TelemetryWatchAsync(options.Int("timeout-sec", 15)).ConfigureAwait(false),
+                "wait-step" => await runner.WaitForStepAsync(options.Require("step"), options.Int("timeout-sec", 15)).ConfigureAwait(false),
+                "wait-action-ready" => await runner.WaitForActionReadyAsync(options.Require("action"), options.Get("step"), options.Int("timeout-sec", 15)).ConfigureAwait(false),
                 "tap" => await runner.TapAsync(options.Require("x"), options.Require("y")).ConfigureAwait(false),
                 "tap-text" => await runner.TapTextAsync(options.Require("text"), options.Int("timeout-sec", 15)).ConfigureAwait(false),
                 "wait-visible" => await runner.WaitVisibleAsync(options.Require("text"), options.Int("timeout-sec", 15)).ConfigureAwait(false),
@@ -168,6 +170,8 @@ public sealed class CliOptions
         "inspect",
         "telemetry-tail",
         "telemetry-watch",
+        "wait-step",
+        "wait-action-ready",
         "tap",
         "tap-text",
         "wait-visible",
@@ -393,7 +397,7 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
 /// <summary>
 /// Device operation facade used by the command handlers.
 /// </summary>
-public sealed class DeviceRunner(
+public sealed partial class DeviceRunner(
     IAdbClient adb,
     ArtifactSession artifacts,
     TimeProvider? timeProvider = null,
@@ -705,6 +709,73 @@ public sealed class DeviceRunner(
     }
 
     /// <summary>
+    /// Waits for a semantic telemetry step event.
+    /// </summary>
+    /// <param name="step">Expected semantic step name.</param>
+    /// <param name="timeoutSec">Timeout in seconds.</param>
+    /// <returns>Matched telemetry data.</returns>
+    public Task<object> WaitForStepAsync(string step, int timeoutSec)
+    {
+        var expectedStep = NormalizeTelemetryStep(step);
+        return WaitForTelemetryEventAsync(
+            timeoutSec,
+            telemetry => string.Equals(telemetry.Event, "step", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(NormalizeTelemetryStep(telemetry.Step), expectedStep, StringComparison.Ordinal),
+            telemetry => new
+            {
+                step = expectedStep,
+                line = telemetry.RawLine,
+                event_name = telemetry.Event,
+                payload = telemetry.Payload,
+            },
+            "wait-step",
+            invocation => new
+            {
+                schema = "device-e2e-lab-wait-step.v1",
+                step = expectedStep,
+                timeout_sec = timeoutSec,
+                invocation,
+            },
+            () => new SemanticWaitTimeoutException($"device step '{expectedStep}'", timeoutSec));
+    }
+
+    /// <summary>
+    /// Waits for a semantic telemetry action-ready event.
+    /// </summary>
+    /// <param name="action">Expected action name.</param>
+    /// <param name="step">Optional expected step name.</param>
+    /// <param name="timeoutSec">Timeout in seconds.</param>
+    /// <returns>Matched telemetry data.</returns>
+    public Task<object> WaitForActionReadyAsync(string action, string? step, int timeoutSec)
+    {
+        var normalizedStep = NormalizeTelemetryStep(step);
+        return WaitForTelemetryEventAsync(
+            timeoutSec,
+            telemetry =>
+                string.Equals(telemetry.Event, "action_ready", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(telemetry.Action, action, StringComparison.OrdinalIgnoreCase) &&
+                (normalizedStep is null || string.Equals(NormalizeTelemetryStep(telemetry.Step), normalizedStep, StringComparison.Ordinal)),
+            telemetry => new
+            {
+                action,
+                step = normalizedStep,
+                line = telemetry.RawLine,
+                event_name = telemetry.Event,
+                payload = telemetry.Payload,
+            },
+            "wait-action-ready",
+            invocation => new
+            {
+                schema = "device-e2e-lab-wait-action-ready.v1",
+                action,
+                step = normalizedStep,
+                timeout_sec = timeoutSec,
+                invocation,
+            },
+            () => new SemanticWaitTimeoutException($"device action ready '{action}'" + (normalizedStep is null ? string.Empty : $" on '{normalizedStep}'"), timeoutSec));
+    }
+
+    /// <summary>
     /// Records video with Android screenrecord.
     /// </summary>
     /// <param name="output">Local output path.</param>
@@ -851,6 +922,85 @@ public sealed class DeviceRunner(
             events = parsed.Events,
             parse_errors = parsed.ParseErrors,
         };
+    }
+
+    private async Task<object> WaitForTelemetryEventAsync(
+        int timeoutSec,
+        Func<TelemetryEvent, bool> eventMatch,
+        Func<TelemetryEvent, object> successDataFactory,
+        string artifactBaseName,
+        Func<string, object> metadataFactory,
+        Func<Exception> timeoutExceptionFactory)
+    {
+        var started = _timeProvider.GetUtcNow();
+        var deadline = started.AddSeconds(Math.Max(1, timeoutSec));
+        string lastLogOutput = string.Empty;
+        string? invocation = null;
+        TelemetryParseResult lastParsed = new([], [], 0, 0);
+
+        while (_timeProvider.GetUtcNow() < deadline)
+        {
+            var result = await _adb.RunAsync([
+                "logcat",
+                "-d",
+                "-v",
+                "brief",
+                "-T",
+                started.ToLocalTime().ToString("MM-dd HH:mm:ss.fff"),
+                "*:V"]).ConfigureAwait(false);
+            result.EnsureSuccess("telemetry wait failed");
+            invocation = result.Invocation;
+            lastLogOutput = result.Stdout;
+            lastParsed = _telemetryParser.ParseLog(lastLogOutput);
+
+            var match = lastParsed.Events.LastOrDefault(eventMatch);
+            if (match is not null)
+            {
+                await _artifacts.WriteTextAsync($"{artifactBaseName}.txt", lastLogOutput).ConfigureAwait(false);
+                await _artifacts.WriteJsonAsync(
+                    $"{artifactBaseName}.json",
+                    new
+                    {
+                        metadata = metadataFactory(invocation),
+                        event_count = lastParsed.Events.Count,
+                        parse_error_count = lastParsed.ParseErrors.Count,
+                        matched = successDataFactory(match),
+                        events = lastParsed.Events,
+                        parse_errors = lastParsed.ParseErrors,
+                    }).ConfigureAwait(false);
+                return successDataFactory(match);
+            }
+
+            await _delay.DelayAsync(250).ConfigureAwait(false);
+        }
+
+        if (invocation is not null)
+        {
+            await _artifacts.WriteTextAsync($"{artifactBaseName}.txt", lastLogOutput).ConfigureAwait(false);
+            await _artifacts.WriteJsonAsync(
+                $"{artifactBaseName}.json",
+                new
+                {
+                    metadata = metadataFactory(invocation),
+                    event_count = lastParsed.Events.Count,
+                    parse_error_count = lastParsed.ParseErrors.Count,
+                    events = lastParsed.Events,
+                    parse_errors = lastParsed.ParseErrors,
+                }).ConfigureAwait(false);
+        }
+
+        throw timeoutExceptionFactory();
+    }
+
+    private static string? NormalizeTelemetryStep(string? step)
+    {
+        if (string.IsNullOrWhiteSpace(step))
+        {
+            return null;
+        }
+
+        var normalized = step.Trim().ToUpperInvariant().Replace('-', '_');
+        return normalized.StartsWith("STEP_", StringComparison.Ordinal) ? normalized : $"STEP_{normalized}";
     }
 
     private string NormalizeDevicePathForPull(string path)
@@ -1121,7 +1271,8 @@ public sealed record Bounds(int Left, int Top, int Right, int Bottom);
 /// </summary>
 /// <param name="Name">Scenario name.</param>
 /// <param name="Steps">Scenario steps.</param>
-public sealed record ScenarioFile(string Name, IReadOnlyList<ScenarioStep> Steps);
+/// <param name="Variables">Optional scenario variables.</param>
+public sealed record ScenarioFile(string Name, IReadOnlyList<ScenarioStep> Steps, IReadOnlyDictionary<string, string>? Variables = null);
 
 /// <summary>
 /// Scenario playbook step.
@@ -1130,9 +1281,57 @@ public sealed record ScenarioFile(string Name, IReadOnlyList<ScenarioStep> Steps
 /// <param name="Action">Action name.</param>
 /// <param name="Text">Text argument.</param>
 /// <param name="Code">Keyevent argument.</param>
+/// <param name="Step">Semantic step argument.</param>
+/// <param name="Label">Optional artifact or tap target label.</param>
+/// <param name="Event">Domain event name.</param>
+/// <param name="Contains">Event detail substrings.</param>
+/// <param name="DetailsPattern">Optional event details regex.</param>
+/// <param name="Below">Anchor label for below assertions.</param>
+/// <param name="With">Anchor label for alignment assertions.</param>
+/// <param name="Package">Optional package override.</param>
 /// <param name="TimeoutSec">Timeout in seconds.</param>
 /// <param name="Milliseconds">Sleep duration.</param>
-public sealed record ScenarioStep(string? Name, string Action, string? Text, string? Code, int? TimeoutSec, int? Milliseconds);
+/// <param name="X">Absolute X coordinate.</param>
+/// <param name="Y">Absolute Y coordinate.</param>
+/// <param name="XRatio">Relative X coordinate.</param>
+/// <param name="YRatio">Relative Y coordinate.</param>
+/// <param name="PostTapDelayMs">Post-tap delay for coordinate taps.</param>
+/// <param name="RequireKeyboard">Whether text input requires the keyboard.</param>
+/// <param name="HeaderLogo">Whether a double-tap should target the header logo.</param>
+/// <param name="MaxGapPx">Maximum vertical gap for below assertions.</param>
+/// <param name="MaxDeltaPx">Maximum horizontal delta for alignment assertions.</param>
+/// <param name="MaxTopInsetPx">Maximum top inset for version assertions.</param>
+/// <param name="MaxRightInsetPx">Maximum right inset for version assertions.</param>
+/// <param name="IntervalMs">Interval between double taps or keyed characters.</param>
+/// <param name="ContinueOnError">Whether the scenario should continue after a step failure.</param>
+public sealed record ScenarioStep(
+    string? Name,
+    string Action,
+    string? Text,
+    string? Code,
+    string? Step,
+    string? Label = null,
+    string? Event = null,
+    IReadOnlyList<string>? Contains = null,
+    string? DetailsPattern = null,
+    string? Below = null,
+    string? With = null,
+    string? Package = null,
+    int? TimeoutSec = null,
+    int? Milliseconds = null,
+    int? X = null,
+    int? Y = null,
+    double? XRatio = null,
+    double? YRatio = null,
+    int? PostTapDelayMs = null,
+    bool? RequireKeyboard = null,
+    bool? HeaderLogo = null,
+    int? MaxGapPx = null,
+    int? MaxDeltaPx = null,
+    int? MaxTopInsetPx = null,
+    int? MaxRightInsetPx = null,
+    int? IntervalMs = null,
+    bool? ContinueOnError = null);
 
 /// <summary>
 /// JSON command envelope.
@@ -1184,6 +1383,12 @@ public sealed record ErrorInfo(string Type, string Message, string Category)
             return "log_wait_timeout";
         }
 
+        if (message.Contains("device step", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("device action ready", StringComparison.OrdinalIgnoreCase))
+        {
+            return "oracle_timeout";
+        }
+
         if (message.Contains("Timed out", StringComparison.OrdinalIgnoreCase))
         {
             return "selector_or_screen_state";
@@ -1210,6 +1415,13 @@ public sealed class UsageException(string message) : Exception(message);
 public sealed class LogWaitTimeoutException(string containsText, int timeoutSec) : TimeoutException($"Timed out after {timeoutSec}s waiting for log text '{containsText}'."), ICommandFailureDetails
 {
     public string CategoryOverride => "log_wait_timeout";
+
+    public object? DataPayload => null;
+}
+
+public sealed class SemanticWaitTimeoutException(string target, int timeoutSec) : TimeoutException($"Timed out after {timeoutSec}s waiting for {target}."), ICommandFailureDetails
+{
+    public string CategoryOverride => "oracle_timeout";
 
     public object? DataPayload => null;
 }
@@ -1250,6 +1462,8 @@ Commands:
     inspect
     telemetry-tail [--tail 200]
     telemetry-watch [--timeout-sec 15]
+    wait-step --step <STEP_NAME> [--timeout-sec 15]
+    wait-action-ready --action <name> [--step <STEP_NAME>] [--timeout-sec 15]
   wait-visible --text <label> [--timeout-sec 15]
   tap-text --text <label> [--timeout-sec 15]
   tap --x <px> --y <px>

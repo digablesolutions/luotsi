@@ -1,0 +1,13 @@
+{
+  "name": "pin-printer-test-failure-cover-open",
+  "steps": [
+    { "name": "maintenance action visible", "action": "waitVisible", "text": "Maintenance", "timeoutSec": 10 },
+    { "name": "clear logs", "action": "resetLog" },
+    { "name": "open maintenance", "action": "tapText", "text": "Maintenance", "timeoutSec": 15 },
+    { "name": "printing failed visible", "action": "waitVisible", "text": "Printing failed", "timeoutSec": 30 },
+    { "name": "capture failure screenshot", "action": "takeScreenshot", "label": "printer-test-cover-open" },
+    { "name": "printer failure event logged", "action": "assertEvent", "event": "PRINTER_TEST_FAILURE", "contains": ["eloSerial=", "probe_error", "printer cover is open"], "timeoutSec": 30 },
+    { "name": "return to pin setup", "action": "tapText", "text": "Back", "timeoutSec": 10 },
+    { "name": "maintenance action restored", "action": "waitVisible", "text": "Maintenance", "timeoutSec": 10 }
+  ]
+}

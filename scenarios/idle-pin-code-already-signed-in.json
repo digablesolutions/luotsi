@@ -1,0 +1,22 @@
+{
+  "name": "idle-pin-code-already-signed-in",
+  "variables": {
+    "pinCode": "${env:DEVICE_TEST_PIN_CODE}"
+  },
+  "steps": [
+    { "name": "idle sign in visible", "action": "waitVisible", "text": "Sign in", "timeoutSec": 15 },
+    { "name": "clear logs", "action": "resetLog" },
+    { "name": "open sign in", "action": "tapText", "text": "Sign in", "timeoutSec": 15 },
+    { "name": "pin code question visible", "action": "waitVisible", "text": "Do you have a PIN code?", "timeoutSec": 15 },
+    { "name": "choose pin flow", "action": "tapText", "text": "Yes", "timeoutSec": 15 },
+    { "name": "pin prompt visible", "action": "waitVisible", "text": "Enter the PIN code from your pre-arrival email or text message", "timeoutSec": 15 },
+    { "name": "focus first pin box", "action": "tapPoint", "label": "pin-code-first-box-focus", "xRatio": 0.388, "yRatio": 0.316, "postTapDelayMs": 300 },
+    { "name": "enter pin code", "action": "typePin", "text": "${var:pinCode}", "intervalMs": 120 },
+    { "name": "continue after pin", "action": "tapText", "text": "Continue", "timeoutSec": 15 },
+    { "name": "already signed in step", "action": "waitStep", "step": "STEP_ALREADY_SIGNED_IN", "timeoutSec": 20 },
+    { "name": "already signed in message visible", "action": "waitVisible", "text": "already signed in", "timeoutSec": 10 },
+    { "name": "take photo stays hidden", "action": "waitNotVisible", "text": "Take photo", "timeoutSec": 2 },
+    { "name": "idle step returns", "action": "waitStep", "step": "STEP_IDLE", "timeoutSec": 30 },
+    { "name": "idle sign in restored", "action": "waitVisible", "text": "Sign in", "timeoutSec": 15 }
+  ]
+}

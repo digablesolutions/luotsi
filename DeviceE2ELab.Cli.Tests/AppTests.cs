@@ -286,6 +286,116 @@ public sealed class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_WaitStep_Returns_Matched_Step_And_Writes_Artifacts()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        var console = new FakeConsole();
+        adb.EnqueueRunResult(new ProcessResult(
+            0,
+            "05-15 12:00:00.000 I/Test: DEVICE_TEST_TELEMETRY {\"schema\":\"systam-device-test-telemetry.v1\",\"seq\":10,\"session\":\"abc\",\"timestamp\":\"2026-05-15T12:00:00Z\",\"event\":\"step\",\"step\":\"STEP_IDLE\"}" + Environment.NewLine,
+            string.Empty));
+        var app = new App(timeProvider, fileSystem, new DefaultProcessRunner(), new FakeDelay(timeProvider), new FakeAdbClientFactory(adb), console);
+
+        var exitCode = await app.RunAsync(["wait-step", "--step", "idle", "--artifacts", "/tmp/test-artifacts"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("STEP_IDLE", envelope.RootElement.GetProperty("data").GetProperty("step").GetString());
+        var artifactRoot = envelope.RootElement.GetProperty("artifacts").GetProperty("artifact_root").GetString();
+        Assert.NotNull(artifactRoot);
+        Assert.True(fileSystem.FileExists(Path.Combine(artifactRoot!, "wait-step.txt")));
+        Assert.True(fileSystem.FileExists(Path.Combine(artifactRoot, "wait-step.json")));
+    }
+
+    [Fact]
+    public async Task RunAsync_WaitActionReady_Returns_Matched_Action_And_Step()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        var console = new FakeConsole();
+        adb.EnqueueRunResult(new ProcessResult(
+            0,
+            "05-15 12:00:00.000 I/Test: DEVICE_TEST_TELEMETRY {\"schema\":\"systam-device-test-telemetry.v1\",\"seq\":11,\"session\":\"abc\",\"timestamp\":\"2026-05-15T12:00:00Z\",\"event\":\"action_ready\",\"step\":\"STEP_IDLE\",\"action\":\"sign_in\"}" + Environment.NewLine,
+            string.Empty));
+        var app = new App(timeProvider, fileSystem, new DefaultProcessRunner(), new FakeDelay(timeProvider), new FakeAdbClientFactory(adb), console);
+
+        var exitCode = await app.RunAsync(["wait-action-ready", "--action", "sign_in", "--step", "idle", "--artifacts", "/tmp/test-artifacts"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("sign_in", envelope.RootElement.GetProperty("data").GetProperty("action").GetString());
+        Assert.Equal("STEP_IDLE", envelope.RootElement.GetProperty("data").GetProperty("step").GetString());
+    }
+
+    [Fact]
+    public async Task RunScenarioAsync_WaitStep_Action_Uses_Step_Field()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.EnqueueShellResult(new ProcessResult(0, "SER123", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "Pixel 9", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "16", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "36", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "google/pixel/device", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "arm64-v8a", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "mCurrentFocus=App", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(
+            0,
+            "05-15 12:00:00.000 I/Test: DEVICE_TEST_TELEMETRY {\"schema\":\"systam-device-test-telemetry.v1\",\"seq\":12,\"session\":\"abc\",\"timestamp\":\"2026-05-15T12:00:00Z\",\"event\":\"step\",\"step\":\"STEP_IDLE\"}" + Environment.NewLine,
+            string.Empty));
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
+        var scenarios = new ScenarioExecutor(runner, fileSystem, timeProvider, new FakeDelay(timeProvider));
+        var scenarioPath = "/tmp/wait-step.json";
+        fileSystem.AddFile(scenarioPath, """
+        {
+          "name": "semantic-step",
+          "steps": [
+            { "name": "wait for idle", "action": "waitStep", "step": "idle", "timeoutSec": 5 }
+          ]
+        }
+        """);
+
+        var result = await scenarios.RunAsync(scenarioPath);
+        var json = JsonDocument.Parse(JsonSerializer.Serialize(result)).RootElement;
+
+        Assert.Equal("semantic-step", json.GetProperty("scenario").GetString());
+        Assert.Equal("passed", json.GetProperty("status").GetString());
+        Assert.Equal("waitStep", json.GetProperty("steps")[0].GetProperty("action").GetString());
+        Assert.Equal("STEP_IDLE", json.GetProperty("steps")[0].GetProperty("result").GetProperty("step").GetString());
+    }
+
+    [Fact]
+    public void ScenarioCatalog_Files_Are_Valid_Json()
+    {
+        var repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        var scenarioDirectory = Path.Combine(repoRoot, "scenarios");
+
+        Assert.True(Directory.Exists(scenarioDirectory), $"Scenario directory was not found: {scenarioDirectory}");
+
+        var files = Directory.GetFiles(scenarioDirectory, "*.json", SearchOption.TopDirectoryOnly)
+            .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        Assert.NotEmpty(files);
+
+        foreach (var file in files)
+        {
+            var text = File.ReadAllText(file);
+            var scenario = JsonSerializer.Deserialize<ScenarioFile>(text, AppJson.Options);
+
+            Assert.NotNull(scenario);
+            Assert.False(string.IsNullOrWhiteSpace(scenario!.Name));
+            Assert.NotEmpty(scenario.Steps);
+        }
+    }
+
+    [Fact]
     public async Task RunAsync_Inspect_Streams_Snapshot_Command_Result_And_Delta()
     {
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
@@ -637,6 +747,38 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public Task<object> TelemetryWatchAsync(int timeoutSec) => Task.FromResult<object>(new { timeout_sec = timeoutSec, event_count = 0 });
 
+    public Task<object> WaitNotVisibleAsync(string text, int timeoutSec) => Task.FromResult<object>(new { text, timeout_sec = timeoutSec, visible = false });
+
+    public Task<object> TapPointAsync(string? label, int? x, int? y, double? xRatio, double? yRatio, int postTapDelayMs) =>
+        Task.FromResult<object>(new { label, x, y, x_ratio = xRatio, y_ratio = yRatio, post_tap_delay_ms = postTapDelayMs });
+
+    public Task<object> DoubleTapHeaderLogoAsync() => Task.FromResult<object>(new { target = "header_logo" });
+
+    public Task<object> WaitForStepAsync(string step, int timeoutSec) => Task.FromResult<object>(new { step, timeout_sec = timeoutSec });
+
+    public Task<object> WaitForActionReadyAsync(string action, string? step, int timeoutSec) => Task.FromResult<object>(new { action, step, timeout_sec = timeoutSec });
+
+    public Task<object> ResetLogAsync() => Task.FromResult<object>(new { cleared = true });
+
+    public Task<object> AssertEventAsync(string name, IReadOnlyList<string> contains, string? detailsPattern, int timeoutSec) =>
+        Task.FromResult<object>(new { name, contains, details_pattern = detailsPattern, timeout_sec = timeoutSec });
+
+    public Task<object> TakeScreenshotAsync(string label) => Task.FromResult<object>(new { label, file = $"{label}.png" });
+
+    public Task<object> CaptureArtifactsAsync(string label) => Task.FromResult<object>(new { label, root = "/tmp/artifacts" });
+
+    public Task<object> AssertTextInputReadyAsync(bool requireKeyboard, int timeoutSec) =>
+        Task.FromResult<object>(new { require_keyboard = requireKeyboard, timeout_sec = timeoutSec, keyboard_visible = true });
+
+    public Task<object> AssertBelowAsync(string text, string referenceText, int maxGapPx) =>
+        Task.FromResult<object>(new { text, below = referenceText, max_gap_px = maxGapPx, gap_px = 8 });
+
+    public Task<object> AssertAlignedAsync(string text, string referenceText, int maxDeltaPx) =>
+        Task.FromResult<object>(new { text, with = referenceText, max_delta_px = maxDeltaPx, delta_px = 4 });
+
+    public Task<object> AssertAppVersionAsync(string? packageName, int maxTopInsetPx, int maxRightInsetPx) =>
+        Task.FromResult<object>(new { package = packageName, max_top_inset_px = maxTopInsetPx, max_right_inset_px = maxRightInsetPx });
+
     public Task<object> RecordAsync(string output, int timeLimitSec) => Task.FromResult<object>(new { output, time_limit_sec = timeLimitSec });
 
     public Task<ScreenElement> WaitVisibleAsync(string text, int timeoutSec) =>
@@ -649,6 +791,8 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
     }
 
     public Task<object> TypeTextAsync(string text) => Task.FromResult<object>(new { text });
+
+    public Task<object> TypePinAsync(string pin, int perDigitDelayMs) => Task.FromResult<object>(new { pin, per_digit_delay_ms = perDigitDelayMs });
 
     public Task<object> KeyEventAsync(string code) => Task.FromResult<object>(new { code });
 
