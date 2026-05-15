@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -23,6 +24,11 @@ public static class Program
         var app = new App();
         return await app.RunAsync(args).ConfigureAwait(false);
     }
+}
+
+internal static class LogcatTime
+{
+    public static string FormatSince(DateTimeOffset value) => value.ToLocalTime().ToString("MM-dd HH':'mm':'ss.fff", CultureInfo.InvariantCulture);
 }
 
 /// <summary>
@@ -303,7 +309,7 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
 
     public async Task<AdbLogStreamResult> MonitorLogAsync(string containsText, DateTimeOffset since, int timeoutSec, CancellationToken cancellationToken = default)
     {
-        var finalArgs = BuildFinalArgs(["logcat", "-v", "brief", "-T", since.ToLocalTime().ToString("MM-dd HH:mm:ss.fff"), "*:V"]);
+        var finalArgs = BuildFinalArgs(["logcat", "-v", "brief", "-T", LogcatTime.FormatSince(since), "*:V"]);
         var startInfo = new ProcessStartInfo(_executable)
         {
             RedirectStandardOutput = true,
@@ -541,8 +547,24 @@ public sealed partial class DeviceRunner(
         while (_timeProvider.GetUtcNow() < deadline)
         {
             attempt++;
-            var state = await CaptureScreenStateAsync($"wait-visible-{attempt:000}").ConfigureAwait(false);
-            last = state.Elements.FirstOrDefault(e => e.Matches(text));
+            ScreenState state;
+
+            try
+            {
+                state = await CaptureScreenStateAsync($"wait-visible-{attempt:000}").ConfigureAwait(false);
+            }
+            catch (InvalidOperationException ex) when (IsRetryableHierarchyDumpFailure(ex))
+            {
+                await _delay.DelayAsync(500).ConfigureAwait(false);
+                continue;
+            }
+
+            last = state.Elements
+                .Select(element => new { Element = element, Score = element.GetMatchScore(text) })
+                .Where(candidate => candidate.Score > 0)
+                .OrderByDescending(candidate => candidate.Score)
+                .Select(candidate => candidate.Element)
+                .FirstOrDefault();
             if (last is not null)
             {
                 return last;
@@ -553,6 +575,9 @@ public sealed partial class DeviceRunner(
 
         throw new TimeoutException($"Timed out after {timeoutSec}s waiting for visible text '{text}'. Last seen: {last?.StableId ?? "none"}");
     }
+
+    private static bool IsRetryableHierarchyDumpFailure(InvalidOperationException exception) =>
+        exception.Message.Contains("UI hierarchy dump was empty or invalid XML", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Taps the center of visible text.
@@ -692,7 +717,7 @@ public sealed partial class DeviceRunner(
             "-v",
             "brief",
             "-T",
-            started.ToLocalTime().ToString("MM-dd HH:mm:ss.fff"),
+            LogcatTime.FormatSince(started),
             "-d",
             "*:V"]).ConfigureAwait(false);
         result.EnsureSuccess("telemetry watch failed");
@@ -946,7 +971,7 @@ public sealed partial class DeviceRunner(
                 "-v",
                 "brief",
                 "-T",
-                started.ToLocalTime().ToString("MM-dd HH:mm:ss.fff"),
+                LogcatTime.FormatSince(started),
                 "*:V"]).ConfigureAwait(false);
             result.EnsureSuccess("telemetry wait failed");
             invocation = result.Invocation;
@@ -1247,6 +1272,41 @@ public sealed record ScreenElement(
         string.Equals(ContentDescription, value, StringComparison.OrdinalIgnoreCase) ||
         (Text?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false) ||
         (ContentDescription?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false);
+
+    public bool IsExactMatch(string value) =>
+        string.Equals(Text, value, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(ContentDescription, value, StringComparison.OrdinalIgnoreCase);
+
+    public int GetMatchScore(string value)
+    {
+        var score = IsExactMatch(value)
+            ? 300
+            : Matches(value)
+                ? 200
+                : 0;
+
+        if (score == 0)
+        {
+            return 0;
+        }
+
+        if (ClassName?.Contains("EditText", StringComparison.OrdinalIgnoreCase) is true)
+        {
+            score -= 150;
+        }
+
+        if (Clickable)
+        {
+            score += 25;
+        }
+
+        if (!Enabled)
+        {
+            score -= 25;
+        }
+
+        return score;
+    }
 
     private static Bounds ParseBounds(string value)
     {

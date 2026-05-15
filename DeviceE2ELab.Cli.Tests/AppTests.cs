@@ -183,6 +183,63 @@ public sealed class AppTests
     }
 
     [Fact]
+    public async Task WaitVisibleAsync_Prefers_Exact_Button_Over_Containing_Header()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.EnqueueShellResult(new ProcessResult(
+            0,
+            CreateUiDumpWithNodes(
+                CreateUiNode(text: string.Empty, contentDescription: "Enter your name to sign out", className: "android.view.View", clickable: false, left: 693, top: 210, right: 1227, bottom: 261),
+                CreateUiNode(text: string.Empty, contentDescription: "Sign out", className: "android.widget.ImageView", clickable: false, left: 850, top: 453, right: 1070, bottom: 522)),
+            string.Empty));
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["wait-visible"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
+
+        var element = await runner.WaitVisibleAsync("Sign out", 1);
+
+        Assert.Equal("Sign out", element.ContentDescription);
+        Assert.Equal(453, element.Top);
+    }
+
+    [Fact]
+    public async Task WaitVisibleAsync_Prefers_Result_Row_Over_EditText_Query_Echo()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.EnqueueShellResult(new ProcessResult(
+            0,
+            CreateUiDumpWithNodes(
+                CreateUiNode(text: "Ggg Systam164344", contentDescription: string.Empty, className: "android.widget.EditText", clickable: true, left: 636, top: 270, right: 1284, bottom: 348),
+                CreateUiNode(text: string.Empty, contentDescription: "Ggg Systam164344\n15.05.2026 • 13:44 • Host: Perttu Sliden", className: "android.widget.ImageView", clickable: true, left: 636, top: 332, right: 1284, bottom: 452)),
+            string.Empty));
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["wait-visible"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
+
+        var element = await runner.WaitVisibleAsync("Ggg Systam164344", 1);
+
+        Assert.Contains("Host: Perttu Sliden", element.ContentDescription, StringComparison.Ordinal);
+        Assert.Equal("android.widget.ImageView", element.ClassName);
+    }
+
+    [Fact]
+    public async Task WaitVisibleAsync_Retries_Transient_Invalid_Dumps()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var delay = new FakeDelay(timeProvider);
+        var adb = new FakeAdbClient();
+        adb.EnqueueShellResult(new ProcessResult(0, "not-xml", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, CreateUiDump("Target"), string.Empty));
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["wait-visible"]), fileSystem, timeProvider), timeProvider, delay, fileSystem);
+
+        var element = await runner.WaitVisibleAsync("Target", 2);
+
+        Assert.Equal("Target", element.Text);
+        Assert.Single(delay.Calls);
+    }
+
+    [Fact]
     public async Task RecordAsync_Uses_Injected_Id_And_Cleans_Up_Remote_File()
     {
         var fileSystem = new FakeFileSystem();
@@ -549,6 +606,11 @@ public sealed class AppTests
 
     private static string CreateUiDump(string text) =>
         $"<hierarchy><node text=\"{text}\" content-desc=\"\" resource-id=\"id/{text}\" class=\"android.widget.TextView\" enabled=\"true\" clickable=\"false\" bounds=\"[0,0][100,100]\" /></hierarchy>";
+
+    private static string CreateUiDumpWithNodes(params string[] nodes) => $"<hierarchy>{string.Join(string.Empty, nodes)}</hierarchy>";
+
+    private static string CreateUiNode(string text, string contentDescription, string className, bool clickable, int left, int top, int right, int bottom) =>
+        $"<node text=\"{text}\" content-desc=\"{contentDescription}\" resource-id=\"\" class=\"{className}\" enabled=\"true\" clickable=\"{clickable.ToString().ToLowerInvariant()}\" bounds=\"[{left},{top}][{right},{bottom}]\" />";
 
     private static ScreenState CreateScreenState(DateTimeOffset capturedAt, string text) =>
         new(capturedAt, 1, [new ScreenElement(text, null, $"id/{text}", "android.widget.TextView", true, true, 0, 0, 100, 100)]);

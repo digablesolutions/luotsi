@@ -17,7 +17,18 @@ public sealed partial class DeviceRunner
         while (_timeProvider.GetUtcNow() < deadline)
         {
             attempt++;
-            var state = await CaptureScreenStateAsync($"wait-not-visible-{attempt:000}").ConfigureAwait(false);
+            ScreenState state;
+
+            try
+            {
+                state = await CaptureScreenStateAsync($"wait-not-visible-{attempt:000}").ConfigureAwait(false);
+            }
+            catch (InvalidOperationException ex) when (IsRetryableHierarchyDumpFailure(ex))
+            {
+                await _delay.DelayAsync(500).ConfigureAwait(false);
+                continue;
+            }
+
             if (!state.Elements.Any(element => element.Matches(text)))
             {
                 return new { text, attempt_count = attempt, visible = false };
@@ -123,7 +134,7 @@ public sealed partial class DeviceRunner
                 "-v",
                 "brief",
                 "-T",
-                started.ToLocalTime().ToString("MM-dd HH:mm:ss.fff"),
+                LogcatTime.FormatSince(started),
                 "*:V"]).ConfigureAwait(false);
             result.EnsureSuccess("assert event failed");
             invocation = result.Invocation;
