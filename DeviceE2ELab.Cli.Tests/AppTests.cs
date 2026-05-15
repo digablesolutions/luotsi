@@ -204,6 +204,123 @@ public sealed class AppTests
         Assert.Contains("rm -f /sdcard/device-e2e-fixed-recording-id.mp4", adb.ShellCommands[1], StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task RunAsync_WaitLog_Returns_Matched_Line_And_Writes_Artifacts()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        var console = new FakeConsole();
+        adb.EnqueueLogLines("I/Test: boot", "I/Test: DEVICE_READY", "I/Test: idle");
+        var app = new App(timeProvider, fileSystem, new DefaultProcessRunner(), new FakeDelay(timeProvider), new FakeAdbClientFactory(adb), console);
+
+        var exitCode = await app.RunAsync(["wait-log", "--contains", "device_ready", "--artifacts", "/tmp/test-artifacts"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("I/Test: DEVICE_READY", envelope.RootElement.GetProperty("data").GetProperty("matched_line").GetString());
+        Assert.Contains(adb.LogRequests, request => request.ContainsText == "device_ready");
+        var artifactRoot = envelope.RootElement.GetProperty("artifacts").GetProperty("artifact_root").GetString();
+        Assert.NotNull(artifactRoot);
+        Assert.True(fileSystem.FileExists(Path.Combine(artifactRoot!, "wait-log.txt")));
+        Assert.True(fileSystem.FileExists(Path.Combine(artifactRoot, "wait-log.json")));
+    }
+
+    [Fact]
+    public async Task PreflightAsync_Writes_Device_Fingerprint_Artifact()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.EnqueueShellResult(new ProcessResult(0, "SER123", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "Pixel 9", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "16", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "36", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "google/pixel/device", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "arm64-v8a,x86_64", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "mCurrentFocus=App", string.Empty));
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["preflight"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
+
+        var result = await runner.PreflightAsync(null);
+        var json = JsonDocument.Parse(JsonSerializer.Serialize(result)).RootElement;
+        var artifactRoot = Path.Combine("/tmp/device-e2e-lab", "20260515-120000-preflight");
+
+        Assert.Equal("Pixel 9", json.GetProperty("model").GetString());
+        Assert.Equal("google/pixel/device", json.GetProperty("fingerprint").GetString());
+        Assert.True(fileSystem.FileExists(Path.Combine(artifactRoot, "device-fingerprint.json")));
+    }
+
+    [Fact]
+    public async Task RunAsync_Scenario_LogWait_Timeout_Captures_Failure_Bundle()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        var console = new FakeConsole();
+        var scenarioPath = "/tmp/log-timeout.json";
+        fileSystem.AddFile(scenarioPath, """
+        {
+          "name": "log-timeout",
+          "steps": [
+            { "name": "wait for ready marker", "action": "waitLog", "text": "READY", "timeoutSec": 2 }
+          ]
+        }
+        """);
+        adb.EnqueueShellResult(new ProcessResult(0, "SER123", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "Pixel 9", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "16", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "36", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "google/pixel/device", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "arm64-v8a", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "mCurrentFocus=App", string.Empty));
+        adb.EnqueueLogLines("I/Test: boot", "I/Test: still waiting");
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "01-01 00:00:00.000 I/Test: snapshot", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, CreateUiDump("Failure"), string.Empty));
+        var app = new App(timeProvider, fileSystem, new DefaultProcessRunner(), new FakeDelay(timeProvider), new FakeAdbClientFactory(adb), console);
+
+        var exitCode = await app.RunAsync(["run", "--file", scenarioPath, "--artifacts", "/tmp/test-artifacts"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal("log_wait_timeout", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Equal("failed", envelope.RootElement.GetProperty("data").GetProperty("status").GetString());
+        Assert.Equal("wait for ready marker", envelope.RootElement.GetProperty("data").GetProperty("failed_step").GetProperty("name").GetString());
+        var failureArtifacts = envelope.RootElement.GetProperty("data").GetProperty("failure_artifacts");
+        Assert.Equal("device-e2e-lab-failure-bundle.v1", failureArtifacts.GetProperty("schema").GetString());
+        Assert.True(failureArtifacts.GetProperty("artifacts").GetArrayLength() >= 2);
+    }
+
+    [Fact]
+    public async Task RecordAsync_Normalizes_Device_Path_For_Pull_When_Configured()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        var idGenerator = new FakeUniqueIdGenerator("fixed-recording-id");
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>
+        {
+            ["DEVICE_E2E_EMULATED_STORAGE_TARGET"] = "/sdcard",
+            ["DEVICE_E2E_EMULATED_STORAGE_SOURCE"] = "/mnt/shell/emulated/0",
+        });
+        var runner = new DeviceRunner(
+            adb,
+            ArtifactSession.Create(CliOptions.Parse(["record"]), fileSystem, timeProvider),
+            timeProvider,
+            new FakeDelay(timeProvider),
+            fileSystem,
+            idGenerator,
+            environment);
+
+        await runner.RecordAsync("capture.mp4", 30);
+
+        Assert.Equal(["pull", "/mnt/shell/emulated/0/device-e2e-fixed-recording-id.mp4", "capture.mp4"], adb.RunCommands[0]);
+    }
+
     private static string CreateUiDump(string text) =>
         $"<hierarchy><node text=\"{text}\" content-desc=\"\" resource-id=\"id/{text}\" class=\"android.widget.TextView\" enabled=\"true\" clickable=\"false\" bounds=\"[0,0][100,100]\" /></hierarchy>";
 }
@@ -296,25 +413,47 @@ internal sealed class FakeAdbClient : IAdbClient
 {
     private readonly Queue<ProcessResult> _shellResults = new();
     private readonly Queue<ProcessResult> _runResults = new();
+    private readonly Queue<string[]> _logLines = new();
 
     public List<string> ShellCommands { get; } = [];
 
     public List<string[]> RunCommands { get; } = [];
 
+    public List<(string ContainsText, DateTimeOffset Since, int TimeoutSec)> LogRequests { get; } = [];
+
     public void EnqueueShellResult(ProcessResult result) => _shellResults.Enqueue(result);
 
     public void EnqueueRunResult(ProcessResult result) => _runResults.Enqueue(result);
 
-    public Task<ProcessResult> RunAsync(IEnumerable<string> args, CancellationToken cancellationToken = default)
+    public void EnqueueLogLines(params string[] lines) => _logLines.Enqueue(lines);
+
+    public Task<AdbCommandResult> RunAsync(IEnumerable<string> args, CancellationToken cancellationToken = default)
     {
-        RunCommands.Add(args.ToArray());
-        return Task.FromResult(_runResults.Count > 0 ? _runResults.Dequeue() : new ProcessResult(0, string.Empty, string.Empty));
+        var finalArgs = args.ToArray();
+        RunCommands.Add(finalArgs);
+        var result = _runResults.Count > 0 ? _runResults.Dequeue() : new ProcessResult(0, string.Empty, string.Empty);
+        return Task.FromResult(new AdbCommandResult("adb", null, finalArgs, result));
     }
 
-    public Task<ProcessResult> ShellAsync(string command, CancellationToken cancellationToken = default)
+    public Task<AdbCommandResult> ShellAsync(string command, CancellationToken cancellationToken = default)
     {
         ShellCommands.Add(command);
-        return Task.FromResult(_shellResults.Count > 0 ? _shellResults.Dequeue() : new ProcessResult(0, string.Empty, string.Empty));
+        var result = _shellResults.Count > 0 ? _shellResults.Dequeue() : new ProcessResult(0, string.Empty, string.Empty);
+        return Task.FromResult(new AdbCommandResult("adb", null, ["shell", command], result));
+    }
+
+    public Task<AdbLogStreamResult> MonitorLogAsync(string containsText, DateTimeOffset since, int timeoutSec, CancellationToken cancellationToken = default)
+    {
+        LogRequests.Add((containsText, since, timeoutSec));
+        var lines = _logLines.Count > 0 ? _logLines.Dequeue() : [];
+        var logOutput = string.Join(Environment.NewLine, lines);
+        if (lines.Length > 0)
+        {
+            logOutput += Environment.NewLine;
+        }
+
+        var matchedLine = lines.FirstOrDefault(line => line.Contains(containsText, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(new AdbLogStreamResult(containsText, logOutput, matchedLine, lines.Length, timeoutSec, since, "adb logcat", string.Empty));
     }
 }
 
@@ -323,4 +462,12 @@ internal sealed class FakeAdbClientFactory(IAdbClient adbClient) : IAdbClientFac
     private readonly IAdbClient _adbClient = adbClient;
 
     public IAdbClient Create(string executable, string? serial, IProcessRunner processRunner) => _adbClient;
+}
+
+internal sealed class FakeEnvironmentVariables(Dictionary<string, string> variables) : IEnvironmentVariables
+{
+    private readonly Dictionary<string, string> _variables = variables;
+
+    public string? GetEnvironmentVariable(string variable) =>
+        _variables.TryGetValue(variable, out var value) ? value : null;
 }

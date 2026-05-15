@@ -38,6 +38,7 @@ dotnet run --project DeviceE2ELab.Cli -- devices
 dotnet run --project DeviceE2ELab.Cli -- preflight --device <serial> --package fi.systam.visit
 dotnet run --project DeviceE2ELab.Cli -- screen-state --device <serial>
 dotnet run --project DeviceE2ELab.Cli -- tap-text --device <serial> --text "Sign in"
+dotnet run --project DeviceE2ELab.Cli -- wait-log --device <serial> --contains "DEVICE_READY" --timeout-sec 20
 dotnet run --project DeviceE2ELab.Cli -- run --device <serial> --file examples/idle-language-fi.json
 ```
 
@@ -59,6 +60,12 @@ Every command prints a single JSON envelope:
 }
 ```
 
+Runtime commands now also write richer artifacts when they interact with a device:
+
+- `device-fingerprint.json` for `preflight` and scenario runs
+- `wait-log.txt` / `wait-log.json` for log streaming waits
+- automatic failure bundles with screenshot, logcat, screen-state, hierarchy, and metadata when a runtime command fails after reaching the device
+
 ## Scenario playbook
 
 The first playbook format is JSON to keep parsing unambiguous across OSes and
@@ -70,6 +77,7 @@ agents:
   "steps": [
     { "name": "open language menu", "action": "tapText", "text": "English", "timeoutSec": 10 },
     { "name": "choose Finnish", "action": "tapText", "text": "Suomi", "timeoutSec": 10 },
+    { "name": "wait for telemetry marker", "action": "waitLog", "text": "DEVICE_READY", "timeoutSec": 20 },
     { "name": "assert Finnish sign-in", "action": "waitVisible", "text": "Kirjaudu sisään", "timeoutSec": 15 }
   ]
 }
@@ -81,6 +89,7 @@ Supported actions in this first slice:
 - `tapText`
 - `typeText`
 - `keyevent`
+- `waitLog`
 - `sleep`
 
 ## Next experiment lanes

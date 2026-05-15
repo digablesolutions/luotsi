@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -82,7 +83,7 @@ public sealed class App
 
         var artifacts = ArtifactSession.Create(options, _fileSystem, _timeProvider);
         var adb = _adbClientFactory.Create(options.Get("adb") ?? _environment.GetEnvironmentVariable("DEVICE_E2E_ADB") ?? "adb", options.Get("device"), _processRunner);
-        var runner = new DeviceRunner(adb, artifacts, _timeProvider, _delay, _fileSystem, _idGenerator);
+        var runner = new DeviceRunner(adb, artifacts, _timeProvider, _delay, _fileSystem, _idGenerator, _environment);
         var scenarios = new ScenarioExecutor(runner, _fileSystem, _timeProvider, _delay);
 
         try
@@ -98,6 +99,7 @@ public sealed class App
                 "type-text" => await runner.TypeTextAsync(options.Require("text")).ConfigureAwait(false),
                 "keyevent" => await runner.KeyEventAsync(options.Require("code")).ConfigureAwait(false),
                 "logcat" => await runner.LogcatAsync(options.Int("tail", 200)).ConfigureAwait(false),
+                "wait-log" => await runner.WaitForLogAsync(options.Require("contains"), options.Int("timeout-sec", 15)).ConfigureAwait(false),
                 "record" => await runner.RecordAsync(options.Require("output"), options.Int("time-limit-sec", 30)).ConfigureAwait(false),
                 "run" => await scenarios.RunAsync(options.Require("file")).ConfigureAwait(false),
                 _ => throw new UsageException($"Unknown command '{options.Command}'."),
@@ -113,7 +115,15 @@ public sealed class App
         }
         catch (Exception ex)
         {
-            WriteEnvelope(new CommandEnvelope(false, options.Command, started, _timeProvider.GetUtcNow(), null, artifacts.ToData(), ErrorInfo.From(ex, ErrorInfo.Classify(ex.Message))));
+            var failure = ex as ICommandFailureDetails;
+            var failureData = failure?.DataPayload;
+            if (failureData is null)
+            {
+                failureData = await runner.CaptureFailureArtifactsAsync(new FailureCaptureRequest("command", options.Command, null, null, null, options.Command), ex).ConfigureAwait(false);
+            }
+
+            var category = failure?.CategoryOverride ?? ErrorInfo.Classify(ex.Message);
+            WriteEnvelope(new CommandEnvelope(false, options.Command, started, _timeProvider.GetUtcNow(), failureData, artifacts.ToData(), ErrorInfo.From(ex, category)));
             return 1;
         }
     }
@@ -141,6 +151,7 @@ public sealed class CliOptions
         "type-text",
         "keyevent",
         "logcat",
+        "wait-log",
         "record",
         "run",
     }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
@@ -247,7 +258,101 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
     /// <param name="args">ADB arguments.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Process result.</returns>
-    public async Task<ProcessResult> RunAsync(IEnumerable<string> args, CancellationToken cancellationToken = default)
+    public async Task<AdbCommandResult> RunAsync(IEnumerable<string> args, CancellationToken cancellationToken = default)
+    {
+        var finalArgs = BuildFinalArgs(args);
+        var result = await _processRunner.RunAsync(_executable, finalArgs, cancellationToken).ConfigureAwait(false);
+        return new AdbCommandResult(_executable, _serial, finalArgs, result);
+    }
+
+    /// <summary>
+    /// Runs an adb shell command.
+    /// </summary>
+    /// <param name="command">Shell command text.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Process result.</returns>
+    public Task<AdbCommandResult> ShellAsync(string command, CancellationToken cancellationToken = default) =>
+        RunAsync(new[] { "shell", command }, cancellationToken);
+
+    public async Task<AdbLogStreamResult> MonitorLogAsync(string containsText, DateTimeOffset since, int timeoutSec, CancellationToken cancellationToken = default)
+    {
+        var finalArgs = BuildFinalArgs(["logcat", "-v", "brief", "-T", since.ToLocalTime().ToString("MM-dd HH:mm:ss.fff"), "*:V"]);
+        var startInfo = new ProcessStartInfo(_executable)
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+
+        foreach (var arg in finalArgs)
+        {
+            startInfo.ArgumentList.Add(arg);
+        }
+
+        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Failed to start '{_executable}'.");
+        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        var logBuilder = new StringBuilder();
+        var lineCount = 0;
+        string? matchedLine = null;
+        var matchTask = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var readerTask = Task.Run(async () =>
+        {
+            while (true)
+            {
+                var line = await process.StandardOutput.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+                if (line is null)
+                {
+                    break;
+                }
+
+                line = line.TrimEnd('\r');
+                logBuilder.AppendLine(line);
+                lineCount++;
+                if (matchedLine is null && line.Contains(containsText, StringComparison.OrdinalIgnoreCase))
+                {
+                    matchedLine = line;
+                    matchTask.TrySetResult(line);
+                }
+            }
+        }, cancellationToken);
+
+        var timeoutTask = Task.Delay(TimeSpan.FromSeconds(Math.Max(1, timeoutSec)), cancellationToken);
+        await Task.WhenAny(matchTask.Task, readerTask, timeoutTask).ConfigureAwait(false);
+
+        if (!process.HasExited)
+        {
+            process.Kill(entireProcessTree: true);
+        }
+
+        try
+        {
+            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+        }
+
+        try
+        {
+            await readerTask.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+        }
+
+        return new AdbLogStreamResult(
+            containsText,
+            logBuilder.ToString(),
+            matchedLine,
+            lineCount,
+            timeoutSec,
+            since,
+            string.Join(" ", [_executable, .. finalArgs]),
+            await stderrTask.ConfigureAwait(false));
+    }
+
+    private List<string> BuildFinalArgs(IEnumerable<string> args)
     {
         var finalArgs = new List<string>();
         if (_serial is not null)
@@ -257,23 +362,21 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
         }
 
         finalArgs.AddRange(args);
-        return await _processRunner.RunAsync(_executable, finalArgs, cancellationToken).ConfigureAwait(false);
+        return finalArgs;
     }
-
-    /// <summary>
-    /// Runs an adb shell command.
-    /// </summary>
-    /// <param name="command">Shell command text.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Process result.</returns>
-    public Task<ProcessResult> ShellAsync(string command, CancellationToken cancellationToken = default) =>
-        RunAsync(new[] { "shell", command }, cancellationToken);
 }
 
 /// <summary>
 /// Device operation facade used by the command handlers.
 /// </summary>
-public sealed class DeviceRunner(IAdbClient adb, ArtifactSession artifacts, TimeProvider? timeProvider = null, IDelay? delay = null, IFileSystem? fileSystem = null, IUniqueIdGenerator? idGenerator = null) : IScenarioActionHost
+public sealed class DeviceRunner(
+    IAdbClient adb,
+    ArtifactSession artifacts,
+    TimeProvider? timeProvider = null,
+    IDelay? delay = null,
+    IFileSystem? fileSystem = null,
+    IUniqueIdGenerator? idGenerator = null,
+    IEnvironmentVariables? environment = null) : IScenarioActionHost
 {
     private readonly IAdbClient _adb = adb ?? throw new ArgumentNullException(nameof(adb));
     private readonly ArtifactSession _artifacts = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
@@ -281,6 +384,7 @@ public sealed class DeviceRunner(IAdbClient adb, ArtifactSession artifacts, Time
     private readonly IDelay _delay = delay ?? new TaskDelay(timeProvider);
     private readonly IFileSystem _fileSystem = fileSystem ?? new PhysicalFileSystem();
     private readonly IUniqueIdGenerator _idGenerator = idGenerator ?? new GuidUniqueIdGenerator();
+    private readonly IEnvironmentVariables _environment = environment ?? new SystemEnvironmentVariables();
 
     /// <summary>
     /// Lists connected devices.
@@ -310,10 +414,8 @@ public sealed class DeviceRunner(IAdbClient adb, ArtifactSession artifacts, Time
     /// <returns>Preflight data.</returns>
     public async Task<object> PreflightAsync(string? packageName)
     {
-        var model = await ShellTextAsync("getprop ro.product.model").ConfigureAwait(false);
-        var release = await ShellTextAsync("getprop ro.build.version.release").ConfigureAwait(false);
-        var sdk = await ShellTextAsync("getprop ro.build.version.sdk").ConfigureAwait(false);
-        var focus = await ShellTextAsync("dumpsys window | grep -E 'mCurrentFocus|mFocusedApp|mResumedActivity' | head -1").ConfigureAwait(false);
+        var fingerprint = await WriteDeviceFingerprintAsync().ConfigureAwait(false);
+        var focus = fingerprint.CurrentFocus;
         string? packageInfo = null;
 
         if (!string.IsNullOrWhiteSpace(packageName))
@@ -330,7 +432,18 @@ public sealed class DeviceRunner(IAdbClient adb, ArtifactSession artifacts, Time
             }
         }
 
-        return new { model, android_release = release, sdk, current_focus = focus, package = packageName, package_info = packageInfo };
+        return new
+        {
+            model = fingerprint.Model,
+            android_release = fingerprint.AndroidRelease,
+            sdk = fingerprint.Sdk,
+            current_focus = focus,
+            package = packageName,
+            package_info = packageInfo,
+            fingerprint = fingerprint.Fingerprint,
+            abi = fingerprint.Abi,
+            serial = fingerprint.Serial,
+        };
     }
 
     /// <summary>
@@ -471,6 +584,32 @@ public sealed class DeviceRunner(IAdbClient adb, ArtifactSession artifacts, Time
         return new { code };
     }
 
+    public async Task<object> WaitForLogAsync(string text, int timeoutSec)
+    {
+        var started = _timeProvider.GetUtcNow();
+        var monitor = await _adb.MonitorLogAsync(text, started, timeoutSec).ConfigureAwait(false);
+        await _artifacts.WriteTextAsync("wait-log.txt", monitor.LogOutput).ConfigureAwait(false);
+        await _artifacts.WriteJsonAsync(
+            "wait-log.json",
+            new
+            {
+                schema = "device-e2e-lab-log-wait.v1",
+                contains = text,
+                timeout_sec = timeoutSec,
+                started_at = started,
+                matched_line = monitor.MatchedLine,
+                line_count = monitor.LineCount,
+                invocation = monitor.Invocation,
+            }).ConfigureAwait(false);
+
+        if (monitor.MatchedLine is null)
+        {
+            throw new LogWaitTimeoutException(text, timeoutSec);
+        }
+
+        return new { contains = text, timeout_sec = timeoutSec, matched_line = monitor.MatchedLine, line_count = monitor.LineCount };
+    }
+
     /// <summary>
     /// Reads logcat.
     /// </summary>
@@ -496,10 +635,81 @@ public sealed class DeviceRunner(IAdbClient adb, ArtifactSession artifacts, Time
         var clamped = Math.Clamp(timeLimitSec, 1, 180);
         var record = await _adb.ShellAsync($"screenrecord --time-limit {clamped} {remote}").ConfigureAwait(false);
         record.EnsureSuccess("screenrecord failed");
-        var pull = await _adb.RunAsync(new[] { "pull", remote, output }).ConfigureAwait(false);
+        var pull = await _adb.RunAsync(new[] { "pull", NormalizeDevicePathForPull(remote), output }).ConfigureAwait(false);
         await _adb.ShellAsync($"rm -f {remote}").ConfigureAwait(false);
         pull.EnsureSuccess("pull recording failed");
         return new { output, time_limit_sec = clamped };
+    }
+
+    public async Task<DeviceFingerprint> WriteDeviceFingerprintAsync()
+    {
+        var fingerprint = new DeviceFingerprint(
+            "device-fingerprint.v1",
+            _timeProvider.GetUtcNow(),
+            await ShellTextAsync("getprop ro.serialno").ConfigureAwait(false),
+            await ShellTextAsync("getprop ro.product.model").ConfigureAwait(false),
+            await ShellTextAsync("getprop ro.build.version.release").ConfigureAwait(false),
+            await ShellTextAsync("getprop ro.build.version.sdk").ConfigureAwait(false),
+            await ShellTextAsync("getprop ro.build.fingerprint").ConfigureAwait(false),
+            await ShellTextAsync("getprop ro.product.cpu.abilist").ConfigureAwait(false),
+            await ShellTextAsync("dumpsys window | grep -E 'mCurrentFocus|mFocusedApp|mResumedActivity' | head -1").ConfigureAwait(false));
+        await _artifacts.WriteJsonAsync("device-fingerprint.json", fingerprint).ConfigureAwait(false);
+        return fingerprint;
+    }
+
+    public async Task<FailureArtifactBundle> CaptureFailureArtifactsAsync(FailureCaptureRequest request, Exception exception)
+    {
+        var prefix = BuildFailurePrefix(request);
+        var captured = new List<FailureArtifact>();
+        var captureFailures = new List<FailureCaptureError>();
+
+        async Task CaptureAsync(string name, Func<Task<string>> action)
+        {
+            try
+            {
+                captured.Add(new FailureArtifact(name, await action().ConfigureAwait(false)));
+            }
+            catch (Exception captureException)
+            {
+                captureFailures.Add(new FailureCaptureError(name, captureException.Message));
+            }
+        }
+
+        await CaptureAsync("screenshot", async () =>
+        {
+            var fileName = $"{prefix}-screenshot.png";
+            await CaptureScreenshotAsync(fileName).ConfigureAwait(false);
+            return fileName;
+        }).ConfigureAwait(false);
+
+        await CaptureAsync("logcat", async () =>
+        {
+            var fileName = $"{prefix}-logcat.txt";
+            await CaptureLogcatSnapshotAsync(fileName, 1000).ConfigureAwait(false);
+            return fileName;
+        }).ConfigureAwait(false);
+
+        await CaptureAsync("screen-state", async () =>
+        {
+            await CaptureScreenStateAsync(prefix).ConfigureAwait(false);
+            return $"{prefix}-screen-state.json";
+        }).ConfigureAwait(false);
+
+        var metadata = new FailureArtifactBundle(
+            "device-e2e-lab-failure-bundle.v1",
+            _timeProvider.GetUtcNow(),
+            request.Scope,
+            request.Name,
+            request.File,
+            request.StepIndex,
+            request.StepName,
+            request.Action,
+            exception.GetType().FullName ?? exception.GetType().Name,
+            exception.Message,
+            captured,
+            captureFailures);
+        await _artifacts.WriteJsonAsync($"{prefix}-failure.json", metadata).ConfigureAwait(false);
+        return metadata with { MetadataFile = $"{prefix}-failure.json" };
     }
 
     private async Task<string> DumpUiAsync()
@@ -515,6 +725,80 @@ public sealed class DeviceRunner(IAdbClient adb, ArtifactSession artifacts, Time
         var result = await _adb.ShellAsync(command).ConfigureAwait(false);
         result.EnsureSuccess($"adb shell failed: {command}");
         return result.Stdout.Trim();
+    }
+
+    private async Task CaptureScreenshotAsync(string fileName)
+    {
+        var remote = $"/sdcard/device-e2e-{_idGenerator.NewId()}.png";
+        var capture = await _adb.ShellAsync($"screencap {remote}").ConfigureAwait(false);
+        capture.EnsureSuccess("screencap failed");
+        var pull = await _adb.RunAsync(["pull", NormalizeDevicePathForPull(remote), Path.Combine(_artifacts.Root, fileName)]).ConfigureAwait(false);
+        await _adb.ShellAsync($"rm -f {remote}").ConfigureAwait(false);
+        pull.EnsureSuccess("pull screenshot failed");
+    }
+
+    private async Task CaptureLogcatSnapshotAsync(string fileName, int tail)
+    {
+        var result = await _adb.RunAsync(["logcat", "-d", "-t", tail.ToString()]).ConfigureAwait(false);
+        result.EnsureSuccess("logcat failed");
+        await _artifacts.WriteTextAsync(fileName, result.Stdout).ConfigureAwait(false);
+    }
+
+    private string NormalizeDevicePathForPull(string path)
+    {
+        var normalized = path.Replace('\\', '/').Trim();
+        normalized = normalized.Replace("\r", string.Empty, StringComparison.Ordinal).Replace("\n", string.Empty, StringComparison.Ordinal);
+        if (!normalized.StartsWith("/", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Device path '{path}' must be absolute for adb pull.");
+        }
+
+        if (normalized.Contains("/../", StringComparison.Ordinal) || normalized.EndsWith("/..", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Device path '{path}' contains unsupported parent traversal.");
+        }
+
+        var source = _environment.GetEnvironmentVariable("DEVICE_E2E_EMULATED_STORAGE_SOURCE")?.Trim();
+        var target = _environment.GetEnvironmentVariable("DEVICE_E2E_EMULATED_STORAGE_TARGET")?.Trim();
+        if (!string.IsNullOrWhiteSpace(source) &&
+            !string.IsNullOrWhiteSpace(target) &&
+            normalized.StartsWith(target, StringComparison.Ordinal))
+        {
+            return source + normalized[target.Length..];
+        }
+
+        return normalized;
+    }
+
+    private string BuildFailurePrefix(FailureCaptureRequest request)
+    {
+        var parts = new List<string> { "failure" };
+        if (request.StepIndex is int stepIndex)
+        {
+            parts.Add(stepIndex.ToString("000", System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.StepName))
+        {
+            parts.Add(Slugify(request.StepName));
+        }
+        else if (!string.IsNullOrWhiteSpace(request.Name))
+        {
+            parts.Add(Slugify(request.Name));
+        }
+
+        return string.Join("-", parts.Where(static part => !string.IsNullOrWhiteSpace(part)));
+    }
+
+    private static string Slugify(string value)
+    {
+        var builder = new StringBuilder(value.Length);
+        foreach (var ch in value)
+        {
+            builder.Append(char.IsLetterOrDigit(ch) ? char.ToLowerInvariant(ch) : '-');
+        }
+
+        return string.Join("-", builder.ToString().Split('-', StringSplitOptions.RemoveEmptyEntries));
     }
 
     private static string ShellQuote(string value) => "'" + value.Replace("'", "'\\''", StringComparison.Ordinal) + "'";
@@ -593,6 +877,40 @@ public sealed class ArtifactSession
     /// </summary>
     /// <returns>Artifact metadata.</returns>
     public object ToData() => new { artifact_root = Root };
+}
+
+public sealed record DeviceFingerprint(
+    string Schema,
+    DateTimeOffset CapturedAt,
+    string Serial,
+    string Model,
+    string AndroidRelease,
+    string Sdk,
+    string Fingerprint,
+    string Abi,
+    string CurrentFocus);
+
+public sealed record FailureCaptureRequest(string Scope, string? Name, string? File, int? StepIndex, string? StepName, string? Action);
+
+public sealed record FailureArtifact(string Kind, string FileName);
+
+public sealed record FailureCaptureError(string Kind, string Message);
+
+public sealed record FailureArtifactBundle(
+    string Schema,
+    DateTimeOffset CapturedAt,
+    string Scope,
+    string? Name,
+    string? File,
+    int? StepIndex,
+    string? StepName,
+    string? Action,
+    string ErrorType,
+    string ErrorMessage,
+    IReadOnlyList<FailureArtifact> Artifacts,
+    IReadOnlyList<FailureCaptureError> CaptureErrors)
+{
+    public string? MetadataFile { get; init; }
 }
 
 /// <summary>
@@ -751,6 +1069,11 @@ public sealed record ErrorInfo(string Type, string Message, string Category)
             return "usage_error";
         }
 
+        if (message.Contains("waiting for log", StringComparison.OrdinalIgnoreCase))
+        {
+            return "log_wait_timeout";
+        }
+
         if (message.Contains("Timed out", StringComparison.OrdinalIgnoreCase))
         {
             return "selector_or_screen_state";
@@ -772,6 +1095,13 @@ public sealed record ErrorInfo(string Type, string Message, string Category)
 /// Usage error.
 /// </summary>
 public sealed class UsageException(string message) : Exception(message);
+
+public sealed class LogWaitTimeoutException(string containsText, int timeoutSec) : TimeoutException($"Timed out after {timeoutSec}s waiting for log text '{containsText}'."), ICommandFailureDetails
+{
+    public string CategoryOverride => "log_wait_timeout";
+
+    public object? DataPayload => null;
+}
 
 /// <summary>
 /// Application JSON settings.
@@ -812,6 +1142,7 @@ Commands:
   type-text --text <value>
   keyevent --code <code>
   logcat [--tail 200]
+  wait-log --contains <text> [--timeout-sec 15]
   record --output <file.mp4> [--time-limit-sec 30]
   run --file <scenario.json>
 

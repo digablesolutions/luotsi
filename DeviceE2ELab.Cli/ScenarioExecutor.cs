@@ -8,6 +8,9 @@ public interface IScenarioActionHost
     Task<object> TapTextAsync(string text, int timeoutSec);
     Task<object> TypeTextAsync(string text);
     Task<object> KeyEventAsync(string code);
+    Task<object> WaitForLogAsync(string text, int timeoutSec);
+    Task<DeviceFingerprint> WriteDeviceFingerprintAsync();
+    Task<FailureArtifactBundle> CaptureFailureArtifactsAsync(FailureCaptureRequest request, Exception exception);
 }
 
 /// <summary>
@@ -29,21 +32,52 @@ public sealed class ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem
     {
         var scenario = await LoadAsync(file).ConfigureAwait(false);
         var steps = new List<object>();
+        await _actionHost.WriteDeviceFingerprintAsync().ConfigureAwait(false);
 
-        foreach (var step in scenario.Steps)
+        for (var index = 0; index < scenario.Steps.Count; index++)
         {
+            var step = scenario.Steps[index];
             var started = _timeProvider.GetUtcNow();
-            object result = step.Action switch
-            {
-                "waitVisible" => await _actionHost.WaitVisibleAsync(step.Text ?? throw new UsageException("waitVisible requires text."), step.TimeoutSec ?? 15).ConfigureAwait(false),
-                "tapText" => await _actionHost.TapTextAsync(step.Text ?? throw new UsageException("tapText requires text."), step.TimeoutSec ?? 15).ConfigureAwait(false),
-                "typeText" => await _actionHost.TypeTextAsync(step.Text ?? throw new UsageException("typeText requires text.")).ConfigureAwait(false),
-                "keyevent" => await _actionHost.KeyEventAsync(step.Code ?? throw new UsageException("keyevent requires code.")).ConfigureAwait(false),
-                "sleep" => await SleepAsync(step.Milliseconds ?? 1000).ConfigureAwait(false),
-                _ => throw new UsageException($"Unknown scenario action '{step.Action}'."),
-            };
 
-            steps.Add(new { step = step.Name ?? step.Action, action = step.Action, duration_ms = (_timeProvider.GetUtcNow() - started).TotalMilliseconds, result });
+            try
+            {
+                object result = step.Action switch
+                {
+                    "waitVisible" => await _actionHost.WaitVisibleAsync(step.Text ?? throw new UsageException("waitVisible requires text."), step.TimeoutSec ?? 15).ConfigureAwait(false),
+                    "tapText" => await _actionHost.TapTextAsync(step.Text ?? throw new UsageException("tapText requires text."), step.TimeoutSec ?? 15).ConfigureAwait(false),
+                    "typeText" => await _actionHost.TypeTextAsync(step.Text ?? throw new UsageException("typeText requires text.")).ConfigureAwait(false),
+                    "keyevent" => await _actionHost.KeyEventAsync(step.Code ?? throw new UsageException("keyevent requires code.")).ConfigureAwait(false),
+                    "waitLog" => await _actionHost.WaitForLogAsync(step.Text ?? throw new UsageException("waitLog requires text."), step.TimeoutSec ?? 15).ConfigureAwait(false),
+                    "sleep" => await SleepAsync(step.Milliseconds ?? 1000).ConfigureAwait(false),
+                    _ => throw new UsageException($"Unknown scenario action '{step.Action}'."),
+                };
+
+                steps.Add(new { step = step.Name ?? step.Action, action = step.Action, duration_ms = (_timeProvider.GetUtcNow() - started).TotalMilliseconds, result });
+            }
+            catch (UsageException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                var failureArtifacts = await _actionHost.CaptureFailureArtifactsAsync(
+                    new FailureCaptureRequest("scenario", scenario.Name, file, index + 1, step.Name ?? step.Action, step.Action),
+                    ex).ConfigureAwait(false);
+                var category = ex is ICommandFailureDetails failure ? failure.CategoryOverride : ErrorInfo.Classify(ex.Message);
+                throw new ScenarioStepFailureException(
+                    $"Scenario '{scenario.Name}' failed at step {index + 1} ({step.Name ?? step.Action}).",
+                    category,
+                    new
+                    {
+                        scenario = scenario.Name,
+                        file,
+                        status = "failed",
+                        failed_step = new { index = index + 1, name = step.Name ?? step.Action, action = step.Action },
+                        steps,
+                        failure_artifacts = failureArtifacts,
+                    },
+                    ex);
+            }
         }
 
         return new { scenario = scenario.Name, status = "passed", steps };
@@ -78,4 +112,19 @@ public sealed class ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem
         await _delay.DelayAsync(milliseconds).ConfigureAwait(false);
         return new { milliseconds = Math.Max(0, milliseconds) };
     }
+}
+
+public interface ICommandFailureDetails
+{
+    string CategoryOverride { get; }
+
+    object? DataPayload { get; }
+}
+
+public sealed class ScenarioStepFailureException(string message, string categoryOverride, object dataPayload, Exception innerException)
+    : Exception(message, innerException), ICommandFailureDetails
+{
+    public string CategoryOverride { get; } = categoryOverride;
+
+    public object? DataPayload { get; } = dataPayload;
 }

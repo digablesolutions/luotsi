@@ -25,8 +25,9 @@ public interface IProcessRunner
 
 public interface IAdbClient
 {
-    Task<ProcessResult> RunAsync(IEnumerable<string> args, CancellationToken cancellationToken = default);
-    Task<ProcessResult> ShellAsync(string command, CancellationToken cancellationToken = default);
+    Task<AdbCommandResult> RunAsync(IEnumerable<string> args, CancellationToken cancellationToken = default);
+    Task<AdbCommandResult> ShellAsync(string command, CancellationToken cancellationToken = default);
+    Task<AdbLogStreamResult> MonitorLogAsync(string containsText, DateTimeOffset since, int timeoutSec, CancellationToken cancellationToken = default);
 }
 
 public interface IAdbClientFactory
@@ -49,6 +50,31 @@ public interface IUniqueIdGenerator
 {
     string NewId();
 }
+
+public sealed record AdbCommandResult(string Executable, string? Serial, IReadOnlyList<string> Args, ProcessResult Process)
+{
+    public int ExitCode => Process.ExitCode;
+
+    public string Stdout => Process.Stdout;
+
+    public string Stderr => Process.Stderr;
+
+    public string Invocation => string.Join(" ", [Executable, .. Args.Select(QuoteArgument)]);
+
+    public void EnsureSuccess(string message)
+    {
+        if (ExitCode != 0)
+        {
+            var detail = string.IsNullOrWhiteSpace(Stderr) ? Stdout : Stderr;
+            throw new InvalidOperationException($"{message}: `{Invocation}` exited {ExitCode}. {detail}".Trim());
+        }
+    }
+
+    private static string QuoteArgument(string value) =>
+        value.Any(static ch => char.IsWhiteSpace(ch) || ch == '"') ? $"\"{value.Replace("\"", "\\\"", StringComparison.Ordinal)}\"" : value;
+}
+
+public sealed record AdbLogStreamResult(string ContainsText, string LogOutput, string? MatchedLine, int LineCount, int TimeoutSec, DateTimeOffset Since, string Invocation, string Stderr);
 
 public sealed class TaskDelay(TimeProvider? timeProvider = null) : IDelay
 {
