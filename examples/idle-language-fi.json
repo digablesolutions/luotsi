@@ -1,0 +1,23 @@
+{
+  "name": "idle-language-fi",
+  "steps": [
+    {
+      "name": "open language menu",
+      "action": "tapText",
+      "text": "English",
+      "timeoutSec": 10
+    },
+    {
+      "name": "choose Finnish",
+      "action": "tapText",
+      "text": "Suomi",
+      "timeoutSec": 10
+    },
+    {
+      "name": "assert Finnish sign-in",
+      "action": "waitVisible",
+      "text": "Kirjaudu sisään",
+      "timeoutSec": 15
+    }
+  ]
+}
