@@ -34,6 +34,22 @@ public interface IAdbClientFactory
     IAdbClient Create(string executable, string? serial, IProcessRunner processRunner);
 }
 
+public interface IConsoleIO
+{
+    void WriteLine(string value);
+    void WriteErrorLine(string value);
+}
+
+public interface IEnvironmentVariables
+{
+    string? GetEnvironmentVariable(string variable);
+}
+
+public interface IUniqueIdGenerator
+{
+    string NewId();
+}
+
 public sealed class TaskDelay(TimeProvider? timeProvider = null) : IDelay
 {
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
@@ -88,4 +104,21 @@ public sealed class DefaultAdbClientFactory : IAdbClientFactory
 {
     public IAdbClient Create(string executable, string? serial, IProcessRunner processRunner) =>
         new AdbClient(executable, serial, processRunner);
+}
+
+public sealed class SystemConsoleIO : IConsoleIO
+{
+    public void WriteLine(string value) => Console.Out.WriteLine(value);
+
+    public void WriteErrorLine(string value) => Console.Error.WriteLine(value);
+}
+
+public sealed class SystemEnvironmentVariables : IEnvironmentVariables
+{
+    public string? GetEnvironmentVariable(string variable) => Environment.GetEnvironmentVariable(variable);
+}
+
+public sealed class GuidUniqueIdGenerator : IUniqueIdGenerator
+{
+    public string NewId() => Guid.NewGuid().ToString("N");
 }

@@ -18,60 +18,32 @@ public sealed class AppTests
     [Fact]
     public async Task RunAsync_Invalid_Tap_Coordinates_Return_Usage_Error_Envelope()
     {
-        var app = new App();
-        using var stdout = new StringWriter();
-        using var stderr = new StringWriter();
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
+        var console = new FakeConsole();
+        var app = new App(console: console);
 
-        try
-        {
-            Console.SetOut(stdout);
-            Console.SetError(stderr);
+        var exitCode = await app.RunAsync(["tap", "--x", "nope", "--y", "1"]);
+        using var envelope = console.ParseSingleOutputAsJson();
 
-            var exitCode = await app.RunAsync(["tap", "--x", "nope", "--y", "1"]);
-            var envelope = JsonDocument.Parse(stdout.ToString()).RootElement;
-
-            Assert.Equal(2, exitCode);
-            Assert.False(envelope.GetProperty("ok").GetBoolean());
-            Assert.Equal("device-e2e-lab-command.v1", envelope.GetProperty("schema").GetString());
-            Assert.Equal("usage_error", envelope.GetProperty("error").GetProperty("category").GetString());
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
-        }
+        Assert.Equal(2, exitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("device-e2e-lab-command.v1", envelope.RootElement.GetProperty("schema").GetString());
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
     }
 
     [Fact]
     public async Task RunAsync_Missing_Scenario_File_Returns_Usage_Error_Envelope()
     {
-        var app = new App();
-        using var stdout = new StringWriter();
-        using var stderr = new StringWriter();
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
+        var console = new FakeConsole();
+        var app = new App(console: console);
         var file = Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}.json");
 
-        try
-        {
-            Console.SetOut(stdout);
-            Console.SetError(stderr);
+        var exitCode = await app.RunAsync(["run", "--file", file]);
+        using var envelope = console.ParseSingleOutputAsJson();
 
-            var exitCode = await app.RunAsync(["run", "--file", file]);
-            var envelope = JsonDocument.Parse(stdout.ToString()).RootElement;
-
-            Assert.Equal(2, exitCode);
-            Assert.False(envelope.GetProperty("ok").GetBoolean());
-            Assert.Equal("usage_error", envelope.GetProperty("error").GetProperty("category").GetString());
-            Assert.Contains("does not exist", envelope.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
-        }
+        Assert.Equal(2, exitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("does not exist", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -90,33 +62,19 @@ public sealed class AppTests
         var fileSystem = new FakeFileSystem();
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var adb = new FakeAdbClient();
+        var console = new FakeConsole();
         adb.EnqueueShellResult(new ProcessResult(0, CreateUiDump("One"), string.Empty));
         adb.EnqueueShellResult(new ProcessResult(0, CreateUiDump("Two"), string.Empty));
         adb.EnqueueShellResult(new ProcessResult(0, CreateUiDump("Three"), string.Empty));
-        var app = new App(timeProvider, fileSystem, new DefaultProcessRunner(), new FakeDelay(timeProvider), new FakeAdbClientFactory(adb));
-        using var stdout = new StringWriter();
-        using var stderr = new StringWriter();
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
+        var app = new App(timeProvider, fileSystem, new DefaultProcessRunner(), new FakeDelay(timeProvider), new FakeAdbClientFactory(adb), console);
 
-        try
-        {
-            Console.SetOut(stdout);
-            Console.SetError(stderr);
+        var exitCode = await app.RunAsync(["wait-visible", "--text", "Target", "--timeout-sec", "1", "--artifacts", "/tmp/test-artifacts"]);
+        using var envelope = console.ParseSingleOutputAsJson();
 
-            var exitCode = await app.RunAsync(["wait-visible", "--text", "Target", "--timeout-sec", "1", "--artifacts", "/tmp/test-artifacts"]);
-            var envelope = JsonDocument.Parse(stdout.ToString()).RootElement;
-
-            Assert.Equal(1, exitCode);
-            Assert.False(envelope.GetProperty("ok").GetBoolean());
-            Assert.Equal("selector_or_screen_state", envelope.GetProperty("error").GetProperty("category").GetString());
-            Assert.Equal("wait-visible", envelope.GetProperty("command").GetString());
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
-        }
+        Assert.Equal(1, exitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("selector_or_screen_state", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Equal("wait-visible", envelope.RootElement.GetProperty("command").GetString());
     }
 
     [Fact]
@@ -224,6 +182,28 @@ public sealed class AppTests
         Assert.Equal(2, delay.Calls.Count);
     }
 
+    [Fact]
+    public async Task RecordAsync_Uses_Injected_Id_And_Cleans_Up_Remote_File()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        var idGenerator = new FakeUniqueIdGenerator("fixed-recording-id");
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["record"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem, idGenerator);
+
+        var result = await runner.RecordAsync("capture.mp4", 999);
+        var json = JsonDocument.Parse(JsonSerializer.Serialize(result)).RootElement;
+
+        Assert.Equal("capture.mp4", json.GetProperty("output").GetString());
+        Assert.Equal(180, json.GetProperty("time_limit_sec").GetInt32());
+        Assert.Contains("screenrecord --time-limit 180 /sdcard/device-e2e-fixed-recording-id.mp4", adb.ShellCommands[0], StringComparison.Ordinal);
+        Assert.Equal(["pull", "/sdcard/device-e2e-fixed-recording-id.mp4", "capture.mp4"], adb.RunCommands[0]);
+        Assert.Contains("rm -f /sdcard/device-e2e-fixed-recording-id.mp4", adb.ShellCommands[1], StringComparison.Ordinal);
+    }
+
     private static string CreateUiDump(string text) =>
         $"<hierarchy><node text=\"{text}\" content-desc=\"\" resource-id=\"id/{text}\" class=\"android.widget.TextView\" enabled=\"true\" clickable=\"false\" bounds=\"[0,0][100,100]\" /></hierarchy>";
 }
@@ -249,6 +229,30 @@ internal sealed class FakeDelay(ManualTimeProvider timeProvider) : IDelay
         _timeProvider.Advance(TimeSpan.FromMilliseconds(milliseconds));
         return Task.CompletedTask;
     }
+}
+
+internal sealed class FakeConsole : IConsoleIO
+{
+    public List<string> OutputLines { get; } = [];
+
+    public List<string> ErrorLines { get; } = [];
+
+    public void WriteLine(string value) => OutputLines.Add(value);
+
+    public void WriteErrorLine(string value) => ErrorLines.Add(value);
+
+    public JsonDocument ParseSingleOutputAsJson()
+    {
+        Assert.Single(OutputLines);
+        return JsonDocument.Parse(OutputLines[0]);
+    }
+}
+
+internal sealed class FakeUniqueIdGenerator(string value) : IUniqueIdGenerator
+{
+    private readonly string _value = value;
+
+    public string NewId() => _value;
 }
 
 internal sealed class FakeFileSystem : IFileSystem
@@ -293,15 +297,25 @@ internal sealed class FakeAdbClient : IAdbClient
     private readonly Queue<ProcessResult> _shellResults = new();
     private readonly Queue<ProcessResult> _runResults = new();
 
+    public List<string> ShellCommands { get; } = [];
+
+    public List<string[]> RunCommands { get; } = [];
+
     public void EnqueueShellResult(ProcessResult result) => _shellResults.Enqueue(result);
 
     public void EnqueueRunResult(ProcessResult result) => _runResults.Enqueue(result);
 
-    public Task<ProcessResult> RunAsync(IEnumerable<string> args, CancellationToken cancellationToken = default) =>
-        Task.FromResult(_runResults.Count > 0 ? _runResults.Dequeue() : new ProcessResult(0, string.Empty, string.Empty));
+    public Task<ProcessResult> RunAsync(IEnumerable<string> args, CancellationToken cancellationToken = default)
+    {
+        RunCommands.Add(args.ToArray());
+        return Task.FromResult(_runResults.Count > 0 ? _runResults.Dequeue() : new ProcessResult(0, string.Empty, string.Empty));
+    }
 
-    public Task<ProcessResult> ShellAsync(string command, CancellationToken cancellationToken = default) =>
-        Task.FromResult(_shellResults.Count > 0 ? _shellResults.Dequeue() : new ProcessResult(0, string.Empty, string.Empty));
+    public Task<ProcessResult> ShellAsync(string command, CancellationToken cancellationToken = default)
+    {
+        ShellCommands.Add(command);
+        return Task.FromResult(_shellResults.Count > 0 ? _shellResults.Dequeue() : new ProcessResult(0, string.Empty, string.Empty));
+    }
 }
 
 internal sealed class FakeAdbClientFactory(IAdbClient adbClient) : IAdbClientFactory

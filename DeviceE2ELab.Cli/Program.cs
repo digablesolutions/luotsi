@@ -41,14 +41,28 @@ public sealed class App
     private readonly IProcessRunner _processRunner;
     private readonly IDelay _delay;
     private readonly IAdbClientFactory _adbClientFactory;
+    private readonly IConsoleIO _console;
+    private readonly IEnvironmentVariables _environment;
+    private readonly IUniqueIdGenerator _idGenerator;
 
-    public App(TimeProvider? timeProvider = null, IFileSystem? fileSystem = null, IProcessRunner? processRunner = null, IDelay? delay = null, IAdbClientFactory? adbClientFactory = null)
+    public App(
+        TimeProvider? timeProvider = null,
+        IFileSystem? fileSystem = null,
+        IProcessRunner? processRunner = null,
+        IDelay? delay = null,
+        IAdbClientFactory? adbClientFactory = null,
+        IConsoleIO? console = null,
+        IEnvironmentVariables? environment = null,
+        IUniqueIdGenerator? idGenerator = null)
     {
         _timeProvider = timeProvider ?? TimeProvider.System;
         _fileSystem = fileSystem ?? new PhysicalFileSystem();
         _processRunner = processRunner ?? new DefaultProcessRunner();
         _delay = delay ?? new TaskDelay(_timeProvider);
         _adbClientFactory = adbClientFactory ?? new DefaultAdbClientFactory();
+        _console = console ?? new SystemConsoleIO();
+        _environment = environment ?? new SystemEnvironmentVariables();
+        _idGenerator = idGenerator ?? new GuidUniqueIdGenerator();
     }
 
     /// <summary>
@@ -62,13 +76,13 @@ public sealed class App
         var options = CliOptions.Parse(args);
         if (options.Command is null || options.HasFlag("help") || options.HasFlag("h"))
         {
-            Console.Error.WriteLine(Help.Text);
+            _console.WriteErrorLine(Help.Text);
             return options.HasFlag("help") || options.HasFlag("h") ? 0 : 2;
         }
 
         var artifacts = ArtifactSession.Create(options, _fileSystem, _timeProvider);
-        var adb = _adbClientFactory.Create(options.Get("adb") ?? Environment.GetEnvironmentVariable("DEVICE_E2E_ADB") ?? "adb", options.Get("device"), _processRunner);
-        var runner = new DeviceRunner(adb, artifacts, _timeProvider, _delay, _fileSystem);
+        var adb = _adbClientFactory.Create(options.Get("adb") ?? _environment.GetEnvironmentVariable("DEVICE_E2E_ADB") ?? "adb", options.Get("device"), _processRunner);
+        var runner = new DeviceRunner(adb, artifacts, _timeProvider, _delay, _fileSystem, _idGenerator);
         var scenarios = new ScenarioExecutor(runner, _fileSystem, _timeProvider, _delay);
 
         try
@@ -104,9 +118,9 @@ public sealed class App
         }
     }
 
-    private static void WriteEnvelope(CommandEnvelope envelope)
+    private void WriteEnvelope(CommandEnvelope envelope)
     {
-        Console.Out.WriteLine(JsonSerializer.Serialize(envelope, JsonOptions));
+        _console.WriteLine(JsonSerializer.Serialize(envelope, JsonOptions));
     }
 }
 
@@ -259,13 +273,14 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
 /// <summary>
 /// Device operation facade used by the command handlers.
 /// </summary>
-public sealed class DeviceRunner(IAdbClient adb, ArtifactSession artifacts, TimeProvider? timeProvider = null, IDelay? delay = null, IFileSystem? fileSystem = null) : IScenarioActionHost
+public sealed class DeviceRunner(IAdbClient adb, ArtifactSession artifacts, TimeProvider? timeProvider = null, IDelay? delay = null, IFileSystem? fileSystem = null, IUniqueIdGenerator? idGenerator = null) : IScenarioActionHost
 {
     private readonly IAdbClient _adb = adb ?? throw new ArgumentNullException(nameof(adb));
     private readonly ArtifactSession _artifacts = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private readonly IDelay _delay = delay ?? new TaskDelay(timeProvider);
     private readonly IFileSystem _fileSystem = fileSystem ?? new PhysicalFileSystem();
+    private readonly IUniqueIdGenerator _idGenerator = idGenerator ?? new GuidUniqueIdGenerator();
 
     /// <summary>
     /// Lists connected devices.
@@ -477,7 +492,7 @@ public sealed class DeviceRunner(IAdbClient adb, ArtifactSession artifacts, Time
     /// <returns>Recording metadata.</returns>
     public async Task<object> RecordAsync(string output, int timeLimitSec)
     {
-        var remote = $"/sdcard/device-e2e-{Guid.NewGuid():N}.mp4";
+        var remote = $"/sdcard/device-e2e-{_idGenerator.NewId()}.mp4";
         var clamped = Math.Clamp(timeLimitSec, 1, 180);
         var record = await _adb.ShellAsync($"screenrecord --time-limit {clamped} {remote}").ConfigureAwait(false);
         record.EnsureSuccess("screenrecord failed");
