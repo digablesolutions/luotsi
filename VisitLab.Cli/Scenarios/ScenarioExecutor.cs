@@ -57,23 +57,34 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
         for (var index = 0; index < scenario.Steps.Count; index++)
         {
             var step = scenario.Steps[index];
+            using var delayScope = DelayMetrics.BeginScope();
             var started = _timeProvider.GetUtcNow();
 
             try
             {
                 var result = await ExecuteStepAsync(step).ConfigureAwait(false);
+                var durationMs = (_timeProvider.GetUtcNow() - started).TotalMilliseconds;
 
-                steps.Add(new { step = step.Name ?? step.Action, action = step.Action, duration_ms = (_timeProvider.GetUtcNow() - started).TotalMilliseconds, result });
+                steps.Add(new
+                {
+                    step = step.Name ?? step.Action,
+                    action = step.Action,
+                    duration_ms = durationMs,
+                    timing = CreateTimingData(step, durationMs, delayScope.TotalMilliseconds),
+                    result
+                });
             }
             catch (Exception ex) when (step.ContinueOnError is true && ex is not UsageException)
             {
                 var category = ex is ICommandFailureDetails continuedFailure ? continuedFailure.CategoryOverride : ErrorInfo.Classify(ex.Message);
+                var durationMs = (_timeProvider.GetUtcNow() - started).TotalMilliseconds;
                 steps.Add(new
                 {
                     step = step.Name ?? step.Action,
                     action = step.Action,
                     status = "continued_on_error",
-                    duration_ms = (_timeProvider.GetUtcNow() - started).TotalMilliseconds,
+                    duration_ms = durationMs,
+                    timing = CreateTimingData(step, durationMs, delayScope.TotalMilliseconds),
                     error = ErrorInfo.From(ex, category)
                 });
             }
@@ -83,6 +94,7 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
             }
             catch (Exception ex)
             {
+                var durationMs = (_timeProvider.GetUtcNow() - started).TotalMilliseconds;
                 var failureArtifacts = await _actionHost.CaptureFailureArtifactsAsync(
                     new FailureCaptureRequest("scenario", scenario.Name, file, index + 1, step.Name ?? step.Action, step.Action),
                     ex).ConfigureAwait(false);
@@ -95,7 +107,14 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
                         scenario = scenario.Name,
                         file,
                         status = "failed",
-                        failed_step = new { index = index + 1, name = step.Name ?? step.Action, action = step.Action },
+                        failed_step = new
+                        {
+                            index = index + 1,
+                            name = step.Name ?? step.Action,
+                            action = step.Action,
+                            duration_ms = durationMs,
+                            timing = CreateTimingData(step, durationMs, delayScope.TotalMilliseconds)
+                        },
                         steps,
                         failure_artifacts = failureArtifacts
                     },
@@ -451,6 +470,26 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
         await _delay.DelayAsync(milliseconds).ConfigureAwait(false);
         return new SleepResult(milliseconds);
     }
+
+    private static object CreateTimingData(ScenarioStep step, double durationMs, int harnessDelayMs)
+    {
+        var configuredDelayMs = GetConfiguredDelayMs(step);
+        return new
+        {
+            total_ms = durationMs,
+            harness_delay_ms = harnessDelayMs,
+            configured_delay_ms = configuredDelayMs,
+            non_delay_ms = Math.Max(0, durationMs - harnessDelayMs)
+        };
+    }
+
+    private static int? GetConfiguredDelayMs(ScenarioStep step) => step.Action switch
+    {
+        "sleep" => Math.Max(0, step.Milliseconds ?? 1000),
+        "tapPoint" => Math.Max(0, step.PostTapDelayMs ?? 300),
+        "typePin" when !string.IsNullOrWhiteSpace(step.Text) => Math.Max(0, step.IntervalMs ?? 120) * step.Text.Count(char.IsDigit),
+        _ => null
+    };
 }
 
 public interface ICommandFailureDetails

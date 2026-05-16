@@ -118,8 +118,39 @@ public sealed class AppTests
         Assert.Equal("passed", envelope.GetProperty("status").GetString());
         Assert.Equal(2, envelope.GetProperty("steps").GetArrayLength());
         Assert.Equal("sleep", envelope.GetProperty("steps")[0].GetProperty("action").GetString());
+                Assert.Equal(250, envelope.GetProperty("steps")[0].GetProperty("timing").GetProperty("harness_delay_ms").GetInt32());
+                Assert.Equal(250, envelope.GetProperty("steps")[0].GetProperty("timing").GetProperty("configured_delay_ms").GetInt32());
+                Assert.Equal(0, envelope.GetProperty("steps")[0].GetProperty("timing").GetProperty("non_delay_ms").GetInt32());
         Assert.Equal("keyevent", envelope.GetProperty("steps")[1].GetProperty("action").GetString());
+                Assert.Equal(0, envelope.GetProperty("steps")[1].GetProperty("timing").GetProperty("harness_delay_ms").GetInt32());
     }
+
+        [Fact]
+        public async Task RunScenarioAsync_TapPoint_Timing_Reports_PostTap_Delay()
+        {
+                var fileSystem = new FakeFileSystem();
+                var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+                var delay = new FakeDelay(timeProvider);
+                var adb = new FakeAdbClient();
+                var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, delay, fileSystem);
+                var scenarios = new ScenarioExecutor(runner, fileSystem, timeProvider, delay);
+                var scenarioPath = "/tmp/tap-point.json";
+                fileSystem.AddFile(scenarioPath, """
+                {
+                    "name": "tap-point-delay",
+                    "steps": [
+                        { "name": "tap target", "action": "tapPoint", "x": 10, "y": 20, "postTapDelayMs": 150 }
+                    ]
+                }
+                """);
+
+                var result = await scenarios.RunAsync(scenarioPath);
+                var json = SerializeToJsonElement(result);
+
+                Assert.Equal(150, json.GetProperty("steps")[0].GetProperty("timing").GetProperty("harness_delay_ms").GetInt32());
+                Assert.Equal(150, json.GetProperty("steps")[0].GetProperty("timing").GetProperty("configured_delay_ms").GetInt32());
+                Assert.Equal(150, json.GetProperty("steps")[0].GetProperty("result").GetProperty("post_tap_delay_ms").GetInt32());
+        }
 
     [Fact]
     public async Task RunScenarioAsync_Unknown_Action_Throws_UsageException()
@@ -975,6 +1006,7 @@ internal sealed class FakeDelay(ManualTimeProvider timeProvider) : IDelay
     public Task DelayAsync(int milliseconds, CancellationToken cancellationToken = default)
     {
         Calls.Add(milliseconds);
+        DelayMetrics.RecordDelay(milliseconds);
         _timeProvider.Advance(TimeSpan.FromMilliseconds(milliseconds));
         return Task.CompletedTask;
     }
