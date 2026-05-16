@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Net.Sockets;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Hosts.Android.View;
 using Luotsi.Cli.Infrastructure;
@@ -345,7 +346,8 @@ public sealed class ViewTransportTests
     public async Task NativeWindowViewRenderer_Presents_Frames_To_Window_Surface()
     {
         var windowSurface = new FakeViewWindowSurface();
-        var renderer = new NativeWindowViewRenderer(new FakeViewWindowSurfaceFactory(windowSurface), new FakeDeviceHost());
+        var interactions = new RecordingViewInteractionHandler();
+        var renderer = new NativeWindowViewRenderer(new FakeViewWindowSurfaceFactory(windowSurface), interactions.HandleAsync);
         var frame = new ViewFrame(1, 33_000, 2, 1, "AV_PIX_FMT_BGRA", null)
         {
             PixelData = new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 },
@@ -367,7 +369,8 @@ public sealed class ViewTransportTests
     public async Task NativeWindowViewRenderer_Forwards_Stats_To_Window_Surface()
     {
         var windowSurface = new FakeViewWindowSurface();
-        var renderer = new NativeWindowViewRenderer(new FakeViewWindowSurfaceFactory(windowSurface), new FakeDeviceHost());
+        var interactions = new RecordingViewInteractionHandler();
+        var renderer = new NativeWindowViewRenderer(new FakeViewWindowSurfaceFactory(windowSurface), interactions.HandleAsync);
         var stats = new ViewStats(12, 12, 0, 59.9d, 59.7d, 84);
         await renderer.InitializeAsync(new ViewDisplayInfo(1600, 900, "h264", "AV_PIX_FMT_BGRA"));
 
@@ -380,8 +383,8 @@ public sealed class ViewTransportTests
     public async Task NativeWindowViewRenderer_Maps_Clicks_To_Relative_TapPoint()
     {
         var windowSurface = new FakeViewWindowSurface();
-        var host = new FakeDeviceHost();
-        var renderer = new NativeWindowViewRenderer(new FakeViewWindowSurfaceFactory(windowSurface), host);
+        var interactions = new RecordingViewInteractionHandler();
+        var renderer = new NativeWindowViewRenderer(new FakeViewWindowSurfaceFactory(windowSurface), interactions.HandleAsync);
         await renderer.InitializeAsync(new ViewDisplayInfo(1600, 900, "h264", "AV_PIX_FMT_BGRA"));
         await renderer.PresentAsync(new ViewFrame(1, 33_000, 1600, 900, "AV_PIX_FMT_BGRA", null)
         {
@@ -391,18 +394,17 @@ public sealed class ViewTransportTests
 
         await windowSurface.RaisePointerAsync(new ViewPointerEvent(400, 225, 800, 450));
 
-        var request = Assert.Single(host.TapPointRequests);
-        Assert.Equal(0.5, request.XRatio!.Value, 3);
-        Assert.Equal(0.5, request.YRatio!.Value, 3);
-        Assert.Equal(0, request.PostTapDelayMs);
+        var request = Assert.IsType<ViewTapRequest>(Assert.Single(interactions.Requests));
+        Assert.Equal(0.5, request.XRatio, 3);
+        Assert.Equal(0.5, request.YRatio, 3);
     }
 
     [Fact]
     public async Task NativeWindowViewRenderer_Ignores_Clicks_Outside_Letterboxed_Frame()
     {
         var windowSurface = new FakeViewWindowSurface();
-        var host = new FakeDeviceHost();
-        var renderer = new NativeWindowViewRenderer(new FakeViewWindowSurfaceFactory(windowSurface), host);
+        var interactions = new RecordingViewInteractionHandler();
+        var renderer = new NativeWindowViewRenderer(new FakeViewWindowSurfaceFactory(windowSurface), interactions.HandleAsync);
         await renderer.InitializeAsync(new ViewDisplayInfo(1600, 900, "h264", "AV_PIX_FMT_BGRA"));
         await renderer.PresentAsync(new ViewFrame(1, 33_000, 1600, 900, "AV_PIX_FMT_BGRA", null)
         {
@@ -412,15 +414,15 @@ public sealed class ViewTransportTests
 
         await windowSurface.RaisePointerAsync(new ViewPointerEvent(10, 10, 800, 800));
 
-        Assert.Empty(host.TapPointRequests);
+        Assert.Empty(interactions.Requests);
     }
 
     [Fact]
     public async Task NativeWindowViewRenderer_Maps_Clicks_When_Window_Is_Larger_Than_Source_Without_Upscaling()
     {
         var windowSurface = new FakeViewWindowSurface();
-        var host = new FakeDeviceHost();
-        var renderer = new NativeWindowViewRenderer(new FakeViewWindowSurfaceFactory(windowSurface), host);
+        var interactions = new RecordingViewInteractionHandler();
+        var renderer = new NativeWindowViewRenderer(new FakeViewWindowSurfaceFactory(windowSurface), interactions.HandleAsync);
         await renderer.InitializeAsync(new ViewDisplayInfo(1600, 900, "h264", "AV_PIX_FMT_BGRA"));
         await renderer.PresentAsync(new ViewFrame(1, 33_000, 1600, 900, "AV_PIX_FMT_BGRA", null)
         {
@@ -430,30 +432,31 @@ public sealed class ViewTransportTests
 
         await windowSurface.RaisePointerAsync(new ViewPointerEvent(1000, 600, 2000, 1200));
 
-        var request = Assert.Single(host.TapPointRequests);
-        Assert.Equal(0.5, request.XRatio!.Value, 3);
-        Assert.Equal(0.5, request.YRatio!.Value, 3);
+        var request = Assert.IsType<ViewTapRequest>(Assert.Single(interactions.Requests));
+        Assert.Equal(0.5, request.XRatio, 3);
+        Assert.Equal(0.5, request.YRatio, 3);
     }
 
     [Fact]
     public async Task NativeWindowViewRenderer_Forwards_Screenshot_Command_To_DeviceHost()
     {
         var windowSurface = new FakeViewWindowSurface();
-        var host = new FakeDeviceHost();
-        var renderer = new NativeWindowViewRenderer(new FakeViewWindowSurfaceFactory(windowSurface), host);
+        var interactions = new RecordingViewInteractionHandler();
+        var renderer = new NativeWindowViewRenderer(new FakeViewWindowSurfaceFactory(windowSurface), interactions.HandleAsync);
         await renderer.InitializeAsync(new ViewDisplayInfo(1600, 900, "h264", "AV_PIX_FMT_BGRA"));
 
         await windowSurface.RaiseCommandAsync(ViewWindowCommand.TakeScreenshot);
 
-        Assert.Equal(["view-window-001"], host.TakeScreenshotRequests);
+        var request = Assert.IsType<ViewWindowCommandRequest>(Assert.Single(interactions.Requests));
+        Assert.Equal(ViewWindowCommand.TakeScreenshot, request.Command);
     }
 
     [Fact]
     public async Task NativeWindowViewRenderer_Maps_Clicks_In_Fill_Mode()
     {
         var windowSurface = new FakeViewWindowSurface();
-        var host = new FakeDeviceHost();
-        var renderer = new NativeWindowViewRenderer(new FakeViewWindowSurfaceFactory(windowSurface), host);
+        var interactions = new RecordingViewInteractionHandler();
+        var renderer = new NativeWindowViewRenderer(new FakeViewWindowSurfaceFactory(windowSurface), interactions.HandleAsync);
         await renderer.InitializeAsync(new ViewDisplayInfo(1600, 900, "h264", "AV_PIX_FMT_BGRA"));
         await renderer.PresentAsync(new ViewFrame(1, 33_000, 1600, 900, "AV_PIX_FMT_BGRA", null)
         {
@@ -463,9 +466,143 @@ public sealed class ViewTransportTests
 
         await windowSurface.RaisePointerAsync(new ViewPointerEvent(400, 100, 800, 800, ViewScaleMode.Fill));
 
-        var request = Assert.Single(host.TapPointRequests);
-        Assert.Equal(0.5, request.XRatio!.Value, 3);
-        Assert.Equal(0.125, request.YRatio!.Value, 3);
+        var request = Assert.IsType<ViewTapRequest>(Assert.Single(interactions.Requests));
+        Assert.Equal(0.5, request.XRatio, 3);
+        Assert.Equal(0.125, request.YRatio, 3);
+    }
+
+    [Fact]
+    public async Task NativeWindowViewRenderer_Forwards_Reconnect_Command()
+    {
+        var windowSurface = new FakeViewWindowSurface();
+        var interactions = new RecordingViewInteractionHandler();
+        var renderer = new NativeWindowViewRenderer(new FakeViewWindowSurfaceFactory(windowSurface), interactions.HandleAsync);
+        await renderer.InitializeAsync(new ViewDisplayInfo(1600, 900, "h264", "AV_PIX_FMT_BGRA"));
+
+        await windowSurface.RaiseCommandAsync(ViewWindowCommand.Reconnect);
+
+        var request = Assert.IsType<ViewWindowCommandRequest>(Assert.Single(interactions.Requests));
+        Assert.Equal(ViewWindowCommand.Reconnect, request.Command);
+    }
+
+    [Fact]
+    public async Task NativeWindowViewRenderer_Forwards_ToggleRecording_Command()
+    {
+        var windowSurface = new FakeViewWindowSurface();
+        var interactions = new RecordingViewInteractionHandler();
+        var renderer = new NativeWindowViewRenderer(new FakeViewWindowSurfaceFactory(windowSurface), interactions.HandleAsync);
+        await renderer.InitializeAsync(new ViewDisplayInfo(1600, 900, "h264", "AV_PIX_FMT_BGRA"));
+
+        await windowSurface.RaiseCommandAsync(ViewWindowCommand.ToggleRecording);
+
+        var request = Assert.IsType<ViewWindowCommandRequest>(Assert.Single(interactions.Requests));
+        Assert.Equal(ViewWindowCommand.ToggleRecording, request.Command);
+    }
+
+    [Fact]
+    public async Task TcpViewShareServer_Broadcasts_Header_And_Packet_To_Observer()
+    {
+        await using var server = new TcpViewShareServer("127.0.0.1:0");
+        var endpoint = await server.StartAsync();
+        await server.BeginStreamAsync(new ViewStreamHeader(1, "h264", 1080, 1920, 0));
+
+        var (host, port) = ViewShareEndpointParser.ParseConnect(endpoint);
+        using var client = new TcpClient();
+        await client.ConnectAsync(host, port);
+        await WaitForObserverCountAsync(server, 1);
+
+        await server.PublishPacketAsync(new ViewPacket(ViewPacketType.Frame, 1, 33_000, true, new byte[] { 0x01, 0x02, 0x03 }));
+
+        var reader = new ViewPacketStreamReader();
+        var stream = client.GetStream();
+        var header = await reader.ReadHeaderAsync(stream);
+        await using var packets = reader.ReadPacketsAsync(stream).GetAsyncEnumerator();
+
+        Assert.Equal("h264", header.Codec);
+        Assert.Equal(1080, header.Width);
+        Assert.True(await packets.MoveNextAsync());
+        Assert.Equal(ViewPacketType.Frame, packets.Current.PacketType);
+        Assert.Equal(new byte[] { 0x01, 0x02, 0x03 }, packets.Current.Payload.ToArray());
+    }
+
+    [Fact]
+    public async Task TcpViewShareServer_Replays_Bootstrap_Packets_To_Late_Observer()
+    {
+        await using var server = new TcpViewShareServer("127.0.0.1:0");
+        var endpoint = await server.StartAsync();
+        await server.BeginStreamAsync(new ViewStreamHeader(1, "h264", 1080, 1920, 0));
+
+        await server.PublishPacketAsync(new ViewPacket(ViewPacketType.Config, 1, 0, false, new byte[] { 0x11, 0x12 }));
+        await server.PublishPacketAsync(new ViewPacket(ViewPacketType.Frame, 2, 16_000, false, new byte[] { 0x21 }));
+        await server.PublishPacketAsync(new ViewPacket(ViewPacketType.Frame, 3, 33_000, true, new byte[] { 0x31, 0x32, 0x33 }));
+
+        var (host, port) = ViewShareEndpointParser.ParseConnect(endpoint);
+        using var client = new TcpClient();
+        await client.ConnectAsync(host, port);
+        await WaitForObserverCountAsync(server, 1);
+
+        var reader = new ViewPacketStreamReader();
+        var stream = client.GetStream();
+        var header = await reader.ReadHeaderAsync(stream);
+        await using var packets = reader.ReadPacketsAsync(stream).GetAsyncEnumerator();
+
+        Assert.Equal("h264", header.Codec);
+
+        Assert.True(await packets.MoveNextAsync());
+        Assert.Equal(ViewPacketType.Config, packets.Current.PacketType);
+        Assert.Equal(new byte[] { 0x11, 0x12 }, packets.Current.Payload.ToArray());
+
+        Assert.True(await packets.MoveNextAsync());
+        Assert.Equal(ViewPacketType.Frame, packets.Current.PacketType);
+        Assert.True(packets.Current.IsKeyFrame);
+        Assert.Equal(new byte[] { 0x31, 0x32, 0x33 }, packets.Current.Payload.ToArray());
+    }
+
+    [Fact]
+    public async Task NativeWindowViewRenderer_Forwards_Chrome_State_To_Window_Surface()
+    {
+        var windowSurface = new FakeViewWindowSurface();
+        var interactions = new RecordingViewInteractionHandler();
+        var renderer = new NativeWindowViewRenderer(new FakeViewWindowSurfaceFactory(windowSurface), interactions.HandleAsync);
+        var chrome = new ViewChromeState(
+            "device-a",
+            [new ViewChromeDevice(1, "device-a", "device", "Primary", true)],
+            false,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false);
+
+        await renderer.UpdateChromeAsync(chrome);
+        await renderer.InitializeAsync(new ViewDisplayInfo(1600, 900, "h264", "AV_PIX_FMT_BGRA"));
+
+        Assert.Equal(chrome, windowSurface.Chrome);
+    }
+
+    [Fact]
+    public void ViewChromeLayout_HitTest_Maps_Toolbar_Command_And_Device_Switch()
+    {
+        var chrome = new ViewChromeState(
+            "device-a",
+            [
+                new ViewChromeDevice(1, "device-a", "device", "Primary", true),
+                new ViewChromeDevice(2, "device-b", "device", "Secondary", false)
+            ],
+            false,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true);
+
+        var commandHit = Assert.IsType<ViewChromeCommandHitTarget>(ViewChromeLayout.HitTest(1280, 720, 20, 20, chrome));
+        var switchHit = Assert.IsType<ViewChromeSwitchDeviceHitTarget>(ViewChromeLayout.HitTest(1280, 720, 62, 692, chrome));
+
+        Assert.Equal(ViewWindowCommand.TakeScreenshot, commandHit.Command);
+        Assert.Equal("device-b", switchHit.DeviceSelector);
     }
 
     private static async Task<List<ViewPacket>> ReadAllAsync(IAsyncEnumerable<ViewPacket> packets)
@@ -486,6 +623,21 @@ public sealed class ViewTransportTests
             yield return packet;
             await Task.Yield();
         }
+    }
+
+    private static async Task WaitForObserverCountAsync(TcpViewShareServer server, int expectedCount)
+    {
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            if (server.ObserverCount >= expectedCount)
+            {
+                return;
+            }
+
+            await Task.Delay(10);
+        }
+
+        throw new InvalidOperationException($"Timed out waiting for {expectedCount} share observer connections.");
     }
 }
 
@@ -547,7 +699,7 @@ internal sealed class FakeViewWindowSurfaceFactory(FakeViewWindowSurface windowS
 internal sealed class FakeViewWindowSurface : IViewWindowSurface
 {
     private Func<ViewPointerEvent, Task>? _pointerHandler;
-    private Func<ViewWindowCommand, Task>? _commandHandler;
+    private Func<ViewInteractionRequest, Task>? _interactionHandler;
 
     public string? Title { get; private set; }
 
@@ -557,19 +709,21 @@ internal sealed class FakeViewWindowSurface : IViewWindowSurface
 
     public ViewStats? Stats { get; private set; }
 
+    public ViewChromeState? Chrome { get; private set; }
+
     public bool Disposed { get; private set; }
 
     public Task InitializeAsync(
         string title,
         ViewDisplayInfo displayInfo,
         Func<ViewPointerEvent, Task> pointerHandler,
-        Func<ViewWindowCommand, Task>? commandHandler = null,
+        Func<ViewInteractionRequest, Task>? interactionHandler = null,
         CancellationToken cancellationToken = default)
     {
         Title = title;
         DisplayInfo = displayInfo;
         _pointerHandler = pointerHandler;
-        _commandHandler = commandHandler;
+        _interactionHandler = interactionHandler;
         return Task.CompletedTask;
     }
 
@@ -585,6 +739,12 @@ internal sealed class FakeViewWindowSurface : IViewWindowSurface
         return Task.CompletedTask;
     }
 
+    public Task UpdateChromeAsync(ViewChromeState chrome, CancellationToken cancellationToken = default)
+    {
+        Chrome = chrome;
+        return Task.CompletedTask;
+    }
+
     public Task WaitForCloseAsync(CancellationToken cancellationToken = default) => Task.Delay(Timeout.Infinite, cancellationToken);
 
     public ValueTask DisposeAsync()
@@ -595,7 +755,7 @@ internal sealed class FakeViewWindowSurface : IViewWindowSurface
 
     public Task RaisePointerAsync(ViewPointerEvent pointerEvent) => (_pointerHandler ?? throw new InvalidOperationException("Pointer handler was not initialized."))(pointerEvent);
 
-    public Task RaiseCommandAsync(ViewWindowCommand command) => (_commandHandler ?? throw new InvalidOperationException("Command handler was not initialized."))(command);
+    public Task RaiseCommandAsync(ViewWindowCommand command) => (_interactionHandler ?? throw new InvalidOperationException("Interaction handler was not initialized."))(new ViewWindowCommandRequest(command));
 }
 
 internal sealed class FakeLibavNativeLibraryBinder : ILibavNativeLibraryBinder
@@ -667,6 +827,8 @@ internal sealed class FakeViewRenderer : IViewRenderer
 
     public List<ViewStats> StatsUpdates { get; } = [];
 
+    public ViewChromeState? Chrome { get; private set; }
+
     public Task InitializeAsync(ViewDisplayInfo displayInfo, CancellationToken cancellationToken = default)
     {
         DisplayInfo = displayInfo;
@@ -685,7 +847,24 @@ internal sealed class FakeViewRenderer : IViewRenderer
         return Task.CompletedTask;
     }
 
+    public Task UpdateChromeAsync(ViewChromeState chrome, CancellationToken cancellationToken = default)
+    {
+        Chrome = chrome;
+        return Task.CompletedTask;
+    }
+
     public Task WaitForCloseAsync(CancellationToken cancellationToken = default) => Task.Delay(Timeout.Infinite, cancellationToken);
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+internal sealed class RecordingViewInteractionHandler
+{
+    public List<ViewInteractionRequest> Requests { get; } = [];
+
+    public Task HandleAsync(ViewInteractionRequest request)
+    {
+        Requests.Add(request);
+        return Task.CompletedTask;
+    }
 }

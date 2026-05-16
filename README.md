@@ -82,14 +82,53 @@ SDL window title or flooding stdout on long-lived sessions. Use
 updates independently; the default is `0`, which forwards every renderer stats
 update. `--preset <name>` seeds the launch defaults without blocking explicit
 overrides, and `--defaults` is a shorthand for the conservative `safe` preset.
-The built-in SDL window now also exposes a first hotkey slice: `F12` captures a
-device screenshot into the artifact root, `F11` toggles fullscreen, and `F8`
-switches between `fit` and `fill` presentation modes.
+The built-in SDL window now exposes an operator control layer: `F12` captures a
+device screenshot into the artifact root, `F9` toggles live stream recording,
+`F5` reconnects the mirrored stream, `F11` toggles fullscreen, and `F8`
+switches between `fit` and `fill` presentation modes. Plain text input, common
+navigation/editing keys, mouse-wheel scrolling, host clipboard paste via
+`Ctrl+V`, and drag/drop helpers are also routed through the same session-owned
+interaction surface. Dropped `.apk` files install on the device; other dropped
+files are pushed to `/sdcard/Download`. The SDL window now also paints a small
+in-window toolbar and multi-device shelf on top of the mirror surface, so
+operators can click screenshot/record/reconnect/fit/fullscreen controls instead
+of relying only on hotkeys. When multiple adb-visible devices are present, the
+shelf becomes clickable and switches the active mirrored device by reusing the
+same reconnect loop that powers `F5`.
+
+Source sessions can expose the live stream to a second client with
+`--share-bind <host:port>`. The host session relays the existing private binary
+packet protocol over TCP and reports the bound share endpoint in JSONL. A
+second client can join that stream with `view --join-share <host:port>`.
+Joined share sessions are forced into read-only observer mode and reconnect to
+the shared TCP source rather than talking to adb directly.
+
+`--read-only` turns the view window into an observer surface. The stream still
+renders, screenshots and reconnect/record controls still work, but tap, typing,
+wheel-scroll, clipboard paste, and drag/drop requests are blocked and surfaced
+as `view_input_blocked` JSONL events. Joined share sessions behave the same way
+by default, but additionally disable device-only actions such as screenshots and
+device switching.
 
 `view-doctor` runs the same option resolution as `view` and returns a diagnostic
 report instead of opening a stream. The current checks cover FFmpeg decoder
 readiness, Android helper package availability, adb device visibility, device
 preflight, and optional recording target readiness.
+
+Interactive `view` sessions can now emit additional JSONL events beyond
+`view_started`, `view_stats`, `view_error`, and `view_ended`, including:
+
+- `view_recording_started` / `view_recording_stopped`
+- `view_reconnect_requested` / `view_reconnected`
+- `view_device_switch_requested`
+- `view_screenshot_captured`
+- `view_clipboard_pasted`
+- `view_file_pushed`
+- `view_package_installed`
+- `view_device_shelf` when multiple adb-visible devices are present
+- `view_share_started`
+- `view_share_client_connected` / `view_share_client_disconnected`
+- `view_input_blocked` when `--read-only` suppresses an interactive request
 
 The implementation currently supports `--platform android`. The host seam is in
 place so an iOS adapter can be added later without rewriting the command layer.

@@ -100,6 +100,29 @@ public interface IDeviceHost : IScenarioActionHost
     /// <param name="timeLimitSec">Maximum recording duration.</param>
     /// <returns>Recording metadata.</returns>
     Task<RecordResult> RecordAsync(string output, int timeLimitSec);
+
+    /// <summary>
+    /// Scrolls the current surface using a host-side gesture.
+    /// </summary>
+    /// <param name="horizontalTicks">Horizontal wheel ticks.</param>
+    /// <param name="verticalTicks">Vertical wheel ticks.</param>
+    /// <returns>Scroll metadata.</returns>
+    Task<ScrollResult> ScrollAsync(int horizontalTicks, int verticalTicks);
+
+    /// <summary>
+    /// Pushes a host-local file to the device.
+    /// </summary>
+    /// <param name="localPath">Host-local path.</param>
+    /// <param name="remoteDirectory">Optional device directory.</param>
+    /// <returns>Transfer metadata.</returns>
+    Task<PushFileResult> PushFileAsync(string localPath, string? remoteDirectory = null);
+
+    /// <summary>
+    /// Installs an APK from the host onto the device.
+    /// </summary>
+    /// <param name="packagePath">Host-local package path.</param>
+    /// <returns>Installation metadata.</returns>
+    Task<InstallPackageResult> InstallPackageAsync(string packagePath);
 }
 
 /// <summary>

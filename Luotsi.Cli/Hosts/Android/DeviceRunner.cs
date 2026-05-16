@@ -316,6 +316,91 @@ public sealed class DeviceRunner(
         return new KeyEventResult(keyCode);
     }
 
+    public async Task<ScrollResult> ScrollAsync(int horizontalTicks, int verticalTicks)
+    {
+        if (horizontalTicks == 0 && verticalTicks == 0)
+        {
+            throw new UsageException("scroll requires at least one non-zero wheel delta.");
+        }
+
+        var (displayWidth, displayHeight) = await GetDisplaySizeAsync().ConfigureAwait(false);
+        var width = Math.Max(320, displayWidth);
+        var height = Math.Max(480, displayHeight);
+        var centerX = width / 2;
+        var centerY = height / 2;
+        var horizontalDistance = Math.Clamp(Math.Abs(horizontalTicks) * Math.Max(80, width / 4), 80, Math.Max(120, width / 2));
+        var verticalDistance = Math.Clamp(Math.Abs(verticalTicks) * Math.Max(80, height / 4), 80, Math.Max(120, height / 2));
+        var durationMs = 180;
+
+        var startX = centerX;
+        var endX = centerX;
+        var startY = centerY;
+        var endY = centerY;
+
+        if (Math.Abs(verticalTicks) >= Math.Abs(horizontalTicks) && verticalTicks != 0)
+        {
+            var halfDistance = verticalDistance / 2;
+            if (verticalTicks > 0)
+            {
+                startY = Math.Max(0, centerY - halfDistance);
+                endY = Math.Min(height - 1, centerY + halfDistance);
+            }
+            else
+            {
+                startY = Math.Min(height - 1, centerY + halfDistance);
+                endY = Math.Max(0, centerY - halfDistance);
+            }
+        }
+        else
+        {
+            var halfDistance = horizontalDistance / 2;
+            if (horizontalTicks > 0)
+            {
+                startX = Math.Min(width - 1, centerX + halfDistance);
+                endX = Math.Max(0, centerX - halfDistance);
+            }
+            else
+            {
+                startX = Math.Max(0, centerX - halfDistance);
+                endX = Math.Min(width - 1, centerX + halfDistance);
+            }
+        }
+
+        var result = await _adb.ShellAsync($"input swipe {startX} {startY} {endX} {endY} {durationMs}").ConfigureAwait(false);
+        result.EnsureSuccess("scroll failed");
+        InvalidateUiReadCaches();
+        return new ScrollResult(horizontalTicks, verticalTicks, startX, startY, endX, endY, durationMs);
+    }
+
+    public async Task<PushFileResult> PushFileAsync(string localPath, string? remoteDirectory = null)
+    {
+        var validatedLocalPath = Path.GetFullPath(RequireNonBlank(localPath, "push file requires a local path."));
+        if (!_fileSystem.FileExists(validatedLocalPath))
+        {
+            throw new FileNotFoundException($"Host file '{validatedLocalPath}' was not found.", validatedLocalPath);
+        }
+
+        var targetDirectory = NormalizeDeviceDirectoryForPush(remoteDirectory);
+        var remotePath = $"{targetDirectory}/{Path.GetFileName(validatedLocalPath)}";
+        var result = await _adb.RunAsync(["push", validatedLocalPath, remotePath]).ConfigureAwait(false);
+        result.EnsureSuccess("push file failed");
+        return new PushFileResult(validatedLocalPath, remotePath);
+    }
+
+    public async Task<InstallPackageResult> InstallPackageAsync(string packagePath)
+    {
+        var validatedPackagePath = Path.GetFullPath(RequireNonBlank(packagePath, "install package requires a local path."));
+        if (!_fileSystem.FileExists(validatedPackagePath))
+        {
+            throw new FileNotFoundException($"Host package '{validatedPackagePath}' was not found.", validatedPackagePath);
+        }
+
+        var result = await _adb.RunAsync(["install", "-r", validatedPackagePath]).ConfigureAwait(false);
+        result.EnsureSuccess("install package failed");
+        InvalidateUiReadCaches();
+        return new InstallPackageResult(validatedPackagePath);
+    }
+
     public async Task<WaitLogResult> WaitForLogAsync(string text, int timeoutSec)
     {
         var containsText = RequireNonBlank(text, "waitLog requires text.");
@@ -1399,6 +1484,23 @@ public sealed class DeviceRunner(
             (normalized.Length == target.Length || normalized[target.Length] == '/'))
         {
             return source + normalized[target.Length..];
+        }
+
+        return normalized;
+    }
+
+    private static string NormalizeDeviceDirectoryForPush(string? path)
+    {
+        var normalized = string.IsNullOrWhiteSpace(path) ? "/sdcard/Download" : path.Replace('\\', '/').Trim();
+        normalized = normalized.Replace("\r", string.Empty, StringComparison.Ordinal).Replace("\n", string.Empty, StringComparison.Ordinal).TrimEnd('/');
+        if (!normalized.StartsWith("/", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Device directory '{path}' must be absolute for adb push.");
+        }
+
+        if (normalized.Contains("/../", StringComparison.Ordinal) || normalized.EndsWith("/..", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Device directory '{path}' contains unsupported parent traversal.");
         }
 
         return normalized;

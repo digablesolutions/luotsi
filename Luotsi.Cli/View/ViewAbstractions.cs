@@ -60,7 +60,10 @@ public sealed record ViewOptions(
     bool OverlayTelemetry,
     int StatsIntervalMs = 1000,
     int RendererStatsIntervalMs = 0,
-    string PresetName = "balanced");
+    string PresetName = "balanced",
+    bool ReadOnly = false,
+    string? ShareBindEndpoint = null,
+    string? JoinShareEndpoint = null);
 
 /// <summary>
 /// Bootstraps the device-side stream transport.
@@ -110,6 +113,7 @@ public sealed record ViewStartRequest(
 /// <param name="LocalPort">Local forwarded port.</param>
 /// <param name="ServerVersion">Device-side server version.</param>
 /// <param name="Transport">Transport description.</param>
+/// <param name="Host">Host name or address exposing the transport endpoint.</param>
 public sealed record ViewConnectionInfo(
     string SessionId,
     string Codec,
@@ -118,7 +122,8 @@ public sealed record ViewConnectionInfo(
     int Height,
     int LocalPort,
     string ServerVersion,
-    string Transport);
+    string Transport,
+    string Host = "127.0.0.1");
 
 /// <summary>
 /// Decodes and optionally presents a stream of view packets.
@@ -171,9 +176,9 @@ public interface IViewRendererFactory
     /// Creates a renderer for the requested session options.
     /// </summary>
     /// <param name="options">View session options.</param>
-    /// <param name="deviceHost">Device host used for interactive input routing.</param>
+    /// <param name="interactionHandler">Session-owned interaction handler for local input and commands.</param>
     /// <returns>Renderer instance, or <see langword="null"/> when presentation is disabled.</returns>
-    IViewRenderer? Create(ViewOptions options, IDeviceHost deviceHost);
+    IViewRenderer? Create(ViewOptions options, Func<ViewInteractionRequest, Task> interactionHandler);
 }
 
 /// <summary>
@@ -264,6 +269,14 @@ public interface IViewRenderer : IAsyncDisposable
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Completion task.</returns>
     Task UpdateStatsAsync(ViewStats stats, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Updates session-owned toolbar and shelf chrome state.
+    /// </summary>
+    /// <param name="chrome">Current chrome state.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Completion task.</returns>
+    Task UpdateChromeAsync(ViewChromeState chrome, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Waits until the renderer window is closed by the operator.

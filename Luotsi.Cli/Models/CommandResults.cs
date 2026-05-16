@@ -55,6 +55,15 @@ public sealed record TelemetryMatchResult(
 // Record video
 public sealed record RecordResult(string Output, int TimeLimitSec);
 
+// Scroll gesture
+public sealed record ScrollResult(int HorizontalTicks, int VerticalTicks, int StartX, int StartY, int EndX, int EndY, int DurationMs);
+
+// Push file to device
+public sealed record PushFileResult(string LocalPath, string RemotePath);
+
+// Install package on device
+public sealed record InstallPackageResult(string PackagePath);
+
 // Wait not visible
 public sealed record WaitNotVisibleResult(string Text, int AttemptCount, bool Visible);
 

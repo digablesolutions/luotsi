@@ -25,14 +25,14 @@ public interface IViewWindowSurface : IAsyncDisposable
     /// <param name="title">Window title.</param>
     /// <param name="displayInfo">Initial display info.</param>
     /// <param name="pointerHandler">Pointer callback for click routing.</param>
-    /// <param name="commandHandler">Window command callback for hotkeys or future toolbar actions.</param>
+    /// <param name="interactionHandler">Window interaction callback for hotkeys and typed input.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Completion task.</returns>
     Task InitializeAsync(
         string title,
         ViewDisplayInfo displayInfo,
         Func<ViewPointerEvent, Task> pointerHandler,
-        Func<ViewWindowCommand, Task>? commandHandler = null,
+        Func<ViewInteractionRequest, Task>? interactionHandler = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -52,6 +52,14 @@ public interface IViewWindowSurface : IAsyncDisposable
     Task UpdateStatsAsync(ViewStats stats, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Updates session-owned toolbar and shelf chrome state.
+    /// </summary>
+    /// <param name="chrome">Current chrome state.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Completion task.</returns>
+    Task UpdateChromeAsync(ViewChromeState chrome, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Waits until the native window is closed.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -69,14 +77,6 @@ public enum ViewScaleMode
 }
 
 /// <summary>
-/// Window command raised by local UI affordances such as hotkeys.
-/// </summary>
-public enum ViewWindowCommand
-{
-    TakeScreenshot = 0
-}
-
-/// <summary>
 /// Pointer event raised by the native window surface.
 /// </summary>
 /// <param name="ClientX">Pointer X within the client area.</param>
@@ -89,18 +89,24 @@ public sealed record ViewPointerEvent(int ClientX, int ClientY, int ClientWidth,
 /// <summary>
 /// In-process native window renderer that presents decoded frames and routes clicks through the existing tap-point host path.
 /// </summary>
-public sealed class NativeWindowViewRenderer(IViewWindowSurfaceFactory windowSurfaceFactory, IDeviceHost deviceHost) : IViewRenderer
+public sealed class NativeWindowViewRenderer(IViewWindowSurfaceFactory windowSurfaceFactory, Func<ViewInteractionRequest, Task> interactionHandler) : IViewRenderer
 {
     private readonly IViewWindowSurface _windowSurface = (windowSurfaceFactory ?? throw new ArgumentNullException(nameof(windowSurfaceFactory))).Create();
-    private readonly IDeviceHost _deviceHost = deviceHost ?? throw new ArgumentNullException(nameof(deviceHost));
+    private readonly Func<ViewInteractionRequest, Task> _interactionHandler = interactionHandler ?? throw new ArgumentNullException(nameof(interactionHandler));
     private ViewDisplayInfo? _displayInfo;
-    private int _screenshotSequence;
+    private ViewChromeState? _chrome;
+    private bool _initialized;
 
     /// <inheritdoc />
     public async Task InitializeAsync(ViewDisplayInfo displayInfo, CancellationToken cancellationToken = default)
     {
         _displayInfo = displayInfo ?? throw new ArgumentNullException(nameof(displayInfo));
-        await _windowSurface.InitializeAsync("Luotsi View", displayInfo, HandlePointerAsync, HandleWindowCommandAsync, cancellationToken).ConfigureAwait(false);
+        await _windowSurface.InitializeAsync("Luotsi View", displayInfo, HandlePointerAsync, _interactionHandler, cancellationToken).ConfigureAwait(false);
+        _initialized = true;
+        if (_chrome is not null)
+        {
+            await _windowSurface.UpdateChromeAsync(_chrome, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc />
@@ -131,6 +137,20 @@ public sealed class NativeWindowViewRenderer(IViewWindowSurfaceFactory windowSur
     }
 
     /// <inheritdoc />
+    public async Task UpdateChromeAsync(ViewChromeState chrome, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(chrome);
+
+        _chrome = chrome;
+        if (!_initialized)
+        {
+            return;
+        }
+
+        await _windowSurface.UpdateChromeAsync(chrome, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public Task WaitForCloseAsync(CancellationToken cancellationToken = default) => _windowSurface.WaitForCloseAsync(cancellationToken);
 
     /// <inheritdoc />
@@ -154,14 +174,8 @@ public sealed class NativeWindowViewRenderer(IViewWindowSurfaceFactory windowSur
             return;
         }
 
-        await _deviceHost.TapPointAsync("view-window", null, null, xRatio, yRatio, 0).ConfigureAwait(false);
+        await _interactionHandler(new ViewTapRequest(xRatio, yRatio)).ConfigureAwait(false);
     }
-
-    private Task HandleWindowCommandAsync(ViewWindowCommand command) => command switch
-    {
-        ViewWindowCommand.TakeScreenshot => _deviceHost.TakeScreenshotAsync($"view-window-{Interlocked.Increment(ref _screenshotSequence):000}")!,
-        _ => Task.CompletedTask
-    };
 }
 
 internal static class ViewPointerMapper

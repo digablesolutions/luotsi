@@ -1078,14 +1078,19 @@ public sealed class AppTests
         var exitCode = await session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", true, "capture.h264", 1600, 60, "8M", false, false));
 
         Assert.Equal(0, exitCode);
-        Assert.Equal(2, console.OutputLines.Count);
-        Assert.Same(recorderFactory.LastRecorder, backend.LastRecorder);
+        Assert.Equal(3, console.OutputLines.Count);
+        Assert.NotNull(backend.LastRecorder);
+        Assert.NotNull(recorderFactory.LastRecorder);
 
         using var started = JsonDocument.Parse(console.OutputLines[0]);
         Assert.Equal("view_started", started.RootElement.GetProperty("type").GetString());
         Assert.Equal("capture.h264", started.RootElement.GetProperty("record_path").GetString());
 
-        using var ended = JsonDocument.Parse(console.OutputLines[1]);
+        using var recordingStarted = JsonDocument.Parse(console.OutputLines[1]);
+        Assert.Equal("view_recording_started", recordingStarted.RootElement.GetProperty("type").GetString());
+        Assert.Equal("capture.h264", recordingStarted.RootElement.GetProperty("record_path").GetString());
+
+        using var ended = JsonDocument.Parse(console.OutputLines[2]);
         Assert.Equal("view_ended", ended.RootElement.GetProperty("type").GetString());
         Assert.Equal("stream_ended", ended.RootElement.GetProperty("reason").GetString());
         Assert.True(recorderFactory.LastRecorder!.Disposed);
@@ -1452,6 +1457,97 @@ public sealed class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_View_JoinShare_Uses_Injected_ViewSessionFactory_And_Skips_Device_Host_Creation()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var deviceHostFactory = new FakeDeviceHostFactory(host);
+        var session = new FakeViewSession(23);
+        var factory = new FakeViewSessionFactory(session);
+        var app = new App(
+            console: console,
+            timeProvider: timeProvider,
+            deviceHostFactory: deviceHostFactory,
+            viewSessionFactory: factory);
+
+        var exitCode = await app.RunAsync([
+            "view",
+            "--join-share", "127.0.0.1:45123",
+            "--headless"]);
+
+        Assert.Equal(23, exitCode);
+        Assert.Equal(0, deviceHostFactory.CreateCallCount);
+        Assert.NotNull(factory.LastDeviceHost);
+        Assert.NotSame(host, factory.LastDeviceHost);
+        var options = Assert.Single(session.Options);
+        Assert.Equal("127.0.0.1:45123", options.JoinShareEndpoint);
+        Assert.True(options.ReadOnly);
+        Assert.Equal("127.0.0.1:45123", options.DeviceSelector);
+    }
+
+    [Fact]
+    public async Task RunAsync_View_Uses_ShareBind_On_Source_Session()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var session = new FakeViewSession(23);
+        var factory = new FakeViewSessionFactory(session);
+        var app = new App(
+            console: console,
+            timeProvider: timeProvider,
+            deviceHostFactory: new FakeDeviceHostFactory(host),
+            viewSessionFactory: factory);
+
+        var exitCode = await app.RunAsync([
+            "view",
+            "--device", "192.168.0.134:5555",
+            "--share-bind", "127.0.0.1:0"]);
+
+        Assert.Equal(23, exitCode);
+        var options = Assert.Single(session.Options);
+        Assert.Equal("127.0.0.1:0", options.ShareBindEndpoint);
+        Assert.Null(options.JoinShareEndpoint);
+        Assert.False(options.ReadOnly);
+    }
+
+    [Fact]
+    public async Task RunAsync_View_JoinShare_Consumes_Shared_Tcp_Stream_Without_Starting_Device_Bootstrap()
+    {
+        await using var shareServer = new TcpViewShareServer("127.0.0.1:0");
+        var endpoint = await shareServer.StartAsync();
+        await shareServer.BeginStreamAsync(new ViewStreamHeader(1, "h264", 1080, 1920, 0));
+
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var backend = new FakeViewBackend();
+        var bootstrap = new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward"));
+        var session = new ViewSession(
+            new UnsupportedDeviceHost(),
+            ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
+            console,
+            timeProvider,
+            bootstrap,
+            new FakeViewBackendFactory(backend),
+            new LocalhostViewStreamConnector(),
+            new ViewPacketStreamReader());
+
+        var runTask = session.RunAsync(new ViewOptions(endpoint, "adb", "h264", "ffmpeg", true, null, 1600, 60, "8M", false, false, 1000, 0, "balanced", true, null, endpoint));
+        await ViewTestWaitHelpers.WaitForShareObserverAsync(shareServer, 1);
+        await shareServer.PublishPacketAsync(new ViewPacket(ViewPacketType.Frame, 1, 33_000, true, new byte[] { 0x10, 0x20, 0x30 }));
+        await shareServer.PublishPacketAsync(new ViewPacket(ViewPacketType.StreamEnd, 2, 66_000, false, Array.Empty<byte>()));
+
+        var exitCode = await runTask;
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(0, bootstrap.StartCallCount);
+        Assert.Equal(2, backend.Packets.Count);
+        Assert.Contains(console.OutputLines, line => line.Contains("shared-tcp", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task RunAsync_View_Uses_Safe_Preset_Defaults()
     {
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
@@ -1668,6 +1764,223 @@ public sealed class AppTests
         Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
         Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
         Assert.Contains("--renderer-stats-interval-ms", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_View_InteractionHandler_Routes_Text_Scroll_Clipboard_And_FileDrop_To_DeviceHost()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var renderer = new ClosingViewRenderer();
+        var rendererFactory = new FakeViewRendererFactory(renderer);
+        var session = new ViewSession(
+            host,
+            ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
+            console,
+            timeProvider,
+            new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward")),
+            new FakeViewBackendFactory(new BlockingViewBackend()),
+            new FakeViewStreamConnector(new ViewPacketStreamHarness().WriteHeader("h264", 1080, 1920).Build()),
+            new ViewPacketStreamReader(),
+            rendererFactory);
+
+        var runTask = session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", false, null, 1600, 60, "8M", false, false));
+        var interactionHandler = await ViewTestWaitHelpers.WaitForInteractionHandlerAsync(rendererFactory);
+        await interactionHandler(new ViewTextInputRequest("hello"));
+        await interactionHandler(new ViewKeyInputRequest("KEYCODE_ENTER"));
+        await interactionHandler(new ViewScrollRequest(0, 1));
+        await interactionHandler(new ViewClipboardPasteRequest("paste"));
+        await interactionHandler(new ViewFileDropRequest("C:/tmp/note.txt"));
+        await interactionHandler(new ViewFileDropRequest("C:/tmp/app.apk"));
+        renderer.Close();
+        var exitCode = await runTask;
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["hello", "paste"], host.TypeTextRequests);
+        Assert.Equal(["KEYCODE_ENTER"], host.KeyEventRequests);
+        Assert.Equal([(0, 1)], host.ScrollRequests);
+        Assert.Equal([("C:/tmp/note.txt", null)], host.PushFileRequests);
+        Assert.Equal(["C:/tmp/app.apk"], host.InstallPackageRequests);
+        Assert.Contains(console.OutputLines, line => line.Contains("view_clipboard_pasted", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, line => line.Contains("view_file_pushed", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, line => line.Contains("view_package_installed", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_View_ReadOnly_Blocks_Interactive_Requests()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var renderer = new ClosingViewRenderer();
+        var rendererFactory = new FakeViewRendererFactory(renderer);
+        var session = new ViewSession(
+            host,
+            ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
+            console,
+            timeProvider,
+            new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward")),
+            new FakeViewBackendFactory(new BlockingViewBackend()),
+            new FakeViewStreamConnector(new ViewPacketStreamHarness().WriteHeader("h264", 1080, 1920).Build()),
+            new ViewPacketStreamReader(),
+            rendererFactory);
+
+        var runTask = session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", false, null, 1600, 60, "8M", false, false, 1000, 0, "balanced", true));
+        var interactionHandler = await ViewTestWaitHelpers.WaitForInteractionHandlerAsync(rendererFactory);
+        await interactionHandler(new ViewTapRequest(0.5d, 0.5d));
+        await interactionHandler(new ViewTextInputRequest("hello"));
+        await interactionHandler(new ViewScrollRequest(0, 1));
+        await interactionHandler(new ViewFileDropRequest("C:/tmp/note.txt"));
+        renderer.Close();
+        var exitCode = await runTask;
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(host.TapPointRequests);
+        Assert.Empty(host.TypeTextRequests);
+        Assert.Empty(host.ScrollRequests);
+        Assert.Empty(host.PushFileRequests);
+        Assert.Contains(console.OutputLines, line => line.Contains("view_input_blocked", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_View_Emits_Device_Shelf_When_Multiple_Devices_Are_Visible()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        host.ConnectedDevices.Add(new DeviceInfo("192.168.0.134:5555", "device", "Pixel 9"));
+        host.ConnectedDevices.Add(new DeviceInfo("emulator-5554", "device", "Emulator"));
+        var session = new ViewSession(
+            host,
+            ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
+            console,
+            timeProvider,
+            new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward")),
+            new FakeViewBackendFactory(new FakeViewBackend("ffmpeg-native")),
+            new FakeViewStreamConnector(new ViewPacketStreamHarness().WriteHeader("h264", 1080, 1920).WritePacket(ViewPacketType.StreamEnd, 1, 0, false, []).Build()),
+            new ViewPacketStreamReader(),
+            new FakeViewRendererFactory(new StatsCapturingViewRenderer()));
+
+        var exitCode = await session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", false, null, 1600, 60, "8M", false, false));
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains(console.OutputLines, line => line.Contains("view_device_shelf", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_View_InteractionHandler_Toggles_Recording_And_Emits_Events()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var renderer = new ClosingViewRenderer();
+        var rendererFactory = new FakeViewRendererFactory(renderer);
+        var recorderFactory = new FakeViewRecorderFactory();
+        var session = new ViewSession(
+            host,
+            ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
+            console,
+            timeProvider,
+            new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward")),
+            new FakeViewBackendFactory(new BlockingViewBackend()),
+            new FakeViewStreamConnector(new ViewPacketStreamHarness().WriteHeader("h264", 1080, 1920).Build()),
+            new ViewPacketStreamReader(),
+            rendererFactory,
+            recorderFactory);
+
+        var runTask = session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", false, null, 1600, 60, "8M", false, false));
+        var interactionHandler = await ViewTestWaitHelpers.WaitForInteractionHandlerAsync(rendererFactory);
+        await interactionHandler(new ViewWindowCommandRequest(ViewWindowCommand.ToggleRecording));
+        await interactionHandler(new ViewWindowCommandRequest(ViewWindowCommand.ToggleRecording));
+        renderer.Close();
+        var exitCode = await runTask;
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(recorderFactory.LastRecorder);
+        Assert.True(recorderFactory.LastRecorder!.Disposed);
+        Assert.Contains(console.OutputLines, line => line.Contains("view_recording_started", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, line => line.Contains("view_recording_stopped", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_View_InteractionHandler_Reconnects_And_Emits_Events()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var renderer = new ClosingViewRenderer();
+        var rendererFactory = new FakeViewRendererFactory(renderer);
+        var bootstrap = new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward"));
+        var session = new ViewSession(
+            host,
+            ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
+            console,
+            timeProvider,
+            bootstrap,
+            new FakeViewBackendFactory(new BlockingViewBackend()),
+            new FakeViewStreamConnector(
+                new ViewPacketStreamHarness().WriteHeader("h264", 1080, 1920).Build(),
+                new ViewPacketStreamHarness().WriteHeader("h264", 1080, 1920).Build()),
+            new ViewPacketStreamReader(),
+            rendererFactory);
+
+        var runTask = session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", false, null, 1600, 60, "8M", false, false));
+        var interactionHandler = await ViewTestWaitHelpers.WaitForInteractionHandlerAsync(rendererFactory);
+        await interactionHandler(new ViewWindowCommandRequest(ViewWindowCommand.Reconnect));
+        await ViewTestWaitHelpers.WaitForStartCallsAsync(bootstrap, 2);
+        renderer.Close();
+        var exitCode = await runTask;
+
+        Assert.Equal(0, exitCode);
+        Assert.True(bootstrap.StartCallCount >= 2);
+        Assert.Contains(console.OutputLines, line => line.Contains("view_reconnect_requested", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, line => line.Contains("view_reconnected", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_View_InteractionHandler_Switches_Device_And_Reconnects_On_Selected_Device()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        host.ConnectedDevices.Add(new DeviceInfo("device-a", "device", "Primary"));
+        host.ConnectedDevices.Add(new DeviceInfo("device-b", "device", "Secondary"));
+
+        var renderer = new ClosingViewRenderer();
+        var rendererFactory = new FakeViewRendererFactory(renderer);
+        var bootstrap = new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward"));
+        var session = new ViewSession(
+            host,
+            ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
+            console,
+            timeProvider,
+            bootstrap,
+            new FakeViewBackendFactory(new BlockingViewBackend()),
+            new FakeViewStreamConnector(
+                new ViewPacketStreamHarness().WriteHeader("h264", 1080, 1920).Build(),
+                new ViewPacketStreamHarness().WriteHeader("h264", 1080, 1920).Build()),
+            new ViewPacketStreamReader(),
+            rendererFactory);
+
+        var runTask = session.RunAsync(new ViewOptions("device-a", "adb", "h264", "ffmpeg", false, null, 1600, 60, "8M", false, false));
+        var interactionHandler = await ViewTestWaitHelpers.WaitForInteractionHandlerAsync(rendererFactory);
+    await ViewTestWaitHelpers.WaitForStartCallsAsync(bootstrap, 1);
+        await interactionHandler(new ViewSwitchDeviceRequest("device-b"));
+        await ViewTestWaitHelpers.WaitForStartCallsAsync(bootstrap, 2);
+        renderer.Close();
+        var exitCode = await runTask;
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["device-a", "device-b"], bootstrap.StartRequests.Select(request => request.DeviceSelector).ToArray());
+        Assert.Contains(console.OutputLines, line => line.Contains("view_device_switch_requested", StringComparison.Ordinal));
+        Assert.Equal(2, console.OutputLines.Count(line => line.Contains("view_device_shelf", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -2145,7 +2458,13 @@ internal sealed class FakeDeviceHostFactory(IDeviceHost deviceHost) : IDeviceHos
 {
     private readonly IDeviceHost _deviceHost = deviceHost;
 
-    public IDeviceHost Create(DeviceHostConfiguration configuration, ArtifactSession artifacts) => _deviceHost;
+    public int CreateCallCount { get; private set; }
+
+    public IDeviceHost Create(DeviceHostConfiguration configuration, ArtifactSession artifacts)
+    {
+        CreateCallCount++;
+        return _deviceHost;
+    }
 }
 
 internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDeviceHost
@@ -2157,6 +2476,16 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
     public List<(string? Label, double? XRatio, double? YRatio, int PostTapDelayMs)> TapPointRequests { get; } = [];
 
     public List<string> TakeScreenshotRequests { get; } = [];
+
+    public List<string> TypeTextRequests { get; } = [];
+
+    public List<string> KeyEventRequests { get; } = [];
+
+    public List<(int HorizontalTicks, int VerticalTicks)> ScrollRequests { get; } = [];
+
+    public List<(string LocalPath, string? RemoteDirectory)> PushFileRequests { get; } = [];
+
+    public List<string> InstallPackageRequests { get; } = [];
 
     public List<DeviceInfo> ConnectedDevices { get; } = [];
 
@@ -2245,11 +2574,37 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
         return Task.FromResult(new TapResult(50, 50));
     }
 
-    public Task<TypeTextResult> TypeTextAsync(string text) => Task.FromResult(new TypeTextResult(text));
+    public Task<TypeTextResult> TypeTextAsync(string text)
+    {
+        TypeTextRequests.Add(text);
+        return Task.FromResult(new TypeTextResult(text));
+    }
 
     public Task<TypePinResult> TypePinAsync(string pin, int perDigitDelayMs) => Task.FromResult(new TypePinResult(pin.Length, perDigitDelayMs));
 
-    public Task<KeyEventResult> KeyEventAsync(string code) => Task.FromResult(new KeyEventResult(code));
+    public Task<KeyEventResult> KeyEventAsync(string code)
+    {
+        KeyEventRequests.Add(code);
+        return Task.FromResult(new KeyEventResult(code));
+    }
+
+    public Task<ScrollResult> ScrollAsync(int horizontalTicks, int verticalTicks)
+    {
+        ScrollRequests.Add((horizontalTicks, verticalTicks));
+        return Task.FromResult(new ScrollResult(horizontalTicks, verticalTicks, 10, 10, 10, 100, 180));
+    }
+
+    public Task<PushFileResult> PushFileAsync(string localPath, string? remoteDirectory = null)
+    {
+        PushFileRequests.Add((localPath, remoteDirectory));
+        return Task.FromResult(new PushFileResult(localPath, $"{remoteDirectory ?? "/sdcard/Download"}/{Path.GetFileName(localPath)}"));
+    }
+
+    public Task<InstallPackageResult> InstallPackageAsync(string packagePath)
+    {
+        InstallPackageRequests.Add(packagePath);
+        return Task.FromResult(new InstallPackageResult(packagePath));
+    }
 
     public Task<WaitLogResult> WaitForLogAsync(string text, int timeoutSec) => Task.FromResult(new WaitLogResult(text, timeoutSec, text, 1));
 
@@ -2320,16 +2675,37 @@ internal sealed class FakeViewRendererFactory(IViewRenderer renderer) : IViewRen
 {
     private readonly IViewRenderer _renderer = renderer;
 
-    public IViewRenderer? Create(ViewOptions options, IDeviceHost deviceHost) => options.Headless ? null : _renderer;
+    public Func<ViewInteractionRequest, Task>? LastInteractionHandler { get; private set; }
+
+    public IViewRenderer? Create(ViewOptions options, Func<ViewInteractionRequest, Task> interactionHandler)
+    {
+        LastInteractionHandler = interactionHandler;
+        return options.Headless ? null : _renderer;
+    }
 }
 
 internal sealed class FakeViewTransportBootstrap(ViewConnectionInfo connectionInfo) : IViewTransportBootstrap
 {
     private readonly ViewConnectionInfo _connectionInfo = connectionInfo;
 
-    public Task<ViewConnectionInfo> StartAsync(ViewStartRequest request, CancellationToken cancellationToken = default) => Task.FromResult(_connectionInfo);
+    public int StartCallCount { get; private set; }
 
-    public Task StopAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public int StopCallCount { get; private set; }
+
+    public List<ViewStartRequest> StartRequests { get; } = [];
+
+    public Task<ViewConnectionInfo> StartAsync(ViewStartRequest request, CancellationToken cancellationToken = default)
+    {
+        StartCallCount++;
+        StartRequests.Add(request);
+        return Task.FromResult(_connectionInfo);
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken = default)
+    {
+        StopCallCount++;
+        return Task.CompletedTask;
+    }
 }
 
 internal sealed class FakeViewBackend(string name = "stub") : IViewBackend
@@ -2451,6 +2827,8 @@ internal sealed class ClosingViewRenderer : IViewRenderer
 
     public Task UpdateStatsAsync(ViewStats stats, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
+    public Task UpdateChromeAsync(ViewChromeState chrome, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
     public Task WaitForCloseAsync(CancellationToken cancellationToken = default) => _closedSource.Task.WaitAsync(cancellationToken);
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
@@ -2464,6 +2842,8 @@ internal sealed class StatsCapturingViewRenderer : IViewRenderer
 
     public ViewStats? LastStats { get; private set; }
 
+    public ViewChromeState? LastChrome { get; private set; }
+
     public Task InitializeAsync(ViewDisplayInfo displayInfo, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
     public Task PresentAsync(ViewFrame frame, CancellationToken cancellationToken = default) => Task.CompletedTask;
@@ -2472,6 +2852,12 @@ internal sealed class StatsCapturingViewRenderer : IViewRenderer
     {
         StatsUpdates.Add(stats);
         LastStats = stats;
+        return Task.CompletedTask;
+    }
+
+    public Task UpdateChromeAsync(ViewChromeState chrome, CancellationToken cancellationToken = default)
+    {
+        LastChrome = chrome;
         return Task.CompletedTask;
     }
 
@@ -2571,5 +2957,53 @@ internal sealed class FakeViewRecorder : IViewRecorder
     {
         Disposed = true;
         return ValueTask.CompletedTask;
+    }
+}
+
+internal static class ViewTestWaitHelpers
+{
+    public static async Task<Func<ViewInteractionRequest, Task>> WaitForInteractionHandlerAsync(FakeViewRendererFactory factory)
+    {
+        for (var attempt = 0; attempt < 50; attempt++)
+        {
+            if (factory.LastInteractionHandler is not null)
+            {
+                return factory.LastInteractionHandler;
+            }
+
+            await Task.Yield();
+        }
+
+        throw new InvalidOperationException("Timed out waiting for the view interaction handler.");
+    }
+
+    public static async Task WaitForStartCallsAsync(FakeViewTransportBootstrap bootstrap, int minimumCalls)
+    {
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            if (bootstrap.StartCallCount >= minimumCalls)
+            {
+                return;
+            }
+
+            await Task.Delay(10);
+        }
+
+        throw new InvalidOperationException($"Timed out waiting for {minimumCalls} view transport start calls.");
+    }
+
+    public static async Task WaitForShareObserverAsync(TcpViewShareServer shareServer, int minimumObservers)
+    {
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            if (shareServer.ObserverCount >= minimumObservers)
+            {
+                return;
+            }
+
+            await Task.Delay(10);
+        }
+
+        throw new InvalidOperationException($"Timed out waiting for {minimumObservers} share observer connections.");
     }
 }

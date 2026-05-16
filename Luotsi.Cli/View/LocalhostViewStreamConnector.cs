@@ -4,7 +4,7 @@ using System.Net.Sockets;
 namespace Luotsi.Cli.View;
 
 /// <summary>
-/// Connects to the mirrored stream over a localhost TCP port.
+/// Connects to the mirrored stream over a TCP endpoint.
 /// </summary>
 public sealed class LocalhostViewStreamConnector : IViewStreamConnector
 {
@@ -27,7 +27,8 @@ public sealed class LocalhostViewStreamConnector : IViewStreamConnector
             var client = new TcpClient();
             try
             {
-                await client.ConnectAsync(IPAddress.Loopback, connectionInfo.LocalPort, cancellationToken).ConfigureAwait(false);
+                var host = string.IsNullOrWhiteSpace(connectionInfo.Host) ? IPAddress.Loopback.ToString() : connectionInfo.Host;
+                await client.ConnectAsync(host, connectionInfo.LocalPort, cancellationToken).ConfigureAwait(false);
                 return new TcpViewStreamConnection(client);
             }
             catch (SocketException ex) when (attempt < MaxAttempts)

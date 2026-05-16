@@ -98,6 +98,48 @@ public sealed class App
         try
         {
             artifacts = ArtifactSession.Create(options, _fileSystem, _timeProvider);
+
+            if (string.Equals(options.Command, "inspect", StringComparison.OrdinalIgnoreCase))
+            {
+                runner = _deviceHostFactory.Create(
+                    new DeviceHostConfiguration(
+                        options.Get("platform") ?? CliDefaults.DefaultPlatform,
+                        adbExecutable,
+                        options.Get("device")),
+                    artifacts);
+                var inspectSession = new InspectSession(runner, _console, _timeProvider);
+                return await inspectSession.RunAsync().ConfigureAwait(false);
+            }
+
+            if (string.Equals(options.Command, "view", StringComparison.OrdinalIgnoreCase))
+            {
+                var viewOptions = BuildViewOptions(options, adbExecutable, allowJoinShare: true);
+                runner = string.IsNullOrWhiteSpace(viewOptions.JoinShareEndpoint)
+                    ? _deviceHostFactory.Create(
+                        new DeviceHostConfiguration(
+                            options.Get("platform") ?? CliDefaults.DefaultPlatform,
+                            adbExecutable,
+                            options.Get("device")),
+                        artifacts)
+                    : new UnsupportedDeviceHost();
+                var viewSession = _viewSessionFactory.Create(runner, artifacts);
+                return await viewSession.RunAsync(viewOptions).ConfigureAwait(false);
+            }
+
+            if (string.Equals(options.Command, "view-doctor", StringComparison.OrdinalIgnoreCase))
+            {
+                runner = _deviceHostFactory.Create(
+                    new DeviceHostConfiguration(
+                        options.Get("platform") ?? CliDefaults.DefaultPlatform,
+                        adbExecutable,
+                        options.Get("device")),
+                    artifacts);
+                var viewDoctor = _viewDoctorFactory.Create(runner);
+                var report = await viewDoctor.DiagnoseAsync(BuildViewOptions(options, adbExecutable, allowJoinShare: false)).ConfigureAwait(false);
+                WriteEnvelope(new CommandEnvelope(true, options.Command, started, _timeProvider.GetUtcNow(), report, artifacts.ToData(), null));
+                return 0;
+            }
+
             runner = _deviceHostFactory.Create(
                 new DeviceHostConfiguration(
                     options.Get("platform") ?? CliDefaults.DefaultPlatform,
@@ -105,26 +147,6 @@ public sealed class App
                     options.Get("device")),
                 artifacts);
             var scenarios = new ScenarioExecutor(runner, _fileSystem, _timeProvider, _delay, _environment);
-
-            if (string.Equals(options.Command, "inspect", StringComparison.OrdinalIgnoreCase))
-            {
-                var inspectSession = new InspectSession(runner, _console, _timeProvider);
-                return await inspectSession.RunAsync().ConfigureAwait(false);
-            }
-
-            if (string.Equals(options.Command, "view", StringComparison.OrdinalIgnoreCase))
-            {
-                var viewSession = _viewSessionFactory.Create(runner, artifacts);
-                return await viewSession.RunAsync(BuildViewOptions(options, adbExecutable)).ConfigureAwait(false);
-            }
-
-            if (string.Equals(options.Command, "view-doctor", StringComparison.OrdinalIgnoreCase))
-            {
-                var viewDoctor = _viewDoctorFactory.Create(runner);
-                var report = await viewDoctor.DiagnoseAsync(BuildViewOptions(options, adbExecutable)).ConfigureAwait(false);
-                WriteEnvelope(new CommandEnvelope(true, options.Command, started, _timeProvider.GetUtcNow(), report, artifacts.ToData(), null));
-                return 0;
-            }
 
             var data = options.Command switch
             {
@@ -170,11 +192,27 @@ public sealed class App
         }
     }
 
-    private static ViewOptions BuildViewOptions(CliOptions options, string adbExecutable)
+    private static ViewOptions BuildViewOptions(CliOptions options, string adbExecutable, bool allowJoinShare)
     {
         if (options.HasFlag("defaults") && options.Get("preset") is not null)
         {
             throw new UsageException("view requires either --defaults or --preset, not both.");
+        }
+
+        var joinShareEndpoint = options.Get("join-share");
+        if (!allowJoinShare && !string.IsNullOrWhiteSpace(joinShareEndpoint))
+        {
+            throw new UsageException("view-doctor does not support --join-share.");
+        }
+
+        var device = options.Get("device");
+        if (!allowJoinShare || string.IsNullOrWhiteSpace(joinShareEndpoint))
+        {
+            device = options.Require("device");
+        }
+        else if (!string.IsNullOrWhiteSpace(device))
+        {
+            throw new UsageException("view requires either --device or --join-share, not both.");
         }
 
         var preset = ViewPresetCatalog.Resolve(options.HasFlag("defaults") ? ViewPresetCatalog.Safe : options.Get("preset"));
@@ -191,7 +229,7 @@ public sealed class App
         }
 
         return new ViewOptions(
-            options.Require("device"),
+            device ?? joinShareEndpoint ?? string.Empty,
             adbExecutable,
             options.Get("codec") ?? CliDefaults.DefaultViewCodec,
             options.Get("decoder") ?? CliDefaults.DefaultViewDecoder,
@@ -204,7 +242,10 @@ public sealed class App
             options.HasFlag("overlay-telemetry"),
             statsIntervalMs,
             rendererStatsIntervalMs,
-            preset.Name);
+            preset.Name,
+            options.HasFlag("read-only") || !string.IsNullOrWhiteSpace(joinShareEndpoint),
+            options.Get("share-bind"),
+            joinShareEndpoint);
 
         static int GetIntOrDefault(CliOptions options, string key, int defaultValue) =>
             options.Get(key) is null ? defaultValue : options.Int(key, defaultValue);
