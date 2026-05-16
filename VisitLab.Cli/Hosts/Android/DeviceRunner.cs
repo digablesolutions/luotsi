@@ -25,6 +25,7 @@ public sealed class DeviceRunner(
     ITelemetryParser? telemetryParser = null) : IDeviceHost
 {
     private const string DefaultKioskPackage = "fi.systam.visit";
+    private const int UiPollDelayMs = 250;
     private static readonly TimeSpan KeyboardVisibilityCacheTtl = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan UiDumpCacheTtl = TimeSpan.FromMilliseconds(250);
 
@@ -213,7 +214,7 @@ public sealed class DeviceRunner(
             }
             catch (InvalidOperationException ex) when (IsRetryableHierarchyDumpFailure(ex))
             {
-                await _delay.DelayAsync(500).ConfigureAwait(false);
+                await _delay.DelayAsync(UiPollDelayMs).ConfigureAwait(false);
                 continue;
             }
 
@@ -229,7 +230,7 @@ public sealed class DeviceRunner(
                 return last;
             }
 
-            await _delay.DelayAsync(500).ConfigureAwait(false);
+            await _delay.DelayAsync(UiPollDelayMs).ConfigureAwait(false);
         }
 
         throw new TimeoutException($"Timed out after {validatedTimeoutSec}s waiting for visible text '{expectedText}'. Last seen: {last?.StableId ?? "none"}");
@@ -563,7 +564,7 @@ public sealed class DeviceRunner(
             }
             catch (InvalidOperationException ex) when (IsRetryableHierarchyDumpFailure(ex))
             {
-                await _delay.DelayAsync(500).ConfigureAwait(false);
+                await _delay.DelayAsync(UiPollDelayMs).ConfigureAwait(false);
                 continue;
             }
 
@@ -573,7 +574,7 @@ public sealed class DeviceRunner(
                 return new WaitNotVisibleResult(expectedText, attempt, false);
             }
 
-            await _delay.DelayAsync(500).ConfigureAwait(false);
+            await _delay.DelayAsync(UiPollDelayMs).ConfigureAwait(false);
         }
 
         throw new TimeoutException($"Timed out after {validatedTimeoutSec}s waiting for text '{expectedText}' to disappear.");
