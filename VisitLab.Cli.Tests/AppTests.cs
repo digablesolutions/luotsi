@@ -1047,6 +1047,45 @@ public sealed class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_View_Emits_ViewStats_Jsonl_Events()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var session = new ViewSession(
+            host,
+            ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
+            console,
+            timeProvider,
+            new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward")),
+            new FakeViewBackendFactory(new StatsEmittingViewBackend()),
+            new FakeViewStreamConnector(
+                new ViewPacketStreamHarness()
+                    .WriteHeader("h264", 1080, 1920)
+                    .WritePacket(ViewPacketType.StreamEnd, 1, 0, false, [])
+                    .Build()),
+            new ViewPacketStreamReader());
+
+        var exitCode = await session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", true, null, 1600, 60, "8M", false, false));
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(3, console.OutputLines.Count);
+
+        using var started = JsonDocument.Parse(console.OutputLines[0]);
+        Assert.Equal("view_started", started.RootElement.GetProperty("type").GetString());
+
+        using var stats = JsonDocument.Parse(console.OutputLines[1]);
+        Assert.Equal("view_stats", stats.RootElement.GetProperty("type").GetString());
+        Assert.Equal(12, stats.RootElement.GetProperty("stats").GetProperty("decoded_frames").GetInt32());
+        Assert.Equal(11, stats.RootElement.GetProperty("stats").GetProperty("presented_frames").GetInt32());
+
+        using var ended = JsonDocument.Parse(console.OutputLines[2]);
+        Assert.Equal("view_ended", ended.RootElement.GetProperty("type").GetString());
+        Assert.Equal("stream_ended", ended.RootElement.GetProperty("reason").GetString());
+    }
+
+    [Fact]
     public async Task RunAsync_View_Uses_Backend_Selected_By_Decoder()
     {
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
@@ -1395,6 +1434,8 @@ internal sealed class FakeFileSystem : IFileSystem
     private readonly Dictionary<string, byte[]> _binaryFiles = new(StringComparer.Ordinal);
     private readonly HashSet<string> _directories = new(StringComparer.Ordinal);
 
+    public List<string> DeletedFiles { get; } = [];
+
     public void AddFile(string path, string content)
     {
         CreateDirectory(Path.GetDirectoryName(path) ?? "/");
@@ -1422,6 +1463,13 @@ internal sealed class FakeFileSystem : IFileSystem
 
         CreateDirectory(Path.GetDirectoryName(path) ?? "/");
         return new FakeWriteStream(this, path);
+    }
+
+    public void DeleteFile(string path)
+    {
+        DeletedFiles.Add(path);
+        _files.Remove(path);
+        _binaryFiles.Remove(path);
     }
 
     public bool FileExists(string path) => _files.ContainsKey(path) || _binaryFiles.ContainsKey(path);
@@ -1611,6 +1659,22 @@ internal sealed class FakeEnvironmentVariables(Dictionary<string, string> variab
         _variables.TryGetValue(variable, out var value) ? value : null;
 }
 
+internal sealed class FakeProcessRunner : IProcessRunner
+{
+    private readonly Queue<ProcessResult> _results = new();
+
+    public List<(string FileName, string[] Args)> Calls { get; } = [];
+
+    public void EnqueueResult(ProcessResult result) => _results.Enqueue(result);
+
+    public Task<ProcessResult> RunAsync(string fileName, IEnumerable<string> args, CancellationToken cancellationToken = default)
+    {
+        var finalArgs = args.ToArray();
+        Calls.Add((fileName, finalArgs));
+        return Task.FromResult(_results.Count > 0 ? _results.Dequeue() : new ProcessResult(0, string.Empty, string.Empty));
+    }
+}
+
 internal sealed class FakeDeviceHostFactory(IDeviceHost deviceHost) : IDeviceHostFactory
 {
     private readonly IDeviceHost _deviceHost = deviceHost;
@@ -1766,6 +1830,37 @@ internal sealed class FakeViewBackend(string name = "stub") : IViewBackend
         await foreach (var packet in packets.WithCancellation(cancellationToken))
         {
             Packets.Add(packet);
+            if (packet.PacketType == ViewPacketType.StreamEnd)
+            {
+                return;
+            }
+        }
+    }
+
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+internal sealed class StatsEmittingViewBackend : IViewBackend
+{
+    private IViewRenderer? _renderer;
+
+    public string Name => "stats";
+
+    public Task InitializeAsync(ViewConnectionInfo connectionInfo, IViewRenderer? renderer, IViewRecorder? recorder, CancellationToken cancellationToken = default)
+    {
+        _renderer = renderer;
+        return Task.CompletedTask;
+    }
+
+    public async Task RunAsync(IAsyncEnumerable<ViewPacket> packets, CancellationToken cancellationToken = default)
+    {
+        if (_renderer is not null)
+        {
+            await _renderer.UpdateStatsAsync(new ViewStats(12, 11, 1, 59.9d, 58.7d, 84), cancellationToken).ConfigureAwait(false);
+        }
+
+        await foreach (var packet in packets.WithCancellation(cancellationToken))
+        {
             if (packet.PacketType == ViewPacketType.StreamEnd)
             {
                 return;

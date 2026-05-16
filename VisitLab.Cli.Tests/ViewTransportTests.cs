@@ -288,13 +288,57 @@ public sealed class ViewTransportTests
     }
 
     [Fact]
-    public void DefaultViewRecorderFactory_Rejects_NonRaw_Output_Extensions()
+    public void DefaultViewRecorderFactory_Rejects_Unsupported_Output_Extensions()
     {
-        var factory = new DefaultViewRecorderFactory(new FakeFileSystem());
+        var factory = new DefaultViewRecorderFactory(new FakeFileSystem(), new FakeProcessRunner(), new FakeEnvironmentVariables(new Dictionary<string, string>()));
 
-        var error = Assert.Throws<UsageException>(() => factory.Create(new ViewOptions("device-1", "adb", "h264", "ffmpeg", true, "capture.mkv", 1600, 60, "8M", false, false)));
+        var error = Assert.Throws<UsageException>(() => factory.Create(new ViewOptions("device-1", "adb", "h264", "ffmpeg", true, "capture.avi", 1600, 60, "8M", false, false)));
 
-        Assert.Contains(".h264", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(".mp4", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void DefaultViewRecorderFactory_Creates_FfmpegMuxingRecorder_For_Container_Output()
+    {
+        var fileSystem = new FakeFileSystem();
+        var ffmpegPath = Path.GetFullPath(Path.Combine("C:\\tools\\ffmpeg\\bin", "ffmpeg.exe"));
+        fileSystem.AddFile(ffmpegPath, string.Empty);
+        var factory = new DefaultViewRecorderFactory(
+            fileSystem,
+            new FakeProcessRunner(),
+            new FakeEnvironmentVariables(new Dictionary<string, string>
+            {
+                ["DEVICE_E2E_FFMPEG_ROOT"] = Path.GetDirectoryName(ffmpegPath)!
+            }));
+
+        var recorder = factory.Create(new ViewOptions("device-1", "adb", "h264", "ffmpeg", true, "capture.mp4", 1600, 60, "8M", false, false));
+
+        Assert.IsType<FfmpegMuxingViewRecorder>(recorder);
+    }
+
+    [Fact]
+    public async Task FfmpegMuxingViewRecorder_Invokes_Ffmpeg_To_Remux_Raw_Capture()
+    {
+        var fileSystem = new FakeFileSystem();
+        var processRunner = new FakeProcessRunner();
+        processRunner.EnqueueResult(new ProcessResult(0, string.Empty, string.Empty));
+        var ffmpegPath = Path.GetFullPath(Path.Combine("C:\\tools\\ffmpeg\\bin", "ffmpeg.exe"));
+        fileSystem.AddFile(ffmpegPath, string.Empty);
+        var recorder = new FfmpegMuxingViewRecorder(fileSystem, processRunner, ffmpegPath, Path.GetFullPath("capture.mkv"), 60);
+
+        await recorder.InitializeAsync(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward"));
+        await recorder.WritePacketAsync(new ViewPacket(ViewPacketType.Config, 1, 0, false, new byte[] { 0x00, 0x00, 0x00, 0x01, 0x67 }));
+        await recorder.WritePacketAsync(new ViewPacket(ViewPacketType.Frame, 2, 33_000, true, new byte[] { 0x00, 0x00, 0x00, 0x01, 0x65 }));
+        await recorder.CompleteAsync();
+
+        var call = Assert.Single(processRunner.Calls);
+        Assert.Equal(ffmpegPath, call.FileName);
+        Assert.Contains("-f", call.Args, StringComparer.Ordinal);
+        Assert.Contains("h264", call.Args, StringComparer.Ordinal);
+        Assert.Contains("-c:v", call.Args, StringComparer.Ordinal);
+        Assert.Contains("copy", call.Args, StringComparer.Ordinal);
+        Assert.Contains(Path.GetFullPath("capture.mkv"), call.Args, StringComparer.OrdinalIgnoreCase);
+        Assert.Single(fileSystem.DeletedFiles);
     }
 
     [Fact]

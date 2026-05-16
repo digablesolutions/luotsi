@@ -46,7 +46,7 @@ public sealed class DefaultViewSessionFactory(
             new LocalhostViewStreamConnector(),
             new ViewPacketStreamReader(),
             new DefaultViewRendererFactory(),
-            new DefaultViewRecorderFactory(_fileSystem));
+            new DefaultViewRecorderFactory(_fileSystem, _processRunner, _environment));
 }
 
 /// <summary>
@@ -138,6 +138,7 @@ public sealed class ViewSession(
             await using var recorder = _viewRecorderFactory.Create(options);
             await using var viewBackend = _viewBackendFactory.Create(options);
             IViewRenderer? renderer = null;
+            IViewRenderer? backendRenderer = null;
             string endReason = "stream_ended";
             try
             {
@@ -164,7 +165,19 @@ public sealed class ViewSession(
                 };
 
                 renderer = _viewRendererFactory.Create(options, _deviceHost);
-                await viewBackend.InitializeAsync(negotiatedConnection, renderer, recorder, sessionCancellation.Token).ConfigureAwait(false);
+                backendRenderer = new SessionViewRenderer(renderer, stats =>
+                {
+                    WriteJsonLine(new
+                    {
+                        type = "view_stats",
+                        session_id = sessionId,
+                        observed_at = _timeProvider.GetUtcNow(),
+                        stats
+                    });
+
+                    return Task.CompletedTask;
+                });
+                await viewBackend.InitializeAsync(negotiatedConnection, backendRenderer, recorder, sessionCancellation.Token).ConfigureAwait(false);
 
                 WriteJsonLine(new
                 {
@@ -173,7 +186,7 @@ public sealed class ViewSession(
                     started_at = _timeProvider.GetUtcNow(),
                     device = options.DeviceSelector,
                     decoder = options.Decoder,
-                    codec = options.Codec,
+                    codec = negotiatedConnection.Codec,
                     backend = viewBackend.Name,
                     headless = options.Headless,
                     record_path = options.RecordPath,
@@ -305,6 +318,35 @@ internal sealed class NullViewRendererFactory : IViewRendererFactory
 internal sealed class NullViewRecorderFactory : IViewRecorderFactory
 {
     public IViewRecorder? Create(ViewOptions options) => null;
+}
+
+internal sealed class SessionViewRenderer(IViewRenderer? innerRenderer, Func<ViewStats, Task> onStatsAsync) : IViewRenderer
+{
+    private readonly IViewRenderer? _innerRenderer = innerRenderer;
+    private readonly Func<ViewStats, Task> _onStatsAsync = onStatsAsync ?? throw new ArgumentNullException(nameof(onStatsAsync));
+
+    public Task InitializeAsync(ViewDisplayInfo displayInfo, CancellationToken cancellationToken = default) =>
+        _innerRenderer?.InitializeAsync(displayInfo, cancellationToken) ?? Task.CompletedTask;
+
+    public Task PresentAsync(ViewFrame frame, CancellationToken cancellationToken = default) =>
+        _innerRenderer?.PresentAsync(frame, cancellationToken) ?? Task.CompletedTask;
+
+    public async Task UpdateStatsAsync(ViewStats stats, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(stats);
+
+        if (_innerRenderer is not null)
+        {
+            await _innerRenderer.UpdateStatsAsync(stats, cancellationToken).ConfigureAwait(false);
+        }
+
+        await _onStatsAsync(stats).ConfigureAwait(false);
+    }
+
+    public Task WaitForCloseAsync(CancellationToken cancellationToken = default) =>
+        _innerRenderer?.WaitForCloseAsync(cancellationToken) ?? Task.Delay(Timeout.Infinite, cancellationToken);
+
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
 internal sealed class NullViewTransportBootstrap : IViewTransportBootstrap

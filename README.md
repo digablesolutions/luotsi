@@ -43,7 +43,7 @@ cd <repo-root>
 dotnet run --project VisitLab.Cli -- devices
 dotnet run --project VisitLab.Cli -- preflight --device <serial> --package fi.systam.visit
 dotnet run --project VisitLab.Cli -- screen-state --device <serial>
-dotnet run --project VisitLab.Cli -- view --device <serial> --decoder ffmpeg --record capture.h264
+dotnet run --project VisitLab.Cli -- view --device <serial> --decoder ffmpeg --record capture.mp4
 dotnet run --project VisitLab.Cli -- telemetry-tail --device <serial> --tail 200
 dotnet run --project VisitLab.Cli -- telemetry-watch --device <serial> --timeout-sec 10
 dotnet run --project VisitLab.Cli -- tap-text --device <serial> --text "Sign in"
@@ -69,6 +69,11 @@ Then send one JSON command per line:
 
 If WSL cannot see `adb`, pass a path with `--adb` or expose Android platform
 tools on WSL's `PATH`.
+
+The `view` command is also a long-lived JSONL session. Alongside `view_started`,
+`view_error`, and `view_ended`, it can now emit `view_stats` events so agents
+can consume rolling decode/present FPS and latency without scraping the SDL
+window title.
 
 The implementation currently supports `--platform android`. The host seam is in
 place so an iOS adapter can be added later without rewriting the command layer.
@@ -228,8 +233,9 @@ at publish time.
 - For the native `view --decoder ffmpeg` runtime, populate `ffmpeg/bin` with
   host-native shared libraries via `ffmpeg/download-ffmpeg.ps1` or set
   `DEVICE_E2E_FFMPEG_ROOT`.
-- `view --record <file.h264>` now writes the live mirrored stream as a raw
-  H.264 Annex B capture. Container muxing is still a later step.
+- `view --record <file.h264|file.mp4|file.mkv>` supports raw H.264 capture and
+  container remuxing. `.mp4` and `.mkv` recording require an `ffmpeg`
+  executable resolvable from `ffmpeg/bin`, `DEVICE_E2E_FFMPEG_ROOT`, or `PATH`.
 - Current macOS publishes already include the SDL3 native runtime, but FFmpeg
   shared libraries still need to be staged separately for live `view` runs.
 - Build typed semantic waits such as `wait-step` and `wait-action-ready` on top

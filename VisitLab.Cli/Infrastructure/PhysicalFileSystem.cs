@@ -15,6 +15,14 @@ public sealed class PhysicalFileSystem : IFileSystem
     public Stream OpenWrite(string path, bool overwrite = true) =>
         new FileStream(path, overwrite ? FileMode.Create : FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, useAsync: true);
 
+    public void DeleteFile(string path)
+    {
+        if (File.Exists(path))
+        {
+            File.Delete(path);
+        }
+    }
+
     public bool FileExists(string path) => File.Exists(path);
 
     public void CopyFile(string sourcePath, string destinationPath, bool overwrite) =>
