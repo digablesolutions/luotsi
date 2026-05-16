@@ -19,36 +19,66 @@ public sealed class DeviceTestTelemetryParser : ITelemetryParser
         var events = new List<TelemetryEvent>();
         var parseErrors = new List<TelemetryParseError>();
         var lines = (logOutput ?? string.Empty).Split('\n');
+        var inspectedLineCount = 0;
         var telemetryLineCount = 0;
 
         foreach (var rawLine in lines)
         {
-            var line = rawLine.TrimEnd('\r');
-            if (string.IsNullOrWhiteSpace(line))
+            var parsedLine = ParseLine(rawLine);
+            if (!parsedLine.Inspected)
             {
                 continue;
             }
 
-            var prefixIndex = line.IndexOf(Prefix, StringComparison.Ordinal);
-            if (prefixIndex < 0)
+            inspectedLineCount++;
+            if (parsedLine.TelemetryLine)
             {
-                continue;
+                telemetryLineCount++;
             }
 
-            telemetryLineCount++;
-            var jsonStart = line.IndexOf('{', prefixIndex + Prefix.Length);
-            if (jsonStart < 0)
+            if (parsedLine.Event is not null)
             {
-                parseErrors.Add(new TelemetryParseError(line, "Telemetry line did not contain a JSON payload."));
-                continue;
+                events.Add(parsedLine.Event);
             }
 
-            var jsonText = line[jsonStart..].Trim();
-            try
+            if (parsedLine.ParseError is not null)
             {
-                using var document = JsonDocument.Parse(jsonText);
-                var payload = document.RootElement.Clone();
-                events.Add(new TelemetryEvent(
+                parseErrors.Add(parsedLine.ParseError);
+            }
+        }
+
+        return new TelemetryParseResult(events, parseErrors, inspectedLineCount, telemetryLineCount);
+    }
+
+    public TelemetryLineParseResult ParseLine(string? rawLine)
+    {
+        var line = rawLine?.TrimEnd('\r') ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(line))
+        {
+            return new TelemetryLineParseResult(false, false, null, null);
+        }
+
+        var prefixIndex = line.IndexOf(Prefix, StringComparison.Ordinal);
+        if (prefixIndex < 0)
+        {
+            return new TelemetryLineParseResult(true, false, null, null);
+        }
+
+        var jsonStart = line.IndexOf('{', prefixIndex + Prefix.Length);
+        if (jsonStart < 0)
+        {
+            return new TelemetryLineParseResult(true, true, null, new TelemetryParseError(line, "Telemetry line did not contain a JSON payload."));
+        }
+
+        var jsonText = line[jsonStart..].Trim();
+        try
+        {
+            using var document = JsonDocument.Parse(jsonText);
+            var payload = document.RootElement.Clone();
+            return new TelemetryLineParseResult(
+                true,
+                true,
+                new TelemetryEvent(
                     TryGetString(payload, "schema"),
                     TryGetInt64(payload, "seq"),
                     TryGetString(payload, "session"),
@@ -57,15 +87,13 @@ public sealed class DeviceTestTelemetryParser : ITelemetryParser
                     TryGetString(payload, "step"),
                     TryGetString(payload, "action"),
                     payload,
-                    line));
-            }
-            catch (JsonException ex)
-            {
-                parseErrors.Add(new TelemetryParseError(line, ex.Message));
-            }
+                    line),
+                null);
         }
-
-        return new TelemetryParseResult(events, parseErrors, lines.Count(static line => !string.IsNullOrWhiteSpace(line)), telemetryLineCount);
+        catch (JsonException ex)
+        {
+            return new TelemetryLineParseResult(true, true, null, new TelemetryParseError(line, ex.Message));
+        }
     }
 
     private static string? TryGetString(JsonElement element, string propertyName) =>

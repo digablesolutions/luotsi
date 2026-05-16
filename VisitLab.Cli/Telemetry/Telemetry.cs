@@ -13,7 +13,27 @@ public interface ITelemetryParser
     /// <param name="logOutput">Raw logcat text.</param>
     /// <returns>Parsed telemetry results.</returns>
     TelemetryParseResult ParseLog(string logOutput);
+
+    /// <summary>
+    /// Parses a single logcat line.
+    /// </summary>
+    /// <param name="line">Single raw logcat line.</param>
+    /// <returns>Line-level telemetry parse result.</returns>
+    TelemetryLineParseResult ParseLine(string line);
 }
+
+/// <summary>
+/// Line-level telemetry parse result.
+/// </summary>
+/// <param name="Inspected">Whether the line counted as an inspected non-empty log line.</param>
+/// <param name="TelemetryLine">Whether the line matched the telemetry prefix.</param>
+/// <param name="Event">Parsed telemetry event when available.</param>
+/// <param name="ParseError">Telemetry parse error when the line matched the prefix but failed to parse.</param>
+public sealed record TelemetryLineParseResult(
+    bool Inspected,
+    bool TelemetryLine,
+    TelemetryEvent? Event,
+    TelemetryParseError? ParseError);
 
 /// <summary>
 /// Parsed semantic telemetry event.

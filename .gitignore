@@ -482,3 +482,12 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+.artifacts/physical-telemetry-watch/20260516-045945-telemetry-watch/failure-telemetry-watch-failure.json
+.artifacts/physical-telemetry-watch/20260516-045945-telemetry-watch/failure-telemetry-watch-hierarchy.xml
+.artifacts/physical-telemetry-watch/20260516-045945-telemetry-watch/failure-telemetry-watch-logcat.txt
+.artifacts/physical-telemetry-watch/20260516-045945-telemetry-watch/failure-telemetry-watch-screen-state.json
+.artifacts/physical-telemetry-watch/20260516-045945-telemetry-watch/failure-telemetry-watch-screenshot.png
+.artifacts/physical-telemetry-watch/20260516-045945-telemetry-watch/hierarchy.xml
+.artifacts/physical-telemetry-watch/20260516-045945-telemetry-watch/screen-state.json
+.artifacts/physical-telemetry-watch-rerun/20260516-050116-telemetry-watch/telemetry-watch.json
+.artifacts/physical-telemetry-watch-rerun/20260516-050116-telemetry-watch/telemetry-watch.txt

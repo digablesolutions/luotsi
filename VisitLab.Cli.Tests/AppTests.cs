@@ -7,6 +7,7 @@ using VisitLab.Cli.Hosts.Android;
 using VisitLab.Cli.Infrastructure;
 using VisitLab.Cli.Models;
 using VisitLab.Cli.Scenarios;
+using VisitLab.Cli.Telemetry;
 using Xunit;
 
 namespace VisitLab.Cli.Tests;
@@ -344,6 +345,21 @@ public sealed class AppTests
     }
 
     [Fact]
+    public async Task TapPointAsync_Uses_Cached_Display_Size_ForRepeated_Relative_Taps()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.EnqueueShellResult(new ProcessResult(0, "Physical size: 1080x1920", string.Empty));
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["tap"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
+
+        await runner.TapPointAsync("first", null, null, 0.5, 0.5, 0);
+        await runner.TapPointAsync("second", null, null, 0.25, 0.25, 0);
+
+        Assert.Equal(1, adb.ShellCommands.Count(static command => command == "wm size"));
+    }
+
+    [Fact]
     public async Task AssertTextInputReadyAsync_Retries_Transient_Invalid_Dumps()
     {
         var fileSystem = new FakeFileSystem();
@@ -365,6 +381,31 @@ public sealed class AppTests
         Assert.True(json.GetProperty("keyboard_visible").GetBoolean());
         Assert.Single(delay.Calls);
         Assert.True(fileSystem.FileExists(Path.Combine(artifacts.Root, "hierarchy-invalid.xml")));
+    }
+
+    [Fact]
+    public async Task AssertTextInputReadyAsync_Caches_Keyboard_Visibility_Between_Polls()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var delay = new FakeDelay(timeProvider);
+        var adb = new FakeAdbClient();
+        const string focusedInputDump = """
+        <hierarchy>
+          <node text="" content-desc="" resource-id="input/name" class="android.widget.EditText" enabled="true" clickable="true" focused="true" bounds="[0,0][100,100]" />
+        </hierarchy>
+        """;
+        adb.EnqueueShellResult(new ProcessResult(0, focusedInputDump, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, focusedInputDump, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, focusedInputDump, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, focusedInputDump, string.Empty));
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, delay, fileSystem);
+
+        await Assert.ThrowsAsync<TimeoutException>(() => runner.AssertTextInputReadyAsync(requireKeyboard: true, timeoutSec: 1));
+
+        Assert.Equal(2, adb.ShellCommands.Count(static command => command.StartsWith("dumpsys input_method", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -491,6 +532,7 @@ public sealed class AppTests
         Assert.Empty(adb.RunCommands);
         Assert.Single(adb.StreamingLogRequests);
         Assert.False(adb.StreamingLogRequests[0].HasStopCondition);
+        Assert.True(adb.StreamingLogRequests[0].HasLineObserver);
     }
 
     [Fact]
@@ -516,6 +558,7 @@ public sealed class AppTests
         Assert.Empty(adb.RunCommands);
         Assert.Single(adb.StreamingLogRequests);
         Assert.True(adb.StreamingLogRequests[0].HasStopCondition);
+        Assert.True(adb.StreamingLogRequests[0].HasLineObserver);
     }
 
     [Fact]
@@ -538,6 +581,41 @@ public sealed class AppTests
         Assert.Empty(adb.RunCommands);
         Assert.Single(adb.StreamingLogRequests);
         Assert.True(adb.StreamingLogRequests[0].HasStopCondition);
+        Assert.True(adb.StreamingLogRequests[0].HasLineObserver);
+    }
+
+    [Fact]
+    public async Task WaitForStepAsync_Uses_Incremental_Telemetry_Parsing()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        var parser = new CountingTelemetryParser();
+        adb.EnqueueLogLines("05-15 12:00:00.000 I/Test: DEVICE_TEST_TELEMETRY {\"schema\":\"systam-device-test-telemetry.v1\",\"seq\":15,\"session\":\"abc\",\"timestamp\":\"2026-05-15T12:00:00Z\",\"event\":\"step\",\"step\":\"STEP_IDLE\"}");
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["wait-step"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem, telemetryParser: parser);
+
+        var result = await runner.WaitForStepAsync("idle", 5);
+
+        Assert.Equal("STEP_IDLE", result.Step);
+        Assert.Equal(0, parser.ParseLogCallCount);
+        Assert.Equal(1, parser.ParseLineCallCount);
+    }
+
+    [Fact]
+    public async Task TelemetryWatchAsync_Uses_Incremental_Telemetry_Parsing()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        var parser = new CountingTelemetryParser();
+        adb.EnqueueLogLines("05-15 12:00:03.000 I/Test: DEVICE_TEST_TELEMETRY {\"schema\":\"systam-device-test-telemetry.v1\",\"seq\":16,\"session\":\"abc\",\"timestamp\":\"2026-05-15T12:00:03Z\",\"event\":\"action_ready\",\"step\":\"STEP_IDLE\",\"action\":\"sign_in\"}");
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["telemetry-watch"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem, telemetryParser: parser);
+
+        var result = await runner.TelemetryWatchAsync(5);
+
+        Assert.Equal(1, result.EventCount);
+        Assert.Equal(0, parser.ParseLogCallCount);
+        Assert.Equal(1, parser.ParseLineCallCount);
     }
 
     [Fact]
@@ -879,7 +957,7 @@ internal sealed class FakeAdbClient : IAdbClient
 
     public List<(string ContainsText, DateTimeOffset Since, int TimeoutSec)> LogRequests { get; } = [];
 
-    public List<(DateTimeOffset Since, int TimeoutSec, bool HasStopCondition)> StreamingLogRequests { get; } = [];
+    public List<(DateTimeOffset Since, int TimeoutSec, bool HasStopCondition, bool HasLineObserver)> StreamingLogRequests { get; } = [];
 
     public void EnqueueShellResult(ProcessResult result) => _shellResults.Enqueue(result);
 
@@ -923,9 +1001,9 @@ internal sealed class FakeAdbClient : IAdbClient
         return Task.FromResult(new AdbLogStreamResult(containsText, logOutput, matchedLine, lines.Length, timeoutSec, since, "adb logcat", 0, string.Empty));
     }
 
-    public Task<AdbLogStreamResult> MonitorLogAsync(DateTimeOffset since, int timeoutSec, Func<string, bool>? stopWhen = null, CancellationToken cancellationToken = default)
+    public Task<AdbLogStreamResult> MonitorLogAsync(DateTimeOffset since, int timeoutSec, Func<string, bool>? stopWhen = null, Action<string>? observeLine = null, CancellationToken cancellationToken = default)
     {
-        StreamingLogRequests.Add((since, timeoutSec, stopWhen is not null));
+        StreamingLogRequests.Add((since, timeoutSec, stopWhen is not null, observeLine is not null));
         if (_logResults.Count > 0)
         {
             return Task.FromResult(_logResults.Dequeue());
@@ -938,6 +1016,7 @@ internal sealed class FakeAdbClient : IAdbClient
         foreach (var line in lines)
         {
             outputLines.Add(line);
+            observeLine?.Invoke(line);
             if (matchedLine is null && stopWhen?.Invoke(line) is true)
             {
                 matchedLine = line;
@@ -952,6 +1031,27 @@ internal sealed class FakeAdbClient : IAdbClient
         }
 
         return Task.FromResult(new AdbLogStreamResult(string.Empty, logOutput, matchedLine, outputLines.Count, timeoutSec, since, "adb logcat", 0, string.Empty));
+    }
+}
+
+internal sealed class CountingTelemetryParser : ITelemetryParser
+{
+    private readonly DeviceTestTelemetryParser _inner = new();
+
+    public int ParseLogCallCount { get; private set; }
+
+    public int ParseLineCallCount { get; private set; }
+
+    public TelemetryParseResult ParseLog(string logOutput)
+    {
+        ParseLogCallCount++;
+        return _inner.ParseLog(logOutput);
+    }
+
+    public TelemetryLineParseResult ParseLine(string line)
+    {
+        ParseLineCallCount++;
+        return _inner.ParseLine(line);
     }
 }
 

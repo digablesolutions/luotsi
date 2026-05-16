@@ -25,6 +25,7 @@ public sealed class DeviceRunner(
     ITelemetryParser? telemetryParser = null) : IDeviceHost
 {
     private const string DefaultKioskPackage = "fi.systam.visit";
+    private static readonly TimeSpan KeyboardVisibilityCacheTtl = TimeSpan.FromMilliseconds(500);
 
     private readonly IAdbClient _adb = adb ?? throw new ArgumentNullException(nameof(adb));
     private readonly ArtifactSession _artifacts = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
@@ -34,6 +35,9 @@ public sealed class DeviceRunner(
     private readonly IUniqueIdGenerator _idGenerator = idGenerator ?? new GuidUniqueIdGenerator();
     private readonly IEnvironmentVariables _environment = environment ?? new SystemEnvironmentVariables();
     private readonly ITelemetryParser _telemetryParser = telemetryParser ?? new DeviceTestTelemetryParser();
+
+    private (int Width, int Height)? _displaySizeCache;
+    private KeyboardVisibilitySnapshot? _keyboardVisibilityCache;
 
     /// <summary>
     /// Lists connected devices.
@@ -267,6 +271,7 @@ public sealed class DeviceRunner(
 
         var result = await _adb.ShellAsync($"input tap {parsedX} {parsedY}").ConfigureAwait(false);
         result.EnsureSuccess("tap failed");
+        InvalidateKeyboardVisibilityCache();
         return new TapResult(parsedX, parsedY);
     }
 
@@ -280,6 +285,7 @@ public sealed class DeviceRunner(
         var escaped = text.Replace("%", "%25", StringComparison.Ordinal).Replace(" ", "%s", StringComparison.Ordinal);
         var result = await _adb.ShellAsync($"input text {ShellQuote(escaped)}").ConfigureAwait(false);
         result.EnsureSuccess("type text failed");
+        InvalidateKeyboardVisibilityCache();
         return new TypeTextResult(text);
     }
 
@@ -293,6 +299,7 @@ public sealed class DeviceRunner(
         var keyCode = RequireNonBlank(code, "keyevent requires code.");
         var result = await _adb.ShellAsync($"input keyevent {ShellQuote(keyCode)}").ConfigureAwait(false);
         result.EnsureSuccess("keyevent failed");
+        InvalidateKeyboardVisibilityCache();
         return new KeyEventResult(keyCode);
     }
 
@@ -382,7 +389,8 @@ public sealed class DeviceRunner(
                 started_at = telemetrySession.StartedAt,
                 timeout_sec = validatedTimeoutSec,
                 invocation = telemetrySession.Invocation
-            }).ConfigureAwait(false);
+            },
+            telemetrySession.Parsed).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -587,6 +595,7 @@ public sealed class DeviceRunner(
 
         var result = await _adb.ShellAsync($"input tap {resolvedX} {resolvedY}").ConfigureAwait(false);
         result.EnsureSuccess("tap point failed");
+        InvalidateKeyboardVisibilityCache();
 
         if (validatedPostTapDelayMs > 0)
         {
@@ -605,6 +614,8 @@ public sealed class DeviceRunner(
             tap.EnsureSuccess("double tap header logo failed");
             await _delay.DelayAsync(160).ConfigureAwait(false);
         }
+
+        InvalidateKeyboardVisibilityCache();
 
         return new DoubleTapHeaderLogoResult("header_logo", x, y, 160);
     }
@@ -634,6 +645,8 @@ public sealed class DeviceRunner(
                 await _delay.DelayAsync(validatedPerDigitDelayMs).ConfigureAwait(false);
             }
         }
+
+        InvalidateKeyboardVisibilityCache();
 
         return new TypePinResult(digits.Length, validatedPerDigitDelayMs);
     }
@@ -824,8 +837,16 @@ public sealed class DeviceRunner(
 
     private async Task<bool> IsKeyboardVisibleAsync()
     {
+        var now = _timeProvider.GetUtcNow();
+        if (_keyboardVisibilityCache is { } cached && now - cached.CapturedAt < KeyboardVisibilityCacheTtl)
+        {
+            return cached.IsVisible;
+        }
+
         var result = await ShellTextAsync("dumpsys input_method | grep -E 'mInputShown=true|mIsInputViewShown=true|mShowRequested=true' | head -1").ConfigureAwait(false);
-        return !string.IsNullOrWhiteSpace(result);
+        var isVisible = !string.IsNullOrWhiteSpace(result);
+        _keyboardVisibilityCache = new KeyboardVisibilitySnapshot(isVisible, now);
+        return isVisible;
     }
 
     private async Task<(int X, int Y)> ResolveRelativePointAsync(double? xRatio, double? yRatio)
@@ -846,6 +867,11 @@ public sealed class DeviceRunner(
 
     private async Task<(int Width, int Height)> GetDisplaySizeAsync()
     {
+        if (_displaySizeCache.HasValue)
+        {
+            return _displaySizeCache.Value;
+        }
+
         var text = await ShellTextAsync("wm size").ConfigureAwait(false);
         var match = Regex.Match(text, @"(?<width>\d+)x(?<height>\d+)");
         if (!match.Success)
@@ -853,10 +879,13 @@ public sealed class DeviceRunner(
             throw new InvalidOperationException($"Could not parse device display size from '{text}'.");
         }
 
-        return (
+        _displaySizeCache = (
             int.Parse(match.Groups["width"].Value, CultureInfo.InvariantCulture),
             int.Parse(match.Groups["height"].Value, CultureInfo.InvariantCulture));
+        return _displaySizeCache.Value;
     }
+
+    private void InvalidateKeyboardVisibilityCache() => _keyboardVisibilityCache = null;
 
     private async Task<(int X, int Y)> ResolveHeaderLogoTargetAsync()
     {
@@ -1002,9 +1031,9 @@ public sealed class DeviceRunner(
         }
     }
 
-    private async Task<TelemetryResult> CaptureTelemetryAsync(string artifactBaseName, string logOutput, object metadata)
+    private async Task<TelemetryResult> CaptureTelemetryAsync(string artifactBaseName, string logOutput, object metadata, TelemetryParseResult? parsed = null)
     {
-        var parsed = _telemetryParser.ParseLog(logOutput);
+        parsed ??= _telemetryParser.ParseLog(logOutput);
         var result = new TelemetryResult(
             parsed.InspectedLineCount,
             parsed.TelemetryLineCount,
@@ -1076,29 +1105,20 @@ public sealed class DeviceRunner(
     private async Task<TelemetryMonitorResult> MonitorTelemetryAsync(int timeoutSec, Func<TelemetryEvent, bool>? eventMatch = null)
     {
         var started = _timeProvider.GetUtcNow();
-        TelemetryEvent? matchedEvent = null;
+        var accumulator = new TelemetryStreamAccumulator(_telemetryParser, eventMatch);
 
         var monitor = await _adb.MonitorLogAsync(
             started,
             timeoutSec,
-            eventMatch is null
-                ? null
-                : line => TryMatchTelemetryLine(line, eventMatch, out matchedEvent)).ConfigureAwait(false);
+            eventMatch is null ? null : accumulator.ShouldStop,
+            accumulator.ObserveLine).ConfigureAwait(false);
 
         if (monitor.ExitCode != 0)
         {
             throw new InvalidOperationException($"adb logcat failed: {monitor.Stderr}".Trim());
         }
 
-        var parsed = _telemetryParser.ParseLog(monitor.LogOutput);
-        matchedEvent ??= eventMatch is null ? null : parsed.Events.LastOrDefault(eventMatch);
-        return new TelemetryMonitorResult(started, monitor.Invocation, monitor.LogOutput, parsed, matchedEvent);
-    }
-
-    private bool TryMatchTelemetryLine(string line, Func<TelemetryEvent, bool> eventMatch, out TelemetryEvent? matchedEvent)
-    {
-        matchedEvent = _telemetryParser.ParseLog(line).Events.LastOrDefault(eventMatch);
-        return matchedEvent is not null;
+        return new TelemetryMonitorResult(started, monitor.Invocation, monitor.LogOutput, accumulator.ToParseResult(), accumulator.MatchedEvent);
     }
 
     private static string RequireNonBlank(string value, string message)
@@ -1160,12 +1180,59 @@ public sealed class DeviceRunner(
 
     private sealed record ScreenCapture(string Xml, ScreenState State);
 
+    private sealed record KeyboardVisibilitySnapshot(bool IsVisible, DateTimeOffset CapturedAt);
+
     private sealed record TelemetryMonitorResult(
         DateTimeOffset StartedAt,
         string Invocation,
         string LogOutput,
         TelemetryParseResult Parsed,
         TelemetryEvent? MatchedEvent);
+
+    private sealed class TelemetryStreamAccumulator(ITelemetryParser telemetryParser, Func<TelemetryEvent, bool>? eventMatch)
+    {
+        private readonly ITelemetryParser _telemetryParser = telemetryParser;
+        private readonly Func<TelemetryEvent, bool>? _eventMatch = eventMatch;
+        private readonly List<TelemetryEvent> _events = [];
+        private readonly List<TelemetryParseError> _parseErrors = [];
+        private int _inspectedLineCount;
+        private int _telemetryLineCount;
+
+        public TelemetryEvent? MatchedEvent { get; private set; }
+
+        public void ObserveLine(string line)
+        {
+            var parsedLine = _telemetryParser.ParseLine(line);
+            if (!parsedLine.Inspected)
+            {
+                return;
+            }
+
+            _inspectedLineCount++;
+            if (parsedLine.TelemetryLine)
+            {
+                _telemetryLineCount++;
+            }
+
+            if (parsedLine.Event is not null)
+            {
+                _events.Add(parsedLine.Event);
+                if (MatchedEvent is null && _eventMatch?.Invoke(parsedLine.Event) is true)
+                {
+                    MatchedEvent = parsedLine.Event;
+                }
+            }
+
+            if (parsedLine.ParseError is not null)
+            {
+                _parseErrors.Add(parsedLine.ParseError);
+            }
+        }
+
+        public bool ShouldStop(string _) => MatchedEvent is not null;
+
+        public TelemetryParseResult ToParseResult() => new(_events, _parseErrors, _inspectedLineCount, _telemetryLineCount);
+    }
 
     private static string? NormalizeTelemetryStep(string? step)
     {
