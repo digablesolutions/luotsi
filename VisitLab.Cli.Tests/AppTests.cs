@@ -490,6 +490,29 @@ public sealed class AppTests
     }
 
     [Fact]
+    public async Task AssertEventAsync_Uses_Streaming_Log_Monitor()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.EnqueueLogLines(
+            "I/flutter (17495): unrelated",
+            "I/flutter (17495): Log.PRINTING_SUCCESSFUL: [Main Isolate] Printing successful");
+        var artifacts = ArtifactSession.Create(CliOptions.Parse(["assert-event"]), fileSystem, timeProvider);
+        var runner = new DeviceRunner(adb, artifacts, timeProvider, new FakeDelay(timeProvider), fileSystem);
+
+        var result = await runner.AssertEventAsync("PRINTING_SUCCESSFUL", [], null, 5);
+
+        Assert.Equal("I/flutter (17495): Log.PRINTING_SUCCESSFUL: [Main Isolate] Printing successful", result.MatchedLine);
+        Assert.Empty(adb.RunCommands);
+        Assert.Single(adb.StreamingLogRequests);
+        Assert.True(adb.StreamingLogRequests[0].HasStopCondition);
+        Assert.False(adb.StreamingLogRequests[0].HasLineObserver);
+        Assert.True(fileSystem.FileExists(Path.Combine(artifacts.Root, "assert-event.txt")));
+        Assert.True(fileSystem.FileExists(Path.Combine(artifacts.Root, "assert-event.json")));
+    }
+
+    [Fact]
     public async Task RecordAsync_Uses_Injected_Id_And_Cleans_Up_Remote_File()
     {
         var fileSystem = new FakeFileSystem();

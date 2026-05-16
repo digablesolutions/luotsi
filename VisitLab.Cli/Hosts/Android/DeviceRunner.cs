@@ -667,38 +667,18 @@ public sealed class DeviceRunner(
         var eventName = RequireNonBlank(name, "assertEvent requires event or text.");
         var validatedTimeoutSec = RequirePositive(timeoutSec, "assertEvent requires timeoutSec greater than zero.");
         var started = _timeProvider.GetUtcNow();
-        var deadline = started.AddSeconds(validatedTimeoutSec);
-        string? invocation = null;
-        var lastLog = string.Empty;
-        string? matchedLine = null;
         var detailsRegex = CreateDetailsRegex(detailsPattern);
+        var monitor = await _adb.MonitorLogAsync(
+            started,
+            validatedTimeoutSec,
+            line => EventLineMatches(line, eventName, contains, detailsRegex)).ConfigureAwait(false);
 
-        while (_timeProvider.GetUtcNow() < deadline)
+        if (monitor.ExitCode != 0)
         {
-            var result = await _adb.RunAsync([
-                "logcat",
-                "-d",
-                "-v",
-                "brief",
-                "-T",
-                LogcatTime.FormatSince(started),
-                "*:V"]).ConfigureAwait(false);
-            result.EnsureSuccess("assert event failed");
-            invocation = result.Invocation;
-            lastLog = result.Stdout;
-            matchedLine = lastLog.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                .Select(static line => line.TrimEnd('\r'))
-                .LastOrDefault(line => EventLineMatches(line, eventName, contains, detailsRegex));
-
-            if (matchedLine is not null)
-            {
-                break;
-            }
-
-            await _delay.DelayAsync(250).ConfigureAwait(false);
+            throw new InvalidOperationException($"adb logcat failed: {monitor.Stderr}".Trim());
         }
 
-        await _artifacts.WriteTextAsync("assert-event.txt", lastLog).ConfigureAwait(false);
+        await _artifacts.WriteTextAsync("assert-event.txt", monitor.LogOutput).ConfigureAwait(false);
         await _artifacts.WriteJsonAsync(
             "assert-event.json",
             new
@@ -708,16 +688,16 @@ public sealed class DeviceRunner(
                 contains,
                 details_pattern = detailsPattern,
                 timeout_sec = validatedTimeoutSec,
-                invocation,
-                matched_line = matchedLine
+                invocation = monitor.Invocation,
+                matched_line = monitor.MatchedLine
             }).ConfigureAwait(false);
 
-        if (matchedLine is null)
+        if (monitor.MatchedLine is null)
         {
             throw new SemanticWaitTimeoutException($"event '{eventName}'", validatedTimeoutSec);
         }
 
-        return new AssertEventResult(eventName, contains, detailsPattern, matchedLine);
+        return new AssertEventResult(eventName, contains, detailsPattern, monitor.MatchedLine);
     }
 
     public async Task<TakeScreenshotResult> TakeScreenshotAsync(string label)
