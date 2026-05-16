@@ -63,7 +63,8 @@ public sealed record ViewOptions(
     string PresetName = "balanced",
     bool ReadOnly = false,
     string? ShareBindEndpoint = null,
-    string? JoinShareEndpoint = null);
+    string? JoinShareEndpoint = null,
+    bool AlwaysOnTop = false);
 
 /// <summary>
 /// Bootstraps the device-side stream transport.

@@ -165,6 +165,15 @@ internal sealed class ViewSessionInteractionRouter(
                 await HandleFileDropAsync(fileDropRequest.FilePath).ConfigureAwait(false);
                 break;
 
+            case ViewFilePullRequest filePullRequest:
+                if (TryBlockReadOnly("file_pull"))
+                {
+                    return;
+                }
+
+                await HandleFilePullAsync(filePullRequest).ConfigureAwait(false);
+                break;
+
             case ViewSwitchDeviceRequest switchDeviceRequest:
                 await HandleDeviceSwitchAsync(switchDeviceRequest).ConfigureAwait(false);
                 break;
@@ -238,6 +247,11 @@ internal sealed class ViewSessionInteractionRouter(
             }
 
             case ViewWindowCommand.ToggleRecording:
+                if (TryBlockUnsupported("recording", "observer_session", !string.IsNullOrWhiteSpace(_options.JoinShareEndpoint)))
+                {
+                    break;
+                }
+
                 await ToggleRecordingAsync().ConfigureAwait(false);
                 break;
 
@@ -251,6 +265,28 @@ internal sealed class ViewSessionInteractionRouter(
                 });
                 _reconnectRequested.TrySetResult();
                 _iterationCancellation?.Cancel();
+                break;
+
+            case ViewWindowCommand.Back:
+                await SendDeviceKeyAsync("KEYCODE_BACK", "back").ConfigureAwait(false);
+                break;
+
+            case ViewWindowCommand.Home:
+                await SendDeviceKeyAsync("KEYCODE_HOME", "home").ConfigureAwait(false);
+                break;
+
+            case ViewWindowCommand.Recents:
+                await SendDeviceKeyAsync("KEYCODE_APP_SWITCH", "recents").ConfigureAwait(false);
+                break;
+
+            case ViewWindowCommand.OpenArtifacts:
+                WriteEvent(new
+                {
+                    type = "view_artifacts_requested",
+                    session_id = _sessionId,
+                    occurred_at = _timeProvider.GetUtcNow(),
+                    artifact_root = _artifacts.Root
+                });
                 break;
 
             default:
@@ -339,6 +375,37 @@ internal sealed class ViewSessionInteractionRouter(
         });
     }
 
+    private async Task HandleFilePullAsync(ViewFilePullRequest request)
+    {
+        var pullResult = await _deviceHost.PullFileAsync(request.RemotePath, request.LocalDirectory ?? _artifacts.Root).ConfigureAwait(false);
+        WriteEvent(new
+        {
+            type = "view_file_pulled",
+            session_id = _sessionId,
+            occurred_at = _timeProvider.GetUtcNow(),
+            remote_path = pullResult.RemotePath,
+            local_path = pullResult.LocalPath
+        });
+    }
+
+    private async Task SendDeviceKeyAsync(string keyCode, string command)
+    {
+        if (TryBlockReadOnly(command))
+        {
+            return;
+        }
+
+        await _deviceHost.KeyEventAsync(keyCode).ConfigureAwait(false);
+        WriteEvent(new
+        {
+            type = "view_key_command_sent",
+            session_id = _sessionId,
+            occurred_at = _timeProvider.GetUtcNow(),
+            command,
+            code = keyCode
+        });
+    }
+
     public async Task EmitDeviceShelfSnapshotIfNeededAsync()
     {
         if (!string.IsNullOrWhiteSpace(_options.JoinShareEndpoint))
@@ -400,7 +467,7 @@ internal sealed class ViewSessionInteractionRouter(
         !string.IsNullOrWhiteSpace(_options.JoinShareEndpoint),
         _recorder.IsRecording,
         string.IsNullOrWhiteSpace(_options.JoinShareEndpoint),
-        true,
+        string.IsNullOrWhiteSpace(_options.JoinShareEndpoint),
         true,
         _devices.Count > 1 && string.IsNullOrWhiteSpace(_options.JoinShareEndpoint),
         _shareEndpoint,

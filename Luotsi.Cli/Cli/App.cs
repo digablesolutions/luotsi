@@ -119,6 +119,7 @@ public sealed class App
             {
                 var viewOptions = BuildViewOptions(options, adbExecutable, allowJoinShare: true);
                 await SaveProfileIfRequestedAsync(options, viewOptions).ConfigureAwait(false);
+                await _viewProfileStore.SaveAsync("last", ViewProfile.FromResolvedOptions(options, viewOptions)).ConfigureAwait(false);
                 runner = string.IsNullOrWhiteSpace(viewOptions.JoinShareEndpoint)
                     ? _deviceHostFactory.Create(
                         new DeviceHostConfiguration(
@@ -157,6 +158,7 @@ public sealed class App
             {
                 "devices" => await runner.GetDevicesAsync().ConfigureAwait(false),
                 "preflight" => await runner.PreflightAsync(options.Get("package")).ConfigureAwait(false),
+                "wireless" => await runner.EnableWirelessAsync(options.Require("host"), options.Int("port", 5555)).ConfigureAwait(false),
                 "screen-state" => await runner.GetScreenStateAsync().ConfigureAwait(false),
                 "telemetry-tail" => await runner.TelemetryTailAsync(options.Int("tail", CliDefaults.DefaultLogTail)).ConfigureAwait(false),
                 "telemetry-watch" => await runner.TelemetryWatchAsync(options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
@@ -199,7 +201,7 @@ public sealed class App
 
     private async Task ApplyProfileDefaultsAsync(CliOptions options)
     {
-        var profileName = options.Get("profile");
+        var profileName = options.HasFlag("last") ? "last" : options.Get("profile");
         if (string.IsNullOrWhiteSpace(profileName))
         {
             return;
@@ -277,7 +279,8 @@ public sealed class App
             preset.Name,
             options.HasFlag("read-only") || !string.IsNullOrWhiteSpace(joinShareEndpoint),
             options.Get("share-bind"),
-            joinShareEndpoint);
+            joinShareEndpoint,
+            options.HasFlag("always-on-top"));
 
         static int GetIntOrDefault(CliOptions options, string key, int defaultValue) =>
             options.Get(key) is null ? defaultValue : options.Int(key, defaultValue);

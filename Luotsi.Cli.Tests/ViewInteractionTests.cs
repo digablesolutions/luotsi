@@ -44,18 +44,26 @@ public sealed partial class AppTests
         await interactionHandler(new ViewClipboardPasteRequest("paste"));
         await interactionHandler(new ViewFileDropRequest("C:/tmp/note.txt"));
         await interactionHandler(new ViewFileDropRequest("C:/tmp/app.apk"));
+        await interactionHandler(new ViewFilePullRequest("/sdcard/Download/report.txt", "C:/tmp/pulled"));
+        await interactionHandler(new ViewWindowCommandRequest(ViewWindowCommand.Back));
+        await interactionHandler(new ViewWindowCommandRequest(ViewWindowCommand.Home));
+        await interactionHandler(new ViewWindowCommandRequest(ViewWindowCommand.Recents));
+        await interactionHandler(new ViewWindowCommandRequest(ViewWindowCommand.OpenArtifacts));
         renderer.Close();
         var exitCode = await runTask;
 
         Assert.Equal(0, exitCode);
         Assert.Equal(["hello", "paste"], host.TypeTextRequests);
-        Assert.Equal(["KEYCODE_ENTER"], host.KeyEventRequests);
+        Assert.Equal(["KEYCODE_ENTER", "KEYCODE_BACK", "KEYCODE_HOME", "KEYCODE_APP_SWITCH"], host.KeyEventRequests);
         Assert.Equal([(0, 1)], host.ScrollRequests);
         Assert.Equal([("C:/tmp/note.txt", null)], host.PushFileRequests);
+        Assert.Equal([("/sdcard/Download/report.txt", "C:/tmp/pulled")], host.PullFileRequests);
         Assert.Equal(["C:/tmp/app.apk"], host.InstallPackageRequests);
         Assert.Contains(console.OutputLines, line => line.Contains("view_clipboard_pasted", StringComparison.Ordinal));
         Assert.Contains(console.OutputLines, line => line.Contains("view_file_pushed", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, line => line.Contains("view_file_pulled", StringComparison.Ordinal));
         Assert.Contains(console.OutputLines, line => line.Contains("view_package_installed", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, line => line.Contains("view_artifacts_requested", StringComparison.Ordinal));
     }
 
 
@@ -86,6 +94,8 @@ public sealed partial class AppTests
         await interactionHandler(new ViewTextInputRequest("hello"));
         await interactionHandler(new ViewScrollRequest(0, 1));
         await interactionHandler(new ViewFileDropRequest("C:/tmp/note.txt"));
+        await interactionHandler(new ViewFilePullRequest("/sdcard/Download/report.txt"));
+        await interactionHandler(new ViewWindowCommandRequest(ViewWindowCommand.Back));
         renderer.Close();
         var exitCode = await runTask;
 
@@ -94,6 +104,8 @@ public sealed partial class AppTests
         Assert.Empty(host.TypeTextRequests);
         Assert.Empty(host.ScrollRequests);
         Assert.Empty(host.PushFileRequests);
+        Assert.Empty(host.PullFileRequests);
+        Assert.Empty(host.KeyEventRequests);
         Assert.Contains(console.OutputLines, line => line.Contains("view_input_blocked", StringComparison.Ordinal));
     }
 

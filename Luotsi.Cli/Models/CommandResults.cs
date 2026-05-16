@@ -61,8 +61,14 @@ public sealed record ScrollResult(int HorizontalTicks, int VerticalTicks, int St
 // Push file to device
 public sealed record PushFileResult(string LocalPath, string RemotePath);
 
+// Pull file from device
+public sealed record PullFileResult(string RemotePath, string LocalPath);
+
 // Install package on device
 public sealed record InstallPackageResult(string PackagePath);
+
+// Enable adb-over-TCP and connect to the target endpoint.
+public sealed record WirelessConnectResult(string Host, int Port, string Endpoint);
 
 // Wait not visible
 public sealed record WaitNotVisibleResult(string Text, int AttemptCount, bool Visible);

@@ -387,6 +387,35 @@ public sealed class DeviceRunner(
         return new PushFileResult(validatedLocalPath, remotePath);
     }
 
+    public async Task<PullFileResult> PullFileAsync(string remotePath, string? localDirectory = null)
+    {
+        var validatedRemotePath = RequireNonBlank(remotePath, "pull file requires a remote path.");
+        var targetDirectory = string.IsNullOrWhiteSpace(localDirectory)
+            ? Directory.GetCurrentDirectory()
+            : Path.GetFullPath(localDirectory);
+        _fileSystem.CreateDirectory(targetDirectory);
+        var localPath = Path.Combine(targetDirectory, Path.GetFileName(validatedRemotePath.TrimEnd('/')));
+        var result = await _adb.RunAsync(["pull", validatedRemotePath, localPath]).ConfigureAwait(false);
+        result.EnsureSuccess("pull file failed");
+        return new PullFileResult(validatedRemotePath, localPath);
+    }
+
+    public async Task<WirelessConnectResult> EnableWirelessAsync(string host, int port)
+    {
+        var validatedHost = RequireNonBlank(host, "wireless requires host.");
+        if (port <= 0 || port > 65535)
+        {
+            throw new UsageException("wireless requires --port between 1 and 65535.");
+        }
+
+        var tcpip = await _adb.RunAsync(["tcpip", port.ToString(System.Globalization.CultureInfo.InvariantCulture)]).ConfigureAwait(false);
+        tcpip.EnsureSuccess("adb tcpip failed");
+        var endpoint = $"{validatedHost}:{port}";
+        var connect = await _adb.RunAsync(["connect", endpoint]).ConfigureAwait(false);
+        connect.EnsureSuccess("adb connect failed");
+        return new WirelessConnectResult(validatedHost, port, endpoint);
+    }
+
     public async Task<InstallPackageResult> InstallPackageAsync(string packagePath)
     {
         var validatedPackagePath = Path.GetFullPath(RequireNonBlank(packagePath, "install package requires a local path."));

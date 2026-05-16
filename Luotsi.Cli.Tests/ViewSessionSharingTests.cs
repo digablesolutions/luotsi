@@ -111,6 +111,36 @@ public sealed partial class AppTests
         Assert.Contains(console.OutputLines, line => line.Contains("shared-tcp", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task RunAsync_View_JoinShare_Blocks_Recording_Command()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var renderer = new ClosingViewRenderer();
+        var rendererFactory = new FakeViewRendererFactory(renderer);
+        var session = new ViewSession(
+            new UnsupportedDeviceHost(),
+            ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
+            console,
+            timeProvider,
+            new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward")),
+            new FakeViewBackendFactory(new BlockingViewBackend()),
+            new FakeViewStreamConnector(new ViewPacketStreamHarness().WriteHeader("h264", 1080, 1920).Build()),
+            new ViewPacketStreamReader(),
+            rendererFactory);
+
+        var runTask = session.RunAsync(new ViewOptions("127.0.0.1:45123", "adb", "h264", "ffmpeg", false, null, 1600, 60, "8M", false, false, 1000, 0, "balanced", true, null, "127.0.0.1:45123"));
+        var interactionHandler = await ViewTestWaitHelpers.WaitForInteractionHandlerAsync(rendererFactory);
+        await interactionHandler(new ViewWindowCommandRequest(ViewWindowCommand.ToggleRecording));
+        renderer.Close();
+        var exitCode = await runTask;
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains(console.OutputLines, line => line.Contains("observer_session", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, line => line.Contains("view_input_blocked", StringComparison.Ordinal));
+    }
+
 
 
 }

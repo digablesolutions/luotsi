@@ -104,6 +104,35 @@ public sealed partial class AppTests
         Assert.Equal("Model", preflight.Model);
     }
 
+    [Fact]
+    public async Task ViewDoctor_DiagnoseAsync_Flags_Unauthorized_Device_With_Recommendation()
+    {
+        var fileSystem = new FakeFileSystem();
+        var helperPath = "/tmp/luotsi-view-helper.apk";
+        fileSystem.AddFile(helperPath, "apk");
+        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>
+        {
+            ["DEVICE_E2E_VIEW_HELPER_JAR"] = helperPath
+        });
+        var host = new FakeDeviceHost(CreateScreenState(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind), "Sign in"));
+        host.ConnectedDevices.Add(new DeviceInfo("usb-device", "unauthorized", "Pixel 9"));
+        var binder = new FakeLibavNativeLibraryBinder();
+        binder.SucceedFor(null);
+        var doctor = new ViewDoctor(
+            host,
+            new AndroidViewHelperPackageLocator(environment, fileSystem),
+            new DefaultViewRecorderFactory(fileSystem, new FakeProcessRunner(), environment),
+            environment,
+            binder);
+
+        var result = await doctor.DiagnoseAsync(new ViewOptions("usb-device", "adb", "h264", "ffmpeg", true, null, 1280, 30, "4M", false, false));
+
+        Assert.False(result.Ready);
+        var deviceCheck = Assert.Single(result.Checks, check => check.Name == "device_visibility");
+        Assert.False(deviceCheck.Ok);
+        Assert.Contains("unauthorized", deviceCheck.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("USB debugging", deviceCheck.Recommendation, StringComparison.OrdinalIgnoreCase);
+    }
 
 
 }

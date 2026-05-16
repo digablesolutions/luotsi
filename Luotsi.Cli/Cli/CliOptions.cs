@@ -17,6 +17,7 @@ public sealed class CliOptions
         "inspect",
         "view",
         "view-doctor",
+        "wireless",
         "telemetry-tail",
         "telemetry-watch",
         "wait-step",

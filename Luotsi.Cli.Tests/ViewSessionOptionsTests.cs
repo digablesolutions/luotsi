@@ -332,6 +332,32 @@ public sealed partial class AppTests
         Assert.Equal(1280, profile.MaxSize);
         Assert.Equal(30, profile.MaxFps);
         Assert.Equal("4M", profile.VideoBitRate);
+        Assert.True(profiles.Profiles.ContainsKey("last"));
+    }
+
+    [Fact]
+    public async Task RunAsync_View_Last_Loads_Last_Profile()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var session = new FakeViewSession(23);
+        var profiles = new FakeViewProfileStore();
+        profiles.Profiles["last"] = new ViewProfile(Device: "last-device", Preset: "safe", AlwaysOnTop: true);
+        var app = new App(
+            console: console,
+            timeProvider: timeProvider,
+            deviceHostFactory: new FakeDeviceHostFactory(host),
+            viewSessionFactory: new FakeViewSessionFactory(session),
+            viewProfileStore: profiles);
+
+        var exitCode = await app.RunAsync(["view", "--last"]);
+
+        Assert.Equal(23, exitCode);
+        var options = Assert.Single(session.Options);
+        Assert.Equal("last-device", options.DeviceSelector);
+        Assert.Equal("safe", options.PresetName);
+        Assert.True(options.AlwaysOnTop);
     }
 
 

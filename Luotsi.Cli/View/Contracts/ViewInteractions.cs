@@ -49,6 +49,8 @@ public sealed record ViewClipboardPasteRequest(string Text) : ViewInteractionReq
 /// <param name="FilePath">Dropped host-local file path.</param>
 public sealed record ViewFileDropRequest(string FilePath) : ViewInteractionRequest;
 
+public sealed record ViewFilePullRequest(string RemotePath, string? LocalDirectory = null) : ViewInteractionRequest;
+
 /// <summary>
 /// Device-switch request emitted by the local window shelf.
 /// </summary>
@@ -70,5 +72,9 @@ public enum ViewWindowCommand
 {
     TakeScreenshot = 0,
     ToggleRecording = 1,
-    Reconnect = 2
+    Reconnect = 2,
+    Back = 3,
+    Home = 4,
+    Recents = 5,
+    OpenArtifacts = 6
 }

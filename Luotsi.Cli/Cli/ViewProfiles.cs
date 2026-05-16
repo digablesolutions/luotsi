@@ -25,6 +25,7 @@ public sealed record ViewProfile(
     bool? ReadOnly = null,
     string? ShareBind = null,
     string? JoinShare = null,
+    bool? AlwaysOnTop = null,
     string? Artifacts = null,
     string? PollArtifacts = null)
 {
@@ -48,6 +49,7 @@ public sealed record ViewProfile(
         Add(values, "read-only", ReadOnly);
         Add(values, "share-bind", ShareBind);
         Add(values, "join-share", JoinShare);
+        Add(values, "always-on-top", AlwaysOnTop);
         Add(values, "artifacts", Artifacts);
         Add(values, "poll-artifacts", PollArtifacts);
         return values;
@@ -71,6 +73,7 @@ public sealed record ViewProfile(
         viewOptions.ReadOnly,
         viewOptions.ShareBindEndpoint,
         viewOptions.JoinShareEndpoint,
+        viewOptions.AlwaysOnTop,
         options.Get("artifacts"),
         options.Get("poll-artifacts") ?? CliDefaults.DefaultPollArtifactsPolicy);
 

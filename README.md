@@ -46,7 +46,9 @@ dotnet run --project Luotsi.Cli -- preflight --device <serial> --package dev.luo
 dotnet run --project Luotsi.Cli -- screen-state --device <serial>
 dotnet run --project Luotsi.Cli -- view --device <serial> --preset safe --decoder ffmpeg --record capture.mp4 --stats-interval-ms 1000
 dotnet run --project Luotsi.Cli -- view --profile desk
+dotnet run --project Luotsi.Cli -- view --last
 dotnet run --project Luotsi.Cli -- view-doctor --device <serial> --preset low-latency
+dotnet run --project Luotsi.Cli -- wireless --device <usb-serial> --host 192.168.0.44
 dotnet run --project Luotsi.Cli -- telemetry-tail --device <serial> --tail 200
 dotnet run --project Luotsi.Cli -- telemetry-watch --device <serial> --timeout-sec 10
 dotnet run --project Luotsi.Cli -- tap-text --device <serial> --text "Sign in"
@@ -89,6 +91,8 @@ Use `--save-profile <name>` to persist the resolved connection settings and
 decoder, size/FPS/bitrate, record target, stats cadences, share settings, and
 artifact policy. By default they are stored under the user app-data directory;
 set `LUOTSI_PROFILE_ROOT` to use a repo-local or CI-specific profile directory.
+Every `view` launch also refreshes the special `last` profile, so `view --last`
+is the quickest reconnect path after a successful setup.
 The built-in SDL window now exposes an operator control layer: `F12` captures a
 device screenshot into the artifact root, `F9` toggles live stream recording,
 `F5` reconnects the mirrored stream, `F11` toggles fullscreen, and `F8`
@@ -96,7 +100,9 @@ switches between `fit` and `fill` presentation modes. Plain text input, common
 navigation/editing keys, mouse-wheel scrolling, host clipboard paste via
 `Ctrl+V`, and drag/drop helpers are also routed through the same session-owned
 interaction surface. Dropped `.apk` files install on the device; other dropped
-files are pushed to `/sdcard/Download`. The SDL window now also paints a small
+files are pushed to `/sdcard/Download`; session code also supports pull requests
+from device paths into the artifact root. `F1`, `F2`, and `F3` send Android
+Back, Home, and Recents respectively. The SDL window now also paints a small
 in-window toolbar and multi-device shelf on top of the mirror surface, so
 operators can click screenshot/record/reconnect/fit/fullscreen controls instead
 of relying only on hotkeys. When multiple adb-visible devices are present, the
@@ -121,6 +127,10 @@ device switching.
 report instead of opening a stream. The current checks cover FFmpeg decoder
 readiness, Android helper package availability, adb device visibility, device
 preflight, and optional recording target readiness.
+
+`wireless` is the first-pass “go wireless” flow. It runs `adb tcpip <port>` for
+the USB-selected device, then `adb connect <host>:<port>`, returning the TCP/IP
+endpoint that can be saved into a view profile.
 
 Interactive `view` sessions can now emit additional JSONL events beyond
 `view_started`, `view_stats`, `view_error`, and `view_ended`, including:

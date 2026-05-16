@@ -117,6 +117,10 @@ public interface IDeviceHost : IScenarioActionHost
     /// <returns>Transfer metadata.</returns>
     Task<PushFileResult> PushFileAsync(string localPath, string? remoteDirectory = null);
 
+    Task<PullFileResult> PullFileAsync(string remotePath, string? localDirectory = null);
+
+    Task<WirelessConnectResult> EnableWirelessAsync(string host, int port);
+
     /// <summary>
     /// Installs an APK from the host onto the device.
     /// </summary>

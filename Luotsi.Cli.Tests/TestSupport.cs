@@ -352,6 +352,10 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public List<(string LocalPath, string? RemoteDirectory)> PushFileRequests { get; } = [];
 
+    public List<(string RemotePath, string? LocalDirectory)> PullFileRequests { get; } = [];
+
+    public List<(string Host, int Port)> WirelessRequests { get; } = [];
+
     public List<string> InstallPackageRequests { get; } = [];
 
     public List<DeviceInfo> ConnectedDevices { get; } = [];
@@ -465,6 +469,18 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
     {
         PushFileRequests.Add((localPath, remoteDirectory));
         return Task.FromResult(new PushFileResult(localPath, $"{remoteDirectory ?? "/sdcard/Download"}/{Path.GetFileName(localPath)}"));
+    }
+
+    public Task<PullFileResult> PullFileAsync(string remotePath, string? localDirectory = null)
+    {
+        PullFileRequests.Add((remotePath, localDirectory));
+        return Task.FromResult(new PullFileResult(remotePath, Path.Combine(localDirectory ?? "/tmp", Path.GetFileName(remotePath))));
+    }
+
+    public Task<WirelessConnectResult> EnableWirelessAsync(string host, int port)
+    {
+        WirelessRequests.Add((host, port));
+        return Task.FromResult(new WirelessConnectResult(host, port, $"{host}:{port}"));
     }
 
     public Task<InstallPackageResult> InstallPackageAsync(string packagePath)

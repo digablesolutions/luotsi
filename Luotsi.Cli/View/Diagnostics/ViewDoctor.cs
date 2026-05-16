@@ -39,7 +39,8 @@ public interface IViewDoctorFactory
 /// <param name="Ok">Whether the check passed.</param>
 /// <param name="Summary">Human-readable summary.</param>
 /// <param name="Detail">Optional detail payload.</param>
-public sealed record ViewDoctorCheck(string Name, bool Ok, string Summary, string? Detail = null);
+/// <param name="Recommendation">Concrete fallback or fix to try when the check fails.</param>
+public sealed record ViewDoctorCheck(string Name, bool Ok, string Summary, string? Detail = null, string? Recommendation = null);
 
 /// <summary>
 /// Aggregated doctor result for a requested view configuration.
@@ -151,16 +152,16 @@ public sealed class ViewDoctor(
             }
             catch (Exception ex)
             {
-                return new ViewDoctorCheck("decoder", false, "FFmpeg native decoder is not ready.", ex.Message);
+                return new ViewDoctorCheck("decoder", false, "FFmpeg native decoder is not ready.", ex.Message, "Set DEVICE_E2E_FFMPEG_ROOT or run view with --defaults --decoder ffmpeg after installing the bundled FFmpeg libraries.");
             }
         }
 
         if (string.Equals(options.Decoder, "wmf", StringComparison.OrdinalIgnoreCase))
         {
-            return new ViewDoctorCheck("decoder", false, "WMF view decoder is not implemented yet.");
+            return new ViewDoctorCheck("decoder", false, "WMF view decoder is not implemented yet.", null, "Use --decoder ffmpeg.");
         }
 
-        return new ViewDoctorCheck("decoder", false, $"Unsupported view decoder '{options.Decoder}'.");
+        return new ViewDoctorCheck("decoder", false, $"Unsupported view decoder '{options.Decoder}'.", null, "Use --decoder ffmpeg.");
     }
 
     private ViewDoctorCheck CheckHelperPackage()
@@ -172,7 +173,7 @@ public sealed class ViewDoctor(
         }
         catch (Exception ex)
         {
-            return new ViewDoctorCheck("helper_package", false, "Android view helper package is not ready.", ex.Message);
+            return new ViewDoctorCheck("helper_package", false, "Android view helper package is not ready.", ex.Message, "Build the Android helper APK or set DEVICE_E2E_VIEW_HELPER_APK to a valid helper package.");
         }
     }
 
@@ -189,7 +190,14 @@ public sealed class ViewDoctor(
                     ? "No adb-visible devices were reported."
                     : string.Join(", ", devices.Devices.Select(static device => string.IsNullOrWhiteSpace(device.Serial) ? device.Details : device.Serial));
                 return (
-                    new ViewDoctorCheck("device_visibility", false, $"Configured device '{options.DeviceSelector}' is not visible to adb.", detail),
+                    new ViewDoctorCheck("device_visibility", false, $"Configured device '{options.DeviceSelector}' is not visible to adb.", detail, "Run `adb devices`, reconnect USB, authorize the device, or use `wireless` to connect a remembered TCP/IP target."),
+                    devices.Devices);
+            }
+
+            if (!string.Equals(matchedDevice.Status, "device", StringComparison.OrdinalIgnoreCase))
+            {
+                return (
+                    new ViewDoctorCheck("device_visibility", false, $"Configured device '{options.DeviceSelector}' is visible but not ready: '{matchedDevice.Status}'.", matchedDevice.Details, "If status is unauthorized, confirm the Android USB debugging prompt. If offline, reconnect the device or restart adb."),
                     devices.Devices);
             }
 
@@ -201,7 +209,7 @@ public sealed class ViewDoctor(
         catch (Exception ex)
         {
             return (
-                new ViewDoctorCheck("device_visibility", false, "Unable to enumerate adb-visible devices.", ex.Message),
+                new ViewDoctorCheck("device_visibility", false, "Unable to enumerate adb-visible devices.", ex.Message, "Check that adb is installed and reachable via --adb or DEVICE_E2E_ADB."),
                 Array.Empty<DeviceInfo>());
         }
     }
@@ -216,7 +224,7 @@ public sealed class ViewDoctor(
         }
         catch (Exception ex)
         {
-            return (new ViewDoctorCheck("preflight", false, "Device preflight failed.", ex.Message), null);
+            return (new ViewDoctorCheck("preflight", false, "Device preflight failed.", ex.Message, "Wake/unlock the device and verify the target app or current foreground package."), null);
         }
     }
 
@@ -239,7 +247,7 @@ public sealed class ViewDoctor(
         }
         catch (Exception ex)
         {
-            return new ViewDoctorCheck("recording", false, "Live recording target is not ready.", ex.Message);
+            return new ViewDoctorCheck("recording", false, "Live recording target is not ready.", ex.Message, "Use a .h264/.mp4/.mkv output path in a writable directory, or omit --record.");
         }
     }
 }

@@ -642,6 +642,18 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
 
         switch (keyboardEvent.key)
         {
+            case SDL_Keycode.SDLK_F1:
+                DispatchInteraction(new ViewWindowCommandRequest(ViewWindowCommand.Back));
+                return false;
+
+            case SDL_Keycode.SDLK_F2:
+                DispatchInteraction(new ViewWindowCommandRequest(ViewWindowCommand.Home));
+                return false;
+
+            case SDL_Keycode.SDLK_F3:
+                DispatchInteraction(new ViewWindowCommandRequest(ViewWindowCommand.Recents));
+                return false;
+
             case SDL_Keycode.SDLK_F5:
                 DispatchInteraction(new ViewWindowCommandRequest(ViewWindowCommand.Reconnect));
                 return false;
