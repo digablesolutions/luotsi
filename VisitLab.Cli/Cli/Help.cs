@@ -19,7 +19,7 @@ Commands:
   preflight --package <app.id>
   screen-state
   inspect
-  view --device <adb serial> [--codec h264|h265] [--decoder ffmpeg|wmf] [--headless] [--record <file>] [--stats-interval-ms <ms>]
+  view --device <adb serial> [--codec h264|h265] [--decoder ffmpeg|wmf] [--headless] [--record <file>] [--stats-interval-ms <ms>] [--renderer-stats-interval-ms <ms>]
   telemetry-tail [--tail 200]
   telemetry-watch [--timeout-sec 15]
   wait-step --step <STEP_NAME> [--timeout-sec 15]

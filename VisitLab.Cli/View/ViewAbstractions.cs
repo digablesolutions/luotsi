@@ -45,6 +45,7 @@ public interface IViewSessionFactory
 /// <param name="OverlayScreenState">Whether screen-state overlays are enabled.</param>
 /// <param name="OverlayTelemetry">Whether telemetry overlays are enabled.</param>
 /// <param name="StatsIntervalMs">Minimum interval between emitted JSONL stats updates. Set to zero to disable JSONL stats emission.</param>
+/// <param name="RendererStatsIntervalMs">Minimum interval between forwarded renderer stats updates. Set to zero to forward every renderer stats update.</param>
 public sealed record ViewOptions(
     string DeviceSelector,
     string AdbExecutable,
@@ -57,7 +58,8 @@ public sealed record ViewOptions(
     string VideoBitRate,
     bool OverlayScreenState,
     bool OverlayTelemetry,
-    int StatsIntervalMs = 1000);
+    int StatsIntervalMs = 1000,
+    int RendererStatsIntervalMs = 0);
 
 /// <summary>
 /// Bootstraps the device-side stream transport.

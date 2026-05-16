@@ -165,7 +165,12 @@ public sealed class ViewSession(
                 };
 
                 renderer = _viewRendererFactory.Create(options, _deviceHost);
-                sessionRenderer = new SessionViewRenderer(renderer, _timeProvider, TimeSpan.FromMilliseconds(options.StatsIntervalMs), stats =>
+                sessionRenderer = new SessionViewRenderer(
+                    renderer,
+                    _timeProvider,
+                    TimeSpan.FromMilliseconds(options.RendererStatsIntervalMs),
+                    TimeSpan.FromMilliseconds(options.StatsIntervalMs),
+                    stats =>
                 {
                     WriteJsonLine(new
                     {
@@ -195,6 +200,7 @@ public sealed class ViewSession(
                     max_fps = options.MaxFps,
                     video_bit_rate = options.VideoBitRate,
                     stats_interval_ms = options.StatsIntervalMs,
+                    renderer_stats_interval_ms = options.RendererStatsIntervalMs,
                     overlay_screen_state = options.OverlayScreenState,
                     overlay_telemetry = options.OverlayTelemetry,
                     connection = negotiatedConnection,
@@ -330,18 +336,25 @@ internal sealed class NullViewRecorderFactory : IViewRecorderFactory
 internal sealed class SessionViewRenderer(
     IViewRenderer? innerRenderer,
     TimeProvider timeProvider,
+    TimeSpan rendererStatsInterval,
     TimeSpan statsEventInterval,
     Func<ViewStats, Task> onStatsAsync) : IViewRenderer
 {
     private readonly IViewRenderer? _innerRenderer = innerRenderer;
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+    private readonly TimeSpan _rendererStatsInterval = rendererStatsInterval >= TimeSpan.Zero
+        ? rendererStatsInterval
+        : throw new ArgumentOutOfRangeException(nameof(rendererStatsInterval));
     private readonly TimeSpan _statsEventInterval = statsEventInterval >= TimeSpan.Zero
         ? statsEventInterval
         : throw new ArgumentOutOfRangeException(nameof(statsEventInterval));
     private readonly Func<ViewStats, Task> _onStatsAsync = onStatsAsync ?? throw new ArgumentNullException(nameof(onStatsAsync));
+    private readonly object _rendererStatsGate = new();
     private readonly object _statsGate = new();
 
+    private ViewStats? _pendingRendererStats;
     private ViewStats? _pendingStats;
+    private DateTimeOffset? _lastRendererStatsForwardedAt;
     private DateTimeOffset? _lastStatsEmittedAt;
 
     public Task InitializeAsync(ViewDisplayInfo displayInfo, CancellationToken cancellationToken = default) =>
@@ -354,18 +367,71 @@ internal sealed class SessionViewRenderer(
     {
         ArgumentNullException.ThrowIfNull(stats);
 
-        if (_innerRenderer is not null)
+        var now = _timeProvider.GetUtcNow();
+        var rendererStatsToForward = CaptureRendererStats(stats, now);
+        if (rendererStatsToForward is not null && _innerRenderer is not null)
         {
-            await _innerRenderer.UpdateStatsAsync(stats, cancellationToken).ConfigureAwait(false);
+            await _innerRenderer.UpdateStatsAsync(rendererStatsToForward, cancellationToken).ConfigureAwait(false);
         }
 
+        var statsToEmit = CaptureJsonStats(stats, now);
+        if (statsToEmit is not null)
+        {
+            await _onStatsAsync(statsToEmit).ConfigureAwait(false);
+        }
+    }
+
+    public async Task FlushPendingStatsAsync()
+    {
+        var now = _timeProvider.GetUtcNow();
+        var rendererStatsToForward = FlushPendingRendererStats(now);
+        if (rendererStatsToForward is not null && _innerRenderer is not null)
+        {
+            await _innerRenderer.UpdateStatsAsync(rendererStatsToForward).ConfigureAwait(false);
+        }
+
+        var statsToEmit = FlushPendingJsonStats(now);
+        if (statsToEmit is not null)
+        {
+            await _onStatsAsync(statsToEmit).ConfigureAwait(false);
+        }
+    }
+
+    private ViewStats? CaptureRendererStats(ViewStats stats, DateTimeOffset now)
+    {
+        if (_innerRenderer is null)
+        {
+            return null;
+        }
+
+        if (_rendererStatsInterval == TimeSpan.Zero)
+        {
+            return stats;
+        }
+
+        ViewStats? statsToForward = null;
+        lock (_rendererStatsGate)
+        {
+            _pendingRendererStats = stats;
+            if (_lastRendererStatsForwardedAt is null || now - _lastRendererStatsForwardedAt.Value >= _rendererStatsInterval)
+            {
+                statsToForward = _pendingRendererStats;
+                _pendingRendererStats = null;
+                _lastRendererStatsForwardedAt = now;
+            }
+        }
+
+        return statsToForward;
+    }
+
+    private ViewStats? CaptureJsonStats(ViewStats stats, DateTimeOffset now)
+    {
         if (_statsEventInterval == TimeSpan.Zero)
         {
-            return;
+            return null;
         }
 
         ViewStats? statsToEmit = null;
-        var now = _timeProvider.GetUtcNow();
         lock (_statsGate)
         {
             _pendingStats = stats;
@@ -377,33 +443,49 @@ internal sealed class SessionViewRenderer(
             }
         }
 
-        if (statsToEmit is not null)
+        return statsToEmit;
+    }
+
+    private ViewStats? FlushPendingRendererStats(DateTimeOffset now)
+    {
+        if (_innerRenderer is null || _rendererStatsInterval == TimeSpan.Zero)
         {
-            await _onStatsAsync(statsToEmit).ConfigureAwait(false);
+            return null;
+        }
+
+        lock (_rendererStatsGate)
+        {
+            var statsToForward = _pendingRendererStats;
+            if (statsToForward is null)
+            {
+                return null;
+            }
+
+            _pendingRendererStats = null;
+            _lastRendererStatsForwardedAt = now;
+            return statsToForward;
         }
     }
 
-    public Task FlushPendingStatsAsync()
+    private ViewStats? FlushPendingJsonStats(DateTimeOffset now)
     {
         if (_statsEventInterval == TimeSpan.Zero)
         {
-            return Task.CompletedTask;
+            return null;
         }
 
-        ViewStats? statsToEmit;
         lock (_statsGate)
         {
-            statsToEmit = _pendingStats;
+            var statsToEmit = _pendingStats;
             if (statsToEmit is null)
             {
-                return Task.CompletedTask;
+                return null;
             }
 
             _pendingStats = null;
-            _lastStatsEmittedAt = _timeProvider.GetUtcNow();
+            _lastStatsEmittedAt = now;
+            return statsToEmit;
         }
-
-        return _onStatsAsync(statsToEmit);
     }
 
     public Task WaitForCloseAsync(CancellationToken cancellationToken = default) =>

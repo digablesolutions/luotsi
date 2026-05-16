@@ -75,7 +75,10 @@ The `view` command is also a long-lived JSONL session. Alongside `view_started`,
 agents can consume rolling decode/present FPS and latency without scraping the
 SDL window title or flooding stdout on long-lived sessions. Use
 `--stats-interval-ms <ms>` to tune that cadence; the default is `1000`, and
-`0` disables JSONL `view_stats` emission entirely.
+`0` disables JSONL `view_stats` emission entirely. Use
+`--renderer-stats-interval-ms <ms>` to throttle local renderer/title stats
+updates independently; the default is `0`, which forwards every renderer stats
+update.
 
 The implementation currently supports `--platform android`. The host seam is in
 place so an iOS adapter can be added later without rewriting the command layer.

@@ -159,9 +159,15 @@ public sealed class App
     private static ViewOptions BuildViewOptions(CliOptions options, string adbExecutable)
     {
         var statsIntervalMs = options.Int("stats-interval-ms", 1000);
+        var rendererStatsIntervalMs = options.Int("renderer-stats-interval-ms", 0);
         if (statsIntervalMs < 0)
         {
             throw new UsageException("view requires --stats-interval-ms zero or greater.");
+        }
+
+        if (rendererStatsIntervalMs < 0)
+        {
+            throw new UsageException("view requires --renderer-stats-interval-ms zero or greater.");
         }
 
         return new ViewOptions(
@@ -176,7 +182,8 @@ public sealed class App
             options.Get("video-bit-rate") ?? "8M",
             options.HasFlag("overlay-screen-state"),
             options.HasFlag("overlay-telemetry"),
-            statsIntervalMs);
+                statsIntervalMs,
+                rendererStatsIntervalMs);
     }
 
     private void WriteEnvelope(CommandEnvelope envelope) => _console.WriteLine(JsonSerializer.Serialize(envelope, JsonOptions));
