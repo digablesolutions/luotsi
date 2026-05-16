@@ -19,8 +19,8 @@ Commands:
   preflight --package <app.id>
   screen-state
   inspect
-  view (--device <adb serial> | --join-share <host:port>) [--share-bind <host:port>] [--preset safe|balanced|quality|low-latency] [--defaults] [--read-only] [--codec h264|h265] [--decoder ffmpeg|wmf] [--headless] [--record <file>] [--stats-interval-ms <ms>] [--renderer-stats-interval-ms <ms>]
-  view-doctor --device <adb serial> [--preset safe|balanced|quality|low-latency] [--defaults] [--read-only] [--decoder ffmpeg|wmf] [--record <file>]
+  view (--device <adb serial> | --join-share <host:port>) [--profile <name>] [--save-profile <name>] [--share-bind <host:port>] [--preset safe|balanced|high-quality|low-latency] [--defaults] [--read-only] [--codec h264|h265] [--decoder ffmpeg|wmf] [--headless] [--record <file>] [--stats-interval-ms <ms>] [--renderer-stats-interval-ms <ms>]
+  view-doctor --device <adb serial> [--profile <name>] [--preset safe|balanced|high-quality|low-latency] [--defaults] [--read-only] [--decoder ffmpeg|wmf] [--record <file>]
   telemetry-tail [--tail 200]
   telemetry-watch [--timeout-sec 15]
   wait-step --step <STEP_NAME> [--timeout-sec 15]

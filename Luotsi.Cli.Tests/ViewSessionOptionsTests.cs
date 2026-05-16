@@ -140,6 +140,57 @@ public sealed partial class AppTests
         Assert.Equal("4M", options.VideoBitRate);
     }
 
+    [Fact]
+    public async Task RunAsync_View_HighQuality_Preset_Uses_Quality_Defaults()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var session = new FakeViewSession(23);
+        var app = new App(
+            console: console,
+            timeProvider: timeProvider,
+            deviceHostFactory: new FakeDeviceHostFactory(host),
+            viewSessionFactory: new FakeViewSessionFactory(session));
+
+        var exitCode = await app.RunAsync([
+            "view",
+            "--device", "192.168.0.134:5555",
+            "--preset", "high-quality"]);
+
+        Assert.Equal(23, exitCode);
+        var options = Assert.Single(session.Options);
+        Assert.Equal("high-quality", options.PresetName);
+        Assert.Equal(1920, options.MaxSize);
+        Assert.Equal(60, options.MaxFps);
+        Assert.Equal("12M", options.VideoBitRate);
+    }
+
+    [Fact]
+    public async Task RunAsync_View_Quality_Preset_Alias_Uses_HighQuality_Name()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var session = new FakeViewSession(23);
+        var app = new App(
+            console: console,
+            timeProvider: timeProvider,
+            deviceHostFactory: new FakeDeviceHostFactory(host),
+            viewSessionFactory: new FakeViewSessionFactory(session));
+
+        var exitCode = await app.RunAsync([
+            "view",
+            "--device", "192.168.0.134:5555",
+            "--preset", "quality"]);
+
+        Assert.Equal(23, exitCode);
+        var options = Assert.Single(session.Options);
+        Assert.Equal("high-quality", options.PresetName);
+        Assert.Equal(1920, options.MaxSize);
+        Assert.Equal("12M", options.VideoBitRate);
+    }
+
 
 
     [Fact]

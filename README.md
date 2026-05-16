@@ -45,6 +45,7 @@ dotnet run --project Luotsi.Cli -- devices
 dotnet run --project Luotsi.Cli -- preflight --device <serial> --package dev.luotsi.app
 dotnet run --project Luotsi.Cli -- screen-state --device <serial>
 dotnet run --project Luotsi.Cli -- view --device <serial> --preset safe --decoder ffmpeg --record capture.mp4 --stats-interval-ms 1000
+dotnet run --project Luotsi.Cli -- view --profile desk
 dotnet run --project Luotsi.Cli -- view-doctor --device <serial> --preset low-latency
 dotnet run --project Luotsi.Cli -- telemetry-tail --device <serial> --tail 200
 dotnet run --project Luotsi.Cli -- telemetry-watch --device <serial> --timeout-sec 10
@@ -81,7 +82,13 @@ SDL window title or flooding stdout on long-lived sessions. Use
 `--renderer-stats-interval-ms <ms>` to throttle local renderer/title stats
 updates independently; the default is `0`, which forwards every renderer stats
 update. `--preset <name>` seeds the launch defaults without blocking explicit
-overrides, and `--defaults` is a shorthand for the conservative `safe` preset.
+overrides. The built-in presets are `low-latency`, `balanced`, `high-quality`,
+and `safe`; `--defaults` is a shorthand for the conservative `safe` preset.
+Use `--save-profile <name>` to persist the resolved connection settings and
+`--profile <name>` to reuse them later. Profiles include the device selector,
+decoder, size/FPS/bitrate, record target, stats cadences, share settings, and
+artifact policy. By default they are stored under the user app-data directory;
+set `LUOTSI_PROFILE_ROOT` to use a repo-local or CI-specific profile directory.
 The built-in SDL window now exposes an operator control layer: `F12` captures a
 device screenshot into the artifact root, `F9` toggles live stream recording,
 `F5` reconnects the mirrored stream, `F11` toggles fullscreen, and `F8`
