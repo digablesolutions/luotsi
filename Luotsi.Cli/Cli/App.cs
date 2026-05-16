@@ -29,6 +29,7 @@ public sealed class App
     private readonly IEnvironmentVariables _environment;
     private readonly IViewSessionFactory _viewSessionFactory;
     private readonly IViewDoctorFactory _viewDoctorFactory;
+    private readonly IViewProfileStore _viewProfileStore;
 
     public App(
         TimeProvider? timeProvider = null,
@@ -41,7 +42,8 @@ public sealed class App
         IUniqueIdGenerator? idGenerator = null,
         IDeviceHostFactory? deviceHostFactory = null,
         IViewSessionFactory? viewSessionFactory = null,
-        IViewDoctorFactory? viewDoctorFactory = null)
+        IViewDoctorFactory? viewDoctorFactory = null,
+        IViewProfileStore? viewProfileStore = null)
     {
         _timeProvider = timeProvider ?? TimeProvider.System;
         _fileSystem = fileSystem ?? new PhysicalFileSystem();
@@ -70,6 +72,7 @@ public sealed class App
             _environment,
             _fileSystem,
             processRunner1);
+        _viewProfileStore = viewProfileStore ?? new JsonViewProfileStore(_fileSystem, _environment);
     }
 
     /// <summary>
@@ -89,7 +92,6 @@ public sealed class App
 
         ArtifactSession? artifacts = null;
         IDeviceHost? runner = null;
-        var adbExecutable = options.Get("adb") ?? _environment.GetEnvironmentVariable(CliDefaults.AdbExecutableEnvironmentVariable) ?? CliDefaults.DefaultAdbExecutable;
 
         ArtifactData CreateArtifactData() => artifacts?.ToData() ?? new ArtifactData(
             options.Get("artifacts") ?? string.Empty,
@@ -97,6 +99,8 @@ public sealed class App
 
         try
         {
+            await ApplyProfileDefaultsAsync(options).ConfigureAwait(false);
+            var adbExecutable = options.Get("adb") ?? _environment.GetEnvironmentVariable(CliDefaults.AdbExecutableEnvironmentVariable) ?? CliDefaults.DefaultAdbExecutable;
             artifacts = ArtifactSession.Create(options, _fileSystem, _timeProvider);
 
             if (string.Equals(options.Command, "inspect", StringComparison.OrdinalIgnoreCase))
@@ -114,12 +118,13 @@ public sealed class App
             if (string.Equals(options.Command, "view", StringComparison.OrdinalIgnoreCase))
             {
                 var viewOptions = BuildViewOptions(options, adbExecutable, allowJoinShare: true);
+                await SaveProfileIfRequestedAsync(options, viewOptions).ConfigureAwait(false);
                 runner = string.IsNullOrWhiteSpace(viewOptions.JoinShareEndpoint)
                     ? _deviceHostFactory.Create(
                         new DeviceHostConfiguration(
                             options.Get("platform") ?? CliDefaults.DefaultPlatform,
                             adbExecutable,
-                            options.Get("device")),
+                            viewOptions.DeviceSelector),
                         artifacts)
                     : new UnsupportedDeviceHost();
                 var viewSession = _viewSessionFactory.Create(runner, artifacts);
@@ -190,6 +195,33 @@ public sealed class App
             WriteEnvelope(new CommandEnvelope(false, options.Command, started, _timeProvider.GetUtcNow(), failureData, CreateArtifactData(), ErrorInfo.From(ex, category)));
             return 1;
         }
+    }
+
+    private async Task ApplyProfileDefaultsAsync(CliOptions options)
+    {
+        var profileName = options.Get("profile");
+        if (string.IsNullOrWhiteSpace(profileName))
+        {
+            return;
+        }
+
+        if (!string.Equals(options.Command, "view", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(options.Command, "view-doctor", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new UsageException("--profile is only supported for view and view-doctor.");
+        }
+
+        var profile = await _viewProfileStore.LoadAsync(profileName).ConfigureAwait(false)
+            ?? throw new UsageException($"View profile '{profileName}' was not found.");
+        options.ApplyDefaults(profile.ToOptionDefaults());
+    }
+
+    private Task SaveProfileIfRequestedAsync(CliOptions options, ViewOptions viewOptions)
+    {
+        var profileName = options.Get("save-profile");
+        return string.IsNullOrWhiteSpace(profileName)
+            ? Task.CompletedTask
+            : _viewProfileStore.SaveAsync(profileName, ViewProfile.FromResolvedOptions(options, viewOptions));
     }
 
     private static ViewOptions BuildViewOptions(CliOptions options, string adbExecutable, bool allowJoinShare)

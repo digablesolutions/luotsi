@@ -88,6 +88,18 @@ public sealed class CliOptions
     public string? Get(string key) => _values.TryGetValue(key, out var value) ? value : null;
 
     /// <summary>
+    /// Applies default values for options that were not supplied on the command line.
+    /// </summary>
+    /// <param name="defaults">Default option values keyed by option name.</param>
+    public void ApplyDefaults(IReadOnlyDictionary<string, string?> defaults)
+    {
+        foreach (var (key, value) in defaults)
+        {
+            _values.TryAdd(key, value);
+        }
+    }
+
+    /// <summary>
     /// Gets whether a flag was supplied.
     /// </summary>
     /// <param name="key">Flag name.</param>

@@ -495,6 +495,20 @@ internal sealed class FakeViewSession(int exitCode) : IViewSession
     }
 }
 
+internal sealed class FakeViewProfileStore : IViewProfileStore
+{
+    public Dictionary<string, ViewProfile> Profiles { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public Task<ViewProfile?> LoadAsync(string name, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Profiles.TryGetValue(name, out var profile) ? profile : null);
+
+    public Task SaveAsync(string name, ViewProfile profile, CancellationToken cancellationToken = default)
+    {
+        Profiles[name] = profile;
+        return Task.CompletedTask;
+    }
+}
+
 internal sealed class FakeViewSessionFactory(IViewSession viewSession) : IViewSessionFactory
 {
     private readonly IViewSession _viewSession = viewSession;

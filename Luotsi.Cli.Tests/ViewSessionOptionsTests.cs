@@ -174,6 +174,115 @@ public sealed partial class AppTests
         Assert.Equal(0, options.RendererStatsIntervalMs);
     }
 
+    [Fact]
+    public async Task RunAsync_View_Profile_Seeds_View_Options()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var session = new FakeViewSession(23);
+        var factory = new FakeViewSessionFactory(session);
+        var profiles = new FakeViewProfileStore();
+        profiles.Profiles["desk"] = new ViewProfile(
+            Device: "profile-device",
+            Decoder: "wmf",
+            Preset: "low-latency",
+            Headless: true,
+            Record: "profile.mkv",
+            MaxSize: 1024,
+            MaxFps: 24,
+            VideoBitRate: "3M",
+            StatsIntervalMs: 500,
+            RendererStatsIntervalMs: 125,
+            OverlayScreenState: true,
+            OverlayTelemetry: true,
+            PollArtifacts: "per-attempt");
+        var app = new App(
+            console: console,
+            timeProvider: timeProvider,
+            deviceHostFactory: new FakeDeviceHostFactory(host),
+            viewSessionFactory: factory,
+            viewProfileStore: profiles);
+
+        var exitCode = await app.RunAsync(["view", "--profile", "desk"]);
+
+        Assert.Equal(23, exitCode);
+        var options = Assert.Single(session.Options);
+        Assert.Equal("profile-device", options.DeviceSelector);
+        Assert.Equal("wmf", options.Decoder);
+        Assert.Equal("low-latency", options.PresetName);
+        Assert.True(options.Headless);
+        Assert.Equal("profile.mkv", options.RecordPath);
+        Assert.Equal(1024, options.MaxSize);
+        Assert.Equal(24, options.MaxFps);
+        Assert.Equal("3M", options.VideoBitRate);
+        Assert.Equal(500, options.StatsIntervalMs);
+        Assert.Equal(125, options.RendererStatsIntervalMs);
+        Assert.True(options.OverlayScreenState);
+        Assert.True(options.OverlayTelemetry);
+        Assert.Equal("per-attempt", factory.LastArtifacts!.ToData().PollArtifacts);
+    }
+
+    [Fact]
+    public async Task RunAsync_View_Cli_Options_Override_Profile()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var session = new FakeViewSession(23);
+        var factory = new FakeViewSessionFactory(session);
+        var profiles = new FakeViewProfileStore();
+        profiles.Profiles["desk"] = new ViewProfile(Device: "profile-device", Decoder: "wmf", MaxSize: 1024);
+        var app = new App(
+            console: console,
+            timeProvider: timeProvider,
+            deviceHostFactory: new FakeDeviceHostFactory(host),
+            viewSessionFactory: factory,
+            viewProfileStore: profiles);
+
+        var exitCode = await app.RunAsync(["view", "--profile", "desk", "--device", "cli-device", "--decoder", "ffmpeg", "--max-size", "1920"]);
+
+        Assert.Equal(23, exitCode);
+        var options = Assert.Single(session.Options);
+        Assert.Equal("cli-device", options.DeviceSelector);
+        Assert.Equal("ffmpeg", options.Decoder);
+        Assert.Equal(1920, options.MaxSize);
+    }
+
+    [Fact]
+    public async Task RunAsync_View_SaveProfile_Writes_Resolved_View_Profile()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var session = new FakeViewSession(23);
+        var profiles = new FakeViewProfileStore();
+        var app = new App(
+            console: console,
+            timeProvider: timeProvider,
+            deviceHostFactory: new FakeDeviceHostFactory(host),
+            viewSessionFactory: new FakeViewSessionFactory(session),
+            viewProfileStore: profiles);
+
+        var exitCode = await app.RunAsync([
+            "view",
+            "--device", "desk-device",
+            "--preset", "safe",
+            "--record", "capture.mkv",
+            "--poll-artifacts", "none",
+            "--save-profile", "desk"]);
+
+        Assert.Equal(23, exitCode);
+        var profile = profiles.Profiles["desk"];
+        Assert.Equal("desk-device", profile.Device);
+        Assert.Equal("safe", profile.Preset);
+        Assert.Equal("capture.mkv", profile.Record);
+        Assert.Equal("none", profile.PollArtifacts);
+        Assert.Equal(1280, profile.MaxSize);
+        Assert.Equal(30, profile.MaxFps);
+        Assert.Equal("4M", profile.VideoBitRate);
+    }
+
 
 
     [Fact]
