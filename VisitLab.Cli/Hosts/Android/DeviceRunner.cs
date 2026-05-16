@@ -973,10 +973,23 @@ public sealed class DeviceRunner(
 
     private async Task<string> DumpUiAsync()
     {
-        var command = "rm -f /sdcard/.device-e2e-dump.xml; uiautomator dump /sdcard/.device-e2e-dump.xml >/dev/null 2>&1; cat /sdcard/.device-e2e-dump.xml; rm -f /sdcard/.device-e2e-dump.xml";
-        var result = await _adb.ShellAsync(command).ConfigureAwait(false);
+        var result = await _adb.RunAsync(["exec-out", "uiautomator", "dump", "/dev/tty"]).ConfigureAwait(false);
         result.EnsureSuccess("uiautomator dump failed");
-        return result.Stdout;
+        var xml = result.Stdout;
+        var xmlStart = xml.IndexOf("<?xml", StringComparison.Ordinal);
+        if (xmlStart < 0)
+        {
+            xmlStart = xml.IndexOf("<hierarchy", StringComparison.Ordinal);
+        }
+
+        var xmlEnd = xml.LastIndexOf("</hierarchy>", StringComparison.Ordinal);
+        if (xmlStart >= 0 && xmlEnd >= xmlStart)
+        {
+            xmlEnd += "</hierarchy>".Length;
+            return xml[xmlStart..xmlEnd];
+        }
+
+        return xmlStart >= 0 ? xml[xmlStart..] : xml;
     }
 
     private async Task<string> ReadUiDumpXmlAsync()

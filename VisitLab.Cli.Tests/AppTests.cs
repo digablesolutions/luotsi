@@ -218,6 +218,22 @@ public sealed class AppTests
     }
 
     [Fact]
+    public async Task GetScreenStateAsync_Uses_ExecOut_UiDump_And_Strips_Prefix_Noise()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var artifacts = ArtifactSession.Create(CliOptions.Parse(["screen-state"]), fileSystem, timeProvider);
+        var adb = new FakeAdbClient();
+        adb.EnqueueRunResult(new ProcessResult(0, "UI hierchary dumped to: /dev/tty\n<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>" + CreateUiDump("Target") + "\nUI hierchary dumped to: /dev/tty", string.Empty));
+        var runner = new DeviceRunner(adb, artifacts, timeProvider, new FakeDelay(timeProvider), fileSystem);
+
+        var state = await runner.GetScreenStateAsync();
+
+        Assert.Contains(state.Elements, element => element.Text == "Target");
+        Assert.Equal(["exec-out", "uiautomator", "dump", "/dev/tty"], adb.RunCommands[0]);
+    }
+
+    [Fact]
     public async Task WaitVisibleAsync_Preserves_Per_Attempt_Snapshots_Without_Real_Delay()
     {
         var fileSystem = new FakeFileSystem();
@@ -374,7 +390,12 @@ public sealed class AppTests
 
         Assert.Equal("Target", element.Text);
         Assert.Equal(50, tap.X);
-        Assert.Single(adb.ShellCommands, static command => command.Contains("uiautomator dump", StringComparison.Ordinal));
+        Assert.Single(adb.RunCommands, static command =>
+            command.Length == 4 &&
+            string.Equals(command[0], "exec-out", StringComparison.Ordinal) &&
+            string.Equals(command[1], "uiautomator", StringComparison.Ordinal) &&
+            string.Equals(command[2], "dump", StringComparison.Ordinal) &&
+            string.Equals(command[3], "/dev/tty", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -393,7 +414,12 @@ public sealed class AppTests
 
         Assert.Contains(first.Elements, element => element.Text == "First");
         Assert.Contains(second.Elements, element => element.Text == "Second");
-        Assert.Equal(2, adb.ShellCommands.Count(static command => command.Contains("uiautomator dump", StringComparison.Ordinal)));
+        Assert.Equal(2, adb.RunCommands.Count(static command =>
+            command.Length == 4 &&
+            string.Equals(command[0], "exec-out", StringComparison.Ordinal) &&
+            string.Equals(command[1], "uiautomator", StringComparison.Ordinal) &&
+            string.Equals(command[2], "dump", StringComparison.Ordinal) &&
+            string.Equals(command[3], "/dev/tty", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -411,7 +437,12 @@ public sealed class AppTests
         await runner.TapAsync("10", "20");
         await runner.WaitVisibleAsync("Target", 1);
 
-        Assert.Equal(2, adb.ShellCommands.Count(static command => command.Contains("uiautomator dump", StringComparison.Ordinal)));
+        Assert.Equal(2, adb.RunCommands.Count(static command =>
+            command.Length == 4 &&
+            string.Equals(command[0], "exec-out", StringComparison.Ordinal) &&
+            string.Equals(command[1], "uiautomator", StringComparison.Ordinal) &&
+            string.Equals(command[2], "dump", StringComparison.Ordinal) &&
+            string.Equals(command[3], "/dev/tty", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -1049,7 +1080,16 @@ internal sealed class FakeAdbClient : IAdbClient
     {
         var finalArgs = args.ToArray();
         RunCommands.Add(finalArgs);
-        var result = _runResults.Count > 0 ? _runResults.Dequeue() : new ProcessResult(0, string.Empty, string.Empty);
+                var result = _runResults.Count > 0
+                        ? _runResults.Dequeue()
+                        : finalArgs.Length == 4 &&
+                            string.Equals(finalArgs[0], "exec-out", StringComparison.Ordinal) &&
+                            string.Equals(finalArgs[1], "uiautomator", StringComparison.Ordinal) &&
+                            string.Equals(finalArgs[2], "dump", StringComparison.Ordinal) &&
+                            string.Equals(finalArgs[3], "/dev/tty", StringComparison.Ordinal) &&
+                            _shellResults.Count > 0
+                                ? _shellResults.Dequeue()
+                                : new ProcessResult(0, string.Empty, string.Empty);
         return Task.FromResult(new AdbCommandResult("adb", null, finalArgs, result));
     }
 
