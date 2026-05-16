@@ -1,7 +1,9 @@
 using System.Text;
 using System.Text.Json;
 using VisitLab.Cli.Cli;
+using VisitLab.Cli.Errors;
 using VisitLab.Cli.Infrastructure;
+using VisitLab.Cli.Models;
 
 namespace VisitLab.Cli.Artifacts;
 
@@ -12,10 +14,11 @@ public sealed class ArtifactSession
 {
     private readonly IFileSystem _fileSystem;
 
-    private ArtifactSession(string root, IFileSystem fileSystem)
+    private ArtifactSession(string root, IFileSystem fileSystem, UiPollArtifactPolicy uiPollArtifactPolicy)
     {
         Root = root;
         _fileSystem = fileSystem;
+        UiPollArtifactPolicy = uiPollArtifactPolicy;
         _fileSystem.CreateDirectory(root);
     }
 
@@ -23,6 +26,11 @@ public sealed class ArtifactSession
     /// Gets the artifact root path.
     /// </summary>
     public string Root { get; }
+
+    /// <summary>
+    /// Gets the artifact policy used for UI polling loops.
+    /// </summary>
+    public UiPollArtifactPolicy UiPollArtifactPolicy { get; }
 
     /// <summary>
     /// Creates an artifact session from CLI options.
@@ -37,7 +45,7 @@ public sealed class ArtifactSession
         var activeTimeProvider = timeProvider ?? TimeProvider.System;
         var baseDir = options.Get("artifacts") ?? Path.Combine(activeFileSystem.GetTempPath(), "visit-lab");
         var name = $"{activeTimeProvider.GetUtcNow():yyyyMMdd-HHmmss}-{options.Command ?? "command"}";
-        return new ArtifactSession(Path.Combine(baseDir, name), activeFileSystem);
+        return new ArtifactSession(Path.Combine(baseDir, name), activeFileSystem, ParseUiPollArtifactPolicy(options.Get("poll-artifacts")));
     }
 
     /// <summary>
@@ -58,5 +66,30 @@ public sealed class ArtifactSession
     /// Returns JSON envelope artifact data.
     /// </summary>
     /// <returns>Artifact metadata.</returns>
-    public object ToData() => new { artifact_root = Root };
+    public ArtifactData ToData() => new(Root, ToOptionValue(UiPollArtifactPolicy));
+
+    private static UiPollArtifactPolicy ParseUiPollArtifactPolicy(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return UiPollArtifactPolicy.Final;
+        }
+
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "final" => UiPollArtifactPolicy.Final,
+            "per-attempt" or "perattempt" => UiPollArtifactPolicy.PerAttempt,
+            "none" => UiPollArtifactPolicy.None,
+            _ => throw new UsageException("Option --poll-artifacts must be one of: final, per-attempt, none.")
+        };
+    }
+
+    private static string ToOptionValue(UiPollArtifactPolicy policy) =>
+        policy switch
+        {
+            UiPollArtifactPolicy.Final => "final",
+            UiPollArtifactPolicy.PerAttempt => "per-attempt",
+            UiPollArtifactPolicy.None => "none",
+            _ => throw new InvalidOperationException($"Unsupported poll artifact policy '{policy}'.")
+        };
 }

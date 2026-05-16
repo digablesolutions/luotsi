@@ -13,6 +13,11 @@ namespace VisitLab.Cli.Tests;
 
 public sealed class AppTests
 {
+    private static readonly JsonSerializerOptions TestJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+    };
+
     [Fact]
     public void Parse_Allows_Global_Options_Before_Command()
     {
@@ -106,8 +111,7 @@ public sealed class AppTests
         """);
 
         var result = await scenarios.RunAsync(scenarioPath);
-        var json = JsonSerializer.Serialize(result);
-        var envelope = JsonDocument.Parse(json).RootElement;
+        var envelope = SerializeToJsonElement(result);
 
         Assert.Equal("basic", envelope.GetProperty("scenario").GetString());
         Assert.Equal("passed", envelope.GetProperty("status").GetString());
@@ -218,7 +222,7 @@ public sealed class AppTests
         var fileSystem = new FakeFileSystem();
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var delay = new FakeDelay(timeProvider);
-        var artifacts = ArtifactSession.Create(CliOptions.Parse(["wait-visible"]), fileSystem, timeProvider);
+        var artifacts = ArtifactSession.Create(CliOptions.Parse(["wait-visible", "--poll-artifacts", "per-attempt"]), fileSystem, timeProvider);
         var adb = new FakeAdbClient();
         adb.EnqueueShellResult(new ProcessResult(0, CreateUiDump("First"), string.Empty));
         adb.EnqueueShellResult(new ProcessResult(0, CreateUiDump("Second"), string.Empty));
@@ -232,6 +236,42 @@ public sealed class AppTests
         Assert.True(fileSystem.FileExists(Path.Combine(artifacts.Root, "wait-visible-002-hierarchy.xml")));
         Assert.True(fileSystem.FileExists(Path.Combine(artifacts.Root, "wait-visible-003-hierarchy.xml")));
         Assert.Equal(2, delay.Calls.Count);
+    }
+
+    [Fact]
+    public async Task WaitVisibleAsync_Writes_Only_Final_Snapshot_By_Default()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var delay = new FakeDelay(timeProvider);
+        var artifacts = ArtifactSession.Create(CliOptions.Parse(["wait-visible"]), fileSystem, timeProvider);
+        var adb = new FakeAdbClient();
+        adb.EnqueueShellResult(new ProcessResult(0, CreateUiDump("First"), string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, CreateUiDump("Second"), string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, CreateUiDump("Target"), string.Empty));
+        var runner = new DeviceRunner(adb, artifacts, timeProvider, delay, fileSystem);
+
+        var element = await runner.WaitVisibleAsync("Target", 2);
+
+        Assert.Equal("Target", element.Text);
+        Assert.False(fileSystem.FileExists(Path.Combine(artifacts.Root, "wait-visible-001-hierarchy.xml")));
+        Assert.False(fileSystem.FileExists(Path.Combine(artifacts.Root, "wait-visible-002-hierarchy.xml")));
+        Assert.True(fileSystem.FileExists(Path.Combine(artifacts.Root, "wait-visible-003-hierarchy.xml")));
+        Assert.Equal(2, delay.Calls.Count);
+    }
+
+    [Fact]
+    public async Task RunAsync_Invalid_Poll_Artifacts_Value_Returns_Usage_Error_Envelope()
+    {
+        var console = new FakeConsole();
+        var app = new App(console: console);
+
+        var exitCode = await app.RunAsync(["devices", "--poll-artifacts", "loud"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
     }
 
     [Fact]
@@ -320,7 +360,7 @@ public sealed class AppTests
                 var runner = new DeviceRunner(adb, artifacts, timeProvider, delay, fileSystem);
 
         var result = await runner.AssertTextInputReadyAsync(requireKeyboard: false, timeoutSec: 2);
-        var json = JsonDocument.Parse(JsonSerializer.Serialize(result)).RootElement;
+        var json = SerializeToJsonElement(result);
 
         Assert.True(json.GetProperty("keyboard_visible").GetBoolean());
         Assert.Single(delay.Calls);
@@ -366,7 +406,7 @@ public sealed class AppTests
         var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["record"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem, idGenerator);
 
         var result = await runner.RecordAsync("capture.mp4", 999);
-        var json = JsonDocument.Parse(JsonSerializer.Serialize(result)).RootElement;
+        var json = SerializeToJsonElement(result);
 
         Assert.Equal("capture.mp4", json.GetProperty("output").GetString());
         Assert.Equal(180, json.GetProperty("time_limit_sec").GetInt32());
@@ -429,17 +469,14 @@ public sealed class AppTests
     }
 
     [Fact]
-    public async Task RunAsync_TelemetryWatch_Waits_And_Collects_Events()
+    public async Task RunAsync_TelemetryWatch_Streams_And_Collects_Events()
     {
         var fileSystem = new FakeFileSystem();
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var delay = new FakeDelay(timeProvider);
         var adb = new FakeAdbClient();
         var console = new FakeConsole();
-        adb.EnqueueRunResult(new ProcessResult(
-            0,
-            "05-15 12:00:03.000 I/Test: DEVICE_TEST_TELEMETRY {\"schema\":\"systam-device-test-telemetry.v1\",\"seq\":2,\"session\":\"abc\",\"timestamp\":\"2026-05-15T12:00:03Z\",\"event\":\"action_ready\",\"step\":\"STEP_IDLE\",\"action\":\"sign_in\"}" + Environment.NewLine,
-            string.Empty));
+        adb.EnqueueLogLines("05-15 12:00:03.000 I/Test: DEVICE_TEST_TELEMETRY {\"schema\":\"systam-device-test-telemetry.v1\",\"seq\":2,\"session\":\"abc\",\"timestamp\":\"2026-05-15T12:00:03Z\",\"event\":\"action_ready\",\"step\":\"STEP_IDLE\",\"action\":\"sign_in\"}");
         var app = new App(timeProvider, fileSystem, new DefaultProcessRunner(), delay, new FakeAdbClientFactory(adb), console);
 
         var exitCode = await app.RunAsync(["telemetry-watch", "--timeout-sec", "3", "--artifacts", "/tmp/test-artifacts"]);
@@ -450,10 +487,10 @@ public sealed class AppTests
         Assert.Equal(1, envelope.RootElement.GetProperty("data").GetProperty("event_count").GetInt32());
         Assert.Equal("action_ready", envelope.RootElement.GetProperty("data").GetProperty("events")[0].GetProperty("event").GetString());
         Assert.Equal("sign_in", envelope.RootElement.GetProperty("data").GetProperty("events")[0].GetProperty("action").GetString());
-        Assert.Equal([3000], delay.Calls);
-        Assert.Equal("logcat", adb.RunCommands[0][0]);
-        Assert.Contains("-T", adb.RunCommands[0]);
-        Assert.Contains("*:V", adb.RunCommands[0]);
+        Assert.Empty(delay.Calls);
+        Assert.Empty(adb.RunCommands);
+        Assert.Single(adb.StreamingLogRequests);
+        Assert.False(adb.StreamingLogRequests[0].HasStopCondition);
     }
 
     [Fact]
@@ -463,10 +500,7 @@ public sealed class AppTests
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var adb = new FakeAdbClient();
         var console = new FakeConsole();
-        adb.EnqueueRunResult(new ProcessResult(
-            0,
-            "05-15 12:00:00.000 I/Test: DEVICE_TEST_TELEMETRY {\"schema\":\"systam-device-test-telemetry.v1\",\"seq\":10,\"session\":\"abc\",\"timestamp\":\"2026-05-15T12:00:00Z\",\"event\":\"step\",\"step\":\"STEP_IDLE\"}" + Environment.NewLine,
-            string.Empty));
+        adb.EnqueueLogLines("05-15 12:00:00.000 I/Test: DEVICE_TEST_TELEMETRY {\"schema\":\"systam-device-test-telemetry.v1\",\"seq\":10,\"session\":\"abc\",\"timestamp\":\"2026-05-15T12:00:00Z\",\"event\":\"step\",\"step\":\"STEP_IDLE\"}");
         var app = new App(timeProvider, fileSystem, new DefaultProcessRunner(), new FakeDelay(timeProvider), new FakeAdbClientFactory(adb), console);
 
         var exitCode = await app.RunAsync(["wait-step", "--step", "idle", "--artifacts", "/tmp/test-artifacts"]);
@@ -479,6 +513,9 @@ public sealed class AppTests
         Assert.NotNull(artifactRoot);
         Assert.True(fileSystem.FileExists(Path.Combine(artifactRoot!, "wait-step.txt")));
         Assert.True(fileSystem.FileExists(Path.Combine(artifactRoot, "wait-step.json")));
+        Assert.Empty(adb.RunCommands);
+        Assert.Single(adb.StreamingLogRequests);
+        Assert.True(adb.StreamingLogRequests[0].HasStopCondition);
     }
 
     [Fact]
@@ -488,10 +525,7 @@ public sealed class AppTests
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var adb = new FakeAdbClient();
         var console = new FakeConsole();
-        adb.EnqueueRunResult(new ProcessResult(
-            0,
-            "05-15 12:00:00.000 I/Test: DEVICE_TEST_TELEMETRY {\"schema\":\"systam-device-test-telemetry.v1\",\"seq\":11,\"session\":\"abc\",\"timestamp\":\"2026-05-15T12:00:00Z\",\"event\":\"action_ready\",\"step\":\"STEP_IDLE\",\"action\":\"sign_in\"}" + Environment.NewLine,
-            string.Empty));
+        adb.EnqueueLogLines("05-15 12:00:00.000 I/Test: DEVICE_TEST_TELEMETRY {\"schema\":\"systam-device-test-telemetry.v1\",\"seq\":11,\"session\":\"abc\",\"timestamp\":\"2026-05-15T12:00:00Z\",\"event\":\"action_ready\",\"step\":\"STEP_IDLE\",\"action\":\"sign_in\"}");
         var app = new App(timeProvider, fileSystem, new DefaultProcessRunner(), new FakeDelay(timeProvider), new FakeAdbClientFactory(adb), console);
 
         var exitCode = await app.RunAsync(["wait-action-ready", "--action", "sign_in", "--step", "idle", "--artifacts", "/tmp/test-artifacts"]);
@@ -501,6 +535,9 @@ public sealed class AppTests
         Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
         Assert.Equal("sign_in", envelope.RootElement.GetProperty("data").GetProperty("action").GetString());
         Assert.Equal("STEP_IDLE", envelope.RootElement.GetProperty("data").GetProperty("step").GetString());
+        Assert.Empty(adb.RunCommands);
+        Assert.Single(adb.StreamingLogRequests);
+        Assert.True(adb.StreamingLogRequests[0].HasStopCondition);
     }
 
     [Fact]
@@ -516,10 +553,7 @@ public sealed class AppTests
         adb.EnqueueShellResult(new ProcessResult(0, "google/pixel/device", string.Empty));
         adb.EnqueueShellResult(new ProcessResult(0, "arm64-v8a", string.Empty));
         adb.EnqueueShellResult(new ProcessResult(0, "mCurrentFocus=App", string.Empty));
-        adb.EnqueueRunResult(new ProcessResult(
-            0,
-            "05-15 12:00:00.000 I/Test: DEVICE_TEST_TELEMETRY {\"schema\":\"systam-device-test-telemetry.v1\",\"seq\":12,\"session\":\"abc\",\"timestamp\":\"2026-05-15T12:00:00Z\",\"event\":\"step\",\"step\":\"STEP_IDLE\"}" + Environment.NewLine,
-            string.Empty));
+        adb.EnqueueLogLines("05-15 12:00:00.000 I/Test: DEVICE_TEST_TELEMETRY {\"schema\":\"systam-device-test-telemetry.v1\",\"seq\":12,\"session\":\"abc\",\"timestamp\":\"2026-05-15T12:00:00Z\",\"event\":\"step\",\"step\":\"STEP_IDLE\"}");
         var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
         var scenarios = new ScenarioExecutor(runner, fileSystem, timeProvider, new FakeDelay(timeProvider));
         var scenarioPath = "/tmp/wait-step.json";
@@ -533,7 +567,7 @@ public sealed class AppTests
         """);
 
         var result = await scenarios.RunAsync(scenarioPath);
-        var json = JsonDocument.Parse(JsonSerializer.Serialize(result)).RootElement;
+        var json = SerializeToJsonElement(result);
 
         Assert.Equal("semantic-step", json.GetProperty("scenario").GetString());
         Assert.Equal("passed", json.GetProperty("status").GetString());
@@ -622,7 +656,7 @@ public sealed class AppTests
         var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["preflight"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
 
         var result = await runner.PreflightAsync(null);
-        var json = JsonDocument.Parse(JsonSerializer.Serialize(result)).RootElement;
+        var json = SerializeToJsonElement(result);
         var artifactRoot = Path.Combine("/tmp", "visit-lab", "20260515-120000-preflight");
 
         Assert.Equal("Pixel 9", json.GetProperty("model").GetString());
@@ -720,6 +754,12 @@ public sealed class AppTests
 
     private static string CreateUiDump(string text) =>
         $"<hierarchy><node text=\"{text}\" content-desc=\"\" resource-id=\"id/{text}\" class=\"android.widget.TextView\" enabled=\"true\" clickable=\"false\" bounds=\"[0,0][100,100]\" /></hierarchy>";
+
+    private static JsonElement SerializeToJsonElement<T>(T value)
+    {
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(value, TestJsonOptions));
+        return document.RootElement.Clone();
+    }
 
     private static string CreateUiDumpWithNodes(params string[] nodes) => $"<hierarchy>{string.Join(string.Empty, nodes)}</hierarchy>";
 
@@ -839,6 +879,8 @@ internal sealed class FakeAdbClient : IAdbClient
 
     public List<(string ContainsText, DateTimeOffset Since, int TimeoutSec)> LogRequests { get; } = [];
 
+    public List<(DateTimeOffset Since, int TimeoutSec, bool HasStopCondition)> StreamingLogRequests { get; } = [];
+
     public void EnqueueShellResult(ProcessResult result) => _shellResults.Enqueue(result);
 
     public void EnqueueRunResult(ProcessResult result) => _runResults.Enqueue(result);
@@ -880,6 +922,37 @@ internal sealed class FakeAdbClient : IAdbClient
         var matchedLine = lines.FirstOrDefault(line => line.Contains(containsText, StringComparison.OrdinalIgnoreCase));
         return Task.FromResult(new AdbLogStreamResult(containsText, logOutput, matchedLine, lines.Length, timeoutSec, since, "adb logcat", 0, string.Empty));
     }
+
+    public Task<AdbLogStreamResult> MonitorLogAsync(DateTimeOffset since, int timeoutSec, Func<string, bool>? stopWhen = null, CancellationToken cancellationToken = default)
+    {
+        StreamingLogRequests.Add((since, timeoutSec, stopWhen is not null));
+        if (_logResults.Count > 0)
+        {
+            return Task.FromResult(_logResults.Dequeue());
+        }
+
+        var lines = _logLines.Count > 0 ? _logLines.Dequeue() : [];
+        var outputLines = new List<string>();
+        string? matchedLine = null;
+
+        foreach (var line in lines)
+        {
+            outputLines.Add(line);
+            if (matchedLine is null && stopWhen?.Invoke(line) is true)
+            {
+                matchedLine = line;
+                break;
+            }
+        }
+
+        var logOutput = string.Join(Environment.NewLine, outputLines);
+        if (outputLines.Count > 0)
+        {
+            logOutput += Environment.NewLine;
+        }
+
+        return Task.FromResult(new AdbLogStreamResult(string.Empty, logOutput, matchedLine, outputLines.Count, timeoutSec, since, "adb logcat", 0, string.Empty));
+    }
 }
 
 internal sealed class FakeAdbClientFactory(IAdbClient adbClient) : IAdbClientFactory
@@ -910,69 +983,69 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public List<string> TapTextRequests { get; } = [];
 
-    public Task<object> GetDevicesAsync() => Task.FromResult<object>(new { devices = Array.Empty<object>() });
+    public Task<DeviceListResult> GetDevicesAsync() => Task.FromResult(new DeviceListResult([]));
 
-    public Task<object> PreflightAsync(string? packageName) => Task.FromResult<object>(new { package = packageName });
+    public Task<PreflightResult> PreflightAsync(string? packageName) => Task.FromResult(new PreflightResult("Model", "16", "36", "focus", packageName, null, "fingerprint", "arm64-v8a", "SER"));
 
     public Task<ScreenState> GetScreenStateAsync() =>
         Task.FromResult(_screenStates.Count > 1 ? _screenStates.Dequeue() : _screenStates.Peek());
 
-    public Task<object> TapAsync(string x, string y) => Task.FromResult<object>(new { x, y });
+    public Task<TapResult> TapAsync(string x, string y) => Task.FromResult(new TapResult(int.Parse(x), int.Parse(y)));
 
-    public Task<object> TelemetryTailAsync(int tail) => Task.FromResult<object>(new { tail, event_count = 0 });
+    public Task<TelemetryResult> TelemetryTailAsync(int tail) => Task.FromResult(new TelemetryResult(0, 0, 0, 0, [], []));
 
-    public Task<object> TelemetryWatchAsync(int timeoutSec) => Task.FromResult<object>(new { timeout_sec = timeoutSec, event_count = 0 });
+    public Task<TelemetryResult> TelemetryWatchAsync(int timeoutSec) => Task.FromResult(new TelemetryResult(0, 0, 0, 0, [], []));
 
-    public Task<object> WaitNotVisibleAsync(string text, int timeoutSec) => Task.FromResult<object>(new { text, timeout_sec = timeoutSec, visible = false });
+    public Task<WaitNotVisibleResult> WaitNotVisibleAsync(string text, int timeoutSec) => Task.FromResult(new WaitNotVisibleResult(text, 1, false));
 
-    public Task<object> TapPointAsync(string? label, int? x, int? y, double? xRatio, double? yRatio, int postTapDelayMs) =>
-        Task.FromResult<object>(new { label, x, y, x_ratio = xRatio, y_ratio = yRatio, post_tap_delay_ms = postTapDelayMs });
+    public Task<TapPointResult> TapPointAsync(string? label, int? x, int? y, double? xRatio, double? yRatio, int postTapDelayMs) =>
+        Task.FromResult(new TapPointResult(label, x ?? 0, y ?? 0, xRatio, yRatio, postTapDelayMs));
 
-    public Task<object> DoubleTapHeaderLogoAsync() => Task.FromResult<object>(new { target = "header_logo" });
+    public Task<DoubleTapHeaderLogoResult> DoubleTapHeaderLogoAsync() => Task.FromResult(new DoubleTapHeaderLogoResult("header_logo", 0, 0, 160));
 
-    public Task<object> WaitForStepAsync(string step, int timeoutSec) => Task.FromResult<object>(new { step, timeout_sec = timeoutSec });
+    public Task<TelemetryMatchResult> WaitForStepAsync(string step, int timeoutSec) => Task.FromResult(new TelemetryMatchResult(step, null, string.Empty, "step", default));
 
-    public Task<object> WaitForActionReadyAsync(string action, string? step, int timeoutSec) => Task.FromResult<object>(new { action, step, timeout_sec = timeoutSec });
+    public Task<TelemetryMatchResult> WaitForActionReadyAsync(string action, string? step, int timeoutSec) => Task.FromResult(new TelemetryMatchResult(step, action, string.Empty, "action_ready", default));
 
-    public Task<object> ResetLogAsync() => Task.FromResult<object>(new { cleared = true });
+    public Task<ResetLogResult> ResetLogAsync() => Task.FromResult(new ResetLogResult(true));
 
-    public Task<object> AssertEventAsync(string name, IReadOnlyList<string> contains, string? detailsPattern, int timeoutSec) =>
-        Task.FromResult<object>(new { name, contains, details_pattern = detailsPattern, timeout_sec = timeoutSec });
+    public Task<AssertEventResult> AssertEventAsync(string name, IReadOnlyList<string> contains, string? detailsPattern, int timeoutSec) =>
+        Task.FromResult(new AssertEventResult(name, contains, detailsPattern, string.Empty));
 
-    public Task<object> TakeScreenshotAsync(string label) => Task.FromResult<object>(new { label, file = $"{label}.png" });
+    public Task<TakeScreenshotResult> TakeScreenshotAsync(string label) => Task.FromResult(new TakeScreenshotResult(label, $"{label}.png"));
 
-    public Task<object> CaptureArtifactsAsync(string label) => Task.FromResult<object>(new { label, root = "/tmp/artifacts" });
+    public Task<CaptureArtifactsResult> CaptureArtifactsAsync(string label) => Task.FromResult(new CaptureArtifactsResult(label, $"{label}.png", $"{label}.txt", $"{label}.json", $"{label}.xml"));
 
-    public Task<object> AssertTextInputReadyAsync(bool requireKeyboard, int timeoutSec) =>
-        Task.FromResult<object>(new { require_keyboard = requireKeyboard, timeout_sec = timeoutSec, keyboard_visible = true });
+    public Task<AssertTextInputReadyResult> AssertTextInputReadyAsync(bool requireKeyboard, int timeoutSec) =>
+        Task.FromResult(new AssertTextInputReadyResult(requireKeyboard, true, null, null, null));
 
-    public Task<object> AssertBelowAsync(string text, string referenceText, int maxGapPx) =>
-        Task.FromResult<object>(new { text, below = referenceText, max_gap_px = maxGapPx, gap_px = 8 });
+    public Task<AssertBelowResult> AssertBelowAsync(string text, string referenceText, int maxGapPx) =>
+        Task.FromResult(new AssertBelowResult(text, referenceText, 8, maxGapPx));
 
-    public Task<object> AssertAlignedAsync(string text, string referenceText, int maxDeltaPx) =>
-        Task.FromResult<object>(new { text, with = referenceText, max_delta_px = maxDeltaPx, delta_px = 4 });
+    public Task<AssertAlignedResult> AssertAlignedAsync(string text, string referenceText, int maxDeltaPx) =>
+        Task.FromResult(new AssertAlignedResult(text, referenceText, 4, maxDeltaPx));
 
-    public Task<object> AssertAppVersionAsync(string? packageName, int maxTopInsetPx, int maxRightInsetPx) =>
-        Task.FromResult<object>(new { package = packageName, max_top_inset_px = maxTopInsetPx, max_right_inset_px = maxRightInsetPx });
+    public Task<AssertAppVersionResult> AssertAppVersionAsync(string? packageName, int maxTopInsetPx, int maxRightInsetPx) =>
+        Task.FromResult(new AssertAppVersionResult(packageName ?? string.Empty, "v1.0.0", 0, 0, maxTopInsetPx, maxRightInsetPx));
 
-    public Task<object> RecordAsync(string output, int timeLimitSec) => Task.FromResult<object>(new { output, time_limit_sec = timeLimitSec });
+    public Task<RecordResult> RecordAsync(string output, int timeLimitSec) => Task.FromResult(new RecordResult(output, timeLimitSec));
 
     public Task<ScreenElement> WaitVisibleAsync(string text, int timeoutSec) =>
         Task.FromResult(new ScreenElement(text, null, $"id/{text}", "android.widget.TextView", true, true, 0, 0, 100, 100));
 
-    public Task<object> TapTextAsync(string text, int timeoutSec)
+    public Task<TapResult> TapTextAsync(string text, int timeoutSec)
     {
         TapTextRequests.Add(text);
-        return Task.FromResult<object>(new { text, timeout_sec = timeoutSec });
+        return Task.FromResult(new TapResult(50, 50));
     }
 
-    public Task<object> TypeTextAsync(string text) => Task.FromResult<object>(new { text });
+    public Task<TypeTextResult> TypeTextAsync(string text) => Task.FromResult(new TypeTextResult(text));
 
-    public Task<object> TypePinAsync(string pin, int perDigitDelayMs) => Task.FromResult<object>(new { pin, per_digit_delay_ms = perDigitDelayMs });
+    public Task<TypePinResult> TypePinAsync(string pin, int perDigitDelayMs) => Task.FromResult(new TypePinResult(pin.Length, perDigitDelayMs));
 
-    public Task<object> KeyEventAsync(string code) => Task.FromResult<object>(new { code });
+    public Task<KeyEventResult> KeyEventAsync(string code) => Task.FromResult(new KeyEventResult(code));
 
-    public Task<object> WaitForLogAsync(string text, int timeoutSec) => Task.FromResult<object>(new { text, timeout_sec = timeoutSec });
+    public Task<WaitLogResult> WaitForLogAsync(string text, int timeoutSec) => Task.FromResult(new WaitLogResult(text, timeoutSec, text, 1));
 
     public Task<DeviceFingerprint> WriteDeviceFingerprintAsync() =>
         Task.FromResult(new DeviceFingerprint("device-fingerprint.v1", DateTimeOffset.UtcNow, "SER", "Model", "16", "36", "fingerprint", "arm64-v8a", "focus"));
@@ -980,5 +1053,5 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
     public Task<FailureArtifactBundle> CaptureFailureArtifactsAsync(FailureCaptureRequest request, Exception exception) =>
         Task.FromResult(new FailureArtifactBundle("visit-lab-failure-bundle.v1", DateTimeOffset.UtcNow, request.Scope, request.Name, request.File, request.StepIndex, request.StepName, request.Action, exception.GetType().FullName ?? exception.GetType().Name, exception.Message, [], []));
 
-    public Task<object> LogcatAsync(int tail) => Task.FromResult<object>(new { tail });
+    public Task<LogcatResult> LogcatAsync(int tail) => Task.FromResult(new LogcatResult([]));
 }

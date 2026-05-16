@@ -245,7 +245,7 @@ public sealed record ScenarioStep(
 /// <summary>
 /// JSON command envelope.
 /// </summary>
-public sealed record CommandEnvelope(bool Ok, string? Command, DateTimeOffset StartedAt, DateTimeOffset EndedAt, object? Data, object Artifacts, ErrorInfo? Error)
+public sealed record CommandEnvelope(bool Ok, string? Command, DateTimeOffset StartedAt, DateTimeOffset EndedAt, object? Data, ArtifactData Artifacts, ErrorInfo? Error)
 {
     /// <summary>
     /// Gets the schema name.

@@ -35,7 +35,13 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
     public Task<AdbCommandResult> ShellAsync(string command, CancellationToken cancellationToken = default) =>
         RunAsync(["shell", command], cancellationToken);
 
-    public async Task<AdbLogStreamResult> MonitorLogAsync(string containsText, DateTimeOffset since, int timeoutSec, CancellationToken cancellationToken = default)
+    public Task<AdbLogStreamResult> MonitorLogAsync(string containsText, DateTimeOffset since, int timeoutSec, CancellationToken cancellationToken = default) =>
+        MonitorLogAsyncCore(containsText, since, timeoutSec, line => line.Contains(containsText, StringComparison.OrdinalIgnoreCase), cancellationToken);
+
+    public Task<AdbLogStreamResult> MonitorLogAsync(DateTimeOffset since, int timeoutSec, Func<string, bool>? stopWhen = null, CancellationToken cancellationToken = default) =>
+        MonitorLogAsyncCore(string.Empty, since, timeoutSec, stopWhen, cancellationToken);
+
+    private async Task<AdbLogStreamResult> MonitorLogAsyncCore(string containsText, DateTimeOffset since, int timeoutSec, Func<string, bool>? stopWhen, CancellationToken cancellationToken)
     {
         var finalArgs = BuildFinalArgs(["logcat", "-v", "brief", "-T", LogcatTime.FormatSince(since), "*:V"]);
         var startInfo = new ProcessStartInfo(_executable)
@@ -53,12 +59,19 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
 
         using var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Failed to start '{_executable}'.");
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        var matchSignal = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var matchSignal = stopWhen is null ? null : new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
         var stdout = process.StandardOutput;
-        var readerTask = Task.Run(() => ReadLogOutputAsync(stdout, containsText, matchSignal, cancellationToken), cancellationToken);
+        var readerTask = Task.Run(() => ReadLogOutputAsync(stdout, stopWhen, matchSignal, cancellationToken), cancellationToken);
 
         var timeoutTask = Task.Delay(TimeSpan.FromSeconds(Math.Max(1, timeoutSec)), cancellationToken);
-        await Task.WhenAny(matchSignal.Task, readerTask, timeoutTask).ConfigureAwait(false);
+        if (matchSignal is null)
+        {
+            await Task.WhenAny(readerTask, timeoutTask).ConfigureAwait(false);
+        }
+        else
+        {
+            await Task.WhenAny(matchSignal.Task, readerTask, timeoutTask).ConfigureAwait(false);
+        }
 
         if (!process.HasExited)
         {
@@ -97,8 +110,8 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
 
     private static async Task<LogReaderResult> ReadLogOutputAsync(
         StreamReader reader,
-        string containsText,
-        TaskCompletionSource<string?> matchSignal,
+        Func<string, bool>? stopWhen,
+        TaskCompletionSource<string?>? matchSignal,
         CancellationToken cancellationToken)
     {
         var logBuilder = new StringBuilder();
@@ -110,10 +123,10 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
             var line = rawLine.TrimEnd('\r');
             logBuilder.AppendLine(line);
             lineCount++;
-            if (matchedLine is null && line.Contains(containsText, StringComparison.OrdinalIgnoreCase))
+            if (matchedLine is null && stopWhen?.Invoke(line) is true)
             {
                 matchedLine = line;
-                matchSignal.TrySetResult(line);
+                matchSignal?.TrySetResult(line);
             }
         }
 

@@ -38,6 +38,7 @@ Common options:
   --adb <adb executable>
   --platform <android>
   --artifacts <directory>
+  --poll-artifacts <final|per-attempt|none>
 
 Design:
   The CLI is intentionally host-side and cross-platform. The v1

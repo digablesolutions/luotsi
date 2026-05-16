@@ -30,6 +30,7 @@ public interface IAdbClient
     Task<AdbCommandResult> RunAsync(IEnumerable<string> args, CancellationToken cancellationToken = default);
     Task<AdbCommandResult> ShellAsync(string command, CancellationToken cancellationToken = default);
     Task<AdbLogStreamResult> MonitorLogAsync(string containsText, DateTimeOffset since, int timeoutSec, CancellationToken cancellationToken = default);
+    Task<AdbLogStreamResult> MonitorLogAsync(DateTimeOffset since, int timeoutSec, Func<string, bool>? stopWhen = null, CancellationToken cancellationToken = default);
 }
 
 public interface IAdbClientFactory
@@ -46,14 +47,14 @@ public interface IDeviceHost : IScenarioActionHost
     /// Lists connected devices.
     /// </summary>
     /// <returns>Device list data.</returns>
-    Task<object> GetDevicesAsync();
+    Task<DeviceListResult> GetDevicesAsync();
 
     /// <summary>
     /// Checks whether the target device and app are ready.
     /// </summary>
     /// <param name="packageName">Optional foreground package to require.</param>
     /// <returns>Preflight data.</returns>
-    Task<object> PreflightAsync(string? packageName);
+    Task<PreflightResult> PreflightAsync(string? packageName);
 
     /// <summary>
     /// Captures the current normalized screen state.
@@ -67,28 +68,28 @@ public interface IDeviceHost : IScenarioActionHost
     /// <param name="x">X coordinate.</param>
     /// <param name="y">Y coordinate.</param>
     /// <returns>Tap metadata.</returns>
-    Task<object> TapAsync(string x, string y);
+    Task<TapResult> TapAsync(string x, string y);
 
     /// <summary>
     /// Reads logcat lines from the active device.
     /// </summary>
     /// <param name="tail">Maximum lines to return.</param>
     /// <returns>Logcat data.</returns>
-    Task<object> LogcatAsync(int tail);
+    Task<LogcatResult> LogcatAsync(int tail);
 
     /// <summary>
     /// Reads and parses recent semantic telemetry events.
     /// </summary>
     /// <param name="tail">Maximum logcat lines to inspect.</param>
     /// <returns>Telemetry data.</returns>
-    Task<object> TelemetryTailAsync(int tail);
+    Task<TelemetryResult> TelemetryTailAsync(int tail);
 
     /// <summary>
     /// Collects semantic telemetry events over a bounded watch window.
     /// </summary>
     /// <param name="timeoutSec">Duration to watch for telemetry events.</param>
     /// <returns>Telemetry data.</returns>
-    Task<object> TelemetryWatchAsync(int timeoutSec);
+    Task<TelemetryResult> TelemetryWatchAsync(int timeoutSec);
 
     /// <summary>
     /// Records the device screen to a local file.
@@ -96,7 +97,7 @@ public interface IDeviceHost : IScenarioActionHost
     /// <param name="output">Local output path.</param>
     /// <param name="timeLimitSec">Maximum recording duration.</param>
     /// <returns>Recording metadata.</returns>
-    Task<object> RecordAsync(string output, int timeLimitSec);
+    Task<RecordResult> RecordAsync(string output, int timeLimitSec);
 }
 
 /// <summary>

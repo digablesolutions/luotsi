@@ -70,23 +70,30 @@ public sealed class App
             return options.HasFlag("help") || options.HasFlag("h") ? 0 : 2;
         }
 
-        var artifacts = ArtifactSession.Create(options, _fileSystem, _timeProvider);
-        var runner = _deviceHostFactory.Create(
-            new DeviceHostConfiguration(
-                options.Get("platform") ?? "android",
-                options.Get("adb") ?? _environment.GetEnvironmentVariable("DEVICE_E2E_ADB") ?? "adb",
-                options.Get("device")),
-            artifacts);
-        var scenarios = new ScenarioExecutor(runner, _fileSystem, _timeProvider, _delay, _environment);
+        ArtifactSession? artifacts = null;
+        IDeviceHost? runner = null;
 
-        if (string.Equals(options.Command, "inspect", StringComparison.OrdinalIgnoreCase))
-        {
-            var inspectSession = new InspectSession(runner, _console, _timeProvider);
-            return await inspectSession.RunAsync().ConfigureAwait(false);
-        }
+        ArtifactData CreateArtifactData() => artifacts?.ToData() ?? new ArtifactData(
+            options.Get("artifacts") ?? string.Empty,
+            options.Get("poll-artifacts") ?? "final");
 
         try
         {
+            artifacts = ArtifactSession.Create(options, _fileSystem, _timeProvider);
+            runner = _deviceHostFactory.Create(
+                new DeviceHostConfiguration(
+                    options.Get("platform") ?? "android",
+                    options.Get("adb") ?? _environment.GetEnvironmentVariable("DEVICE_E2E_ADB") ?? "adb",
+                    options.Get("device")),
+                artifacts);
+            var scenarios = new ScenarioExecutor(runner, _fileSystem, _timeProvider, _delay, _environment);
+
+            if (string.Equals(options.Command, "inspect", StringComparison.OrdinalIgnoreCase))
+            {
+                var inspectSession = new InspectSession(runner, _console, _timeProvider);
+                return await inspectSession.RunAsync().ConfigureAwait(false);
+            }
+
             var data = options.Command switch
             {
                 "devices" => await runner.GetDevicesAsync().ConfigureAwait(false),
@@ -113,20 +120,20 @@ public sealed class App
         }
         catch (UsageException ex)
         {
-            WriteEnvelope(new CommandEnvelope(false, options.Command, started, _timeProvider.GetUtcNow(), null, artifacts.ToData(), ErrorInfo.From(ex, "usage_error")));
+            WriteEnvelope(new CommandEnvelope(false, options.Command, started, _timeProvider.GetUtcNow(), null, CreateArtifactData(), ErrorInfo.From(ex, "usage_error")));
             return 2;
         }
         catch (Exception ex)
         {
             var failure = ex as ICommandFailureDetails;
             var failureData = failure?.DataPayload;
-            if (failureData is null)
+            if (failureData is null && runner is not null)
             {
                 failureData = await runner.CaptureFailureArtifactsAsync(new FailureCaptureRequest("command", options.Command, null, null, null, options.Command), ex).ConfigureAwait(false);
             }
 
             var category = failure?.CategoryOverride ?? ErrorInfo.Classify(ex.Message);
-            WriteEnvelope(new CommandEnvelope(false, options.Command, started, _timeProvider.GetUtcNow(), failureData, artifacts.ToData(), ErrorInfo.From(ex, category)));
+            WriteEnvelope(new CommandEnvelope(false, options.Command, started, _timeProvider.GetUtcNow(), failureData, CreateArtifactData(), ErrorInfo.From(ex, category)));
             return 1;
         }
     }

@@ -10,24 +10,24 @@ namespace VisitLab.Cli.Scenarios;
 public interface IScenarioActionHost
 {
     Task<ScreenElement> WaitVisibleAsync(string text, int timeoutSec);
-    Task<object> WaitNotVisibleAsync(string text, int timeoutSec);
-    Task<object> TapTextAsync(string text, int timeoutSec);
-    Task<object> TapPointAsync(string? label, int? x, int? y, double? xRatio, double? yRatio, int postTapDelayMs);
-    Task<object> DoubleTapHeaderLogoAsync();
-    Task<object> TypeTextAsync(string text);
-    Task<object> TypePinAsync(string pin, int perDigitDelayMs);
-    Task<object> KeyEventAsync(string code);
-    Task<object> WaitForLogAsync(string text, int timeoutSec);
-    Task<object> WaitForStepAsync(string step, int timeoutSec);
-    Task<object> WaitForActionReadyAsync(string action, string? step, int timeoutSec);
-    Task<object> ResetLogAsync();
-    Task<object> AssertEventAsync(string name, IReadOnlyList<string> contains, string? detailsPattern, int timeoutSec);
-    Task<object> TakeScreenshotAsync(string label);
-    Task<object> CaptureArtifactsAsync(string label);
-    Task<object> AssertTextInputReadyAsync(bool requireKeyboard, int timeoutSec);
-    Task<object> AssertBelowAsync(string text, string referenceText, int maxGapPx);
-    Task<object> AssertAlignedAsync(string text, string referenceText, int maxDeltaPx);
-    Task<object> AssertAppVersionAsync(string? packageName, int maxTopInsetPx, int maxRightInsetPx);
+    Task<WaitNotVisibleResult> WaitNotVisibleAsync(string text, int timeoutSec);
+    Task<TapResult> TapTextAsync(string text, int timeoutSec);
+    Task<TapPointResult> TapPointAsync(string? label, int? x, int? y, double? xRatio, double? yRatio, int postTapDelayMs);
+    Task<DoubleTapHeaderLogoResult> DoubleTapHeaderLogoAsync();
+    Task<TypeTextResult> TypeTextAsync(string text);
+    Task<TypePinResult> TypePinAsync(string pin, int perDigitDelayMs);
+    Task<KeyEventResult> KeyEventAsync(string code);
+    Task<WaitLogResult> WaitForLogAsync(string text, int timeoutSec);
+    Task<TelemetryMatchResult> WaitForStepAsync(string step, int timeoutSec);
+    Task<TelemetryMatchResult> WaitForActionReadyAsync(string action, string? step, int timeoutSec);
+    Task<ResetLogResult> ResetLogAsync();
+    Task<AssertEventResult> AssertEventAsync(string name, IReadOnlyList<string> contains, string? detailsPattern, int timeoutSec);
+    Task<TakeScreenshotResult> TakeScreenshotAsync(string label);
+    Task<CaptureArtifactsResult> CaptureArtifactsAsync(string label);
+    Task<AssertTextInputReadyResult> AssertTextInputReadyAsync(bool requireKeyboard, int timeoutSec);
+    Task<AssertBelowResult> AssertBelowAsync(string text, string referenceText, int maxGapPx);
+    Task<AssertAlignedResult> AssertAlignedAsync(string text, string referenceText, int maxDeltaPx);
+    Task<AssertAppVersionResult> AssertAppVersionAsync(string? packageName, int maxTopInsetPx, int maxRightInsetPx);
     Task<DeviceFingerprint> WriteDeviceFingerprintAsync();
     Task<FailureArtifactBundle> CaptureFailureArtifactsAsync(FailureCaptureRequest request, Exception exception);
 }
@@ -441,7 +441,7 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
         return -1;
     }
 
-    private async Task<object> SleepAsync(int milliseconds)
+    private async Task<SleepResult> SleepAsync(int milliseconds)
     {
         if (milliseconds < 0)
         {
@@ -449,7 +449,7 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
         }
 
         await _delay.DelayAsync(milliseconds).ConfigureAwait(false);
-        return new { milliseconds };
+        return new SleepResult(milliseconds);
     }
 }
 
