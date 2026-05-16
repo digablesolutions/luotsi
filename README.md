@@ -71,9 +71,9 @@ If WSL cannot see `adb`, pass a path with `--adb` or expose Android platform
 tools on WSL's `PATH`.
 
 The `view` command is also a long-lived JSONL session. Alongside `view_started`,
-`view_error`, and `view_ended`, it can now emit `view_stats` events so agents
-can consume rolling decode/present FPS and latency without scraping the SDL
-window title.
+`view_error`, and `view_ended`, it can emit throttled `view_stats` events so
+agents can consume rolling decode/present FPS and latency without scraping the
+SDL window title or flooding stdout on long-lived sessions.
 
 The implementation currently supports `--platform android`. The host seam is in
 place so an iOS adapter can be added later without rewriting the command layer.

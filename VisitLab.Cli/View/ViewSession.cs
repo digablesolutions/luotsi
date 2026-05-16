@@ -114,6 +114,7 @@ public sealed class ViewSession(
 
     private const int InitialStreamAttempts = 20;
     private static readonly TimeSpan InitialStreamRetryDelay = TimeSpan.FromMilliseconds(100);
+    private static readonly TimeSpan ViewStatsEventInterval = TimeSpan.FromSeconds(1);
 
     private readonly IDeviceHost _deviceHost = deviceHost ?? throw new ArgumentNullException(nameof(deviceHost));
     private readonly ArtifactSession _artifacts = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
@@ -138,6 +139,7 @@ public sealed class ViewSession(
             await using var recorder = _viewRecorderFactory.Create(options);
             await using var viewBackend = _viewBackendFactory.Create(options);
             IViewRenderer? renderer = null;
+            SessionViewRenderer? sessionRenderer = null;
             IViewRenderer? backendRenderer = null;
             string endReason = "stream_ended";
             try
@@ -165,7 +167,7 @@ public sealed class ViewSession(
                 };
 
                 renderer = _viewRendererFactory.Create(options, _deviceHost);
-                backendRenderer = new SessionViewRenderer(renderer, stats =>
+                sessionRenderer = new SessionViewRenderer(renderer, _timeProvider, ViewStatsEventInterval, stats =>
                 {
                     WriteJsonLine(new
                     {
@@ -177,6 +179,7 @@ public sealed class ViewSession(
 
                     return Task.CompletedTask;
                 });
+                backendRenderer = sessionRenderer;
                 await viewBackend.InitializeAsync(negotiatedConnection, backendRenderer, recorder, sessionCancellation.Token).ConfigureAwait(false);
 
                 WriteJsonLine(new
@@ -225,6 +228,11 @@ public sealed class ViewSession(
                 else
                 {
                     await viewTask.ConfigureAwait(false);
+                }
+
+                if (sessionRenderer is not null)
+                {
+                    await sessionRenderer.FlushPendingStatsAsync().ConfigureAwait(false);
                 }
 
                 WriteJsonLine(new
@@ -320,10 +328,22 @@ internal sealed class NullViewRecorderFactory : IViewRecorderFactory
     public IViewRecorder? Create(ViewOptions options) => null;
 }
 
-internal sealed class SessionViewRenderer(IViewRenderer? innerRenderer, Func<ViewStats, Task> onStatsAsync) : IViewRenderer
+internal sealed class SessionViewRenderer(
+    IViewRenderer? innerRenderer,
+    TimeProvider timeProvider,
+    TimeSpan statsEventInterval,
+    Func<ViewStats, Task> onStatsAsync) : IViewRenderer
 {
     private readonly IViewRenderer? _innerRenderer = innerRenderer;
+    private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+    private readonly TimeSpan _statsEventInterval = statsEventInterval > TimeSpan.Zero
+        ? statsEventInterval
+        : throw new ArgumentOutOfRangeException(nameof(statsEventInterval));
     private readonly Func<ViewStats, Task> _onStatsAsync = onStatsAsync ?? throw new ArgumentNullException(nameof(onStatsAsync));
+    private readonly object _statsGate = new();
+
+    private ViewStats? _pendingStats;
+    private DateTimeOffset? _lastStatsEmittedAt;
 
     public Task InitializeAsync(ViewDisplayInfo displayInfo, CancellationToken cancellationToken = default) =>
         _innerRenderer?.InitializeAsync(displayInfo, cancellationToken) ?? Task.CompletedTask;
@@ -340,7 +360,41 @@ internal sealed class SessionViewRenderer(IViewRenderer? innerRenderer, Func<Vie
             await _innerRenderer.UpdateStatsAsync(stats, cancellationToken).ConfigureAwait(false);
         }
 
-        await _onStatsAsync(stats).ConfigureAwait(false);
+        ViewStats? statsToEmit = null;
+        var now = _timeProvider.GetUtcNow();
+        lock (_statsGate)
+        {
+            _pendingStats = stats;
+            if (_lastStatsEmittedAt is null || now - _lastStatsEmittedAt.Value >= _statsEventInterval)
+            {
+                statsToEmit = _pendingStats;
+                _pendingStats = null;
+                _lastStatsEmittedAt = now;
+            }
+        }
+
+        if (statsToEmit is not null)
+        {
+            await _onStatsAsync(statsToEmit).ConfigureAwait(false);
+        }
+    }
+
+    public Task FlushPendingStatsAsync()
+    {
+        ViewStats? statsToEmit;
+        lock (_statsGate)
+        {
+            statsToEmit = _pendingStats;
+            if (statsToEmit is null)
+            {
+                return Task.CompletedTask;
+            }
+
+            _pendingStats = null;
+            _lastStatsEmittedAt = _timeProvider.GetUtcNow();
+        }
+
+        return _onStatsAsync(statsToEmit);
     }
 
     public Task WaitForCloseAsync(CancellationToken cancellationToken = default) =>

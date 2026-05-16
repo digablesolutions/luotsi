@@ -1086,6 +1086,49 @@ public sealed class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_View_Throttles_ViewStats_Jsonl_Events_And_Flushes_The_Latest_Snapshot_On_End()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var session = new ViewSession(
+            host,
+            ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
+            console,
+            timeProvider,
+            new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward")),
+            new FakeViewBackendFactory(new ThrottledStatsViewBackend(timeProvider)),
+            new FakeViewStreamConnector(
+                new ViewPacketStreamHarness()
+                    .WriteHeader("h264", 1080, 1920)
+                    .WritePacket(ViewPacketType.StreamEnd, 1, 0, false, [])
+                    .Build()),
+            new ViewPacketStreamReader());
+
+        var exitCode = await session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", true, null, 1600, 60, "8M", false, false));
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(4, console.OutputLines.Count);
+
+        using var started = JsonDocument.Parse(console.OutputLines[0]);
+        Assert.Equal("view_started", started.RootElement.GetProperty("type").GetString());
+
+        using var firstStats = JsonDocument.Parse(console.OutputLines[1]);
+        Assert.Equal("view_stats", firstStats.RootElement.GetProperty("type").GetString());
+        Assert.Equal(10, firstStats.RootElement.GetProperty("stats").GetProperty("decoded_frames").GetInt32());
+
+        using var finalStats = JsonDocument.Parse(console.OutputLines[2]);
+        Assert.Equal("view_stats", finalStats.RootElement.GetProperty("type").GetString());
+        Assert.Equal(12, finalStats.RootElement.GetProperty("stats").GetProperty("decoded_frames").GetInt32());
+        Assert.Equal(11, finalStats.RootElement.GetProperty("stats").GetProperty("presented_frames").GetInt32());
+
+        using var ended = JsonDocument.Parse(console.OutputLines[3]);
+        Assert.Equal("view_ended", ended.RootElement.GetProperty("type").GetString());
+        Assert.Equal("stream_ended", ended.RootElement.GetProperty("reason").GetString());
+    }
+
+    [Fact]
     public async Task RunAsync_View_Uses_Backend_Selected_By_Decoder()
     {
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
@@ -1857,6 +1900,42 @@ internal sealed class StatsEmittingViewBackend : IViewBackend
         if (_renderer is not null)
         {
             await _renderer.UpdateStatsAsync(new ViewStats(12, 11, 1, 59.9d, 58.7d, 84), cancellationToken).ConfigureAwait(false);
+        }
+
+        await foreach (var packet in packets.WithCancellation(cancellationToken))
+        {
+            if (packet.PacketType == ViewPacketType.StreamEnd)
+            {
+                return;
+            }
+        }
+    }
+
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+internal sealed class ThrottledStatsViewBackend(ManualTimeProvider timeProvider) : IViewBackend
+{
+    private readonly ManualTimeProvider _timeProvider = timeProvider;
+    private IViewRenderer? _renderer;
+
+    public string Name => "stats-throttled";
+
+    public Task InitializeAsync(ViewConnectionInfo connectionInfo, IViewRenderer? renderer, IViewRecorder? recorder, CancellationToken cancellationToken = default)
+    {
+        _renderer = renderer;
+        return Task.CompletedTask;
+    }
+
+    public async Task RunAsync(IAsyncEnumerable<ViewPacket> packets, CancellationToken cancellationToken = default)
+    {
+        if (_renderer is not null)
+        {
+            await _renderer.UpdateStatsAsync(new ViewStats(10, 9, 1, 59.9d, 58.7d, 84), cancellationToken).ConfigureAwait(false);
+            _timeProvider.Advance(TimeSpan.FromMilliseconds(100));
+            await _renderer.UpdateStatsAsync(new ViewStats(11, 10, 1, 59.6d, 58.3d, 86), cancellationToken).ConfigureAwait(false);
+            _timeProvider.Advance(TimeSpan.FromMilliseconds(100));
+            await _renderer.UpdateStatsAsync(new ViewStats(12, 11, 1, 59.3d, 58.0d, 88), cancellationToken).ConfigureAwait(false);
         }
 
         await foreach (var packet in packets.WithCancellation(cancellationToken))
