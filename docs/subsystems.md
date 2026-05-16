@@ -11,10 +11,10 @@ that matches the code currently in the repo.
 
 Relevant code:
 
-- `VisitLab.Cli/Cli/App.cs`
-- `VisitLab.Cli/Cli/CliOptions.cs`
-- `VisitLab.Cli/Cli/InspectSession.cs`
-- `VisitLab.Cli/View/ViewSession.cs`
+- `Luotsi.Cli/Cli/App.cs`
+- `Luotsi.Cli/Cli/CliOptions.cs`
+- `Luotsi.Cli/Cli/InspectSession.cs`
+- `Luotsi.Cli/View/ViewSession.cs`
 
 ## Host automation subsystem
 
@@ -25,9 +25,9 @@ Relevant code:
 
 Relevant code:
 
-- `VisitLab.Cli/Infrastructure/`
-- `VisitLab.Cli/Hosts/Android/DeviceRunner.cs`
-- `VisitLab.Cli/Hosts/Android/AdbClient.cs`
+- `Luotsi.Cli/Infrastructure/`
+- `Luotsi.Cli/Hosts/Android/DeviceRunner.cs`
+- `Luotsi.Cli/Hosts/Android/AdbClient.cs`
 
 ## Scenario subsystem
 
@@ -38,19 +38,19 @@ Relevant code:
 
 Relevant code:
 
-- `VisitLab.Cli/Scenarios/ScenarioExecutor.cs`
-- `VisitLab.Cli/Scenarios/ScenarioStepFailureException.cs`
+- `Luotsi.Cli/Scenarios/ScenarioExecutor.cs`
+- `Luotsi.Cli/Scenarios/ScenarioStepFailureException.cs`
 
 ## Telemetry subsystem
 
-- The CLI understands `DEVICE_TEST_TELEMETRY` logcat lines.
+- The CLI understands `LUOTSI_DEVICE_TELEMETRY` logcat lines.
 - Telemetry is reused both by dedicated commands and by semantic waits in
   scenarios.
 
 Relevant code:
 
-- `VisitLab.Cli/Telemetry/DeviceTestTelemetryParser.cs`
-- `VisitLab.Cli/Telemetry/Telemetry.cs`
+- `Luotsi.Cli/Telemetry/LuotsiDeviceTelemetryParser.cs`
+- `Luotsi.Cli/Telemetry/Telemetry.cs`
 
 ## Artifact subsystem
 
@@ -60,8 +60,8 @@ Relevant code:
 
 Relevant code:
 
-- `VisitLab.Cli/Artifacts/ArtifactSession.cs`
-- `VisitLab.Cli/Artifacts/UiPollArtifactPolicy.cs`
+- `Luotsi.Cli/Artifacts/ArtifactSession.cs`
+- `Luotsi.Cli/Artifacts/UiPollArtifactPolicy.cs`
 
 ## View subsystem
 
@@ -76,10 +76,10 @@ The built-in mirror is now a real subsystem, not just a design sketch.
 
 Relevant code:
 
-- `VisitLab.Cli/Hosts/Android/View/AndroidViewBootstrap.cs`
-- `VisitLab.Cli/Hosts/Android/View/AndroidViewServerInstaller.cs`
-- `VisitLab.Cli/Hosts/Android/View/AndroidViewStreamClient.cs`
-- `VisitLab.Cli/View/ViewSession.cs`
+- `Luotsi.Cli/Hosts/Android/View/AndroidViewBootstrap.cs`
+- `Luotsi.Cli/Hosts/Android/View/AndroidViewServerInstaller.cs`
+- `Luotsi.Cli/Hosts/Android/View/AndroidViewStreamClient.cs`
+- `Luotsi.Cli/View/ViewSession.cs`
 
 ### Decode and presentation
 
@@ -90,9 +90,9 @@ Relevant code:
 
 Relevant code:
 
-- `VisitLab.Cli/View/Backends/Ffmpeg/LibavViewBackend.cs`
-- `VisitLab.Cli/View/NativeWindowViewRenderer.cs`
-- `VisitLab.Cli/View/Sdl3ViewWindowSurface.cs`
+- `Luotsi.Cli/View/Backends/Ffmpeg/LibavViewBackend.cs`
+- `Luotsi.Cli/View/NativeWindowViewRenderer.cs`
+- `Luotsi.Cli/View/Sdl3ViewWindowSurface.cs`
 
 ### Input path
 

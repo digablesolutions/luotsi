@@ -6,8 +6,8 @@
     "visitorLastName": "Systam${now:HHmmss}",
     "visitorFullName": "${var:visitorFirstName} ${var:visitorLastName}",
     "visitorSearchText": "${var:visitorFullName}",
-    "hostSearchText": "${env:DEVICE_TEST_HOST_SEARCH|per}",
-    "hostName": "${env:DEVICE_TEST_HOST_NAME|Perttu Sliden}"
+    "hostSearchText": "${env:LUOTSI_HOST_SEARCH|per}",
+    "hostName": "${env:LUOTSI_HOST_NAME|Perttu Sliden}"
   },
   "steps": [
     { "name": "idle sign in visible", "action": "waitVisible", "text": "Sign in", "timeoutSec": 15 },

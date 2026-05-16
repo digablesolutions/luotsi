@@ -1,0 +1,15 @@
+{
+  "name": "idle-visitor-home-smoke-language-roundtrip",
+  "steps": [
+    { "name": "english selector visible", "action": "waitVisible", "text": "English", "timeoutSec": 10 },
+    { "name": "sign in visible", "action": "waitVisible", "text": "Sign in", "timeoutSec": 10 },
+    { "name": "open language selector", "action": "tapText", "text": "English", "timeoutSec": 10 },
+    { "name": "switch to finnish", "action": "tapText", "text": "Suomi", "timeoutSec": 10 },
+    { "name": "finnish sign in visible", "action": "waitVisible", "text": "Kirjaudu sisään", "timeoutSec": 15 },
+    { "name": "finnish welcome visible", "action": "waitVisible", "text": "Tervetuloa", "timeoutSec": 15 },
+    { "name": "reopen language selector", "action": "tapText", "text": "Suomi", "timeoutSec": 10 },
+    { "name": "switch back to english", "action": "tapText", "text": "English", "timeoutSec": 10 },
+    { "name": "english sign in restored", "action": "waitVisible", "text": "Sign in", "timeoutSec": 15 },
+    { "name": "capture language artifacts", "action": "captureArtifacts", "label": "idle-visitor-home-smoke-language-roundtrip" }
+  ]
+}

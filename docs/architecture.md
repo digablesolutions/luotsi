@@ -1,6 +1,6 @@
 # Architecture Overview
 
-VisitLab is a .NET CLI for driving a real Android device through `adb`,
+Luotsi is a .NET CLI for driving a real Android device through `adb`,
 capturing artifacts by default, and optionally opening a live mirrored view of
 the device through the built-in `view` session.
 
@@ -14,7 +14,7 @@ The current architecture is split across three long-lived concerns:
 
 ```mermaid
 flowchart LR
-    User[Operator or Agent] --> CLI[VisitLab.Cli]
+  User[Operator or Agent] --> CLI[Luotsi]
     CLI --> App[App / CliOptions / Help]
     App --> Commands[One-shot commands]
     App --> Inspect[InspectSession JSONL]
@@ -42,26 +42,26 @@ flowchart LR
 
 ### Command layer
 
-`VisitLab.Cli/Cli/` owns argument parsing, command dispatch, help text, JSON
+`Luotsi.Cli/Cli/` owns argument parsing, command dispatch, help text, JSON
 envelope formatting for one-shot commands, and JSONL formatting for long-lived
 sessions.
 
 ### Device host layer
 
-`VisitLab.Cli/Infrastructure/` and `VisitLab.Cli/Hosts/Android/` own host-side
+`Luotsi.Cli/Infrastructure/` and `Luotsi.Cli/Hosts/Android/` own host-side
 device semantics. The CLI keeps using typed host actions such as tap, text
 entry, log reads, screen-state capture, and telemetry collection rather than
 inventing a second device-control path.
 
 ### Scenario and telemetry layers
 
-`VisitLab.Cli/Scenarios/` executes scenario JSON files through the same host
-abstractions. `VisitLab.Cli/Telemetry/` parses semantic telemetry from logcat so
+`Luotsi.Cli/Scenarios/` executes scenario JSON files through the same host
+abstractions. `Luotsi.Cli/Telemetry/` parses semantic telemetry from logcat so
 runtime commands and scenarios share the same higher-value oracle path.
 
 ### View layer
 
-`VisitLab.Cli/View/` owns the built-in live mirror. The host bootstraps an
+`Luotsi.Cli/View/` owns the built-in live mirror. The host bootstraps an
 Android helper over `adb`, reads the private packet stream from a localhost
 tunnel, decodes H.264 through native libav, and presents decoded BGRA frames
 through SDL3.
@@ -115,10 +115,10 @@ sequenceDiagram
 
 ## Source map
 
-- `VisitLab.Cli/Cli/`
-- `VisitLab.Cli/Hosts/Android/`
-- `VisitLab.Cli/Hosts/Android/View/`
-- `VisitLab.Cli/Scenarios/`
-- `VisitLab.Cli/Telemetry/`
-- `VisitLab.Cli/View/`
-- `VisitLab.Cli/Artifacts/`
+- `Luotsi.Cli/Cli/`
+- `Luotsi.Cli/Hosts/Android/`
+- `Luotsi.Cli/Hosts/Android/View/`
+- `Luotsi.Cli/Scenarios/`
+- `Luotsi.Cli/Telemetry/`
+- `Luotsi.Cli/View/`
+- `Luotsi.Cli/Artifacts/`

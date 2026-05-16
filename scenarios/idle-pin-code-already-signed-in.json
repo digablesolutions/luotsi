@@ -1,7 +1,7 @@
 {
   "name": "idle-pin-code-already-signed-in",
   "variables": {
-    "pinCode": "${env:DEVICE_TEST_PIN_CODE}"
+    "pinCode": "${env:LUOTSI_PIN_CODE}"
   },
   "steps": [
     { "name": "idle sign in visible", "action": "waitVisible", "text": "Sign in", "timeoutSec": 15 },

@@ -1,9 +1,9 @@
 {
   "name": "idle-pin-code-sign-in-happy-path",
   "variables": {
-    "pinCode": "${env:DEVICE_TEST_PIN_CODE|68057}",
-    "visitorFullName": "${env:DEVICE_TEST_PIN_VISITOR_NAME|Ggg ggg}",
-    "visitorSearchText": "${env:DEVICE_TEST_PIN_VISITOR_SEARCH|${var:visitorFullName}}"
+    "pinCode": "${env:LUOTSI_PIN_CODE|68057}",
+    "visitorFullName": "${env:LUOTSI_PIN_VISITOR_NAME|Ggg ggg}",
+    "visitorSearchText": "${env:LUOTSI_PIN_VISITOR_SEARCH|${var:visitorFullName}}"
   },
   "steps": [
     { "name": "idle sign in visible", "action": "waitVisible", "text": "Sign in", "timeoutSec": 15 },

@@ -1,6 +1,7 @@
-# VisitLab
+# Luotsi
 
-Local-only experiment for a cross-platform on-device end-to-end harness.
+Luotsi is a host-side .NET CLI for cross-platform on-device end-to-end
+automation.
 
 The current kiosk harness proved the useful shape:
 
@@ -10,29 +11,29 @@ The current kiosk harness proved the useful shape:
 - scenarios as small readable playbooks
 - app-side semantic telemetry as the high-value oracle when available
 
-This repo explores whether the next version should be a typed .NET CLI rather
-than PowerShell. It is intentionally separate from the kiosk repo while the
-shape is still experimental.
+This repo packages the next version as a typed .NET CLI rather than
+PowerShell. It stays separate from the kiosk repo while the host-side harness
+is generalized beyond the original kiosk-specific runner.
 
 ## Why look at this approach?
 
 This approach has a useful architecture lesson even if we do not copy its protocol:
 
 
-V1 of this lab does **not** vendor any specific tool or implement its server protocol. It
+Luotsi v1 does **not** vendor any specific tool or implement its server protocol. It
 keeps boring ADB primitives first, with room to add an optional binary
 adapter later for low-latency mirroring, recording, or HID/OTG control.
 
 ## Code layout
 
-- `VisitLab.Cli/Cli/` contains the entrypoint, command dispatch, help text, and inspect-mode session loop.
-- `VisitLab.Cli/Hosts/Android/` contains the Android transport and device interaction runtime.
-- `VisitLab.Cli/Artifacts/` contains artifact session management.
-- `VisitLab.Cli/Models/` contains shared records, envelopes, and screen/scenario data models.
-- `VisitLab.Cli/Scenarios/` contains scenario execution flow and scenario-specific failure plumbing.
-- `VisitLab.Cli/Telemetry/` contains telemetry parsing contracts and the kiosk telemetry parser.
-- `VisitLab.Cli/Errors/` contains typed command and wait exceptions.
-- `VisitLab.Cli/Infrastructure/` contains interfaces plus the default system-backed implementations used by the CLI.
+- `Luotsi.Cli/Cli/` contains the entrypoint, command dispatch, help text, and inspect-mode session loop.
+- `Luotsi.Cli/Hosts/Android/` contains the Android transport and device interaction runtime.
+- `Luotsi.Cli/Artifacts/` contains artifact session management.
+- `Luotsi.Cli/Models/` contains shared records, envelopes, and screen/scenario data models.
+- `Luotsi.Cli/Scenarios/` contains scenario execution flow and scenario-specific failure plumbing.
+- `Luotsi.Cli/Telemetry/` contains telemetry parsing contracts and the kiosk telemetry parser.
+- `Luotsi.Cli/Errors/` contains typed command and wait exceptions.
+- `Luotsi.Cli/Infrastructure/` contains interfaces plus the default system-backed implementations used by the CLI.
 
 ## Current commands
 
@@ -40,22 +41,22 @@ Run from WSL or PowerShell:
 
 ```bash
 cd <repo-root>
-dotnet run --project VisitLab.Cli -- devices
-dotnet run --project VisitLab.Cli -- preflight --device <serial> --package fi.systam.visit
-dotnet run --project VisitLab.Cli -- screen-state --device <serial>
-dotnet run --project VisitLab.Cli -- view --device <serial> --decoder ffmpeg --record capture.mp4 --stats-interval-ms 1000
-dotnet run --project VisitLab.Cli -- telemetry-tail --device <serial> --tail 200
-dotnet run --project VisitLab.Cli -- telemetry-watch --device <serial> --timeout-sec 10
-dotnet run --project VisitLab.Cli -- tap-text --device <serial> --text "Sign in"
-dotnet run --project VisitLab.Cli -- wait-log --device <serial> --contains "DEVICE_READY" --timeout-sec 20
-dotnet run --project VisitLab.Cli -- run --device <serial> --file scenarios/idle-language-switch-finnish.json
+dotnet run --project Luotsi.Cli -- devices
+dotnet run --project Luotsi.Cli -- preflight --device <serial> --package dev.luotsi.app
+dotnet run --project Luotsi.Cli -- screen-state --device <serial>
+dotnet run --project Luotsi.Cli -- view --device <serial> --decoder ffmpeg --record capture.mp4 --stats-interval-ms 1000
+dotnet run --project Luotsi.Cli -- telemetry-tail --device <serial> --tail 200
+dotnet run --project Luotsi.Cli -- telemetry-watch --device <serial> --timeout-sec 10
+dotnet run --project Luotsi.Cli -- tap-text --device <serial> --text "Sign in"
+dotnet run --project Luotsi.Cli -- wait-log --device <serial> --contains "DEVICE_READY" --timeout-sec 20
+dotnet run --project Luotsi.Cli -- run --device <serial> --file scenarios/idle-language-switch-finnish.json
 ```
 
 Inspect mode is intentionally different: it is a long-lived JSONL session over
 stdin/stdout rather than a single JSON envelope. Example:
 
 ```powershell
-dotnet run --project VisitLab.Cli -- inspect --device 192.168.0.134:5555
+dotnet run --project Luotsi.Cli -- inspect --device 192.168.0.134:5555
 ```
 
 Then send one JSON command per line:
@@ -87,12 +88,12 @@ Every command prints a single JSON envelope:
 
 ```json
 {
-  "schema": "visit-lab-command.v1",
+  "schema": "luotsi-command.v1",
   "ok": true,
   "command": "screen-state",
   "data": {},
   "artifacts": {
-    "artifact_root": "/tmp/visit-lab/..."
+    "artifact_root": "/tmp/luotsi/..."
   },
   "error": null
 }
@@ -183,9 +184,16 @@ Supported actions:
 observation window should begin at the previous step's start time instead of the
 assert step's own start time.
 
+Current physical visitor-home smoke runs can stay on pure UI state until the app
+starts emitting `LUOTSI_DEVICE_TELEMETRY`:
+
+- `scenarios/idle-visitor-home-smoke-basics.json`
+- `scenarios/idle-visitor-home-smoke-language-roundtrip.json`
+- `scenarios/idle-header-logo-sync-settings.json`
+
 ## Telemetry support
 
-The CLI now understands the kiosk `DEVICE_TEST_TELEMETRY` logcat prefix.
+Luotsi currently understands the kiosk `LUOTSI_DEVICE_TELEMETRY` logcat marker.
 
 - `telemetry-tail` reads recent logcat lines, parses matching telemetry JSON,
   and returns both parsed events and malformed telemetry lines.
@@ -215,16 +223,16 @@ The CLI can now be published as a self-contained single-file executable for the
 first supported host targets:
 
 ```powershell
-dotnet publish VisitLab.Cli -c Release -r win-x64
-dotnet publish VisitLab.Cli -c Release -r linux-x64
-dotnet publish VisitLab.Cli -c Release -r osx-arm64
-dotnet publish VisitLab.Cli -c Release -r osx-x64
+dotnet publish Luotsi.Cli -c Release -r win-x64
+dotnet publish Luotsi.Cli -c Release -r linux-x64
+dotnet publish Luotsi.Cli -c Release -r osx-arm64
+dotnet publish Luotsi.Cli -c Release -r osx-x64
 ```
 
 Publish outputs land under:
 
 ```text
-VisitLab.Cli/bin/Release/net10.0/<rid>/publish/
+Luotsi.Cli/bin/Release/net10.0/<rid>/publish/
 ```
 
 The published app is self-contained and single-file by default. If you want a
@@ -244,6 +252,6 @@ at publish time.
 - Current macOS publishes already include the SDL3 native runtime, but FFmpeg
   shared libraries still need to be staged separately for live `view` runs.
 - Build typed semantic waits such as `wait-step` and `wait-action-ready` on top
-  of the raw `DEVICE_TEST_TELEMETRY` parser.
+  of the raw `LUOTSI_DEVICE_TELEMETRY` parser.
 - Expand inspect mode with optional event subscriptions and continuous polling.
 - Add an iOS host adapter if the new host interface holds up outside Android.

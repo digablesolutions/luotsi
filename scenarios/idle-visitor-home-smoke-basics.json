@@ -1,0 +1,10 @@
+{
+  "name": "idle-visitor-home-smoke-basics",
+  "steps": [
+    { "name": "english selector visible", "action": "waitVisible", "text": "English", "timeoutSec": 10 },
+    { "name": "sign in visible", "action": "waitVisible", "text": "Sign in", "timeoutSec": 10 },
+    { "name": "sign out visible", "action": "waitVisible", "text": "Sign out", "timeoutSec": 10 },
+    { "name": "capture idle screenshot", "action": "takeScreenshot", "label": "idle-visitor-home-smoke-basics" },
+    { "name": "capture idle artifacts", "action": "captureArtifacts", "label": "idle-visitor-home-smoke-basics" }
+  ]
+}
