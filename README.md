@@ -87,6 +87,23 @@ Every command prints a single JSON envelope:
 }
 ```
 
+Scenario `run` commands return the scenario result inside `data`. That payload now
+includes top-level timing for non-step overhead:
+
+```json
+{
+  "scenario": "idle-visitor-sign-in-happy-path",
+  "status": "passed",
+  "timing": {
+    "total_ms": 86361.4686,
+    "prologue_ms": 655.9714,
+    "steps_ms": 85701.7421,
+    "non_step_ms": 659.7265
+  },
+  "steps": []
+}
+```
+
 Runtime commands now also write richer artifacts when they interact with a device:
 
 - `device-fingerprint.json` for `preflight` and scenario runs
@@ -123,6 +140,10 @@ Scenario strings also support lightweight templating:
 - `${var:name}` for scenario variables from the root `variables` block
 - `${now:HHmmss}` for timestamp fragments used in live test data
 
+Scenario step results also include per-step timing. For actions that include
+harness-authored waits such as `tapPoint`, the step timing reports
+`harness_delay_ms` and `configured_delay_ms` alongside total duration.
+
 Supported actions:
 
 - `waitVisible`
@@ -146,6 +167,10 @@ Supported actions:
 - `takeScreenshot`
 - `captureArtifacts`
 - `sleep`
+
+`assertEvent` also supports `observeFromPreviousStep: true` when the log
+observation window should begin at the previous step's start time instead of the
+assert step's own start time.
 
 ## Telemetry support
 
@@ -182,6 +207,7 @@ first supported host targets:
 dotnet publish VisitLab.Cli -c Release -r win-x64
 dotnet publish VisitLab.Cli -c Release -r linux-x64
 dotnet publish VisitLab.Cli -c Release -r osx-arm64
+dotnet publish VisitLab.Cli -c Release -r osx-x64
 ```
 
 Publish outputs land under:
@@ -196,6 +222,13 @@ at publish time.
 
 ## Next experiment lanes
 
+- See `docs/architecture.md` for the current high-level CLI and view runtime
+  architecture, and `docs/subsystems.md` for the active subsystem map.
+- For the native `view --decoder ffmpeg` runtime, populate `ffmpeg/bin` with
+  host-native shared libraries via `ffmpeg/download-ffmpeg.ps1` or set
+  `DEVICE_E2E_FFMPEG_ROOT`.
+- Current macOS publishes already include the SDL3 native runtime, but FFmpeg
+  shared libraries still need to be staged separately for live `view` runs.
 - Build typed semantic waits such as `wait-step` and `wait-action-ready` on top
   of the raw `DEVICE_TEST_TELEMETRY` parser.
 - Expand inspect mode with optional event subscriptions and continuous polling.

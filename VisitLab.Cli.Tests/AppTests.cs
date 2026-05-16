@@ -8,6 +8,7 @@ using VisitLab.Cli.Infrastructure;
 using VisitLab.Cli.Models;
 using VisitLab.Cli.Scenarios;
 using VisitLab.Cli.Telemetry;
+using VisitLab.Cli.View;
 using Xunit;
 
 namespace VisitLab.Cli.Tests;
@@ -25,6 +26,15 @@ public sealed class AppTests
         var options = CliOptions.Parse(["--device", "abc", "devices"]);
 
         Assert.Equal("devices", options.Command);
+        Assert.Equal("abc", options.Get("device"));
+    }
+
+    [Fact]
+    public void Parse_Allows_Global_Options_Before_View_Command()
+    {
+        var options = CliOptions.Parse(["--device", "abc", "view"]);
+
+        Assert.Equal("view", options.Command);
         Assert.Equal("abc", options.Get("device"));
     }
 
@@ -231,6 +241,57 @@ public sealed class AppTests
                 var error = await Assert.ThrowsAsync<UsageException>(() => scenarios.RunAsync(scenarioPath));
 
                 Assert.Contains("milliseconds must be zero or greater", error.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task RunScenarioAsync_Missing_Action_Text_Fails_Before_Device_Work()
+        {
+                var fileSystem = new FakeFileSystem();
+                var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+                var adb = new FakeAdbClient();
+                var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
+                var scenarios = new ScenarioExecutor(runner, fileSystem, timeProvider, new FakeDelay(timeProvider));
+                var scenarioPath = "/tmp/missing-wait-visible-text.json";
+                fileSystem.AddFile(scenarioPath, """
+                {
+                    "name": "broken-missing-text",
+                    "steps": [
+                        { "name": "pause", "action": "sleep", "milliseconds": 10 },
+                        { "name": "wait for sign in", "action": "waitVisible", "timeoutSec": 15 }
+                    ]
+                }
+                """);
+
+                var error = await Assert.ThrowsAsync<UsageException>(() => scenarios.RunAsync(scenarioPath));
+
+                Assert.Contains("waitVisible requires text", error.Message, StringComparison.Ordinal);
+                Assert.Empty(adb.ShellCommands);
+                Assert.Empty(adb.RunCommands);
+        }
+
+        [Fact]
+        public async Task RunScenarioAsync_Invalid_AssertEvent_Regex_Fails_Before_Device_Work()
+        {
+                var fileSystem = new FakeFileSystem();
+                var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+                var adb = new FakeAdbClient();
+                var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
+                var scenarios = new ScenarioExecutor(runner, fileSystem, timeProvider, new FakeDelay(timeProvider));
+                var scenarioPath = "/tmp/invalid-assert-event-regex.json";
+                fileSystem.AddFile(scenarioPath, """
+                {
+                    "name": "broken-regex",
+                    "steps": [
+                        { "name": "printing succeeded", "action": "assertEvent", "event": "PRINTING_SUCCESSFUL", "detailsPattern": "[", "timeoutSec": 15 }
+                    ]
+                }
+                """);
+
+                var error = await Assert.ThrowsAsync<UsageException>(() => scenarios.RunAsync(scenarioPath));
+
+                Assert.Contains("assertEvent detailsPattern is not a valid regular expression", error.Message, StringComparison.Ordinal);
+                Assert.Empty(adb.ShellCommands);
+                Assert.Empty(adb.RunCommands);
         }
 
     [Fact]
@@ -888,6 +949,211 @@ public sealed class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_View_Without_Device_Returns_Usage_Error_Envelope()
+    {
+        var console = new FakeConsole();
+        var app = new App(console: console);
+
+        var exitCode = await app.RunAsync(["view"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("view", envelope.RootElement.GetProperty("command").GetString());
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+    }
+
+    [Fact]
+    public async Task RunAsync_View_Streams_Scaffold_Events()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var backend = new FakeViewBackend("ffmpeg-native");
+        var session = new ViewSession(
+            host,
+            ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
+            console,
+            timeProvider,
+            new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward")),
+            new FakeViewBackendFactory(backend),
+            new FakeViewStreamConnector(
+                new ViewPacketStreamHarness()
+                    .WriteHeader("h264", 1080, 1920)
+                    .WritePacket(ViewPacketType.Config, 1, 0, false, [0x01, 0x02])
+                    .WritePacket(ViewPacketType.StreamEnd, 2, 33_000, false, [])
+                    .Build()),
+            new ViewPacketStreamReader());
+
+        var exitCode = await session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", true, "capture.mkv", 1600, 60, "8M", true, false));
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(2, console.OutputLines.Count);
+
+        using var started = JsonDocument.Parse(console.OutputLines[0]);
+        Assert.Equal("view_started", started.RootElement.GetProperty("type").GetString());
+        Assert.Equal("192.168.0.134:5555", started.RootElement.GetProperty("device").GetString());
+        Assert.Equal("ffmpeg", started.RootElement.GetProperty("decoder").GetString());
+        Assert.Equal("h264", started.RootElement.GetProperty("connection").GetProperty("codec").GetString());
+        Assert.Equal(1080, started.RootElement.GetProperty("connection").GetProperty("width").GetInt32());
+        Assert.True(started.RootElement.GetProperty("headless").GetBoolean());
+        Assert.Equal("capture.mkv", started.RootElement.GetProperty("record_path").GetString());
+        Assert.True(started.RootElement.GetProperty("overlay_screen_state").GetBoolean());
+
+        using var ended = JsonDocument.Parse(console.OutputLines[1]);
+        Assert.Equal("view_ended", ended.RootElement.GetProperty("type").GetString());
+        Assert.Equal("stream_ended", ended.RootElement.GetProperty("reason").GetString());
+        Assert.Equal(2, backend.Packets.Count);
+    }
+
+    [Fact]
+    public async Task RunAsync_View_Uses_Backend_Selected_By_Decoder()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var ffmpegBackend = new FakeViewBackend("ffmpeg-native");
+        var wmfBackend = new FakeViewBackend("wmf-test");
+        var backendFactory = new FakeViewBackendFactory(new Dictionary<string, IViewBackend>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["ffmpeg"] = ffmpegBackend,
+            ["wmf"] = wmfBackend
+        });
+        var session = new ViewSession(
+            host,
+            ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
+            console,
+            timeProvider,
+            new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward")),
+            backendFactory,
+            new FakeViewStreamConnector(
+                new ViewPacketStreamHarness()
+                    .WriteHeader("h264", 1080, 1920)
+                    .WritePacket(ViewPacketType.StreamEnd, 1, 0, false, [])
+                    .Build()),
+            new ViewPacketStreamReader());
+
+        var exitCode = await session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "wmf", true, null, 1600, 60, "8M", false, false));
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["wmf"], backendFactory.RequestedDecoders);
+        Assert.Empty(ffmpegBackend.Packets);
+        Assert.Single(wmfBackend.Packets);
+
+        using var started = JsonDocument.Parse(console.OutputLines[0]);
+        Assert.Equal("wmf-test", started.RootElement.GetProperty("backend").GetString());
+        Assert.Equal("wmf", started.RootElement.GetProperty("decoder").GetString());
+        Assert.DoesNotContain(console.OutputLines, line => line.Contains("process_backed_ffmpeg", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_View_Retries_Initial_Stream_Header_Read()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var backend = new FakeViewBackend();
+        var streamConnector = new FakeViewStreamConnector(
+            new MemoryStream(),
+            new ViewPacketStreamHarness()
+                .WriteHeader("h264", 1080, 1920)
+                .WritePacket(ViewPacketType.StreamEnd, 1, 0, false, [])
+                .Build());
+        var session = new ViewSession(
+            host,
+            ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
+            console,
+            timeProvider,
+            new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward")),
+            new FakeViewBackendFactory(backend),
+            streamConnector,
+            new ViewPacketStreamReader());
+
+        var exitCode = await session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", true, null, 1600, 60, "8M", false, false));
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(2, streamConnector.ConnectCallCount);
+        Assert.Contains(console.OutputLines, line => line.Contains("view_started", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_View_Window_Close_Ends_Session_Cleanly()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var renderer = new ClosingViewRenderer();
+        var session = new ViewSession(
+            host,
+            ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
+            console,
+            timeProvider,
+            new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward")),
+            new FakeViewBackendFactory(new BlockingViewBackend()),
+            new FakeViewStreamConnector(
+                new ViewPacketStreamHarness()
+                    .WriteHeader("h264", 1080, 1920)
+                    .Build()),
+            new ViewPacketStreamReader(),
+            new FakeViewRendererFactory(renderer));
+
+        var runTask = session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", false, null, 1600, 60, "8M", false, false));
+        renderer.Close();
+        var exitCode = await runTask;
+
+        Assert.Equal(0, exitCode);
+        using var ended = JsonDocument.Parse(console.OutputLines[^1]);
+        Assert.Equal("view_ended", ended.RootElement.GetProperty("type").GetString());
+        Assert.Equal("window_closed", ended.RootElement.GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    public async Task RunAsync_View_Uses_Injected_ViewSessionFactory()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var session = new FakeViewSession(23);
+        var factory = new FakeViewSessionFactory(session);
+        var app = new App(
+            console: console,
+            timeProvider: timeProvider,
+            deviceHostFactory: new FakeDeviceHostFactory(host),
+            viewSessionFactory: factory);
+
+        var exitCode = await app.RunAsync([
+            "view",
+            "--device", "192.168.0.134:5555",
+            "--decoder", "wmf",
+            "--headless",
+            "--record", "capture.mkv",
+            "--max-size", "1280",
+            "--max-fps", "30",
+            "--video-bit-rate", "12M",
+            "--overlay-screen-state",
+            "--overlay-telemetry"]);
+
+        Assert.Equal(23, exitCode);
+        Assert.Same(host, factory.LastDeviceHost);
+        Assert.NotNull(factory.LastArtifacts);
+        var options = Assert.Single(session.Options);
+        Assert.Equal("192.168.0.134:5555", options.DeviceSelector);
+        Assert.Equal("h264", options.Codec);
+        Assert.Equal("wmf", options.Decoder);
+        Assert.True(options.Headless);
+        Assert.Equal("capture.mkv", options.RecordPath);
+        Assert.Equal(1280, options.MaxSize);
+        Assert.Equal(30, options.MaxFps);
+        Assert.Equal("12M", options.VideoBitRate);
+        Assert.True(options.OverlayScreenState);
+        Assert.True(options.OverlayTelemetry);
+    }
+
+    [Fact]
     public async Task PreflightAsync_Writes_Device_Fingerprint_Artifact()
     {
         var fileSystem = new FakeFileSystem();
@@ -1269,6 +1535,8 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public List<string> TapTextRequests { get; } = [];
 
+    public List<(string? Label, double? XRatio, double? YRatio, int PostTapDelayMs)> TapPointRequests { get; } = [];
+
     public Task<DeviceListResult> GetDevicesAsync() => Task.FromResult(new DeviceListResult([]));
 
     public Task<PreflightResult> PreflightAsync(string? packageName) => Task.FromResult(new PreflightResult("Model", "16", "36", "focus", packageName, null, "fingerprint", "arm64-v8a", "SER"));
@@ -1284,8 +1552,11 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public Task<WaitNotVisibleResult> WaitNotVisibleAsync(string text, int timeoutSec) => Task.FromResult(new WaitNotVisibleResult(text, 1, false));
 
-    public Task<TapPointResult> TapPointAsync(string? label, int? x, int? y, double? xRatio, double? yRatio, int postTapDelayMs) =>
-        Task.FromResult(new TapPointResult(label, x ?? 0, y ?? 0, xRatio, yRatio, postTapDelayMs));
+    public Task<TapPointResult> TapPointAsync(string? label, int? x, int? y, double? xRatio, double? yRatio, int postTapDelayMs)
+    {
+        TapPointRequests.Add((label, xRatio, yRatio, postTapDelayMs));
+        return Task.FromResult(new TapPointResult(label, x ?? 0, y ?? 0, xRatio, yRatio, postTapDelayMs));
+    }
 
     public Task<DoubleTapHeaderLogoResult> DoubleTapHeaderLogoAsync() => Task.FromResult(new DoubleTapHeaderLogoResult("header_logo", 0, 0, 160));
 
@@ -1340,4 +1611,161 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
         Task.FromResult(new FailureArtifactBundle("visit-lab-failure-bundle.v1", DateTimeOffset.UtcNow, request.Scope, request.Name, request.File, request.StepIndex, request.StepName, request.Action, exception.GetType().FullName ?? exception.GetType().Name, exception.Message, [], []));
 
     public Task<LogcatResult> LogcatAsync(int tail) => Task.FromResult(new LogcatResult([]));
+}
+
+internal sealed class FakeViewSession(int exitCode) : IViewSession
+{
+    public List<ViewOptions> Options { get; } = [];
+
+    public Task<int> RunAsync(ViewOptions options, CancellationToken cancellationToken = default)
+    {
+        Options.Add(options);
+        return Task.FromResult(exitCode);
+    }
+}
+
+internal sealed class FakeViewSessionFactory(IViewSession viewSession) : IViewSessionFactory
+{
+    private readonly IViewSession _viewSession = viewSession;
+
+    public IDeviceHost? LastDeviceHost { get; private set; }
+
+    public ArtifactSession? LastArtifacts { get; private set; }
+
+    public IViewSession Create(IDeviceHost deviceHost, ArtifactSession artifacts)
+    {
+        LastDeviceHost = deviceHost;
+        LastArtifacts = artifacts;
+        return _viewSession;
+    }
+}
+
+internal sealed class FakeViewRendererFactory(IViewRenderer renderer) : IViewRendererFactory
+{
+    private readonly IViewRenderer _renderer = renderer;
+
+    public IViewRenderer? Create(ViewOptions options, IDeviceHost deviceHost) => options.Headless ? null : _renderer;
+}
+
+internal sealed class FakeViewTransportBootstrap(ViewConnectionInfo connectionInfo) : IViewTransportBootstrap
+{
+    private readonly ViewConnectionInfo _connectionInfo = connectionInfo;
+
+    public Task<ViewConnectionInfo> StartAsync(ViewStartRequest request, CancellationToken cancellationToken = default) => Task.FromResult(_connectionInfo);
+
+    public Task StopAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+}
+
+internal sealed class FakeViewBackend(string name = "stub") : IViewBackend
+{
+    private readonly string _name = name;
+
+    public List<ViewPacket> Packets { get; } = [];
+
+    public string Name => _name;
+
+    public Task InitializeAsync(ViewConnectionInfo connectionInfo, IViewRenderer? renderer, IViewRecorder? recorder, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    public async Task RunAsync(IAsyncEnumerable<ViewPacket> packets, CancellationToken cancellationToken = default)
+    {
+        await foreach (var packet in packets.WithCancellation(cancellationToken))
+        {
+            Packets.Add(packet);
+            if (packet.PacketType == ViewPacketType.StreamEnd)
+            {
+                return;
+            }
+        }
+    }
+
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+internal sealed class BlockingViewBackend : IViewBackend
+{
+    public string Name => "blocking";
+
+    public Task InitializeAsync(ViewConnectionInfo connectionInfo, IViewRenderer? renderer, IViewRecorder? recorder, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    public Task RunAsync(IAsyncEnumerable<ViewPacket> packets, CancellationToken cancellationToken = default) => Task.Delay(Timeout.Infinite, cancellationToken);
+
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+internal sealed class ClosingViewRenderer : IViewRenderer
+{
+    private readonly TaskCompletionSource _closedSource = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public Task InitializeAsync(ViewDisplayInfo displayInfo, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    public Task PresentAsync(ViewFrame frame, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    public Task UpdateStatsAsync(ViewStats stats, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    public Task WaitForCloseAsync(CancellationToken cancellationToken = default) => _closedSource.Task.WaitAsync(cancellationToken);
+
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
+    public void Close() => _closedSource.TrySetResult();
+}
+
+internal sealed class FakeViewBackendFactory : IViewBackendFactory
+{
+    private readonly IReadOnlyDictionary<string, IViewBackend> _backends;
+
+    public FakeViewBackendFactory(IViewBackend backend)
+        : this(new Dictionary<string, IViewBackend>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["ffmpeg"] = backend
+        })
+    {
+    }
+
+    public FakeViewBackendFactory(IReadOnlyDictionary<string, IViewBackend> backends)
+    {
+        _backends = backends;
+    }
+
+    public List<string> RequestedDecoders { get; } = [];
+
+    public IViewBackend Create(ViewOptions options)
+    {
+        RequestedDecoders.Add(options.Decoder);
+        if (_backends.TryGetValue(options.Decoder, out var backend))
+        {
+            return backend;
+        }
+
+        throw new InvalidOperationException($"No fake backend configured for decoder '{options.Decoder}'.");
+    }
+}
+
+internal sealed class FakeViewStreamConnector(params Stream[] streams) : IViewStreamConnector
+{
+    private readonly Queue<Stream> _streams = new(streams);
+
+    public int ConnectCallCount { get; private set; }
+
+    public Task<IViewStreamConnection> ConnectAsync(ViewConnectionInfo connectionInfo, CancellationToken cancellationToken = default)
+    {
+        ConnectCallCount++;
+        if (_streams.Count == 0)
+        {
+            throw new InvalidOperationException("No fake view streams remain.");
+        }
+
+        var stream = _streams.Count > 1 ? _streams.Dequeue() : _streams.Peek();
+        return Task.FromResult<IViewStreamConnection>(new FakeViewStreamConnection(stream));
+    }
+}
+
+internal sealed class FakeViewStreamConnection(Stream stream) : IViewStreamConnection
+{
+    public Stream Stream { get; } = stream;
+
+    public ValueTask DisposeAsync()
+    {
+        Stream.Dispose();
+        return ValueTask.CompletedTask;
+    }
 }

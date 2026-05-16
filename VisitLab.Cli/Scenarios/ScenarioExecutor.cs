@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using VisitLab.Cli.Errors;
 using VisitLab.Cli.Infrastructure;
 using VisitLab.Cli.Models;
@@ -37,6 +38,32 @@ public interface IScenarioActionHost
 /// </summary>
 public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSystem, TimeProvider timeProvider, IDelay delay, IEnvironmentVariables? environment = null)
 {
+    private static readonly HashSet<string> SupportedScenarioActions =
+    [
+        "waitVisible",
+        "waitNotVisible",
+        "tapText",
+        "tapPoint",
+        "doubleTapHeaderLogo",
+        "doubleTap",
+        "typeText",
+        "typePin",
+        "keyevent",
+        "waitLog",
+        "waitStep",
+        "waitActionReady",
+        "resetLog",
+        "assertEvent",
+        "takeScreenshot",
+        "captureArtifacts",
+        "assertTextInputReady",
+        "assertBelow",
+        "assertAligned",
+        "assertAppVersion",
+        "screenState",
+        "sleep"
+    ];
+
     private readonly IDeviceHost _actionHost = actionHost ?? throw new ArgumentNullException(nameof(actionHost));
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
@@ -251,10 +278,17 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
     private static void ValidateStep(ScenarioFile scenario, ScenarioStep step, int index)
     {
         var stepLabel = $"Scenario '{scenario.Name}' step {index}";
+        var action = step.Action.Trim();
 
         if (string.IsNullOrWhiteSpace(step.Action))
         {
             throw new UsageException($"{stepLabel} must define a non-empty action.");
+        }
+
+        if (!SupportedScenarioActions.Contains(action) ||
+            (string.Equals(action, "doubleTap", StringComparison.OrdinalIgnoreCase) && step.HeaderLogo is not true))
+        {
+            throw new UsageException($"Unknown scenario action '{step.Action}'.");
         }
 
         ValidatePositive(step.TimeoutSec, $"{stepLabel} timeoutSec");
@@ -277,7 +311,78 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
             throw new UsageException($"{stepLabel} xRatio/yRatio must be between 0 and 1.");
         }
 
-        if (string.Equals(step.Action, "tapPoint", StringComparison.OrdinalIgnoreCase))
+        switch (action)
+        {
+            case "waitVisible":
+            case "waitNotVisible":
+            case "tapText":
+            case "typeText":
+            case "waitLog":
+                RequireScenarioValue(step.Text, $"{stepLabel} {action} requires text.");
+                break;
+
+            case "typePin":
+                RequireScenarioValue(step.Text, $"{stepLabel} typePin requires text.");
+                if (step.Text!.Any(static digit => !char.IsDigit(digit)))
+                {
+                    throw new UsageException($"{stepLabel} typePin supports digits only.");
+                }
+
+                break;
+
+            case "keyevent":
+                RequireScenarioValue(step.Code, $"{stepLabel} keyevent requires code.");
+                break;
+
+            case "waitStep":
+                if (string.IsNullOrWhiteSpace(step.Step) && string.IsNullOrWhiteSpace(step.Text))
+                {
+                    throw new UsageException($"{stepLabel} waitStep requires step.");
+                }
+
+                break;
+
+            case "waitActionReady":
+                RequireScenarioValue(step.Text, $"{stepLabel} waitActionReady requires text.");
+                break;
+
+            case "assertEvent":
+                if (string.IsNullOrWhiteSpace(step.Event) && string.IsNullOrWhiteSpace(step.Text))
+                {
+                    throw new UsageException($"{stepLabel} assertEvent requires event or text.");
+                }
+
+                ValidateRegex(step.DetailsPattern, $"{stepLabel} assertEvent detailsPattern is not a valid regular expression");
+                break;
+
+            case "takeScreenshot":
+                if (string.IsNullOrWhiteSpace(step.Label) && string.IsNullOrWhiteSpace(step.Text) && string.IsNullOrWhiteSpace(step.Name))
+                {
+                    throw new UsageException($"{stepLabel} takeScreenshot requires label, text, or name.");
+                }
+
+                break;
+
+            case "captureArtifacts":
+                if (string.IsNullOrWhiteSpace(step.Label) && string.IsNullOrWhiteSpace(step.Text) && string.IsNullOrWhiteSpace(step.Name))
+                {
+                    throw new UsageException($"{stepLabel} captureArtifacts requires label, text, or name.");
+                }
+
+                break;
+
+            case "assertBelow":
+                RequireScenarioValue(step.Text, $"{stepLabel} assertBelow requires text.");
+                RequireScenarioValue(step.Below, $"{stepLabel} assertBelow requires below.");
+                break;
+
+            case "assertAligned":
+                RequireScenarioValue(step.Text, $"{stepLabel} assertAligned requires text.");
+                RequireScenarioValue(step.With, $"{stepLabel} assertAligned requires with.");
+                break;
+        }
+
+        if (string.Equals(action, "tapPoint", StringComparison.OrdinalIgnoreCase))
         {
             var hasAbsolutePoint = step.X.HasValue || step.Y.HasValue;
             var hasRelativePoint = step.XRatio.HasValue || step.YRatio.HasValue;
@@ -298,7 +403,7 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
             }
         }
 
-        if (string.Equals(step.Action, "assertEvent", StringComparison.OrdinalIgnoreCase) &&
+        if (string.Equals(action, "assertEvent", StringComparison.OrdinalIgnoreCase) &&
             step.ObserveFromPreviousStep is true &&
             index == 1)
         {
@@ -319,6 +424,31 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
         if (value is < 0)
         {
             throw new UsageException($"{label} must be zero or greater.");
+        }
+    }
+
+    private static void RequireScenarioValue(string? value, string message)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new UsageException(message);
+        }
+    }
+
+    private static void ValidateRegex(string? pattern, string messagePrefix)
+    {
+        if (string.IsNullOrWhiteSpace(pattern))
+        {
+            return;
+        }
+
+        try
+        {
+            _ = new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new UsageException($"{messagePrefix}: {ex.Message}");
         }
     }
 

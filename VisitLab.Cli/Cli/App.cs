@@ -5,6 +5,7 @@ using VisitLab.Cli.Errors;
 using VisitLab.Cli.Infrastructure;
 using VisitLab.Cli.Models;
 using VisitLab.Cli.Scenarios;
+using VisitLab.Cli.View;
 
 namespace VisitLab.Cli.Cli;
 
@@ -26,6 +27,7 @@ public sealed class App
     private readonly IDeviceHostFactory _deviceHostFactory;
     private readonly IConsoleIo _console;
     private readonly IEnvironmentVariables _environment;
+    private readonly IViewSessionFactory _viewSessionFactory;
 
     public App(
         TimeProvider? timeProvider = null,
@@ -36,7 +38,8 @@ public sealed class App
         IConsoleIo? console = null,
         IEnvironmentVariables? environment = null,
         IUniqueIdGenerator? idGenerator = null,
-        IDeviceHostFactory? deviceHostFactory = null)
+        IDeviceHostFactory? deviceHostFactory = null,
+        IViewSessionFactory? viewSessionFactory = null)
     {
         _timeProvider = timeProvider ?? TimeProvider.System;
         _fileSystem = fileSystem ?? new PhysicalFileSystem();
@@ -52,6 +55,14 @@ public sealed class App
             _fileSystem,
             _timeProvider,
             _environment,
+            idGenerator1);
+        _viewSessionFactory = viewSessionFactory ?? new DefaultViewSessionFactory(
+            _console,
+            _timeProvider,
+            adbClientFactory ?? new DefaultAdbClientFactory(),
+            processRunner1,
+            _environment,
+            _fileSystem,
             idGenerator1);
     }
 
@@ -72,6 +83,7 @@ public sealed class App
 
         ArtifactSession? artifacts = null;
         IDeviceHost? runner = null;
+        var adbExecutable = options.Get("adb") ?? _environment.GetEnvironmentVariable("DEVICE_E2E_ADB") ?? "adb";
 
         ArtifactData CreateArtifactData() => artifacts?.ToData() ?? new ArtifactData(
             options.Get("artifacts") ?? string.Empty,
@@ -83,7 +95,7 @@ public sealed class App
             runner = _deviceHostFactory.Create(
                 new DeviceHostConfiguration(
                     options.Get("platform") ?? "android",
-                    options.Get("adb") ?? _environment.GetEnvironmentVariable("DEVICE_E2E_ADB") ?? "adb",
+                    adbExecutable,
                     options.Get("device")),
                 artifacts);
             var scenarios = new ScenarioExecutor(runner, _fileSystem, _timeProvider, _delay, _environment);
@@ -92,6 +104,12 @@ public sealed class App
             {
                 var inspectSession = new InspectSession(runner, _console, _timeProvider);
                 return await inspectSession.RunAsync().ConfigureAwait(false);
+            }
+
+            if (string.Equals(options.Command, "view", StringComparison.OrdinalIgnoreCase))
+            {
+                var viewSession = _viewSessionFactory.Create(runner, artifacts);
+                return await viewSession.RunAsync(BuildViewOptions(options, adbExecutable)).ConfigureAwait(false);
             }
 
             var data = options.Command switch
@@ -137,6 +155,20 @@ public sealed class App
             return 1;
         }
     }
+
+    private static ViewOptions BuildViewOptions(CliOptions options, string adbExecutable) =>
+        new(
+            options.Require("device"),
+            adbExecutable,
+            options.Get("codec") ?? "h264",
+            options.Get("decoder") ?? "ffmpeg",
+            options.HasFlag("headless"),
+            options.Get("record"),
+            options.Int("max-size", 1600),
+            options.Int("max-fps", 60),
+            options.Get("video-bit-rate") ?? "8M",
+            options.HasFlag("overlay-screen-state"),
+            options.HasFlag("overlay-telemetry"));
 
     private void WriteEnvelope(CommandEnvelope envelope) => _console.WriteLine(JsonSerializer.Serialize(envelope, JsonOptions));
 }

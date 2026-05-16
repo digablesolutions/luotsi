@@ -15,6 +15,7 @@ public sealed class CliOptions
         "preflight",
         "screen-state",
         "inspect",
+        "view",
         "telemetry-tail",
         "telemetry-watch",
         "wait-step",
