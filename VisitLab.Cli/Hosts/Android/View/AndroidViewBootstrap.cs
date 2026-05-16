@@ -81,6 +81,19 @@ public sealed class AndroidViewServerInstaller(IAdbClient adbClient, IAndroidVie
     public async Task<AndroidViewHelperPackage> InstallAsync(CancellationToken cancellationToken = default)
     {
         var package = _packageLocator.Resolve();
+        return await InstallAsync(package, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Installs a previously resolved helper package.
+    /// </summary>
+    /// <param name="package">Resolved helper package.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Installed helper metadata.</returns>
+    public async Task<AndroidViewHelperPackage> InstallAsync(AndroidViewHelperPackage package, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(package);
+
         var result = await _adbClient.RunAsync(["push", package.LocalPath, package.RemotePath], cancellationToken).ConfigureAwait(false);
         result.EnsureSuccess("view helper push failed");
         return package;
@@ -112,8 +125,6 @@ public sealed class AndroidViewBootstrap(
     IAndroidViewHelperPackageLocator packageLocator,
     IUniqueIdGenerator idGenerator) : IViewTransportBootstrap
 {
-    private const int DefaultLocalPort = 27183;
-
     private readonly IAdbClientFactory _adbClientFactory = adbClientFactory ?? throw new ArgumentNullException(nameof(adbClientFactory));
     private readonly IProcessRunner _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
     private readonly IAndroidViewHelperPackageLocator _packageLocator = packageLocator ?? throw new ArgumentNullException(nameof(packageLocator));
@@ -136,24 +147,92 @@ public sealed class AndroidViewBootstrap(
 
         var sessionId = _idGenerator.NewId();
         var socketName = $"visitlab_view_{sessionId}";
-        var localPort = DefaultLocalPort;
         var adbClient = _adbClientFactory.Create(request.AdbExecutable, request.DeviceSelector, _processRunner);
         var installer = new AndroidViewServerInstaller(adbClient, _packageLocator);
-        var package = await installer.InstallAsync(cancellationToken).ConfigureAwait(false);
-
-        var forward = await adbClient.RunAsync(["forward", $"tcp:{localPort}", $"localabstract:{socketName}"], cancellationToken).ConfigureAwait(false);
-        forward.EnsureSuccess("view transport forward failed");
-
-        var shellCommand = $"sh -c 'CLASSPATH={package.RemotePath} app_process / {package.MainClass} --socket {socketName} --codec {request.Codec} --max-size {request.MaxSize} --max-fps {request.MaxFps} --video-bit-rate {request.VideoBitRate} >/dev/null 2>&1 &'";
-        var start = await adbClient.ShellAsync(shellCommand, cancellationToken).ConfigureAwait(false);
-        start.EnsureSuccess("view helper start failed");
-
         _adbClient = adbClient;
-        _installedPackage = package;
         _socketName = socketName;
-        _localPort = localPort;
 
-        return new ViewConnectionInfo(sessionId, request.Codec, ViewPacketStreamReader.CurrentProtocolVersion, 0, 0, localPort, package.Version, "adb-forward");
+        try
+        {
+            var package = _packageLocator.Resolve();
+            _installedPackage = package;
+
+            await installer.InstallAsync(package, cancellationToken).ConfigureAwait(false);
+
+            var forward = await adbClient.RunAsync(["forward", "tcp:0", $"localabstract:{socketName}"], cancellationToken).ConfigureAwait(false);
+            forward.EnsureSuccess("view transport forward failed");
+            var localPort = await ResolveForwardedLocalPortAsync(adbClient, forward, socketName, cancellationToken).ConfigureAwait(false);
+            _localPort = localPort;
+
+            var shellCommand = $"sh -c 'CLASSPATH={package.RemotePath} app_process / {package.MainClass} --socket {socketName} --codec {request.Codec} --max-size {request.MaxSize} --max-fps {request.MaxFps} --video-bit-rate {request.VideoBitRate} >/dev/null 2>&1 &'";
+            var start = await adbClient.ShellAsync(shellCommand, cancellationToken).ConfigureAwait(false);
+            start.EnsureSuccess("view helper start failed");
+
+            return new ViewConnectionInfo(sessionId, request.Codec, ViewPacketStreamReader.CurrentProtocolVersion, 0, 0, localPort, package.Version, "adb-forward");
+        }
+        catch
+        {
+            await StopAsync(CancellationToken.None).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    private static async Task<int> ResolveForwardedLocalPortAsync(
+        IAdbClient adbClient,
+        AdbCommandResult forward,
+        string socketName,
+        CancellationToken cancellationToken)
+    {
+        if (TryParseTcpPort(forward.Stdout, out var localPort))
+        {
+            return localPort;
+        }
+
+        var list = await adbClient.RunAsync(["forward", "--list"], cancellationToken).ConfigureAwait(false);
+        list.EnsureSuccess("view transport forward list failed");
+        if (TryParseForwardListLocalPort(list.Stdout, socketName, out localPort))
+        {
+            return localPort;
+        }
+
+        throw new InvalidOperationException($"view transport forward did not return a valid local TCP port for localabstract:{socketName}.");
+    }
+
+    private static bool TryParseTcpPort(string value, out int localPort)
+    {
+        var stdout = value.Trim();
+        return int.TryParse(stdout, out localPort) && localPort > 0;
+    }
+
+    private static bool TryParseForwardListLocalPort(string stdout, string socketName, out int localPort)
+    {
+        foreach (var rawLine in stdout.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var tokens = rawLine.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (tokens.Length < 3)
+            {
+                continue;
+            }
+
+            if (!tokens.Contains($"localabstract:{socketName}", StringComparer.Ordinal))
+            {
+                continue;
+            }
+
+            var localSpec = tokens.FirstOrDefault(static token => token.StartsWith("tcp:", StringComparison.OrdinalIgnoreCase));
+            if (localSpec is null)
+            {
+                continue;
+            }
+
+            if (TryParseTcpPort(localSpec[4..], out localPort))
+            {
+                return true;
+            }
+        }
+
+        localPort = 0;
+        return false;
     }
 
     /// <inheritdoc />

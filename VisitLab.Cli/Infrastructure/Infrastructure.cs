@@ -15,6 +15,7 @@ public interface IFileSystem
     void CreateDirectory(string path);
     Task WriteAllTextAsync(string path, string text, Encoding encoding, CancellationToken cancellationToken = default);
     Task<string> ReadAllTextAsync(string path, CancellationToken cancellationToken = default);
+    Stream OpenWrite(string path, bool overwrite = true);
     bool FileExists(string path);
     void CopyFile(string sourcePath, string destinationPath, bool overwrite);
     string GetTempPath();

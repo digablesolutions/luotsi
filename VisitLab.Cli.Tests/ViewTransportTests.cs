@@ -67,7 +67,7 @@ public sealed class ViewTransportTests
     {
         var adb = new FakeAdbClient();
         adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
-        adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "38543\n", string.Empty));
         adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
         var locator = new FakeAndroidViewHelperPackageLocator(new AndroidViewHelperPackage("C:/tmp/helper.apk", "/data/local/tmp/visitlab-view-server.apk", "fi.systam.visitlab.view.Main", "test-helper"));
         var bootstrap = new AndroidViewBootstrap(new FakeAdbClientFactory(adb), new DefaultProcessRunner(), locator, new FakeUniqueIdGenerator("session123"));
@@ -77,8 +77,9 @@ public sealed class ViewTransportTests
         Assert.Equal("session123", connection.SessionId);
         Assert.Equal("h264", connection.Codec);
         Assert.Equal(ViewPacketStreamReader.CurrentProtocolVersion, connection.ProtocolVersion);
+        Assert.Equal(38543, connection.LocalPort);
         Assert.Equal(["push", "C:/tmp/helper.apk", "/data/local/tmp/visitlab-view-server.apk"], adb.RunCommands[0]);
-        Assert.Equal(["forward", "tcp:27183", "localabstract:visitlab_view_session123"], adb.RunCommands[1]);
+        Assert.Equal(["forward", "tcp:0", "localabstract:visitlab_view_session123"], adb.RunCommands[1]);
         Assert.Contains("sh -c 'CLASSPATH=/data/local/tmp/visitlab-view-server.apk app_process / fi.systam.visitlab.view.Main", adb.ShellCommands[0], StringComparison.Ordinal);
         Assert.Contains("--codec h264", adb.ShellCommands[0], StringComparison.Ordinal);
     }
@@ -88,7 +89,7 @@ public sealed class ViewTransportTests
     {
         var adb = new FakeAdbClient();
         adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
-        adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "38543\n", string.Empty));
         adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
         adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
@@ -99,9 +100,47 @@ public sealed class ViewTransportTests
         await bootstrap.StartAsync(new ViewStartRequest("adb", "device-1", 1280, 30, "8M", "h264"));
         await bootstrap.StopAsync();
 
-        Assert.Equal(["forward", "--remove", "tcp:27183"], adb.RunCommands[2]);
+        Assert.Equal(["forward", "--remove", "tcp:38543"], adb.RunCommands[2]);
         Assert.Contains("pkill -f visitlab_view_session123", adb.ShellCommands[1], StringComparison.Ordinal);
         Assert.Contains("rm -f /data/local/tmp/visitlab-view-server.apk", adb.ShellCommands[2], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AndroidViewBootstrap_StartAsync_Cleans_Up_When_Helper_Start_Fails()
+    {
+        var adb = new FakeAdbClient();
+        adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "38543\n", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(1, string.Empty, "boom"));
+        adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        var locator = new FakeAndroidViewHelperPackageLocator(new AndroidViewHelperPackage("C:/tmp/helper.apk", "/data/local/tmp/visitlab-view-server.apk", "fi.systam.visitlab.view.Main", "test-helper"));
+        var bootstrap = new AndroidViewBootstrap(new FakeAdbClientFactory(adb), new DefaultProcessRunner(), locator, new FakeUniqueIdGenerator("session123"));
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => bootstrap.StartAsync(new ViewStartRequest("adb", "device-1", 1280, 30, "8M", "h264")));
+
+        Assert.Contains("view helper start failed", error.Message, StringComparison.Ordinal);
+        Assert.Equal(["forward", "--remove", "tcp:38543"], adb.RunCommands[2]);
+        Assert.Contains("pkill -f visitlab_view_session123", adb.ShellCommands[1], StringComparison.Ordinal);
+        Assert.Contains("rm -f /data/local/tmp/visitlab-view-server.apk", adb.ShellCommands[2], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AndroidViewBootstrap_StartAsync_Uses_Forward_List_Fallback_When_Forwarded_Port_Output_Is_Missing()
+    {
+        var adb = new FakeAdbClient();
+        adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "device-1 tcp:41237 localabstract:visitlab_view_session123\n", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        var locator = new FakeAndroidViewHelperPackageLocator(new AndroidViewHelperPackage("C:/tmp/helper.apk", "/data/local/tmp/visitlab-view-server.apk", "fi.systam.visitlab.view.Main", "test-helper"));
+        var bootstrap = new AndroidViewBootstrap(new FakeAdbClientFactory(adb), new DefaultProcessRunner(), locator, new FakeUniqueIdGenerator("session123"));
+
+        var connection = await bootstrap.StartAsync(new ViewStartRequest("adb", "device-1", 1280, 30, "8M", "h264"));
+
+        Assert.Equal(41237, connection.LocalPort);
+        Assert.Equal(["forward", "--list"], adb.RunCommands[2]);
     }
 
     [Fact]
@@ -189,6 +228,9 @@ public sealed class ViewTransportTests
         Assert.NotNull(renderer.DisplayInfo);
         Assert.Equal("AV_PIX_FMT_YUV420P", renderer.DisplayInfo!.PixelFormat);
         Assert.Equal(2, renderer.PresentedFrames.Count);
+        Assert.NotEmpty(renderer.StatsUpdates);
+        Assert.Equal(2, renderer.StatsUpdates[^1].DecodedFrames);
+        Assert.Equal(2, renderer.StatsUpdates[^1].PresentedFrames);
     }
 
     [Fact]
@@ -229,6 +271,33 @@ public sealed class ViewTransportTests
     }
 
     [Fact]
+    public async Task AnnexBViewRecorder_Writes_Config_And_Frame_Packets_To_Output()
+    {
+        var fileSystem = new FakeFileSystem();
+        var outputPath = Path.GetFullPath("capture.h264");
+        var recorder = new AnnexBViewRecorder(fileSystem, outputPath);
+
+        await recorder.InitializeAsync(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward"));
+        await recorder.WritePacketAsync(new ViewPacket(ViewPacketType.Config, 1, 0, false, new byte[] { 0x01, 0x02 }));
+        await recorder.WritePacketAsync(new ViewPacket(ViewPacketType.Frame, 2, 33_000, true, new byte[] { 0x03, 0x04 }));
+        await recorder.WritePacketAsync(new ViewPacket(ViewPacketType.StreamEnd, 3, 66_000, false, Array.Empty<byte>()));
+        await recorder.CompleteAsync();
+
+        Assert.True(fileSystem.FileExists(outputPath));
+        Assert.Equal(new byte[] { 0x01, 0x02, 0x03, 0x04 }, fileSystem.ReadBytes(outputPath));
+    }
+
+    [Fact]
+    public void DefaultViewRecorderFactory_Rejects_NonRaw_Output_Extensions()
+    {
+        var factory = new DefaultViewRecorderFactory(new FakeFileSystem());
+
+        var error = Assert.Throws<UsageException>(() => factory.Create(new ViewOptions("device-1", "adb", "h264", "ffmpeg", true, "capture.mkv", 1600, 60, "8M", false, false)));
+
+        Assert.Contains(".h264", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task NativeWindowViewRenderer_Presents_Frames_To_Window_Surface()
     {
         var windowSurface = new FakeViewWindowSurface();
@@ -248,6 +317,19 @@ public sealed class ViewTransportTests
         Assert.Single(windowSurface.PresentedFrames);
         Assert.Equal([0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08], windowSurface.PresentedFrames[0].PixelData.ToArray());
         Assert.True(windowSurface.Disposed);
+    }
+
+    [Fact]
+    public async Task NativeWindowViewRenderer_Forwards_Stats_To_Window_Surface()
+    {
+        var windowSurface = new FakeViewWindowSurface();
+        var renderer = new NativeWindowViewRenderer(new FakeViewWindowSurfaceFactory(windowSurface), new FakeDeviceHost());
+        var stats = new ViewStats(12, 12, 0, 59.9d, 59.7d, 84);
+        await renderer.InitializeAsync(new ViewDisplayInfo(1600, 900, "h264", "AV_PIX_FMT_BGRA"));
+
+        await renderer.UpdateStatsAsync(stats);
+
+        Assert.Equal(stats, windowSurface.Stats);
     }
 
     [Fact]
@@ -395,6 +477,8 @@ internal sealed class FakeViewWindowSurface : IViewWindowSurface
 
     public List<ViewFrame> PresentedFrames { get; } = [];
 
+    public ViewStats? Stats { get; private set; }
+
     public bool Disposed { get; private set; }
 
     public Task InitializeAsync(string title, ViewDisplayInfo displayInfo, Func<ViewPointerEvent, Task> pointerHandler, CancellationToken cancellationToken = default)
@@ -408,6 +492,12 @@ internal sealed class FakeViewWindowSurface : IViewWindowSurface
     public Task PresentAsync(ViewFrame frame, CancellationToken cancellationToken = default)
     {
         PresentedFrames.Add(frame);
+        return Task.CompletedTask;
+    }
+
+    public Task UpdateStatsAsync(ViewStats stats, CancellationToken cancellationToken = default)
+    {
+        Stats = stats;
         return Task.CompletedTask;
     }
 
@@ -489,6 +579,8 @@ internal sealed class FakeViewRenderer : IViewRenderer
 
     public List<ViewFrame> PresentedFrames { get; } = [];
 
+    public List<ViewStats> StatsUpdates { get; } = [];
+
     public Task InitializeAsync(ViewDisplayInfo displayInfo, CancellationToken cancellationToken = default)
     {
         DisplayInfo = displayInfo;
@@ -501,7 +593,11 @@ internal sealed class FakeViewRenderer : IViewRenderer
         return Task.CompletedTask;
     }
 
-    public Task UpdateStatsAsync(ViewStats stats, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task UpdateStatsAsync(ViewStats stats, CancellationToken cancellationToken = default)
+    {
+        StatsUpdates.Add(stats);
+        return Task.CompletedTask;
+    }
 
     public Task WaitForCloseAsync(CancellationToken cancellationToken = default) => Task.Delay(Timeout.Infinite, cancellationToken);
 

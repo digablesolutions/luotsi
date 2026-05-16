@@ -172,6 +172,19 @@ public interface IViewRendererFactory
 }
 
 /// <summary>
+/// Creates optional recorders for a view session.
+/// </summary>
+public interface IViewRecorderFactory
+{
+    /// <summary>
+    /// Creates a recorder for the requested session options.
+    /// </summary>
+    /// <param name="options">View session options.</param>
+    /// <returns>Recorder instance, or <see langword="null"/> when recording is disabled.</returns>
+    IViewRecorder? Create(ViewOptions options);
+}
+
+/// <summary>
 /// Reads the private mirrored-stream transport format.
 /// </summary>
 public interface IViewPacketStreamReader
@@ -258,7 +271,7 @@ public interface IViewRenderer : IAsyncDisposable
 /// <summary>
 /// Records a mirrored stream.
 /// </summary>
-public interface IViewRecorder
+public interface IViewRecorder : IAsyncDisposable
 {
     /// <summary>
     /// Initializes recording.

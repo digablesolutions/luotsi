@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using FFmpeg.AutoGen;
 using VisitLab.Cli.Infrastructure;
@@ -166,6 +167,7 @@ public sealed class DefaultLibavVideoDecoderFactory(LibavNativeLibraryLoader lib
 public sealed class LibavViewBackend(ILibavVideoDecoderFactory decoderFactory) : IViewBackend
 {
     private readonly ILibavVideoDecoderFactory _decoderFactory = decoderFactory ?? throw new ArgumentNullException(nameof(decoderFactory));
+    private readonly ViewStatsTracker _statsTracker = new();
     private ViewConnectionInfo? _connectionInfo;
     private IViewRenderer? _renderer;
     private IViewRecorder? _recorder;
@@ -251,7 +253,14 @@ public sealed class LibavViewBackend(ILibavVideoDecoderFactory decoderFactory) :
 
     private async Task PresentFramesAsync(IReadOnlyList<ViewFrame> frames, CancellationToken cancellationToken)
     {
-        if (_renderer is null || frames.Count == 0)
+        if (frames.Count == 0)
+        {
+            return;
+        }
+
+        _statsTracker.RecordDecoded(frames);
+
+        if (_renderer is null)
         {
             return;
         }
@@ -268,8 +277,60 @@ public sealed class LibavViewBackend(ILibavVideoDecoderFactory decoderFactory) :
         foreach (var frame in frames)
         {
             await _renderer.PresentAsync(frame, cancellationToken).ConfigureAwait(false);
+            await _renderer.UpdateStatsAsync(_statsTracker.RecordPresented(frame), cancellationToken).ConfigureAwait(false);
         }
     }
+}
+
+internal sealed class ViewStatsTracker
+{
+    private readonly Stopwatch _clock = Stopwatch.StartNew();
+
+    private long? _originElapsedUs;
+    private long? _originPtsUs;
+    private int _decodedFrames;
+    private int _presentedFrames;
+
+    public void RecordDecoded(IReadOnlyList<ViewFrame> frames)
+    {
+        foreach (var frame in frames)
+        {
+            _decodedFrames++;
+            EnsureOrigin(frame.PresentationTimestampUs);
+        }
+    }
+
+    public ViewStats RecordPresented(ViewFrame frame)
+    {
+        ArgumentNullException.ThrowIfNull(frame);
+
+        _presentedFrames++;
+        EnsureOrigin(frame.PresentationTimestampUs);
+
+        var elapsedUs = GetElapsedUs();
+        var originElapsedUs = _originElapsedUs ?? elapsedUs;
+        var originPtsUs = _originPtsUs ?? frame.PresentationTimestampUs;
+        var runtimeUs = Math.Max(1L, elapsedUs - originElapsedUs);
+        var mediaUs = Math.Max(0L, frame.PresentationTimestampUs - originPtsUs);
+        var decodeFps = _decodedFrames * 1_000_000d / runtimeUs;
+        var presentFps = _presentedFrames * 1_000_000d / runtimeUs;
+        var latencyMs = Math.Max(0L, (runtimeUs - mediaUs) / 1_000L);
+
+        return new ViewStats(_decodedFrames, _presentedFrames, 0, decodeFps, presentFps, latencyMs);
+    }
+
+    private void EnsureOrigin(long ptsUs)
+    {
+        if (_originElapsedUs.HasValue)
+        {
+            return;
+        }
+
+        _originElapsedUs = GetElapsedUs();
+        _originPtsUs = ptsUs;
+    }
+
+    private long GetElapsedUs() => (long)(_clock.ElapsedTicks * 1_000_000d / Stopwatch.Frequency);
 }
 
 internal sealed unsafe class LibavVideoDecoder : ILibavVideoDecoder

@@ -986,7 +986,7 @@ public sealed class AppTests
                     .Build()),
             new ViewPacketStreamReader());
 
-        var exitCode = await session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", true, "capture.mkv", 1600, 60, "8M", true, false));
+        var exitCode = await session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", true, null, 1600, 60, "8M", true, false));
 
         Assert.Equal(0, exitCode);
         Assert.Equal(2, console.OutputLines.Count);
@@ -998,13 +998,52 @@ public sealed class AppTests
         Assert.Equal("h264", started.RootElement.GetProperty("connection").GetProperty("codec").GetString());
         Assert.Equal(1080, started.RootElement.GetProperty("connection").GetProperty("width").GetInt32());
         Assert.True(started.RootElement.GetProperty("headless").GetBoolean());
-        Assert.Equal("capture.mkv", started.RootElement.GetProperty("record_path").GetString());
         Assert.True(started.RootElement.GetProperty("overlay_screen_state").GetBoolean());
 
         using var ended = JsonDocument.Parse(console.OutputLines[1]);
         Assert.Equal("view_ended", ended.RootElement.GetProperty("type").GetString());
         Assert.Equal("stream_ended", ended.RootElement.GetProperty("reason").GetString());
         Assert.Equal(2, backend.Packets.Count);
+    }
+
+    [Fact]
+    public async Task RunAsync_View_With_Record_Path_Creates_Recorder_And_Emits_Started_Event()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var backend = new FakeViewBackend("ffmpeg-native");
+        var recorderFactory = new FakeViewRecorderFactory();
+        var session = new ViewSession(
+            host,
+            ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
+            console,
+            timeProvider,
+            new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward")),
+            new FakeViewBackendFactory(backend),
+            new FakeViewStreamConnector(
+                new ViewPacketStreamHarness()
+                    .WriteHeader("h264", 1080, 1920)
+                    .WritePacket(ViewPacketType.StreamEnd, 1, 0, false, [])
+                    .Build()),
+            new ViewPacketStreamReader(),
+            viewRecorderFactory: recorderFactory);
+
+        var exitCode = await session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", true, "capture.h264", 1600, 60, "8M", false, false));
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(2, console.OutputLines.Count);
+        Assert.Same(recorderFactory.LastRecorder, backend.LastRecorder);
+
+        using var started = JsonDocument.Parse(console.OutputLines[0]);
+        Assert.Equal("view_started", started.RootElement.GetProperty("type").GetString());
+        Assert.Equal("capture.h264", started.RootElement.GetProperty("record_path").GetString());
+
+        using var ended = JsonDocument.Parse(console.OutputLines[1]);
+        Assert.Equal("view_ended", ended.RootElement.GetProperty("type").GetString());
+        Assert.Equal("stream_ended", ended.RootElement.GetProperty("reason").GetString());
+        Assert.True(recorderFactory.LastRecorder!.Disposed);
     }
 
     [Fact]
@@ -1353,12 +1392,14 @@ internal sealed class FakeUniqueIdGenerator(string value) : IUniqueIdGenerator
 internal sealed class FakeFileSystem : IFileSystem
 {
     private readonly Dictionary<string, string> _files = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, byte[]> _binaryFiles = new(StringComparer.Ordinal);
     private readonly HashSet<string> _directories = new(StringComparer.Ordinal);
 
     public void AddFile(string path, string content)
     {
         CreateDirectory(Path.GetDirectoryName(path) ?? "/");
         _files[path] = content;
+        _binaryFiles.Remove(path);
     }
 
     public void CreateDirectory(string path) => _directories.Add(path);
@@ -1370,21 +1411,69 @@ internal sealed class FakeFileSystem : IFileSystem
     }
 
     public Task<string> ReadAllTextAsync(string path, CancellationToken cancellationToken = default) =>
-        Task.FromResult(_files[path]);
+        Task.FromResult(_files.TryGetValue(path, out var text) ? text : System.Text.Encoding.UTF8.GetString(_binaryFiles[path]));
 
-    public bool FileExists(string path) => _files.ContainsKey(path);
+    public Stream OpenWrite(string path, bool overwrite = true)
+    {
+        if (!overwrite && (_files.ContainsKey(path) || _binaryFiles.ContainsKey(path)))
+        {
+            throw new IOException($"Destination file '{path}' exists.");
+        }
+
+        CreateDirectory(Path.GetDirectoryName(path) ?? "/");
+        return new FakeWriteStream(this, path);
+    }
+
+    public bool FileExists(string path) => _files.ContainsKey(path) || _binaryFiles.ContainsKey(path);
 
     public void CopyFile(string sourcePath, string destinationPath, bool overwrite)
     {
-        if (!overwrite && _files.ContainsKey(destinationPath))
+        if (!overwrite && (_files.ContainsKey(destinationPath) || _binaryFiles.ContainsKey(destinationPath)))
         {
             throw new IOException($"Destination file '{destinationPath}' exists.");
         }
 
-        AddFile(destinationPath, _files[sourcePath]);
+        if (_files.TryGetValue(sourcePath, out var text))
+        {
+            AddFile(destinationPath, text);
+            return;
+        }
+
+        WriteBinaryFile(destinationPath, _binaryFiles[sourcePath]);
     }
 
     public string GetTempPath() => "/tmp";
+
+    public byte[] ReadBytes(string path) => _binaryFiles[path];
+
+    private void WriteBinaryFile(string path, byte[] content)
+    {
+        CreateDirectory(Path.GetDirectoryName(path) ?? "/");
+        _binaryFiles[path] = content;
+        _files.Remove(path);
+    }
+
+    private sealed class FakeWriteStream(FakeFileSystem fileSystem, string path) : MemoryStream
+    {
+        private readonly FakeFileSystem _fileSystem = fileSystem;
+        private readonly string _path = path;
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _fileSystem.WriteBinaryFile(_path, ToArray());
+            }
+
+            base.Dispose(disposing);
+        }
+
+        public override async ValueTask DisposeAsync()
+        {
+            _fileSystem.WriteBinaryFile(_path, ToArray());
+            await base.DisposeAsync().ConfigureAwait(false);
+        }
+    }
 }
 
 internal sealed class FakeAdbClient : IAdbClient
@@ -1662,9 +1751,15 @@ internal sealed class FakeViewBackend(string name = "stub") : IViewBackend
 
     public List<ViewPacket> Packets { get; } = [];
 
+    public IViewRecorder? LastRecorder { get; private set; }
+
     public string Name => _name;
 
-    public Task InitializeAsync(ViewConnectionInfo connectionInfo, IViewRenderer? renderer, IViewRecorder? recorder, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task InitializeAsync(ViewConnectionInfo connectionInfo, IViewRenderer? renderer, IViewRecorder? recorder, CancellationToken cancellationToken = default)
+    {
+        LastRecorder = recorder;
+        return Task.CompletedTask;
+    }
 
     public async Task RunAsync(IAsyncEnumerable<ViewPacket> packets, CancellationToken cancellationToken = default)
     {
@@ -1766,6 +1861,39 @@ internal sealed class FakeViewStreamConnection(Stream stream) : IViewStreamConne
     public ValueTask DisposeAsync()
     {
         Stream.Dispose();
+        return ValueTask.CompletedTask;
+    }
+}
+
+internal sealed class FakeViewRecorderFactory : IViewRecorderFactory
+{
+    public FakeViewRecorder? LastRecorder { get; private set; }
+
+    public IViewRecorder? Create(ViewOptions options)
+    {
+        if (string.IsNullOrWhiteSpace(options.RecordPath))
+        {
+            return null;
+        }
+
+        LastRecorder = new FakeViewRecorder();
+        return LastRecorder;
+    }
+}
+
+internal sealed class FakeViewRecorder : IViewRecorder
+{
+    public bool Disposed { get; private set; }
+
+    public Task InitializeAsync(ViewConnectionInfo connectionInfo, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    public Task WritePacketAsync(ViewPacket packet, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    public Task CompleteAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    public ValueTask DisposeAsync()
+    {
+        Disposed = true;
         return ValueTask.CompletedTask;
     }
 }

@@ -38,6 +38,14 @@ public interface IViewWindowSurface : IAsyncDisposable
     Task PresentAsync(ViewFrame frame, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Updates renderer-visible view statistics.
+    /// </summary>
+    /// <param name="stats">Current view statistics.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Completion task.</returns>
+    Task UpdateStatsAsync(ViewStats stats, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Waits until the native window is closed.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -91,7 +99,11 @@ public sealed class NativeWindowViewRenderer(IViewWindowSurfaceFactory windowSur
     }
 
     /// <inheritdoc />
-    public Task UpdateStatsAsync(ViewStats stats, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task UpdateStatsAsync(ViewStats stats, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(stats);
+        return _windowSurface.UpdateStatsAsync(stats, cancellationToken);
+    }
 
     /// <inheritdoc />
     public Task WaitForCloseAsync(CancellationToken cancellationToken = default) => _windowSurface.WaitForCloseAsync(cancellationToken);

@@ -21,12 +21,15 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
     private readonly TaskCompletionSource _readySource = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _closedSource = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly object _frameLock = new();
+    private readonly object _statsLock = new();
 
     private Thread? _windowThread;
     private string _title = "VisitLab View";
     private Func<ViewPointerEvent, Task>? _pointerHandler;
     private ViewFrameSnapshot? _frame;
+    private ViewStats? _stats;
     private bool _frameDirty;
+    private bool _statsDirty;
     private bool _disposeRequested;
     private bool _disposed;
 
@@ -61,6 +64,23 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         {
             _frame = ViewFrameSnapshot.From(frame);
             _frameDirty = true;
+        }
+    }
+
+    public async Task UpdateStatsAsync(ViewStats stats, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(stats);
+
+        if (_disposed)
+        {
+            throw new ObjectDisposedException(nameof(Sdl3ViewWindowSurface));
+        }
+
+        await _readySource.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        lock (_statsLock)
+        {
+            _stats = stats;
+            _statsDirty = true;
         }
     }
 
@@ -179,6 +199,11 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
                 }
             }
 
+            if (ConsumeStatsDirty())
+            {
+                UpdateWindowTitle();
+            }
+
             if (ConsumeFrameDirty() || shouldRender)
             {
                 RenderFrame();
@@ -220,6 +245,46 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
             _frameDirty = false;
             return frameDirty;
         }
+    }
+
+    private bool ConsumeStatsDirty()
+    {
+        lock (_statsLock)
+        {
+            var statsDirty = _statsDirty;
+            _statsDirty = false;
+            return statsDirty;
+        }
+    }
+
+    private unsafe void UpdateWindowTitle()
+    {
+        if (_window is null)
+        {
+            return;
+        }
+
+        var titleBytes = Encoding.UTF8.GetBytes(BuildWindowTitle() + '\0');
+        fixed (byte* title = titleBytes)
+        {
+            SDL_SetWindowTitle(_window, title);
+        }
+    }
+
+    private string BuildWindowTitle()
+    {
+        ViewStats? stats;
+        lock (_statsLock)
+        {
+            stats = _stats;
+        }
+
+        if (stats is null)
+        {
+            return _title;
+        }
+
+        return $"{_title} | decode {stats.DecodeFps:0.0} fps | present {stats.PresentFps:0.0} fps | latency {stats.EndToEndLatencyMs} ms";
     }
 
     private unsafe void RenderFrame()

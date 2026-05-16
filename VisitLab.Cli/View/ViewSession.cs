@@ -45,7 +45,8 @@ public sealed class DefaultViewSessionFactory(
             new DefaultViewBackendFactory(_environment),
             new LocalhostViewStreamConnector(),
             new ViewPacketStreamReader(),
-            new DefaultViewRendererFactory());
+            new DefaultViewRendererFactory(),
+            new DefaultViewRecorderFactory(_fileSystem));
 }
 
 /// <summary>
@@ -101,7 +102,8 @@ public sealed class ViewSession(
     IViewBackendFactory viewBackendFactory,
     IViewStreamConnector streamConnector,
     IViewPacketStreamReader packetStreamReader,
-    IViewRendererFactory? viewRendererFactory = null) : IViewSession
+    IViewRendererFactory? viewRendererFactory = null,
+    IViewRecorderFactory? viewRecorderFactory = null) : IViewSession
 {
     private static readonly JsonSerializerOptions OutputJsonOptions = new()
     {
@@ -122,6 +124,7 @@ public sealed class ViewSession(
     private readonly IViewStreamConnector _streamConnector = streamConnector ?? throw new ArgumentNullException(nameof(streamConnector));
     private readonly IViewPacketStreamReader _packetStreamReader = packetStreamReader ?? throw new ArgumentNullException(nameof(packetStreamReader));
     private readonly IViewRendererFactory _viewRendererFactory = viewRendererFactory ?? new NullViewRendererFactory();
+    private readonly IViewRecorderFactory _viewRecorderFactory = viewRecorderFactory ?? new NullViewRecorderFactory();
 
     /// <inheritdoc />
     public async Task<int> RunAsync(ViewOptions options, CancellationToken cancellationToken = default)
@@ -132,6 +135,7 @@ public sealed class ViewSession(
 
         try
         {
+            await using var recorder = _viewRecorderFactory.Create(options);
             await using var viewBackend = _viewBackendFactory.Create(options);
             IViewRenderer? renderer = null;
             string endReason = "stream_ended";
@@ -160,7 +164,7 @@ public sealed class ViewSession(
                 };
 
                 renderer = _viewRendererFactory.Create(options, _deviceHost);
-                await viewBackend.InitializeAsync(negotiatedConnection, renderer, null, sessionCancellation.Token).ConfigureAwait(false);
+                await viewBackend.InitializeAsync(negotiatedConnection, renderer, recorder, sessionCancellation.Token).ConfigureAwait(false);
 
                 WriteJsonLine(new
                 {
@@ -296,6 +300,11 @@ public sealed class ViewSession(
 internal sealed class NullViewRendererFactory : IViewRendererFactory
 {
     public IViewRenderer? Create(ViewOptions options, IDeviceHost deviceHost) => null;
+}
+
+internal sealed class NullViewRecorderFactory : IViewRecorderFactory
+{
+    public IViewRecorder? Create(ViewOptions options) => null;
 }
 
 internal sealed class NullViewTransportBootstrap : IViewTransportBootstrap

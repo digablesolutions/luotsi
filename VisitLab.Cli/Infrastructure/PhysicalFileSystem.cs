@@ -12,6 +12,9 @@ public sealed class PhysicalFileSystem : IFileSystem
     public Task<string> ReadAllTextAsync(string path, CancellationToken cancellationToken = default) =>
         File.ReadAllTextAsync(path, cancellationToken);
 
+    public Stream OpenWrite(string path, bool overwrite = true) =>
+        new FileStream(path, overwrite ? FileMode.Create : FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+
     public bool FileExists(string path) => File.Exists(path);
 
     public void CopyFile(string sourcePath, string destinationPath, bool overwrite) =>

@@ -43,6 +43,7 @@ cd <repo-root>
 dotnet run --project VisitLab.Cli -- devices
 dotnet run --project VisitLab.Cli -- preflight --device <serial> --package fi.systam.visit
 dotnet run --project VisitLab.Cli -- screen-state --device <serial>
+dotnet run --project VisitLab.Cli -- view --device <serial> --decoder ffmpeg --record capture.h264
 dotnet run --project VisitLab.Cli -- telemetry-tail --device <serial> --tail 200
 dotnet run --project VisitLab.Cli -- telemetry-watch --device <serial> --timeout-sec 10
 dotnet run --project VisitLab.Cli -- tap-text --device <serial> --text "Sign in"
@@ -227,6 +228,8 @@ at publish time.
 - For the native `view --decoder ffmpeg` runtime, populate `ffmpeg/bin` with
   host-native shared libraries via `ffmpeg/download-ffmpeg.ps1` or set
   `DEVICE_E2E_FFMPEG_ROOT`.
+- `view --record <file.h264>` now writes the live mirrored stream as a raw
+  H.264 Annex B capture. Container muxing is still a later step.
 - Current macOS publishes already include the SDL3 native runtime, but FFmpeg
   shared libraries still need to be staged separately for live `view` runs.
 - Build typed semantic waits such as `wait-step` and `wait-action-ready` on top
