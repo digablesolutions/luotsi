@@ -26,6 +26,7 @@ public sealed class DeviceRunner(
 {
     private const string DefaultKioskPackage = "fi.systam.visit";
     private static readonly TimeSpan KeyboardVisibilityCacheTtl = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan UiDumpCacheTtl = TimeSpan.FromMilliseconds(250);
 
     private readonly IAdbClient _adb = adb ?? throw new ArgumentNullException(nameof(adb));
     private readonly ArtifactSession _artifacts = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
@@ -38,6 +39,7 @@ public sealed class DeviceRunner(
 
     private (int Width, int Height)? _displaySizeCache;
     private KeyboardVisibilitySnapshot? _keyboardVisibilityCache;
+    private UiDumpSnapshot? _uiDumpCache;
 
     /// <summary>
     /// Lists connected devices.
@@ -117,15 +119,17 @@ public sealed class DeviceRunner(
 
     private async Task<ScreenCapture> ReadScreenCaptureAsync(bool writeInvalidArtifact)
     {
-        var xml = await DumpUiAsync().ConfigureAwait(false);
+        var xml = await ReadUiDumpXmlAsync().ConfigureAwait(false);
 
         XDocument doc;
         try
         {
             doc = XDocument.Parse(xml);
+            CacheUiDump(xml);
         }
         catch (Exception ex) when (ex is XmlException || ex is InvalidOperationException)
         {
+            InvalidateUiDumpCache();
             if (writeInvalidArtifact)
             {
                 await _artifacts.WriteTextAsync("hierarchy.xml", xml).ConfigureAwait(false);
@@ -271,7 +275,7 @@ public sealed class DeviceRunner(
 
         var result = await _adb.ShellAsync($"input tap {parsedX} {parsedY}").ConfigureAwait(false);
         result.EnsureSuccess("tap failed");
-        InvalidateKeyboardVisibilityCache();
+        InvalidateUiReadCaches();
         return new TapResult(parsedX, parsedY);
     }
 
@@ -285,7 +289,7 @@ public sealed class DeviceRunner(
         var escaped = text.Replace("%", "%25", StringComparison.Ordinal).Replace(" ", "%s", StringComparison.Ordinal);
         var result = await _adb.ShellAsync($"input text {ShellQuote(escaped)}").ConfigureAwait(false);
         result.EnsureSuccess("type text failed");
-        InvalidateKeyboardVisibilityCache();
+        InvalidateUiReadCaches();
         return new TypeTextResult(text);
     }
 
@@ -299,7 +303,7 @@ public sealed class DeviceRunner(
         var keyCode = RequireNonBlank(code, "keyevent requires code.");
         var result = await _adb.ShellAsync($"input keyevent {ShellQuote(keyCode)}").ConfigureAwait(false);
         result.EnsureSuccess("keyevent failed");
-        InvalidateKeyboardVisibilityCache();
+        InvalidateUiReadCaches();
         return new KeyEventResult(keyCode);
     }
 
@@ -595,7 +599,7 @@ public sealed class DeviceRunner(
 
         var result = await _adb.ShellAsync($"input tap {resolvedX} {resolvedY}").ConfigureAwait(false);
         result.EnsureSuccess("tap point failed");
-        InvalidateKeyboardVisibilityCache();
+        InvalidateUiReadCaches();
 
         if (validatedPostTapDelayMs > 0)
         {
@@ -615,7 +619,7 @@ public sealed class DeviceRunner(
             await _delay.DelayAsync(160).ConfigureAwait(false);
         }
 
-        InvalidateKeyboardVisibilityCache();
+        InvalidateUiReadCaches();
 
         return new DoubleTapHeaderLogoResult("header_logo", x, y, 160);
     }
@@ -646,7 +650,7 @@ public sealed class DeviceRunner(
             }
         }
 
-        InvalidateKeyboardVisibilityCache();
+        InvalidateUiReadCaches();
 
         return new TypePinResult(digits.Length, validatedPerDigitDelayMs);
     }
@@ -913,13 +917,16 @@ public sealed class DeviceRunner(
 
     private async Task<XDocument> LoadUiDocumentAsync()
     {
-        var xml = await DumpUiAsync().ConfigureAwait(false);
+        var xml = await ReadUiDumpXmlAsync().ConfigureAwait(false);
         try
         {
-            return XDocument.Parse(xml);
+            var document = XDocument.Parse(xml);
+            CacheUiDump(xml);
+            return document;
         }
         catch (Exception ex) when (ex is XmlException || ex is InvalidOperationException)
         {
+            InvalidateUiDumpCache();
             await _artifacts.WriteTextAsync("hierarchy-invalid.xml", xml).ConfigureAwait(false);
             throw new InvalidOperationException("UI hierarchy dump was empty or invalid XML.", ex);
         }
@@ -990,6 +997,26 @@ public sealed class DeviceRunner(
         var result = await _adb.ShellAsync(command).ConfigureAwait(false);
         result.EnsureSuccess("uiautomator dump failed");
         return result.Stdout;
+    }
+
+    private async Task<string> ReadUiDumpXmlAsync()
+    {
+        var now = _timeProvider.GetUtcNow();
+        if (_uiDumpCache is { } cached && now - cached.CapturedAt < UiDumpCacheTtl)
+        {
+            return cached.Xml;
+        }
+
+        return await DumpUiAsync().ConfigureAwait(false);
+    }
+    private void CacheUiDump(string xml) => _uiDumpCache = new UiDumpSnapshot(xml, _timeProvider.GetUtcNow());
+
+    private void InvalidateUiDumpCache() => _uiDumpCache = null;
+
+    private void InvalidateUiReadCaches()
+    {
+        _keyboardVisibilityCache = null;
+        InvalidateUiDumpCache();
     }
 
     private async Task<string> ShellTextAsync(string command)
@@ -1181,6 +1208,8 @@ public sealed class DeviceRunner(
     private sealed record ScreenCapture(string Xml, ScreenState State);
 
     private sealed record KeyboardVisibilitySnapshot(bool IsVisible, DateTimeOffset CapturedAt);
+
+    private sealed record UiDumpSnapshot(string Xml, DateTimeOffset CapturedAt);
 
     private sealed record TelemetryMonitorResult(
         DateTimeOffset StartedAt,

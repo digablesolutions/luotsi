@@ -360,6 +360,61 @@ public sealed class AppTests
     }
 
     [Fact]
+    public async Task TapTextAsync_Reuses_Recent_UiDump_Across_Adjacent_Reads()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.EnqueueShellResult(new ProcessResult(0, CreateUiDump("Target"), string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
+
+        var element = await runner.WaitVisibleAsync("Target", 1);
+        var tap = await runner.TapTextAsync("Target", 1);
+
+        Assert.Equal("Target", element.Text);
+        Assert.Equal(50, tap.X);
+        Assert.Single(adb.ShellCommands, static command => command.Contains("uiautomator dump", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task GetScreenStateAsync_Refreshes_UiDump_After_Cache_Ttl_Expires()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.EnqueueShellResult(new ProcessResult(0, CreateUiDump("First"), string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, CreateUiDump("Second"), string.Empty));
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["screen-state"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
+
+        var first = await runner.GetScreenStateAsync();
+        timeProvider.Advance(TimeSpan.FromMilliseconds(251));
+        var second = await runner.GetScreenStateAsync();
+
+        Assert.Contains(first.Elements, element => element.Text == "First");
+        Assert.Contains(second.Elements, element => element.Text == "Second");
+        Assert.Equal(2, adb.ShellCommands.Count(static command => command.Contains("uiautomator dump", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task WaitVisibleAsync_Does_Not_Reuse_UiDump_After_Tap_Invalidates_Cache()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.EnqueueShellResult(new ProcessResult(0, CreateUiDump("Target"), string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, CreateUiDump("Target"), string.Empty));
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["wait-visible"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
+
+        await runner.WaitVisibleAsync("Target", 1);
+        await runner.TapAsync("10", "20");
+        await runner.WaitVisibleAsync("Target", 1);
+
+        Assert.Equal(2, adb.ShellCommands.Count(static command => command.Contains("uiautomator dump", StringComparison.Ordinal)));
+    }
+
+    [Fact]
     public async Task AssertTextInputReadyAsync_Retries_Transient_Invalid_Dumps()
     {
         var fileSystem = new FakeFileSystem();
