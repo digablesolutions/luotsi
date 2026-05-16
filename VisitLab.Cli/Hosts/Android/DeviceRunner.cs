@@ -677,11 +677,11 @@ public sealed class DeviceRunner(
         return new ResetLogResult(true);
     }
 
-    public async Task<AssertEventResult> AssertEventAsync(string name, IReadOnlyList<string> contains, string? detailsPattern, int timeoutSec)
+    public async Task<AssertEventResult> AssertEventAsync(string name, IReadOnlyList<string> contains, string? detailsPattern, int timeoutSec, DateTimeOffset? since = null)
     {
         var eventName = RequireNonBlank(name, "assertEvent requires event or text.");
         var validatedTimeoutSec = RequirePositive(timeoutSec, "assertEvent requires timeoutSec greater than zero.");
-        var started = _timeProvider.GetUtcNow();
+        var started = since ?? _timeProvider.GetUtcNow();
         var detailsRegex = CreateDetailsRegex(detailsPattern);
         var monitor = await _adb.MonitorLogAsync(
             started,
@@ -702,6 +702,7 @@ public sealed class DeviceRunner(
                 name = eventName,
                 contains,
                 details_pattern = detailsPattern,
+                observed_since = started,
                 timeout_sec = validatedTimeoutSec,
                 invocation = monitor.Invocation,
                 matched_line = monitor.MatchedLine

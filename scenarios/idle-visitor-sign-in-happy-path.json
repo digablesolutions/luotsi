@@ -33,7 +33,7 @@
     { "name": "additional visitors prompt", "action": "waitVisible", "text": "Would you like to add more visitors?", "timeoutSec": 15 },
     { "name": "clear logs before declining extras", "action": "resetLog" },
     { "name": "decline extra visitors", "action": "tapText", "text": "No", "timeoutSec": 15 },
-    { "name": "printing succeeded", "action": "assertEvent", "event": "PRINTING_SUCCESSFUL", "timeoutSec": 60 },
+    { "name": "printing succeeded", "action": "assertEvent", "event": "PRINTING_SUCCESSFUL", "timeoutSec": 60, "observeFromPreviousStep": true },
     { "name": "return to main page shortcut", "action": "tapText", "text": "Go to the main page", "timeoutSec": 8, "continueOnError": true },
     { "name": "sign out action visible", "action": "waitVisible", "text": "Sign out", "timeoutSec": 60 },
     { "name": "clear logs before sign out", "action": "resetLog" },

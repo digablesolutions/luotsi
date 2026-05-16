@@ -212,6 +212,7 @@ public sealed record ScenarioFile(string Name, IReadOnlyList<ScenarioStep> Steps
 /// <param name="MaxTopInsetPx">Maximum top inset for version assertions.</param>
 /// <param name="MaxRightInsetPx">Maximum right inset for version assertions.</param>
 /// <param name="IntervalMs">Interval between double taps or keyed characters.</param>
+/// <param name="ObserveFromPreviousStep">Whether an assertEvent step should start observing from the previous step's start time.</param>
 /// <param name="ContinueOnError">Whether the scenario should continue after a step failure.</param>
 public sealed record ScenarioStep(
     string? Name,
@@ -240,6 +241,7 @@ public sealed record ScenarioStep(
     int? MaxTopInsetPx = null,
     int? MaxRightInsetPx = null,
     int? IntervalMs = null,
+    bool? ObserveFromPreviousStep = null,
     bool? ContinueOnError = null);
 
 /// <summary>

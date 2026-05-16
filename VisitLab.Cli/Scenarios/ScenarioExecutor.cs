@@ -21,7 +21,7 @@ public interface IScenarioActionHost
     Task<TelemetryMatchResult> WaitForStepAsync(string step, int timeoutSec);
     Task<TelemetryMatchResult> WaitForActionReadyAsync(string action, string? step, int timeoutSec);
     Task<ResetLogResult> ResetLogAsync();
-    Task<AssertEventResult> AssertEventAsync(string name, IReadOnlyList<string> contains, string? detailsPattern, int timeoutSec);
+    Task<AssertEventResult> AssertEventAsync(string name, IReadOnlyList<string> contains, string? detailsPattern, int timeoutSec, DateTimeOffset? since = null);
     Task<TakeScreenshotResult> TakeScreenshotAsync(string label);
     Task<CaptureArtifactsResult> CaptureArtifactsAsync(string label);
     Task<AssertTextInputReadyResult> AssertTextInputReadyAsync(bool requireKeyboard, int timeoutSec);
@@ -50,9 +50,13 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
     /// <returns>Scenario result.</returns>
     public async Task<object> RunAsync(string file)
     {
+        var scenarioStarted = _timeProvider.GetUtcNow();
         var scenario = ValidateScenario(ResolveTemplates(await LoadAsync(file).ConfigureAwait(false)), file);
         var steps = new List<object>();
         await _actionHost.WriteDeviceFingerprintAsync().ConfigureAwait(false);
+        var prologueMs = (_timeProvider.GetUtcNow() - scenarioStarted).TotalMilliseconds;
+        var executedStepMs = 0d;
+        DateTimeOffset? previousStepStartedAt = null;
 
         for (var index = 0; index < scenario.Steps.Count; index++)
         {
@@ -62,8 +66,10 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
 
             try
             {
-                var result = await ExecuteStepAsync(step).ConfigureAwait(false);
+                var result = await ExecuteStepAsync(step, previousStepStartedAt).ConfigureAwait(false);
                 var durationMs = (_timeProvider.GetUtcNow() - started).TotalMilliseconds;
+                executedStepMs += durationMs;
+                previousStepStartedAt = started;
 
                 steps.Add(new
                 {
@@ -78,6 +84,8 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
             {
                 var category = ex is ICommandFailureDetails continuedFailure ? continuedFailure.CategoryOverride : ErrorInfo.Classify(ex.Message);
                 var durationMs = (_timeProvider.GetUtcNow() - started).TotalMilliseconds;
+                executedStepMs += durationMs;
+                previousStepStartedAt = started;
                 steps.Add(new
                 {
                     step = step.Name ?? step.Action,
@@ -95,6 +103,7 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
             catch (Exception ex)
             {
                 var durationMs = (_timeProvider.GetUtcNow() - started).TotalMilliseconds;
+                executedStepMs += durationMs;
                 var failureArtifacts = await _actionHost.CaptureFailureArtifactsAsync(
                     new FailureCaptureRequest("scenario", scenario.Name, file, index + 1, step.Name ?? step.Action, step.Action),
                     ex).ConfigureAwait(false);
@@ -107,6 +116,7 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
                         scenario = scenario.Name,
                         file,
                         status = "failed",
+                        timing = CreateScenarioRunTiming((_timeProvider.GetUtcNow() - scenarioStarted).TotalMilliseconds, prologueMs, executedStepMs),
                         failed_step = new
                         {
                             index = index + 1,
@@ -122,10 +132,16 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
             }
         }
 
-        return new { scenario = scenario.Name, status = "passed", steps };
+        return new
+        {
+            scenario = scenario.Name,
+            status = "passed",
+            timing = CreateScenarioRunTiming((_timeProvider.GetUtcNow() - scenarioStarted).TotalMilliseconds, prologueMs, executedStepMs),
+            steps
+        };
     }
 
-    private async Task<object> ExecuteStepAsync(ScenarioStep step)
+    private async Task<object> ExecuteStepAsync(ScenarioStep step, DateTimeOffset? previousStepStartedAt)
     {
         return step.Action switch
         {
@@ -142,7 +158,7 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
             "waitStep" => await _actionHost.WaitForStepAsync(step.Step ?? step.Text ?? throw new UsageException("waitStep requires step."), step.TimeoutSec ?? 15).ConfigureAwait(false),
             "waitActionReady" => await _actionHost.WaitForActionReadyAsync(step.Text ?? throw new UsageException("waitActionReady requires text."), step.Step, step.TimeoutSec ?? 15).ConfigureAwait(false),
             "resetLog" => await _actionHost.ResetLogAsync().ConfigureAwait(false),
-            "assertEvent" => await _actionHost.AssertEventAsync(step.Event ?? step.Text ?? throw new UsageException("assertEvent requires event or text."), step.Contains ?? Array.Empty<string>(), step.DetailsPattern, step.TimeoutSec ?? 15).ConfigureAwait(false),
+            "assertEvent" => await _actionHost.AssertEventAsync(step.Event ?? step.Text ?? throw new UsageException("assertEvent requires event or text."), step.Contains ?? Array.Empty<string>(), step.DetailsPattern, step.TimeoutSec ?? 15, step.ObserveFromPreviousStep is true ? previousStepStartedAt : null).ConfigureAwait(false),
             "takeScreenshot" => await _actionHost.TakeScreenshotAsync(step.Label ?? step.Text ?? step.Name ?? throw new UsageException("takeScreenshot requires label, text, or name.")).ConfigureAwait(false),
             "captureArtifacts" => await _actionHost.CaptureArtifactsAsync(step.Label ?? step.Text ?? step.Name ?? throw new UsageException("captureArtifacts requires label, text, or name.")).ConfigureAwait(false),
             "assertTextInputReady" => await _actionHost.AssertTextInputReadyAsync(step.RequireKeyboard ?? false, step.TimeoutSec ?? 15).ConfigureAwait(false),
@@ -280,6 +296,13 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
             {
                 throw new UsageException($"{stepLabel} tapPoint requires x/y or xRatio/yRatio.");
             }
+        }
+
+        if (string.Equals(step.Action, "assertEvent", StringComparison.OrdinalIgnoreCase) &&
+            step.ObserveFromPreviousStep is true &&
+            index == 1)
+        {
+            throw new UsageException($"{stepLabel} assertEvent cannot observe from the previous step when it is the first step.");
         }
     }
 
@@ -482,6 +505,14 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
             non_delay_ms = Math.Max(0, durationMs - harnessDelayMs)
         };
     }
+
+    private static object CreateScenarioRunTiming(double totalMs, double prologueMs, double executedStepMs) => new
+    {
+        total_ms = totalMs,
+        prologue_ms = prologueMs,
+        steps_ms = executedStepMs,
+        non_step_ms = Math.Max(0, totalMs - executedStepMs)
+    };
 
     private static int? GetConfiguredDelayMs(ScenarioStep step) => step.Action switch
     {

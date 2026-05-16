@@ -116,6 +116,8 @@ public sealed class AppTests
 
         Assert.Equal("basic", envelope.GetProperty("scenario").GetString());
         Assert.Equal("passed", envelope.GetProperty("status").GetString());
+        Assert.Equal(0, envelope.GetProperty("timing").GetProperty("prologue_ms").GetInt32());
+        Assert.Equal(250, envelope.GetProperty("timing").GetProperty("steps_ms").GetInt32());
         Assert.Equal(2, envelope.GetProperty("steps").GetArrayLength());
         Assert.Equal("sleep", envelope.GetProperty("steps")[0].GetProperty("action").GetString());
                 Assert.Equal(250, envelope.GetProperty("steps")[0].GetProperty("timing").GetProperty("harness_delay_ms").GetInt32());
@@ -562,17 +564,50 @@ public sealed class AppTests
             "I/flutter (17495): Log.PRINTING_SUCCESSFUL: [Main Isolate] Printing successful");
         var artifacts = ArtifactSession.Create(CliOptions.Parse(["assert-event"]), fileSystem, timeProvider);
         var runner = new DeviceRunner(adb, artifacts, timeProvider, new FakeDelay(timeProvider), fileSystem);
+                var observedSince = timeProvider.GetUtcNow().AddSeconds(-2);
 
-        var result = await runner.AssertEventAsync("PRINTING_SUCCESSFUL", [], null, 5);
+                var result = await runner.AssertEventAsync("PRINTING_SUCCESSFUL", [], null, 5, observedSince);
 
         Assert.Equal("I/flutter (17495): Log.PRINTING_SUCCESSFUL: [Main Isolate] Printing successful", result.MatchedLine);
         Assert.Empty(adb.RunCommands);
         Assert.Single(adb.StreamingLogRequests);
+                Assert.Equal(observedSince, adb.StreamingLogRequests[0].Since);
         Assert.True(adb.StreamingLogRequests[0].HasStopCondition);
         Assert.False(adb.StreamingLogRequests[0].HasLineObserver);
         Assert.True(fileSystem.FileExists(Path.Combine(artifacts.Root, "assert-event.txt")));
         Assert.True(fileSystem.FileExists(Path.Combine(artifacts.Root, "assert-event.json")));
     }
+
+        [Fact]
+        public async Task RunScenarioAsync_AssertEvent_Can_Observe_From_Previous_Step()
+        {
+                var fileSystem = new FakeFileSystem();
+                var initialTime = DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind);
+                var timeProvider = new ManualTimeProvider(initialTime);
+                var delay = new FakeDelay(timeProvider);
+                var adb = new FakeAdbClient();
+                adb.EnqueueShellResult(new ProcessResult(0, CreateDeviceFingerprintShellOutput("SER123", "Pixel 9", "16", "36", "google/pixel/device", "arm64-v8a", "mCurrentFocus=App"), string.Empty));
+                adb.EnqueueLogLines("I/flutter (17495): Log.PRINTING_SUCCESSFUL: [Main Isolate] Printing successful");
+                var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, delay, fileSystem);
+                var scenarios = new ScenarioExecutor(runner, fileSystem, timeProvider, delay);
+                var scenarioPath = "/tmp/assert-event-lookback.json";
+                fileSystem.AddFile(scenarioPath, """
+                {
+                    "name": "assert-event-lookback",
+                    "steps": [
+                        { "name": "pause", "action": "sleep", "milliseconds": 250 },
+                        { "name": "printing succeeded", "action": "assertEvent", "event": "PRINTING_SUCCESSFUL", "timeoutSec": 5, "observeFromPreviousStep": true }
+                    ]
+                }
+                """);
+
+                var result = await scenarios.RunAsync(scenarioPath);
+                var envelope = SerializeToJsonElement(result);
+
+                Assert.Equal(initialTime, adb.StreamingLogRequests[0].Since);
+                Assert.Equal(250, envelope.GetProperty("timing").GetProperty("steps_ms").GetInt32());
+                Assert.Equal(0, envelope.GetProperty("steps")[1].GetProperty("timing").GetProperty("harness_delay_ms").GetInt32());
+        }
 
     [Fact]
     public async Task RecordAsync_Uses_Injected_Id_And_Cleans_Up_Remote_File()
@@ -1260,7 +1295,7 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public Task<ResetLogResult> ResetLogAsync() => Task.FromResult(new ResetLogResult(true));
 
-    public Task<AssertEventResult> AssertEventAsync(string name, IReadOnlyList<string> contains, string? detailsPattern, int timeoutSec) =>
+    public Task<AssertEventResult> AssertEventAsync(string name, IReadOnlyList<string> contains, string? detailsPattern, int timeoutSec, DateTimeOffset? since = null) =>
         Task.FromResult(new AssertEventResult(name, contains, detailsPattern, string.Empty));
 
     public Task<TakeScreenshotResult> TakeScreenshotAsync(string label) => Task.FromResult(new TakeScreenshotResult(label, $"{label}.png"));
