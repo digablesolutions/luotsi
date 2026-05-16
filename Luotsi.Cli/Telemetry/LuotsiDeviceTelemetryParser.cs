@@ -4,10 +4,11 @@ namespace Luotsi.Cli.Telemetry;
 
 /// <summary>
 /// Default parser for the kiosk <c>LUOTSI_DEVICE_TELEMETRY</c> logcat contract.
+/// Temporarily also accepts the legacy <c>DEVICE_TEST_TELEMETRY</c> marker.
 /// </summary>
 public sealed class LuotsiDeviceTelemetryParser : ITelemetryParser
 {
-    private const string Prefix = "LUOTSI_DEVICE_TELEMETRY";
+    private static readonly string[] Prefixes = ["LUOTSI_DEVICE_TELEMETRY", "DEVICE_TEST_TELEMETRY"];
 
     /// <summary>
     /// Parses telemetry events and malformed lines from a raw logcat payload.
@@ -58,13 +59,13 @@ public sealed class LuotsiDeviceTelemetryParser : ITelemetryParser
             return new TelemetryLineParseResult(false, false, null, null);
         }
 
-        var prefixIndex = line.IndexOf(Prefix, StringComparison.Ordinal);
-        if (prefixIndex < 0)
+        var prefix = FindPrefix(line, out var prefixIndex);
+        if (prefix is null)
         {
             return new TelemetryLineParseResult(true, false, null, null);
         }
 
-        var jsonStart = line.IndexOf('{', prefixIndex + Prefix.Length);
+        var jsonStart = line.IndexOf('{', prefixIndex + prefix.Length);
         if (jsonStart < 0)
         {
             return new TelemetryLineParseResult(true, true, null, new TelemetryParseError(line, "Telemetry line did not contain a JSON payload."));
@@ -94,6 +95,22 @@ public sealed class LuotsiDeviceTelemetryParser : ITelemetryParser
         {
             return new TelemetryLineParseResult(true, true, null, new TelemetryParseError(line, ex.Message));
         }
+    }
+
+    private static string? FindPrefix(string line, out int prefixIndex)
+    {
+        foreach (var prefix in Prefixes)
+        {
+            var index = line.IndexOf(prefix, StringComparison.Ordinal);
+            if (index >= 0)
+            {
+                prefixIndex = index;
+                return prefix;
+            }
+        }
+
+        prefixIndex = -1;
+        return null;
     }
 
     private static string? TryGetString(JsonElement element, string propertyName) =>
