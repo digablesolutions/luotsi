@@ -731,6 +731,18 @@ internal sealed class ViewSessionInteractionRouter(
                 await HandleDeviceSwitchAsync(switchDeviceRequest).ConfigureAwait(false);
                 break;
 
+            case ViewInteractionFailedRequest failedRequest:
+                WriteEvent(new
+                {
+                    type = "view_interaction_failed",
+                    session_id = _sessionId,
+                    occurred_at = _timeProvider.GetUtcNow(),
+                    request_type = failedRequest.FailedRequestType,
+                    exception_type = failedRequest.ExceptionType,
+                    message = failedRequest.Message
+                });
+                break;
+
             default:
                 throw new InvalidOperationException($"Unsupported view interaction request '{request.GetType().Name}'.");
         }

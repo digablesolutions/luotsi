@@ -559,6 +559,27 @@ public sealed class ViewTransportTests
     }
 
     [Fact]
+    public async Task TcpViewShareServer_Disconnects_Observer_When_Backpressure_Buffer_Is_Full()
+    {
+        await using var server = new TcpViewShareServer("127.0.0.1:0");
+        var endpoint = await server.StartAsync();
+        await server.BeginStreamAsync(new ViewStreamHeader(1, "h264", 1080, 1920, 0));
+
+        var (host, port) = ViewShareEndpointParser.ParseConnect(endpoint);
+        using var client = new TcpClient();
+        await client.ConnectAsync(host, port);
+        await WaitForObserverCountAsync(server, 1);
+
+        var payload = new byte[1024 * 1024];
+        for (var sequence = 0; sequence < 512 && server.ObserverCount > 0; sequence++)
+        {
+            await server.PublishPacketAsync(new ViewPacket(ViewPacketType.Frame, sequence, sequence, false, payload));
+        }
+
+        await WaitForObserverCountExactlyAsync(server, 0);
+    }
+
+    [Fact]
     public async Task NativeWindowViewRenderer_Forwards_Chrome_State_To_Window_Surface()
     {
         var windowSurface = new FakeViewWindowSurface();
@@ -605,6 +626,34 @@ public sealed class ViewTransportTests
         Assert.Equal("device-b", switchHit.DeviceSelector);
     }
 
+    [Fact]
+    public void ViewChromeLayout_ResolveTooltip_Maps_Command_Button_Labels()
+    {
+        var idleChrome = new ViewChromeState(
+            "device-a",
+            [new ViewChromeDevice(1, "device-a", "device", "Primary", true)],
+            false,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false);
+        var recordingChrome = idleChrome with { IsRecording = true };
+
+        var screenshotTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 20, 20, idleChrome, ViewScaleMode.Fit, false));
+        var recordTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 60, 20, idleChrome, ViewScaleMode.Fit, false));
+        var activeRecordTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 60, 20, recordingChrome, ViewScaleMode.Fit, false));
+        var scaleTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 140, 20, idleChrome, ViewScaleMode.Fit, false));
+        var fullscreenTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 180, 20, idleChrome, ViewScaleMode.Fit, true));
+
+        Assert.Equal("Screenshot", screenshotTooltip.Text);
+        Assert.Equal("Start Recording", recordTooltip.Text);
+        Assert.Equal("Stop Recording", activeRecordTooltip.Text);
+        Assert.Equal("Fill", scaleTooltip.Text);
+        Assert.Equal("Windowed", fullscreenTooltip.Text);
+    }
+
     private static async Task<List<ViewPacket>> ReadAllAsync(IAsyncEnumerable<ViewPacket> packets)
     {
         var result = new List<ViewPacket>();
@@ -630,6 +679,21 @@ public sealed class ViewTransportTests
         for (var attempt = 0; attempt < 100; attempt++)
         {
             if (server.ObserverCount >= expectedCount)
+            {
+                return;
+            }
+
+            await Task.Delay(10);
+        }
+
+        throw new InvalidOperationException($"Timed out waiting for {expectedCount} share observer connections.");
+    }
+
+    private static async Task WaitForObserverCountExactlyAsync(TcpViewShareServer server, int expectedCount)
+    {
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            if (server.ObserverCount == expectedCount)
             {
                 return;
             }

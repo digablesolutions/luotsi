@@ -227,7 +227,7 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
         {
             SingleReader = true,
             SingleWriter = false,
-            FullMode = BoundedChannelFullMode.DropWrite
+            FullMode = BoundedChannelFullMode.Wait
         });
 
         private Task? _writerTask;

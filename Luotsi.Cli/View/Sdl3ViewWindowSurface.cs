@@ -18,6 +18,11 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
 {
     private const byte MouseButtonLeft = 1;
     private const int EventWaitTimeoutMs = 16;
+    private const int TooltipGlyphCellSize = 2;
+    private const int TooltipGlyphGap = 2;
+    private const int TooltipPaddingX = 8;
+    private const int TooltipPaddingY = 6;
+    private const int TooltipOffsetY = 6;
 
     private readonly TaskCompletionSource _readySource = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _closedSource = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -39,6 +44,10 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
     private bool _disposed;
     private bool _isFullscreen;
     private ViewScaleMode _scaleMode = ViewScaleMode.Fit;
+    private ViewChromeTooltip? _hoverTooltip;
+    private int _lastMouseClientX;
+    private int _lastMouseClientY;
+    private bool _hasMousePosition;
 
     private unsafe SDL_Window* _window;
     private unsafe SDL_Renderer* _renderer;
@@ -234,9 +243,15 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
                 }
             }
 
-            if (ConsumeStatsDirty() || ConsumeChromeDirty())
+            var statsDirty = ConsumeStatsDirty();
+            var chromeDirty = ConsumeChromeDirty();
+            if (statsDirty || chromeDirty)
             {
                 UpdateWindowTitle();
+                if (chromeDirty)
+                {
+                    shouldRender |= RefreshHoverTooltip();
+                }
             }
 
             if (ConsumeFrameDirty() || shouldRender)
@@ -266,6 +281,9 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
             case (uint)SDL_EventType.SDL_EVENT_MOUSE_BUTTON_UP:
                 HandlePointer(sdlEvent.button);
                 return false;
+
+            case (uint)SDL_EventType.SDL_EVENT_MOUSE_MOTION:
+                return HandleMouseMotion(sdlEvent.motion);
 
             case (uint)SDL_EventType.SDL_EVENT_MOUSE_WHEEL:
                 HandleMouseWheel(sdlEvent.wheel);
@@ -564,10 +582,49 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
                 {
                     await pointerHandler(pointerEvent).ConfigureAwait(false);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    await ReportInteractionFailureAsync(
+                        new ViewPointerInteractionRequest(
+                            pointerEvent.ClientX,
+                            pointerEvent.ClientY,
+                            pointerEvent.ClientWidth,
+                            pointerEvent.ClientHeight,
+                            pointerEvent.ScaleMode),
+                        ex).ConfigureAwait(false);
                 }
             });
+    }
+
+    private bool HandleMouseMotion(SDL_MouseMotionEvent mouseMotionEvent)
+    {
+        _lastMouseClientX = (int)Math.Round(mouseMotionEvent.x, MidpointRounding.AwayFromZero);
+        _lastMouseClientY = (int)Math.Round(mouseMotionEvent.y, MidpointRounding.AwayFromZero);
+        _hasMousePosition = true;
+        return RefreshHoverTooltip();
+    }
+
+    private bool RefreshHoverTooltip()
+    {
+        ViewChromeTooltip? nextTooltip = null;
+        if (_hasMousePosition && TryGetLogicalWindowSize(out var clientWidth, out var clientHeight))
+        {
+            ViewChromeState? chrome;
+            lock (_chromeLock)
+            {
+                chrome = _chrome;
+            }
+
+            nextTooltip = ViewChromeLayout.ResolveTooltip(clientWidth, clientHeight, _lastMouseClientX, _lastMouseClientY, chrome, _scaleMode, _isFullscreen);
+        }
+
+        if (Equals(_hoverTooltip, nextTooltip))
+        {
+            return false;
+        }
+
+        _hoverTooltip = nextTooltip;
+        return true;
     }
 
     private bool HandleKey(SDL_KeyboardEvent keyboardEvent)
@@ -591,6 +648,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
 
             case SDL_Keycode.SDLK_F8:
                 _scaleMode = _scaleMode == ViewScaleMode.Fit ? ViewScaleMode.Fill : ViewScaleMode.Fit;
+                _ = RefreshHoverTooltip();
                 UpdateWindowTitle();
                 return true;
 
@@ -732,6 +790,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         if (SDL_SetWindowFullscreen(_window, nextState))
         {
             _isFullscreen = !_isFullscreen;
+            _ = RefreshHoverTooltip();
             UpdateWindowTitle();
         }
     }
@@ -774,6 +833,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
                 {
                     case ViewChromeLocalAction.ToggleScaleMode:
                         _scaleMode = _scaleMode == ViewScaleMode.Fit ? ViewScaleMode.Fill : ViewScaleMode.Fit;
+                        _ = RefreshHoverTooltip();
                         UpdateWindowTitle();
                         return true;
 
@@ -803,10 +863,31 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
                 {
                     await interactionHandler(request).ConfigureAwait(false);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    await ReportInteractionFailureAsync(request, ex).ConfigureAwait(false);
                 }
             });
+    }
+
+    private async Task ReportInteractionFailureAsync(ViewInteractionRequest request, Exception exception)
+    {
+        var interactionHandler = _interactionHandler;
+        if (interactionHandler is null || request is ViewInteractionFailedRequest)
+        {
+            return;
+        }
+
+        try
+        {
+            await interactionHandler(new ViewInteractionFailedRequest(
+                request.GetType().Name,
+                exception.GetType().FullName ?? exception.GetType().Name,
+                exception.Message)).ConfigureAwait(false);
+        }
+        catch
+        {
+        }
     }
 
     private unsafe void RenderChrome(int pixelWidth, int pixelHeight)
@@ -854,6 +935,11 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
             {
                 DrawDeviceSlot(slot, scaleX, scaleY, chrome.ActiveDevice);
             }
+        }
+
+        if (_hoverTooltip is not null)
+        {
+            DrawTooltip(_hoverTooltip, logicalWidth, logicalHeight, scaleX, scaleY);
         }
     }
 
@@ -1016,6 +1102,103 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         Segment((mask & segmentF) != 0, left, top, thickness, height / 2f);
         Segment((mask & segmentG) != 0, left, middleY, width, thickness);
     }
+
+    private unsafe void DrawTooltip(ViewChromeTooltip tooltip, int logicalWidth, int logicalHeight, float scaleX, float scaleY)
+    {
+        var text = tooltip.Text.ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        var glyphWidth = 5 * TooltipGlyphCellSize;
+        var glyphHeight = 7 * TooltipGlyphCellSize;
+        var textWidth = text.Length * glyphWidth + Math.Max(0, text.Length - 1) * TooltipGlyphGap;
+        var tooltipWidth = textWidth + TooltipPaddingX * 2;
+        var tooltipHeight = glyphHeight + TooltipPaddingY * 2;
+        var left = tooltip.AnchorBounds.Left + (tooltip.AnchorBounds.Width - tooltipWidth) / 2;
+        left = Math.Clamp(left, 8, Math.Max(8, logicalWidth - tooltipWidth - 8));
+
+        var top = tooltip.AnchorBounds.Bottom + TooltipOffsetY;
+        if (top + tooltipHeight > logicalHeight - 8)
+        {
+            top = Math.Max(8, tooltip.AnchorBounds.Top - tooltipHeight - TooltipOffsetY);
+        }
+
+        var bounds = new ViewChromeRect(left, top, tooltipWidth, tooltipHeight);
+        FillRect(bounds, scaleX, scaleY, 10, 10, 10, 236);
+        OutlineRect(bounds, scaleX, scaleY, 232, 232, 232, 255);
+        DrawTooltipText(text, bounds.Left + TooltipPaddingX, bounds.Top + TooltipPaddingY, scaleX, scaleY, 244, 244, 244, 255);
+    }
+
+    private unsafe void DrawTooltipText(string text, int left, int top, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
+    {
+        var glyphWidth = 5 * TooltipGlyphCellSize;
+        var cursorLeft = left;
+        foreach (var character in text)
+        {
+            DrawTooltipGlyph(character, cursorLeft, top, scaleX, scaleY, r, g, b, a);
+            cursorLeft += glyphWidth + TooltipGlyphGap;
+        }
+    }
+
+    private unsafe void DrawTooltipGlyph(char character, int left, int top, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
+    {
+        var glyphRows = GetTooltipGlyphRows(character);
+        if (glyphRows == 0)
+        {
+            return;
+        }
+
+        for (var row = 0; row < 7; row++)
+        {
+            var rowBits = (int)((glyphRows >> ((6 - row) * 5)) & 0x1F);
+            for (var column = 0; column < 5; column++)
+            {
+                if ((rowBits & (1 << (4 - column))) == 0)
+                {
+                    continue;
+                }
+
+                FillRect(
+                    new ViewChromeRect(
+                        left + column * TooltipGlyphCellSize,
+                        top + row * TooltipGlyphCellSize,
+                        TooltipGlyphCellSize,
+                        TooltipGlyphCellSize),
+                    scaleX,
+                    scaleY,
+                    r,
+                    g,
+                    b,
+                    a);
+            }
+        }
+    }
+
+    private static long GetTooltipGlyphRows(char character) => char.ToUpperInvariant(character) switch
+    {
+        'A' => 0b01110_10001_10001_11111_10001_10001_10001,
+        'C' => 0b01110_10001_10000_10000_10000_10001_01110,
+        'D' => 0b11110_10001_10001_10001_10001_10001_11110,
+        'E' => 0b11111_10000_10000_11110_10000_10000_11111,
+        'F' => 0b11111_10000_10000_11110_10000_10000_10000,
+        'G' => 0b01110_10001_10000_10111_10001_10001_01110,
+        'H' => 0b10001_10001_10001_11111_10001_10001_10001,
+        'I' => 0b11111_00100_00100_00100_00100_00100_11111,
+        'L' => 0b10000_10000_10000_10000_10000_10000_11111,
+        'N' => 0b10001_11001_10101_10011_10001_10001_10001,
+        'O' => 0b01110_10001_10001_10001_10001_10001_01110,
+        'P' => 0b11110_10001_10001_11110_10000_10000_10000,
+        'R' => 0b11110_10001_10001_11110_10100_10010_10001,
+        'S' => 0b01111_10000_10000_01110_00001_00001_11110,
+        'T' => 0b11111_00100_00100_00100_00100_00100_00100,
+        'U' => 0b10001_10001_10001_10001_10001_10001_01110,
+        'W' => 0b10001_10001_10001_10101_10101_11011_10001,
+        'Y' => 0b10001_10001_01010_00100_00100_00100_00100,
+        ' ' => 0,
+        _ => 0b11111_00001_00110_00100_00000_00100_00000
+    };
 
     private unsafe void FillRect(ViewChromeRect rect, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
     {

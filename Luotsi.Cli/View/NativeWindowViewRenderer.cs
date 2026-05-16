@@ -178,6 +178,13 @@ public sealed class NativeWindowViewRenderer(IViewWindowSurfaceFactory windowSur
     }
 }
 
+internal sealed record ViewPointerInteractionRequest(
+    int ClientX,
+    int ClientY,
+    int ClientWidth,
+    int ClientHeight,
+    ViewScaleMode ScaleMode) : ViewInteractionRequest;
+
 internal static class ViewPointerMapper
 {
     public static bool TryMapToRelativePoint(

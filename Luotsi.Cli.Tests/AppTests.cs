@@ -1846,6 +1846,38 @@ public sealed class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_View_Emits_Interaction_Failure_Event()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var renderer = new ClosingViewRenderer();
+        var rendererFactory = new FakeViewRendererFactory(renderer);
+        var session = new ViewSession(
+            host,
+            ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
+            console,
+            timeProvider,
+            new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward")),
+            new FakeViewBackendFactory(new BlockingViewBackend()),
+            new FakeViewStreamConnector(new ViewPacketStreamHarness().WriteHeader("h264", 1080, 1920).Build()),
+            new ViewPacketStreamReader(),
+            rendererFactory);
+
+        var runTask = session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", false, null, 1600, 60, "8M", false, false));
+        var interactionHandler = await ViewTestWaitHelpers.WaitForInteractionHandlerAsync(rendererFactory);
+        await interactionHandler(new ViewInteractionFailedRequest("ViewFileDropRequest", "System.InvalidOperationException", "push failed"));
+        renderer.Close();
+        var exitCode = await runTask;
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains(console.OutputLines, line => line.Contains("view_interaction_failed", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, line => line.Contains("ViewFileDropRequest", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, line => line.Contains("push failed", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task RunAsync_View_Emits_Device_Shelf_When_Multiple_Devices_Are_Visible()
     {
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));

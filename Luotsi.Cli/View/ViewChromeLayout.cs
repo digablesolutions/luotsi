@@ -60,6 +60,28 @@ public static class ViewChromeLayout
         return null;
     }
 
+    internal static ViewChromeTooltip? ResolveTooltip(int clientWidth, int clientHeight, int x, int y, ViewChromeState? chrome, ViewScaleMode scaleMode, bool isFullscreen)
+    {
+        if (clientWidth <= 0 || clientHeight <= 0 || chrome is null)
+        {
+            return null;
+        }
+
+        var layout = BuildRenderLayout(clientWidth, clientHeight, chrome);
+        foreach (var button in layout.Buttons)
+        {
+            if (!button.Bounds.Contains(x, y))
+            {
+                continue;
+            }
+
+            var text = DescribeTooltip(button, scaleMode, isFullscreen);
+            return text is null ? null : new ViewChromeTooltip(button.Bounds, text);
+        }
+
+        return null;
+    }
+
     internal static ViewChromeRenderLayout BuildRenderLayout(int clientWidth, int clientHeight, ViewChromeState? chrome)
     {
         if (clientWidth <= 0 || clientHeight <= 0 || chrome is null)
@@ -121,6 +143,17 @@ public static class ViewChromeLayout
 
         return new ViewChromeRenderLayout(buttons, deviceSlots, toolbarBounds, shelfBounds, shareBadge);
     }
+
+    private static string? DescribeTooltip(ViewChromeButtonLayout button, ViewScaleMode scaleMode, bool isFullscreen) =>
+        button.Kind switch
+        {
+            ViewChromeButtonKind.Screenshot => "Screenshot",
+            ViewChromeButtonKind.Record => button.Active ? "Stop Recording" : "Start Recording",
+            ViewChromeButtonKind.Reconnect => "Reconnect",
+            ViewChromeButtonKind.ScaleMode => scaleMode == ViewScaleMode.Fill ? "Fit" : "Fill",
+            ViewChromeButtonKind.Fullscreen => isFullscreen ? "Windowed" : "Fullscreen",
+            _ => null
+        };
 }
 
 /// <summary>
@@ -178,6 +211,8 @@ internal sealed record ViewChromeButtonLayout(ViewChromeButtonKind Kind, ViewChr
 internal sealed record ViewChromeDeviceSlotLayout(string DeviceSelector, int Index, ViewChromeRect Bounds, bool Enabled);
 
 internal sealed record ViewChromeBadgeLayout(ViewChromeRect Bounds, int ObserverCount);
+
+internal sealed record ViewChromeTooltip(ViewChromeRect AnchorBounds, string Text);
 
 internal sealed record ViewChromeRenderLayout(
     IReadOnlyList<ViewChromeButtonLayout> Buttons,

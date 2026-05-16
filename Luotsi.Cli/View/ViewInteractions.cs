@@ -56,6 +56,14 @@ public sealed record ViewFileDropRequest(string FilePath) : ViewInteractionReque
 public sealed record ViewSwitchDeviceRequest(string DeviceSelector) : ViewInteractionRequest;
 
 /// <summary>
+/// Failure raised by the local window surface while dispatching an interaction asynchronously.
+/// </summary>
+/// <param name="FailedRequestType">Interaction request type that failed.</param>
+/// <param name="ExceptionType">Exception type name.</param>
+/// <param name="Message">Failure message.</param>
+public sealed record ViewInteractionFailedRequest(string FailedRequestType, string ExceptionType, string Message) : ViewInteractionRequest;
+
+/// <summary>
 /// Window command raised by local UI affordances such as hotkeys.
 /// </summary>
 public enum ViewWindowCommand
