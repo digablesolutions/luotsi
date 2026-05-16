@@ -141,11 +141,11 @@ public sealed class DeviceRunner(
             InvalidateUiDumpCache();
             if (writeInvalidArtifact)
             {
-                await _artifacts.WriteTextAsync("hierarchy.xml", xml).ConfigureAwait(false);
-                await _artifacts.WriteTextAsync("hierarchy-invalid.xml", xml).ConfigureAwait(false);
+                await _artifacts.WriteTextAsync(DeviceArtifactNames.HierarchyXml, xml).ConfigureAwait(false);
+                await _artifacts.WriteTextAsync(DeviceArtifactNames.InvalidHierarchyXml, xml).ConfigureAwait(false);
             }
 
-            throw new InvalidOperationException("UI hierarchy dump was empty or invalid XML. See hierarchy-invalid.xml for the raw dump.", ex);
+            throw new InvalidOperationException($"UI hierarchy dump was empty or invalid XML. See {DeviceArtifactNames.InvalidHierarchyXml} for the raw dump.", ex);
         }
 
         var elements = doc.Descendants("node")
@@ -157,23 +157,23 @@ public sealed class DeviceRunner(
 
     private async Task WriteScreenCaptureArtifactsAsync(ScreenCapture capture, string? snapshotPrefix = null)
     {
-        await _artifacts.WriteTextAsync("hierarchy.xml", capture.Xml).ConfigureAwait(false);
-        await _artifacts.WriteJsonAsync("screen-state.json", capture.State).ConfigureAwait(false);
+        await _artifacts.WriteTextAsync(DeviceArtifactNames.HierarchyXml, capture.Xml).ConfigureAwait(false);
+        await _artifacts.WriteJsonAsync(DeviceArtifactNames.ScreenStateJson, capture.State).ConfigureAwait(false);
 
         if (string.IsNullOrWhiteSpace(snapshotPrefix))
         {
             return;
         }
 
-        var screenStatePath = Path.Combine(_artifacts.Root, "screen-state.json");
-        var hierarchyPath = Path.Combine(_artifacts.Root, "hierarchy.xml");
-        _fileSystem.CopyFile(screenStatePath, Path.Combine(_artifacts.Root, $"{snapshotPrefix}-screen-state.json"), true);
-        _fileSystem.CopyFile(hierarchyPath, Path.Combine(_artifacts.Root, $"{snapshotPrefix}-hierarchy.xml"), true);
+        var screenStatePath = Path.Combine(_artifacts.Root, DeviceArtifactNames.ScreenStateJson);
+        var hierarchyPath = Path.Combine(_artifacts.Root, DeviceArtifactNames.HierarchyXml);
+        _fileSystem.CopyFile(screenStatePath, Path.Combine(_artifacts.Root, DeviceArtifactNames.ScreenStateForLabel(snapshotPrefix)), true);
+        _fileSystem.CopyFile(hierarchyPath, Path.Combine(_artifacts.Root, DeviceArtifactNames.HierarchyForLabel(snapshotPrefix)), true);
 
-        var invalidHierarchyPath = Path.Combine(_artifacts.Root, "hierarchy-invalid.xml");
+        var invalidHierarchyPath = Path.Combine(_artifacts.Root, DeviceArtifactNames.InvalidHierarchyXml);
         if (_fileSystem.FileExists(invalidHierarchyPath))
         {
-            _fileSystem.CopyFile(invalidHierarchyPath, Path.Combine(_artifacts.Root, $"{snapshotPrefix}-hierarchy-invalid.xml"), true);
+            _fileSystem.CopyFile(invalidHierarchyPath, Path.Combine(_artifacts.Root, DeviceArtifactNames.InvalidHierarchyForLabel(snapshotPrefix)), true);
         }
     }
 
@@ -407,12 +407,12 @@ public sealed class DeviceRunner(
         var validatedTimeoutSec = RequirePositive(timeoutSec, "waitLog requires timeoutSec greater than zero.");
         var started = _timeProvider.GetUtcNow();
         var monitor = await _adb.MonitorLogAsync(containsText, started, validatedTimeoutSec).ConfigureAwait(false);
-        await _artifacts.WriteTextAsync("wait-log.txt", monitor.LogOutput).ConfigureAwait(false);
+        await _artifacts.WriteTextAsync(DeviceArtifactNames.TextFromBase(DeviceArtifactNames.WaitLogBaseName), monitor.LogOutput).ConfigureAwait(false);
         await _artifacts.WriteJsonAsync(
-            "wait-log.json",
+            DeviceArtifactNames.JsonFromBase(DeviceArtifactNames.WaitLogBaseName),
             new
             {
-                schema = "luotsi-log-wait.v1",
+                schema = ResultSchemas.LogWait,
                 contains = containsText,
                 timeout_sec = validatedTimeoutSec,
                 started_at = started,
@@ -444,7 +444,7 @@ public sealed class DeviceRunner(
         var validatedTail = RequirePositive(tail, "logcat requires tail greater than zero.");
         var result = await _adb.RunAsync(["logcat", "-d", "-t", validatedTail.ToString()]).ConfigureAwait(false);
         result.EnsureSuccess("logcat failed");
-        await _artifacts.WriteTextAsync("logcat.txt", result.Stdout).ConfigureAwait(false);
+        await _artifacts.WriteTextAsync(DeviceArtifactNames.LogcatText, result.Stdout).ConfigureAwait(false);
         return new LogcatResult(result.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries));
     }
 
@@ -459,11 +459,11 @@ public sealed class DeviceRunner(
         var result = await _adb.RunAsync(["logcat", "-d", "-v", "brief", "-t", validatedTail.ToString()]).ConfigureAwait(false);
         result.EnsureSuccess("telemetry tail failed");
         return await CaptureTelemetryAsync(
-            "telemetry-tail",
+            DeviceArtifactNames.TelemetryTailBaseName,
             result.Stdout,
             new
             {
-                schema = "luotsi-telemetry-tail.v1",
+                schema = ResultSchemas.TelemetryTail,
                 tail = validatedTail,
                 invocation = result.Invocation
             }).ConfigureAwait(false);
@@ -479,11 +479,11 @@ public sealed class DeviceRunner(
         var validatedTimeoutSec = RequirePositive(timeoutSec, "telemetryWatch requires timeoutSec greater than zero.");
         var telemetrySession = await MonitorTelemetryAsync(validatedTimeoutSec).ConfigureAwait(false);
         return await CaptureTelemetryAsync(
-            "telemetry-watch",
+            DeviceArtifactNames.TelemetryWatchBaseName,
             telemetrySession.LogOutput,
             new
             {
-                schema = "luotsi-telemetry-watch.v1",
+                schema = ResultSchemas.TelemetryWatch,
                 started_at = telemetrySession.StartedAt,
                 timeout_sec = validatedTimeoutSec,
                 invocation = telemetrySession.Invocation
@@ -506,10 +506,10 @@ public sealed class DeviceRunner(
             telemetry => string.Equals(telemetry.Event, "step", StringComparison.OrdinalIgnoreCase)
                 && string.Equals(NormalizeTelemetryStep(telemetry.Step), expectedStep, StringComparison.Ordinal),
             telemetry => new TelemetryMatchResult(expectedStep, null, telemetry.RawLine, telemetry.Event!, telemetry.Payload),
-            "wait-step",
+            DeviceArtifactNames.WaitStepBaseName,
             invocation => new
             {
-                schema = "luotsi-wait-step.v1",
+                schema = ResultSchemas.WaitStep,
                 step = expectedStep,
                 timeout_sec = validatedTimeoutSec,
                 invocation
@@ -536,10 +536,10 @@ public sealed class DeviceRunner(
                 string.Equals(telemetry.Action, expectedAction, StringComparison.OrdinalIgnoreCase) &&
                 (normalizedStep is null || string.Equals(NormalizeTelemetryStep(telemetry.Step), normalizedStep, StringComparison.Ordinal)),
             telemetry => new TelemetryMatchResult(normalizedStep, expectedAction, telemetry.RawLine, telemetry.Event!, telemetry.Payload),
-            "wait-action-ready",
+            DeviceArtifactNames.WaitActionReadyBaseName,
             invocation => new
             {
-                schema = "luotsi-wait-action-ready.v1",
+                schema = ResultSchemas.WaitActionReady,
                 action = expectedAction,
                 step = normalizedStep,
                 timeout_sec = validatedTimeoutSec,
@@ -571,7 +571,7 @@ public sealed class DeviceRunner(
     {
         var snapshot = await ReadDeviceFingerprintSnapshotAsync().ConfigureAwait(false);
         var fingerprint = new DeviceFingerprint(
-            "device-fingerprint.v1",
+            ResultSchemas.DeviceFingerprint,
             _timeProvider.GetUtcNow(),
             snapshot.Serial,
             snapshot.Model,
@@ -580,7 +580,7 @@ public sealed class DeviceRunner(
             snapshot.Fingerprint,
             snapshot.Abi,
             snapshot.CurrentFocus);
-        await _artifacts.WriteJsonAsync("device-fingerprint.json", fingerprint).ConfigureAwait(false);
+        await _artifacts.WriteJsonAsync(DeviceArtifactNames.DeviceFingerprintJson, fingerprint).ConfigureAwait(false);
         return fingerprint;
     }
 
@@ -604,14 +604,14 @@ public sealed class DeviceRunner(
 
         await CaptureAsync("screenshot", async () =>
         {
-            var fileName = $"{prefix}-screenshot.png";
+            var fileName = DeviceArtifactNames.ScreenshotForLabel(prefix);
             await CaptureScreenshotAsync(fileName).ConfigureAwait(false);
             return fileName;
         }).ConfigureAwait(false);
 
         await CaptureAsync("logcat", async () =>
         {
-            var fileName = $"{prefix}-logcat.txt";
+            var fileName = DeviceArtifactNames.LogcatForLabel(prefix);
             await CaptureLogcatSnapshotAsync(fileName, 1000).ConfigureAwait(false);
             return fileName;
         }).ConfigureAwait(false);
@@ -619,11 +619,11 @@ public sealed class DeviceRunner(
         await CaptureAsync("screen-state", async () =>
         {
             await CaptureScreenStateWithRetryAsync(prefix).ConfigureAwait(false);
-            return $"{prefix}-screen-state.json";
+            return DeviceArtifactNames.ScreenStateForLabel(prefix);
         }).ConfigureAwait(false);
 
         var metadata = new FailureArtifactBundle(
-            "luotsi-failure-bundle.v1",
+            ResultSchemas.FailureBundle,
             _timeProvider.GetUtcNow(),
             request.Scope,
             request.Name,
@@ -635,8 +635,9 @@ public sealed class DeviceRunner(
             exception.Message,
             captured,
             captureFailures);
-        await _artifacts.WriteJsonAsync($"{prefix}-failure.json", metadata).ConfigureAwait(false);
-        return metadata with { MetadataFile = $"{prefix}-failure.json" };
+        var metadataFile = DeviceArtifactNames.FailureMetadataForLabel(prefix);
+        await _artifacts.WriteJsonAsync(metadataFile, metadata).ConfigureAwait(false);
+        return metadata with { MetadataFile = metadataFile };
     }
 
     public async Task<WaitNotVisibleResult> WaitNotVisibleAsync(string text, int timeoutSec)
@@ -773,12 +774,12 @@ public sealed class DeviceRunner(
             throw new InvalidOperationException($"adb logcat failed: {monitor.Stderr}".Trim());
         }
 
-        await _artifacts.WriteTextAsync("assert-event.txt", monitor.LogOutput).ConfigureAwait(false);
+        await _artifacts.WriteTextAsync(DeviceArtifactNames.TextFromBase(DeviceArtifactNames.AssertEventBaseName), monitor.LogOutput).ConfigureAwait(false);
         await _artifacts.WriteJsonAsync(
-            "assert-event.json",
+            DeviceArtifactNames.JsonFromBase(DeviceArtifactNames.AssertEventBaseName),
             new
             {
-                schema = "luotsi-assert-event.v1",
+                schema = ResultSchemas.AssertEvent,
                 name = eventName,
                 contains,
                 details_pattern = detailsPattern,
@@ -798,7 +799,7 @@ public sealed class DeviceRunner(
 
     public async Task<TakeScreenshotResult> TakeScreenshotAsync(string label)
     {
-        var fileName = $"{Slugify(label)}-screenshot.png";
+        var fileName = DeviceArtifactNames.ScreenshotForLabel(Slugify(label));
         await CaptureScreenshotAsync(fileName).ConfigureAwait(false);
         return new TakeScreenshotResult(label, fileName);
     }
@@ -806,12 +807,12 @@ public sealed class DeviceRunner(
     public async Task<CaptureArtifactsResult> CaptureArtifactsAsync(string label)
     {
         var slug = Slugify(label);
-        var screenshot = $"{slug}-screenshot.png";
-        var logcat = $"{slug}-logcat.txt";
+        var screenshot = DeviceArtifactNames.ScreenshotForLabel(slug);
+        var logcat = DeviceArtifactNames.LogcatForLabel(slug);
         await CaptureScreenshotAsync(screenshot).ConfigureAwait(false);
         await CaptureLogcatSnapshotAsync(logcat, 500).ConfigureAwait(false);
         await CaptureScreenStateWithRetryAsync(slug).ConfigureAwait(false);
-        return new CaptureArtifactsResult(label, screenshot, logcat, $"{slug}-screen-state.json", $"{slug}-hierarchy.xml");
+        return new CaptureArtifactsResult(label, screenshot, logcat, DeviceArtifactNames.ScreenStateForLabel(slug), DeviceArtifactNames.HierarchyForLabel(slug));
     }
 
     public async Task<AssertTextInputReadyResult> AssertTextInputReadyAsync(bool requireKeyboard, int timeoutSec)
@@ -1003,7 +1004,7 @@ public sealed class DeviceRunner(
         catch (Exception ex) when (ex is XmlException || ex is InvalidOperationException)
         {
             InvalidateUiDumpCache();
-            await _artifacts.WriteTextAsync("hierarchy-invalid.xml", xml).ConfigureAwait(false);
+            await _artifacts.WriteTextAsync(DeviceArtifactNames.InvalidHierarchyXml, xml).ConfigureAwait(false);
             throw new InvalidOperationException("UI hierarchy dump was empty or invalid XML.", ex);
         }
     }
@@ -1247,9 +1248,9 @@ public sealed class DeviceRunner(
             parsed.ParseErrors.Count,
             parsed.Events,
             parsed.ParseErrors);
-        await _artifacts.WriteTextAsync($"{artifactBaseName}.txt", logOutput).ConfigureAwait(false);
+        await _artifacts.WriteTextAsync(DeviceArtifactNames.TextFromBase(artifactBaseName), logOutput).ConfigureAwait(false);
         await _artifacts.WriteJsonAsync(
-            $"{artifactBaseName}.json",
+            DeviceArtifactNames.JsonFromBase(artifactBaseName),
             new
             {
                 metadata,
@@ -1277,9 +1278,9 @@ public sealed class DeviceRunner(
 
         if (match is not null)
         {
-            await _artifacts.WriteTextAsync($"{artifactBaseName}.txt", telemetrySession.LogOutput).ConfigureAwait(false);
+            await _artifacts.WriteTextAsync(DeviceArtifactNames.TextFromBase(artifactBaseName), telemetrySession.LogOutput).ConfigureAwait(false);
             await _artifacts.WriteJsonAsync(
-                $"{artifactBaseName}.json",
+                DeviceArtifactNames.JsonFromBase(artifactBaseName),
                 new
                 {
                     metadata = metadataFactory(telemetrySession.Invocation),
@@ -1293,9 +1294,9 @@ public sealed class DeviceRunner(
             return successDataFactory(match);
         }
 
-        await _artifacts.WriteTextAsync($"{artifactBaseName}.txt", telemetrySession.LogOutput).ConfigureAwait(false);
+        await _artifacts.WriteTextAsync(DeviceArtifactNames.TextFromBase(artifactBaseName), telemetrySession.LogOutput).ConfigureAwait(false);
         await _artifacts.WriteJsonAsync(
-            $"{artifactBaseName}.json",
+            DeviceArtifactNames.JsonFromBase(artifactBaseName),
             new
             {
                 metadata = metadataFactory(telemetrySession.Invocation),

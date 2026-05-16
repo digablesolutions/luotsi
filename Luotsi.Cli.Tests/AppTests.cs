@@ -50,7 +50,7 @@ public sealed class AppTests
 
         Assert.Equal(2, exitCode);
         Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
-        Assert.Equal("luotsi-command.v1", envelope.RootElement.GetProperty("schema").GetString());
+        Assert.Equal(ResultSchemas.CommandEnvelope, envelope.RootElement.GetProperty("schema").GetString());
         Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
     }
 
@@ -2065,7 +2065,7 @@ public sealed class AppTests
         Assert.Equal("failed", envelope.RootElement.GetProperty("data").GetProperty("status").GetString());
         Assert.Equal("wait for ready marker", envelope.RootElement.GetProperty("data").GetProperty("failed_step").GetProperty("name").GetString());
         var failureArtifacts = envelope.RootElement.GetProperty("data").GetProperty("failure_artifacts");
-        Assert.Equal("luotsi-failure-bundle.v1", failureArtifacts.GetProperty("schema").GetString());
+        Assert.Equal(ResultSchemas.FailureBundle, failureArtifacts.GetProperty("schema").GetString());
         Assert.True(failureArtifacts.GetProperty("artifacts").GetArrayLength() >= 2);
     }
 
@@ -2641,10 +2641,10 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
     public Task<WaitLogResult> WaitForLogAsync(string text, int timeoutSec) => Task.FromResult(new WaitLogResult(text, timeoutSec, text, 1));
 
     public Task<DeviceFingerprint> WriteDeviceFingerprintAsync() =>
-        Task.FromResult(new DeviceFingerprint("device-fingerprint.v1", DateTimeOffset.UtcNow, "SER", "Model", "16", "36", "fingerprint", "arm64-v8a", "focus"));
+        Task.FromResult(new DeviceFingerprint(ResultSchemas.DeviceFingerprint, DateTimeOffset.UtcNow, "SER", "Model", "16", "36", "fingerprint", "arm64-v8a", "focus"));
 
     public Task<FailureArtifactBundle> CaptureFailureArtifactsAsync(FailureCaptureRequest request, Exception exception) =>
-        Task.FromResult(new FailureArtifactBundle("luotsi-failure-bundle.v1", DateTimeOffset.UtcNow, request.Scope, request.Name, request.File, request.StepIndex, request.StepName, request.Action, exception.GetType().FullName ?? exception.GetType().Name, exception.Message, [], []));
+        Task.FromResult(new FailureArtifactBundle(ResultSchemas.FailureBundle, DateTimeOffset.UtcNow, request.Scope, request.Name, request.File, request.StepIndex, request.StepName, request.Action, exception.GetType().FullName ?? exception.GetType().Name, exception.Message, [], []));
 
     public Task<LogcatResult> LogcatAsync(int tail) => Task.FromResult(new LogcatResult([]));
 }

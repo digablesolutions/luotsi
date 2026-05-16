@@ -323,7 +323,7 @@ public sealed record CommandEnvelope(bool Ok, string? Command, DateTimeOffset St
     /// <summary>
     /// Gets the schema name.
     /// </summary>
-    public string Schema => "luotsi-command.v1";
+    public string Schema => ResultSchemas.CommandEnvelope;
 
     /// <summary>
     /// Gets duration in milliseconds.
