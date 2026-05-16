@@ -1,9 +1,12 @@
-using System.Collections.Frozen;
-using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using VisitLab.Cli.Artifacts;
+using VisitLab.Cli.Errors;
+using VisitLab.Cli.Infrastructure;
+using VisitLab.Cli.Models;
+using VisitLab.Cli.Scenarios;
 
-namespace VisitLab.Cli;
+namespace VisitLab.Cli.Cli;
 
 /// <summary>
 /// Entry point for the VisitLab command-line application.
@@ -14,17 +17,15 @@ public sealed class App
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        WriteIndented = false,
+        WriteIndented = false
     };
 
     private readonly TimeProvider _timeProvider;
     private readonly IFileSystem _fileSystem;
-    private readonly IProcessRunner _processRunner;
     private readonly IDelay _delay;
     private readonly IDeviceHostFactory _deviceHostFactory;
-    private readonly IConsoleIO _console;
+    private readonly IConsoleIo _console;
     private readonly IEnvironmentVariables _environment;
-    private readonly IUniqueIdGenerator _idGenerator;
 
     public App(
         TimeProvider? timeProvider = null,
@@ -32,26 +33,26 @@ public sealed class App
         IProcessRunner? processRunner = null,
         IDelay? delay = null,
         IAdbClientFactory? adbClientFactory = null,
-        IConsoleIO? console = null,
+        IConsoleIo? console = null,
         IEnvironmentVariables? environment = null,
         IUniqueIdGenerator? idGenerator = null,
         IDeviceHostFactory? deviceHostFactory = null)
     {
         _timeProvider = timeProvider ?? TimeProvider.System;
         _fileSystem = fileSystem ?? new PhysicalFileSystem();
-        _processRunner = processRunner ?? new DefaultProcessRunner();
+        var processRunner1 = processRunner ?? new DefaultProcessRunner();
         _delay = delay ?? new TaskDelay(_timeProvider);
-        _console = console ?? new SystemConsoleIO();
+        _console = console ?? new SystemConsoleIo();
         _environment = environment ?? new SystemEnvironmentVariables();
-        _idGenerator = idGenerator ?? new GuidUniqueIdGenerator();
+        var idGenerator1 = idGenerator ?? new GuidUniqueIdGenerator();
         _deviceHostFactory = deviceHostFactory ?? new DefaultDeviceHostFactory(
             adbClientFactory ?? new DefaultAdbClientFactory(),
-            _processRunner,
+            processRunner1,
             _delay,
             _fileSystem,
             _timeProvider,
             _environment,
-            _idGenerator);
+            idGenerator1);
     }
 
     /// <summary>
@@ -86,7 +87,7 @@ public sealed class App
 
         try
         {
-            object data = options.Command switch
+            var data = options.Command switch
             {
                 "devices" => await runner.GetDevicesAsync().ConfigureAwait(false),
                 "preflight" => await runner.PreflightAsync(options.Get("package")).ConfigureAwait(false),
@@ -104,7 +105,7 @@ public sealed class App
                 "wait-log" => await runner.WaitForLogAsync(options.Require("contains"), options.Int("timeout-sec", 15)).ConfigureAwait(false),
                 "record" => await runner.RecordAsync(options.Require("output"), options.Int("time-limit-sec", 30)).ConfigureAwait(false),
                 "run" => await scenarios.RunAsync(options.Require("file")).ConfigureAwait(false),
-                _ => throw new UsageException($"Unknown command '{options.Command}'."),
+                _ => throw new UsageException($"Unknown command '{options.Command}'.")
             };
 
             WriteEnvelope(new CommandEnvelope(true, options.Command, started, _timeProvider.GetUtcNow(), data, artifacts.ToData(), null));
@@ -130,8 +131,5 @@ public sealed class App
         }
     }
 
-    private void WriteEnvelope(CommandEnvelope envelope)
-    {
-        _console.WriteLine(JsonSerializer.Serialize(envelope, JsonOptions));
-    }
+    private void WriteEnvelope(CommandEnvelope envelope) => _console.WriteLine(JsonSerializer.Serialize(envelope, JsonOptions));
 }

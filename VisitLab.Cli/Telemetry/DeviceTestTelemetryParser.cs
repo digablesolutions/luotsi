@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace VisitLab.Cli;
+namespace VisitLab.Cli.Telemetry;
 
 /// <summary>
 /// Default parser for the kiosk <c>DEVICE_TEST_TELEMETRY</c> logcat contract.
@@ -14,11 +14,11 @@ public sealed class DeviceTestTelemetryParser : ITelemetryParser
     /// </summary>
     /// <param name="logOutput">Raw logcat text.</param>
     /// <returns>Parsed telemetry results.</returns>
-    public TelemetryParseResult ParseLog(string logOutput)
+    public TelemetryParseResult ParseLog(string? logOutput)
     {
         var events = new List<TelemetryEvent>();
         var parseErrors = new List<TelemetryParseError>();
-        var lines = (logOutput ?? string.Empty).Split('\n', StringSplitOptions.None);
+        var lines = (logOutput ?? string.Empty).Split('\n');
         var telemetryLineCount = 0;
 
         foreach (var rawLine in lines)

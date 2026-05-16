@@ -1,4 +1,6 @@
-namespace VisitLab.Cli;
+using VisitLab.Cli.Scenarios;
+
+namespace VisitLab.Cli.Errors;
 
 public sealed class LogWaitTimeoutException(string containsText, int timeoutSec) : TimeoutException($"Timed out after {timeoutSec}s waiting for log text '{containsText}'."), ICommandFailureDetails
 {

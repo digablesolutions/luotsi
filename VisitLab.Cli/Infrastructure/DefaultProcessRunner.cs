@@ -1,6 +1,7 @@
 using System.Diagnostics;
+using VisitLab.Cli.Models;
 
-namespace VisitLab.Cli;
+namespace VisitLab.Cli.Infrastructure;
 
 public sealed class DefaultProcessRunner : IProcessRunner
 {
@@ -10,7 +11,7 @@ public sealed class DefaultProcessRunner : IProcessRunner
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            UseShellExecute = false,
+            UseShellExecute = false
         };
 
         foreach (var arg in args)

@@ -1,8 +1,11 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using VisitLab.Cli.Errors;
+using VisitLab.Cli.Infrastructure;
+using VisitLab.Cli.Models;
 
-namespace VisitLab.Cli;
+namespace VisitLab.Cli.Scenarios;
 
 public interface IScenarioActionHost
 {
@@ -47,7 +50,7 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
     /// <returns>Scenario result.</returns>
     public async Task<object> RunAsync(string file)
     {
-        var scenario = ResolveTemplates(await LoadAsync(file).ConfigureAwait(false));
+        var scenario = ValidateScenario(ResolveTemplates(await LoadAsync(file).ConfigureAwait(false)), file);
         var steps = new List<object>();
         await _actionHost.WriteDeviceFingerprintAsync().ConfigureAwait(false);
 
@@ -71,7 +74,7 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
                     action = step.Action,
                     status = "continued_on_error",
                     duration_ms = (_timeProvider.GetUtcNow() - started).TotalMilliseconds,
-                    error = ErrorInfo.From(ex, category),
+                    error = ErrorInfo.From(ex, category)
                 });
             }
             catch (UsageException)
@@ -94,7 +97,7 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
                         status = "failed",
                         failed_step = new { index = index + 1, name = step.Name ?? step.Action, action = step.Action },
                         steps,
-                        failure_artifacts = failureArtifacts,
+                        failure_artifacts = failureArtifacts
                     },
                     ex);
             }
@@ -129,7 +132,7 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
             "assertAppVersion" => await _actionHost.AssertAppVersionAsync(step.Package ?? step.Text, step.MaxTopInsetPx ?? 140, step.MaxRightInsetPx ?? 300).ConfigureAwait(false),
             "screenState" => await _actionHost.GetScreenStateAsync().ConfigureAwait(false),
             "sleep" => await SleepAsync(step.Milliseconds ?? 1000).ConfigureAwait(false),
-            _ => throw new UsageException($"Unknown scenario action '{step.Action}'."),
+            _ => throw new UsageException($"Unknown scenario action '{step.Action}'.")
         };
     }
 
@@ -185,9 +188,96 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
                 DetailsPattern = ResolveValue(step.DetailsPattern, scenario.Variables, resolvedVariables),
                 Below = ResolveValue(step.Below, scenario.Variables, resolvedVariables),
                 With = ResolveValue(step.With, scenario.Variables, resolvedVariables),
-                Package = ResolveValue(step.Package, scenario.Variables, resolvedVariables),
-            }).ToArray(),
+                Package = ResolveValue(step.Package, scenario.Variables, resolvedVariables)
+            }).ToArray()
         };
+    }
+
+    private static ScenarioFile ValidateScenario(ScenarioFile scenario, string file)
+    {
+        if (string.IsNullOrWhiteSpace(scenario.Name))
+        {
+            throw new UsageException($"Scenario file '{file}' must define a non-empty name.");
+        }
+
+        if (scenario.Steps is null || scenario.Steps.Count == 0)
+        {
+            throw new UsageException($"Scenario file '{file}' must define at least one step.");
+        }
+
+        for (var index = 0; index < scenario.Steps.Count; index++)
+        {
+            ValidateStep(scenario, scenario.Steps[index], index + 1);
+        }
+
+        return scenario;
+    }
+
+    private static void ValidateStep(ScenarioFile scenario, ScenarioStep step, int index)
+    {
+        var stepLabel = $"Scenario '{scenario.Name}' step {index}";
+
+        if (string.IsNullOrWhiteSpace(step.Action))
+        {
+            throw new UsageException($"{stepLabel} must define a non-empty action.");
+        }
+
+        ValidatePositive(step.TimeoutSec, $"{stepLabel} timeoutSec");
+        ValidateNonNegative(step.Milliseconds, $"{stepLabel} milliseconds");
+        ValidateNonNegative(step.PostTapDelayMs, $"{stepLabel} postTapDelayMs");
+        ValidateNonNegative(step.IntervalMs, $"{stepLabel} intervalMs");
+        ValidateNonNegative(step.MaxGapPx, $"{stepLabel} maxGapPx");
+        ValidateNonNegative(step.MaxDeltaPx, $"{stepLabel} maxDeltaPx");
+        ValidateNonNegative(step.MaxTopInsetPx, $"{stepLabel} maxTopInsetPx");
+        ValidateNonNegative(step.MaxRightInsetPx, $"{stepLabel} maxRightInsetPx");
+
+        if (step.X is < 0 || step.Y is < 0)
+        {
+            throw new UsageException($"{stepLabel} coordinates must be zero or greater.");
+        }
+
+        if (step.XRatio is { } xRatio && (xRatio < 0 || xRatio > 1) ||
+            step.YRatio is { } yRatio && (yRatio < 0 || yRatio > 1))
+        {
+            throw new UsageException($"{stepLabel} xRatio/yRatio must be between 0 and 1.");
+        }
+
+        if (string.Equals(step.Action, "tapPoint", StringComparison.OrdinalIgnoreCase))
+        {
+            var hasAbsolutePoint = step.X.HasValue || step.Y.HasValue;
+            var hasRelativePoint = step.XRatio.HasValue || step.YRatio.HasValue;
+
+            if (step.X.HasValue != step.Y.HasValue)
+            {
+                throw new UsageException($"{stepLabel} tapPoint requires both x and y when using absolute coordinates.");
+            }
+
+            if (step.XRatio.HasValue != step.YRatio.HasValue)
+            {
+                throw new UsageException($"{stepLabel} tapPoint requires both xRatio and yRatio when using relative coordinates.");
+            }
+
+            if (!hasAbsolutePoint && !hasRelativePoint)
+            {
+                throw new UsageException($"{stepLabel} tapPoint requires x/y or xRatio/yRatio.");
+            }
+        }
+    }
+
+    private static void ValidatePositive(int? value, string label)
+    {
+        if (value is <= 0)
+        {
+            throw new UsageException($"{label} must be greater than zero.");
+        }
+    }
+
+    private static void ValidateNonNegative(int? value, string label)
+    {
+        if (value is < 0)
+        {
+            throw new UsageException($"{label} must be zero or greater.");
+        }
     }
 
     private string ResolveVariable(
@@ -353,8 +443,13 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
 
     private async Task<object> SleepAsync(int milliseconds)
     {
+        if (milliseconds < 0)
+        {
+            throw new UsageException("sleep requires milliseconds zero or greater.");
+        }
+
         await _delay.DelayAsync(milliseconds).ConfigureAwait(false);
-        return new { milliseconds = Math.Max(0, milliseconds) };
+        return new { milliseconds };
     }
 }
 

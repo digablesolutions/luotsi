@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace VisitLab.Cli;
+namespace VisitLab.Cli.Infrastructure;
 
 /// <summary>
 /// Application JSON settings.
@@ -13,6 +13,6 @@ public static class AppJson
     public static readonly JsonSerializerOptions Options = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = true,
+        WriteIndented = true
     };
 }

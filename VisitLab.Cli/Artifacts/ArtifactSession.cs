@@ -1,7 +1,9 @@
 using System.Text;
 using System.Text.Json;
+using VisitLab.Cli.Cli;
+using VisitLab.Cli.Infrastructure;
 
-namespace VisitLab.Cli;
+namespace VisitLab.Cli.Artifacts;
 
 /// <summary>
 /// A per-command artifact session.
@@ -26,6 +28,8 @@ public sealed class ArtifactSession
     /// Creates an artifact session from CLI options.
     /// </summary>
     /// <param name="options">CLI options.</param>
+    /// <param name="fileSystem"></param>
+    /// <param name="timeProvider"></param>
     /// <returns>Artifact session.</returns>
     public static ArtifactSession Create(CliOptions options, IFileSystem? fileSystem = null, TimeProvider? timeProvider = null)
     {

@@ -1,4 +1,4 @@
-namespace VisitLab.Cli;
+namespace VisitLab.Cli.Errors;
 
 /// <summary>
 /// Usage error.

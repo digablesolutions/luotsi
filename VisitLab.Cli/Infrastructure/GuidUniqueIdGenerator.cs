@@ -1,4 +1,4 @@
-namespace VisitLab.Cli;
+namespace VisitLab.Cli.Infrastructure;
 
 public sealed class GuidUniqueIdGenerator : IUniqueIdGenerator
 {

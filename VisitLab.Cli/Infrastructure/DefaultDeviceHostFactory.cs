@@ -1,4 +1,8 @@
-namespace VisitLab.Cli;
+using VisitLab.Cli.Artifacts;
+using VisitLab.Cli.Errors;
+using VisitLab.Cli.Hosts.Android;
+
+namespace VisitLab.Cli.Infrastructure;
 
 /// <summary>
 /// Default factory that currently supports Android hosts backed by ADB.

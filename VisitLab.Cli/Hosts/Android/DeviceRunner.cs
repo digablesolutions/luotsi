@@ -1,14 +1,15 @@
-using System.Collections.Frozen;
-using System.Diagnostics;
 using System.Globalization;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
+using VisitLab.Cli.Artifacts;
+using VisitLab.Cli.Errors;
+using VisitLab.Cli.Infrastructure;
+using VisitLab.Cli.Models;
+using VisitLab.Cli.Telemetry;
 
-namespace VisitLab.Cli;
+namespace VisitLab.Cli.Hosts.Android;
 
 /// <summary>
 /// Device operation facade used by the command handlers.
@@ -40,7 +41,7 @@ public sealed class DeviceRunner(
     /// <returns>Device list data.</returns>
     public async Task<object> GetDevicesAsync()
     {
-        var result = await _adb.RunAsync(new[] { "devices", "-l" }).ConfigureAwait(false);
+        var result = await _adb.RunAsync(["devices", "-l"]).ConfigureAwait(false);
         result.EnsureSuccess("adb devices failed");
         var devices = result.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries)
             .Skip(1)
@@ -90,7 +91,7 @@ public sealed class DeviceRunner(
             package_info = packageInfo,
             fingerprint = fingerprint.Fingerprint,
             abi = fingerprint.Abi,
-            serial = fingerprint.Serial,
+            serial = fingerprint.Serial
         };
     }
 
@@ -153,7 +154,9 @@ public sealed class DeviceRunner(
     /// <returns>Matched element.</returns>
     public async Task<ScreenElement> WaitVisibleAsync(string text, int timeoutSec)
     {
-        var deadline = _timeProvider.GetUtcNow().AddSeconds(timeoutSec);
+        var expectedText = RequireNonBlank(text, "waitVisible requires non-empty text.");
+        var validatedTimeoutSec = RequirePositive(timeoutSec, "waitVisible requires timeoutSec greater than zero.");
+        var deadline = _timeProvider.GetUtcNow().AddSeconds(validatedTimeoutSec);
         ScreenElement? last = null;
         var attempt = 0;
         while (_timeProvider.GetUtcNow() < deadline)
@@ -172,7 +175,7 @@ public sealed class DeviceRunner(
             }
 
             last = state.Elements
-                .Select(element => new { Element = element, Score = element.GetMatchScore(text) })
+                .Select(element => new { Element = element, Score = element.GetMatchScore(expectedText) })
                 .Where(candidate => candidate.Score > 0)
                 .OrderByDescending(candidate => candidate.Score)
                 .Select(candidate => candidate.Element)
@@ -185,7 +188,7 @@ public sealed class DeviceRunner(
             await _delay.DelayAsync(500).ConfigureAwait(false);
         }
 
-        throw new TimeoutException($"Timed out after {timeoutSec}s waiting for visible text '{text}'. Last seen: {last?.StableId ?? "none"}");
+        throw new TimeoutException($"Timed out after {validatedTimeoutSec}s waiting for visible text '{expectedText}'. Last seen: {last?.StableId ?? "none"}");
     }
 
     private static bool IsRetryableHierarchyDumpFailure(InvalidOperationException exception) =>
@@ -221,6 +224,11 @@ public sealed class DeviceRunner(
             throw new UsageException("Option --y must be an integer.");
         }
 
+        if (parsedX < 0 || parsedY < 0)
+        {
+            throw new UsageException("Tap coordinates must be zero or greater.");
+        }
+
         var result = await _adb.ShellAsync($"input tap {parsedX} {parsedY}").ConfigureAwait(false);
         result.EnsureSuccess("tap failed");
         return new { x = parsedX, y = parsedY };
@@ -246,27 +254,30 @@ public sealed class DeviceRunner(
     /// <returns>Keyevent metadata.</returns>
     public async Task<object> KeyEventAsync(string code)
     {
-        var result = await _adb.ShellAsync($"input keyevent {ShellQuote(code)}").ConfigureAwait(false);
+        var keyCode = RequireNonBlank(code, "keyevent requires code.");
+        var result = await _adb.ShellAsync($"input keyevent {ShellQuote(keyCode)}").ConfigureAwait(false);
         result.EnsureSuccess("keyevent failed");
-        return new { code };
+        return new { code = keyCode };
     }
 
     public async Task<object> WaitForLogAsync(string text, int timeoutSec)
     {
+        var containsText = RequireNonBlank(text, "waitLog requires text.");
+        var validatedTimeoutSec = RequirePositive(timeoutSec, "waitLog requires timeoutSec greater than zero.");
         var started = _timeProvider.GetUtcNow();
-        var monitor = await _adb.MonitorLogAsync(text, started, timeoutSec).ConfigureAwait(false);
+        var monitor = await _adb.MonitorLogAsync(containsText, started, validatedTimeoutSec).ConfigureAwait(false);
         await _artifacts.WriteTextAsync("wait-log.txt", monitor.LogOutput).ConfigureAwait(false);
         await _artifacts.WriteJsonAsync(
             "wait-log.json",
             new
             {
                 schema = "visit-lab-log-wait.v1",
-                contains = text,
-                timeout_sec = timeoutSec,
+                contains = containsText,
+                timeout_sec = validatedTimeoutSec,
                 started_at = started,
                 matched_line = monitor.MatchedLine,
                 line_count = monitor.LineCount,
-                invocation = monitor.Invocation,
+                invocation = monitor.Invocation
             }).ConfigureAwait(false);
 
         if (monitor.ExitCode != 0)
@@ -276,10 +287,10 @@ public sealed class DeviceRunner(
 
         if (monitor.MatchedLine is null)
         {
-            throw new LogWaitTimeoutException(text, timeoutSec);
+            throw new LogWaitTimeoutException(containsText, validatedTimeoutSec);
         }
 
-        return new { contains = text, timeout_sec = timeoutSec, matched_line = monitor.MatchedLine, line_count = monitor.LineCount };
+        return new { contains = containsText, timeout_sec = validatedTimeoutSec, matched_line = monitor.MatchedLine, line_count = monitor.LineCount };
     }
 
     /// <summary>
@@ -289,7 +300,8 @@ public sealed class DeviceRunner(
     /// <returns>Logcat lines.</returns>
     public async Task<object> LogcatAsync(int tail)
     {
-        var result = await _adb.RunAsync(new[] { "logcat", "-d", "-t", tail.ToString() }).ConfigureAwait(false);
+        var validatedTail = RequirePositive(tail, "logcat requires tail greater than zero.");
+        var result = await _adb.RunAsync(["logcat", "-d", "-t", validatedTail.ToString()]).ConfigureAwait(false);
         result.EnsureSuccess("logcat failed");
         await _artifacts.WriteTextAsync("logcat.txt", result.Stdout).ConfigureAwait(false);
         return new { lines = result.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries) };
@@ -302,7 +314,8 @@ public sealed class DeviceRunner(
     /// <returns>Telemetry data.</returns>
     public async Task<object> TelemetryTailAsync(int tail)
     {
-        var result = await _adb.RunAsync(["logcat", "-d", "-v", "brief", "-t", tail.ToString()]).ConfigureAwait(false);
+        var validatedTail = RequirePositive(tail, "telemetryTail requires tail greater than zero.");
+        var result = await _adb.RunAsync(["logcat", "-d", "-v", "brief", "-t", validatedTail.ToString()]).ConfigureAwait(false);
         result.EnsureSuccess("telemetry tail failed");
         return await CaptureTelemetryAsync(
             "telemetry-tail",
@@ -310,8 +323,8 @@ public sealed class DeviceRunner(
             new
             {
                 schema = "visit-lab-telemetry-tail.v1",
-                tail,
-                invocation = result.Invocation,
+                tail = validatedTail,
+                invocation = result.Invocation
             }).ConfigureAwait(false);
     }
 
@@ -322,8 +335,9 @@ public sealed class DeviceRunner(
     /// <returns>Telemetry data.</returns>
     public async Task<object> TelemetryWatchAsync(int timeoutSec)
     {
+        var validatedTimeoutSec = RequirePositive(timeoutSec, "telemetryWatch requires timeoutSec greater than zero.");
         var started = _timeProvider.GetUtcNow();
-        await _delay.DelayAsync(Math.Max(1, timeoutSec) * 1000).ConfigureAwait(false);
+        await _delay.DelayAsync(validatedTimeoutSec * 1000).ConfigureAwait(false);
         var result = await _adb.RunAsync([
             "logcat",
             "-v",
@@ -340,8 +354,8 @@ public sealed class DeviceRunner(
             {
                 schema = "visit-lab-telemetry-watch.v1",
                 started_at = started,
-                timeout_sec = timeoutSec,
-                invocation = result.Invocation,
+                timeout_sec = validatedTimeoutSec,
+                invocation = result.Invocation
             }).ConfigureAwait(false);
     }
 
@@ -353,9 +367,10 @@ public sealed class DeviceRunner(
     /// <returns>Matched telemetry data.</returns>
     public Task<object> WaitForStepAsync(string step, int timeoutSec)
     {
-        var expectedStep = NormalizeTelemetryStep(step);
+        var expectedStep = NormalizeTelemetryStep(RequireNonBlank(step, "waitStep requires step."));
+        var validatedTimeoutSec = RequirePositive(timeoutSec, "waitStep requires timeoutSec greater than zero.");
         return WaitForTelemetryEventAsync(
-            timeoutSec,
+            validatedTimeoutSec,
             telemetry => string.Equals(telemetry.Event, "step", StringComparison.OrdinalIgnoreCase)
                 && string.Equals(NormalizeTelemetryStep(telemetry.Step), expectedStep, StringComparison.Ordinal),
             telemetry => new
@@ -363,17 +378,17 @@ public sealed class DeviceRunner(
                 step = expectedStep,
                 line = telemetry.RawLine,
                 event_name = telemetry.Event,
-                payload = telemetry.Payload,
+                payload = telemetry.Payload
             },
             "wait-step",
             invocation => new
             {
                 schema = "visit-lab-wait-step.v1",
                 step = expectedStep,
-                timeout_sec = timeoutSec,
-                invocation,
+                timeout_sec = validatedTimeoutSec,
+                invocation
             },
-            () => new SemanticWaitTimeoutException($"device step '{expectedStep}'", timeoutSec));
+            () => new SemanticWaitTimeoutException($"device step '{expectedStep}'", validatedTimeoutSec));
     }
 
     /// <summary>
@@ -385,31 +400,33 @@ public sealed class DeviceRunner(
     /// <returns>Matched telemetry data.</returns>
     public Task<object> WaitForActionReadyAsync(string action, string? step, int timeoutSec)
     {
+        var expectedAction = RequireNonBlank(action, "waitActionReady requires action.");
         var normalizedStep = NormalizeTelemetryStep(step);
+        var validatedTimeoutSec = RequirePositive(timeoutSec, "waitActionReady requires timeoutSec greater than zero.");
         return WaitForTelemetryEventAsync(
-            timeoutSec,
+            validatedTimeoutSec,
             telemetry =>
                 string.Equals(telemetry.Event, "action_ready", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(telemetry.Action, action, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(telemetry.Action, expectedAction, StringComparison.OrdinalIgnoreCase) &&
                 (normalizedStep is null || string.Equals(NormalizeTelemetryStep(telemetry.Step), normalizedStep, StringComparison.Ordinal)),
             telemetry => new
             {
-                action,
+                action = expectedAction,
                 step = normalizedStep,
                 line = telemetry.RawLine,
                 event_name = telemetry.Event,
-                payload = telemetry.Payload,
+                payload = telemetry.Payload
             },
             "wait-action-ready",
             invocation => new
             {
                 schema = "visit-lab-wait-action-ready.v1",
-                action,
+                action = expectedAction,
                 step = normalizedStep,
-                timeout_sec = timeoutSec,
-                invocation,
+                timeout_sec = validatedTimeoutSec,
+                invocation
             },
-            () => new SemanticWaitTimeoutException($"device action ready '{action}'" + (normalizedStep is null ? string.Empty : $" on '{normalizedStep}'"), timeoutSec));
+            () => new SemanticWaitTimeoutException($"device action ready '{expectedAction}'" + (normalizedStep is null ? string.Empty : $" on '{normalizedStep}'"), validatedTimeoutSec));
     }
 
     /// <summary>
@@ -420,14 +437,15 @@ public sealed class DeviceRunner(
     /// <returns>Recording metadata.</returns>
     public async Task<object> RecordAsync(string output, int timeLimitSec)
     {
+        var targetOutput = RequireNonBlank(output, "record requires output.");
         var remote = $"/sdcard/device-e2e-{_idGenerator.NewId()}.mp4";
         var clamped = Math.Clamp(timeLimitSec, 1, 180);
         var record = await _adb.ShellAsync($"screenrecord --time-limit {clamped} {remote}").ConfigureAwait(false);
         record.EnsureSuccess("screenrecord failed");
-        var pull = await _adb.RunAsync(new[] { "pull", NormalizeDevicePathForPull(remote), output }).ConfigureAwait(false);
+        var pull = await _adb.RunAsync(["pull", NormalizeDevicePathForPull(remote), targetOutput]).ConfigureAwait(false);
         await _adb.ShellAsync($"rm -f {remote}").ConfigureAwait(false);
         pull.EnsureSuccess("pull recording failed");
-        return new { output, time_limit_sec = clamped };
+        return new { output = targetOutput, time_limit_sec = clamped };
     }
 
     public async Task<DeviceFingerprint> WriteDeviceFingerprintAsync()
@@ -480,7 +498,7 @@ public sealed class DeviceRunner(
 
         await CaptureAsync("screen-state", async () =>
         {
-            await CaptureScreenStateAsync(prefix).ConfigureAwait(false);
+            await CaptureScreenStateWithRetryAsync(prefix).ConfigureAwait(false);
             return $"{prefix}-screen-state.json";
         }).ConfigureAwait(false);
 
@@ -503,7 +521,9 @@ public sealed class DeviceRunner(
 
     public async Task<object> WaitNotVisibleAsync(string text, int timeoutSec)
     {
-        var deadline = _timeProvider.GetUtcNow().AddSeconds(Math.Max(1, timeoutSec));
+        var expectedText = RequireNonBlank(text, "waitNotVisible requires text.");
+        var validatedTimeoutSec = RequirePositive(timeoutSec, "waitNotVisible requires timeoutSec greater than zero.");
+        var deadline = _timeProvider.GetUtcNow().AddSeconds(validatedTimeoutSec);
         var attempt = 0;
 
         while (_timeProvider.GetUtcNow() < deadline)
@@ -521,22 +541,29 @@ public sealed class DeviceRunner(
                 continue;
             }
 
-            if (!state.Elements.Any(element => element.Matches(text)))
+            if (!state.Elements.Any(element => element.Matches(expectedText)))
             {
-                return new { text, attempt_count = attempt, visible = false };
+                return new { text = expectedText, attempt_count = attempt, visible = false };
             }
 
             await _delay.DelayAsync(500).ConfigureAwait(false);
         }
 
-        throw new TimeoutException($"Timed out after {timeoutSec}s waiting for text '{text}' to disappear.");
+        throw new TimeoutException($"Timed out after {validatedTimeoutSec}s waiting for text '{expectedText}' to disappear.");
     }
 
     public async Task<object> TapPointAsync(string? label, int? x, int? y, double? xRatio, double? yRatio, int postTapDelayMs)
     {
+        var validatedPostTapDelayMs = RequireNonNegative(postTapDelayMs, "tapPoint postTapDelayMs must be zero or greater.");
+
         if (x.HasValue != y.HasValue)
         {
             throw new UsageException("tapPoint requires both x and y when using absolute coordinates.");
+        }
+
+        if (x is < 0 || y is < 0)
+        {
+            throw new UsageException("tapPoint coordinates must be zero or greater.");
         }
 
         var (resolvedX, resolvedY) = x.HasValue && y.HasValue
@@ -546,9 +573,9 @@ public sealed class DeviceRunner(
         var result = await _adb.ShellAsync($"input tap {resolvedX} {resolvedY}").ConfigureAwait(false);
         result.EnsureSuccess("tap point failed");
 
-        if (postTapDelayMs > 0)
+        if (validatedPostTapDelayMs > 0)
         {
-            await _delay.DelayAsync(postTapDelayMs).ConfigureAwait(false);
+            await _delay.DelayAsync(validatedPostTapDelayMs).ConfigureAwait(false);
         }
 
         return new
@@ -558,7 +585,7 @@ public sealed class DeviceRunner(
             y = resolvedY,
             x_ratio = xRatio,
             y_ratio = yRatio,
-            post_tap_delay_ms = Math.Max(0, postTapDelayMs),
+            post_tap_delay_ms = validatedPostTapDelayMs
         };
     }
 
@@ -582,6 +609,8 @@ public sealed class DeviceRunner(
             throw new UsageException("typePin requires text.");
         }
 
+        var validatedPerDigitDelayMs = RequireNonNegative(perDigitDelayMs, "typePin intervalMs must be zero or greater.");
+
         var digits = pin.Trim();
         foreach (var digit in digits)
         {
@@ -593,13 +622,13 @@ public sealed class DeviceRunner(
             var result = await _adb.ShellAsync($"input keyevent KEYCODE_{digit}").ConfigureAwait(false);
             result.EnsureSuccess("type pin failed");
 
-            if (perDigitDelayMs > 0)
+            if (validatedPerDigitDelayMs > 0)
             {
-                await _delay.DelayAsync(perDigitDelayMs).ConfigureAwait(false);
+                await _delay.DelayAsync(validatedPerDigitDelayMs).ConfigureAwait(false);
             }
         }
 
-        return new { pin_length = digits.Length, per_digit_delay_ms = Math.Max(0, perDigitDelayMs) };
+        return new { pin_length = digits.Length, per_digit_delay_ms = validatedPerDigitDelayMs };
     }
 
     public async Task<object> ResetLogAsync()
@@ -611,12 +640,14 @@ public sealed class DeviceRunner(
 
     public async Task<object> AssertEventAsync(string name, IReadOnlyList<string> contains, string? detailsPattern, int timeoutSec)
     {
+        var eventName = RequireNonBlank(name, "assertEvent requires event or text.");
+        var validatedTimeoutSec = RequirePositive(timeoutSec, "assertEvent requires timeoutSec greater than zero.");
         var started = _timeProvider.GetUtcNow();
-        var deadline = started.AddSeconds(Math.Max(1, timeoutSec));
+        var deadline = started.AddSeconds(validatedTimeoutSec);
         string? invocation = null;
-        string lastLog = string.Empty;
+        var lastLog = string.Empty;
         string? matchedLine = null;
-        var detailsRegex = string.IsNullOrWhiteSpace(detailsPattern) ? null : new Regex(detailsPattern, RegexOptions.IgnoreCase);
+        var detailsRegex = CreateDetailsRegex(detailsPattern);
 
         while (_timeProvider.GetUtcNow() < deadline)
         {
@@ -633,7 +664,7 @@ public sealed class DeviceRunner(
             lastLog = result.Stdout;
             matchedLine = lastLog.Split('\n', StringSplitOptions.RemoveEmptyEntries)
                 .Select(static line => line.TrimEnd('\r'))
-                .LastOrDefault(line => EventLineMatches(line, name, contains, detailsRegex));
+                .LastOrDefault(line => EventLineMatches(line, eventName, contains, detailsRegex));
 
             if (matchedLine is not null)
             {
@@ -649,20 +680,20 @@ public sealed class DeviceRunner(
             new
             {
                 schema = "visit-lab-assert-event.v1",
-                name,
+                name = eventName,
                 contains,
                 details_pattern = detailsPattern,
-                timeout_sec = timeoutSec,
+                timeout_sec = validatedTimeoutSec,
                 invocation,
-                matched_line = matchedLine,
+                matched_line = matchedLine
             }).ConfigureAwait(false);
 
         if (matchedLine is null)
         {
-            throw new SemanticWaitTimeoutException($"event '{name}'", timeoutSec);
+            throw new SemanticWaitTimeoutException($"event '{eventName}'", validatedTimeoutSec);
         }
 
-        return new { name, contains, details_pattern = detailsPattern, matched_line = matchedLine };
+        return new { name = eventName, contains, details_pattern = detailsPattern, matched_line = matchedLine };
     }
 
     public async Task<object> TakeScreenshotAsync(string label)
@@ -679,24 +710,25 @@ public sealed class DeviceRunner(
         var logcat = $"{slug}-logcat.txt";
         await CaptureScreenshotAsync(screenshot).ConfigureAwait(false);
         await CaptureLogcatSnapshotAsync(logcat, 500).ConfigureAwait(false);
-        await CaptureScreenStateAsync(slug).ConfigureAwait(false);
+        await CaptureScreenStateWithRetryAsync(slug).ConfigureAwait(false);
         return new
         {
             label,
             screenshot,
             logcat,
             screen_state = $"{slug}-screen-state.json",
-            hierarchy = $"{slug}-hierarchy.xml",
+            hierarchy = $"{slug}-hierarchy.xml"
         };
     }
 
     public async Task<object> AssertTextInputReadyAsync(bool requireKeyboard, int timeoutSec)
     {
-        var deadline = _timeProvider.GetUtcNow().AddSeconds(Math.Max(1, timeoutSec));
+        var validatedTimeoutSec = RequirePositive(timeoutSec, "assertTextInputReady requires timeoutSec greater than zero.");
+        var deadline = _timeProvider.GetUtcNow().AddSeconds(validatedTimeoutSec);
 
         while (_timeProvider.GetUtcNow() < deadline)
         {
-            var document = await LoadUiDocumentAsync().ConfigureAwait(false);
+            var document = await LoadUiDocumentWithRetryAsync().ConfigureAwait(false);
             var focused = document.Descendants("node")
                 .FirstOrDefault(node =>
                     ((string?)node.Attribute("class"))?.Contains("EditText", StringComparison.OrdinalIgnoreCase) is true &&
@@ -712,48 +744,56 @@ public sealed class DeviceRunner(
                     keyboard_visible = keyboardVisible,
                     text = (string?)focused.Attribute("text"),
                     resource_id = (string?)focused.Attribute("resource-id"),
-                    bounds = (string?)focused.Attribute("bounds"),
+                    bounds = (string?)focused.Attribute("bounds")
                 };
             }
 
             await _delay.DelayAsync(250).ConfigureAwait(false);
         }
 
-        throw new TimeoutException($"Timed out after {timeoutSec}s waiting for a focused text input{(requireKeyboard ? " and visible keyboard" : string.Empty)}.");
+        throw new TimeoutException($"Timed out after {validatedTimeoutSec}s waiting for a focused text input{(requireKeyboard ? " and visible keyboard" : string.Empty)}.");
     }
 
     public async Task<object> AssertBelowAsync(string text, string referenceText, int maxGapPx)
     {
-        var state = await CaptureScreenStateAsync("assert-below").ConfigureAwait(false);
-        var subject = FindSingleMatch(state, text, "assertBelow text");
-        var reference = FindSingleMatch(state, referenceText, "assertBelow reference");
+        var subjectText = RequireNonBlank(text, "assertBelow requires text.");
+        var anchorText = RequireNonBlank(referenceText, "assertBelow requires below.");
+        var validatedMaxGapPx = RequireNonNegative(maxGapPx, "assertBelow maxGapPx must be zero or greater.");
+        var state = await CaptureScreenStateWithRetryAsync("assert-below").ConfigureAwait(false);
+        var subject = FindSingleMatch(state, subjectText, "assertBelow text");
+        var reference = FindSingleMatch(state, anchorText, "assertBelow reference");
         var gapPx = subject.Top - reference.Bottom;
 
-        if (gapPx < 0 || gapPx > maxGapPx)
+        if (gapPx < 0 || gapPx > validatedMaxGapPx)
         {
-            throw new InvalidOperationException($"Expected '{text}' below '{referenceText}' within {maxGapPx}px, but gap was {gapPx}px.");
+            throw new InvalidOperationException($"Expected '{subjectText}' below '{anchorText}' within {validatedMaxGapPx}px, but gap was {gapPx}px.");
         }
 
-        return new { text, below = referenceText, gap_px = gapPx, max_gap_px = maxGapPx };
+        return new { text = subjectText, below = anchorText, gap_px = gapPx, max_gap_px = validatedMaxGapPx };
     }
 
     public async Task<object> AssertAlignedAsync(string text, string referenceText, int maxDeltaPx)
     {
-        var state = await CaptureScreenStateAsync("assert-aligned").ConfigureAwait(false);
-        var subject = FindSingleMatch(state, text, "assertAligned text");
-        var reference = FindSingleMatch(state, referenceText, "assertAligned reference");
+        var subjectText = RequireNonBlank(text, "assertAligned requires text.");
+        var anchorText = RequireNonBlank(referenceText, "assertAligned requires with.");
+        var validatedMaxDeltaPx = RequireNonNegative(maxDeltaPx, "assertAligned maxDeltaPx must be zero or greater.");
+        var state = await CaptureScreenStateWithRetryAsync("assert-aligned").ConfigureAwait(false);
+        var subject = FindSingleMatch(state, subjectText, "assertAligned text");
+        var reference = FindSingleMatch(state, anchorText, "assertAligned reference");
         var deltaPx = Math.Abs(subject.CenterX - reference.CenterX);
 
-        if (deltaPx > maxDeltaPx)
+        if (deltaPx > validatedMaxDeltaPx)
         {
-            throw new InvalidOperationException($"Expected '{text}' aligned with '{referenceText}' within {maxDeltaPx}px, but delta was {deltaPx}px.");
+            throw new InvalidOperationException($"Expected '{subjectText}' aligned with '{anchorText}' within {validatedMaxDeltaPx}px, but delta was {deltaPx}px.");
         }
 
-        return new { text, with = referenceText, delta_px = deltaPx, max_delta_px = maxDeltaPx };
+        return new { text = subjectText, with = anchorText, delta_px = deltaPx, max_delta_px = validatedMaxDeltaPx };
     }
 
     public async Task<object> AssertAppVersionAsync(string? packageName, int maxTopInsetPx, int maxRightInsetPx)
     {
+        var validatedMaxTopInsetPx = RequireNonNegative(maxTopInsetPx, "assertAppVersion maxTopInsetPx must be zero or greater.");
+        var validatedMaxRightInsetPx = RequireNonNegative(maxRightInsetPx, "assertAppVersion maxRightInsetPx must be zero or greater.");
         var activePackage = string.IsNullOrWhiteSpace(packageName)
             ? _environment.GetEnvironmentVariable("DEVICE_TEST_PACKAGE") ?? DefaultKioskPackage
             : packageName;
@@ -770,13 +810,13 @@ public sealed class DeviceRunner(
         var expectedLabel = versionName.Contains($"+{versionCode}", StringComparison.Ordinal)
             ? $"v{versionName}"
             : $"v{versionName}+{versionCode}";
-        var state = await CaptureScreenStateAsync("assert-app-version").ConfigureAwait(false);
+        var state = await CaptureScreenStateWithRetryAsync("assert-app-version").ConfigureAwait(false);
         var element = FindSingleMatch(state, expectedLabel, "assertAppVersion text");
         var (width, _) = await GetDisplaySizeAsync().ConfigureAwait(false);
         var topInset = element.Top;
         var rightInset = Math.Max(0, width - element.Right);
 
-        if (topInset > maxTopInsetPx || rightInset > maxRightInsetPx)
+        if (topInset > validatedMaxTopInsetPx || rightInset > validatedMaxRightInsetPx)
         {
             throw new InvalidOperationException($"Expected version label '{expectedLabel}' near the top-right corner, but top inset was {topInset}px and right inset was {rightInset}px.");
         }
@@ -787,8 +827,8 @@ public sealed class DeviceRunner(
             label = expectedLabel,
             top_inset_px = topInset,
             right_inset_px = rightInset,
-            max_top_inset_px = maxTopInsetPx,
-            max_right_inset_px = maxRightInsetPx,
+            max_top_inset_px = validatedMaxTopInsetPx,
+            max_right_inset_px = validatedMaxRightInsetPx
         };
     }
 
@@ -805,9 +845,12 @@ public sealed class DeviceRunner(
             throw new UsageException("tapPoint requires either x/y or xRatio/yRatio.");
         }
 
+        var validatedXRatio = RequireUnitInterval(xRatio.Value, "tapPoint xRatio must be between 0 and 1.");
+        var validatedYRatio = RequireUnitInterval(yRatio.Value, "tapPoint yRatio must be between 0 and 1.");
+
         var (width, height) = await GetDisplaySizeAsync().ConfigureAwait(false);
-        var resolvedX = (int)Math.Round(width * xRatio.Value, MidpointRounding.AwayFromZero);
-        var resolvedY = (int)Math.Round(height * yRatio.Value, MidpointRounding.AwayFromZero);
+        var resolvedX = (int)Math.Round(width * validatedXRatio, MidpointRounding.AwayFromZero);
+        var resolvedY = (int)Math.Round(height * validatedYRatio, MidpointRounding.AwayFromZero);
         return (resolvedX, resolvedY);
     }
 
@@ -827,7 +870,7 @@ public sealed class DeviceRunner(
 
     private async Task<(int X, int Y)> ResolveHeaderLogoTargetAsync()
     {
-        var document = await LoadUiDocumentAsync().ConfigureAwait(false);
+        var document = await LoadUiDocumentWithRetryAsync().ConfigureAwait(false);
         var (width, _) = await GetDisplaySizeAsync().ConfigureAwait(false);
         var centerX = width / 2d;
 
@@ -838,7 +881,7 @@ public sealed class DeviceRunner(
             .Select(bounds => new
             {
                 Bounds = bounds,
-                Delta = Math.Abs(((bounds.Left + bounds.Right) / 2d) - centerX),
+                Delta = Math.Abs((bounds.Left + bounds.Right) / 2d - centerX)
             })
             .Where(candidate => candidate.Delta <= width * 0.2)
             .OrderBy(candidate => candidate.Delta)
@@ -846,7 +889,7 @@ public sealed class DeviceRunner(
             .ToArray();
 
         var match = candidates.FirstOrDefault() ?? throw new InvalidOperationException("Could not find a header logo target near the top center of the screen.");
-        return (((match.Bounds.Left + match.Bounds.Right) / 2), ((match.Bounds.Top + match.Bounds.Bottom) / 2));
+        return ((match.Bounds.Left + match.Bounds.Right) / 2, (match.Bounds.Top + match.Bounds.Bottom) / 2);
     }
 
     private async Task<XDocument> LoadUiDocumentAsync()
@@ -858,7 +901,23 @@ public sealed class DeviceRunner(
         }
         catch (Exception ex) when (ex is XmlException || ex is InvalidOperationException)
         {
+            await _artifacts.WriteTextAsync("hierarchy-invalid.xml", xml).ConfigureAwait(false);
             throw new InvalidOperationException("UI hierarchy dump was empty or invalid XML.", ex);
+        }
+    }
+
+    private async Task<XDocument> LoadUiDocumentWithRetryAsync(int maxAttempts = 3, int retryDelayMs = 250)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await LoadUiDocumentAsync().ConfigureAwait(false);
+            }
+            catch (InvalidOperationException ex) when (attempt < maxAttempts && IsRetryableHierarchyDumpFailure(ex))
+            {
+                await _delay.DelayAsync(retryDelayMs).ConfigureAwait(false);
+            }
         }
     }
 
@@ -900,7 +959,7 @@ public sealed class DeviceRunner(
 
     private static Bounds ParseNodeBounds(string value)
     {
-        var numbers = value.Split(new[] { '[', ']', ',' }, StringSplitOptions.RemoveEmptyEntries)
+        var numbers = value.Split(['[', ']', ','], StringSplitOptions.RemoveEmptyEntries)
             .Select(static part => int.TryParse(part, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : 0)
             .ToArray();
         return numbers.Length >= 4 ? new Bounds(numbers[0], numbers[1], numbers[2], numbers[3]) : new Bounds(0, 0, 0, 0);
@@ -938,6 +997,21 @@ public sealed class DeviceRunner(
         await _artifacts.WriteTextAsync(fileName, result.Stdout).ConfigureAwait(false);
     }
 
+    private async Task<ScreenState> CaptureScreenStateWithRetryAsync(string? snapshotPrefix, int maxAttempts = 3, int retryDelayMs = 250)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await CaptureScreenStateAsync(snapshotPrefix).ConfigureAwait(false);
+            }
+            catch (InvalidOperationException ex) when (attempt < maxAttempts && IsRetryableHierarchyDumpFailure(ex))
+            {
+                await _delay.DelayAsync(retryDelayMs).ConfigureAwait(false);
+            }
+        }
+    }
+
     private async Task<object> CaptureTelemetryAsync(string artifactBaseName, string logOutput, object metadata)
     {
         var parsed = _telemetryParser.ParseLog(logOutput);
@@ -952,7 +1026,7 @@ public sealed class DeviceRunner(
                 event_count = parsed.Events.Count,
                 parse_error_count = parsed.ParseErrors.Count,
                 events = parsed.Events,
-                parse_errors = parsed.ParseErrors,
+                parse_errors = parsed.ParseErrors
             }).ConfigureAwait(false);
 
         return new
@@ -962,7 +1036,7 @@ public sealed class DeviceRunner(
             event_count = parsed.Events.Count,
             parse_error_count = parsed.ParseErrors.Count,
             events = parsed.Events,
-            parse_errors = parsed.ParseErrors,
+            parse_errors = parsed.ParseErrors
         };
     }
 
@@ -976,7 +1050,7 @@ public sealed class DeviceRunner(
     {
         var started = _timeProvider.GetUtcNow();
         var deadline = started.AddSeconds(Math.Max(1, timeoutSec));
-        string lastLogOutput = string.Empty;
+        var lastLogOutput = string.Empty;
         string? invocation = null;
         TelemetryParseResult lastParsed = new([], [], 0, 0);
 
@@ -1008,7 +1082,7 @@ public sealed class DeviceRunner(
                         parse_error_count = lastParsed.ParseErrors.Count,
                         matched = successDataFactory(match),
                         events = lastParsed.Events,
-                        parse_errors = lastParsed.ParseErrors,
+                        parse_errors = lastParsed.ParseErrors
                     }).ConfigureAwait(false);
                 return successDataFactory(match);
             }
@@ -1027,11 +1101,68 @@ public sealed class DeviceRunner(
                     event_count = lastParsed.Events.Count,
                     parse_error_count = lastParsed.ParseErrors.Count,
                     events = lastParsed.Events,
-                    parse_errors = lastParsed.ParseErrors,
+                    parse_errors = lastParsed.ParseErrors
                 }).ConfigureAwait(false);
         }
 
         throw timeoutExceptionFactory();
+    }
+
+    private static string RequireNonBlank(string value, string message)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new UsageException(message);
+        }
+
+        return value;
+    }
+
+    private static int RequirePositive(int value, string message)
+    {
+        if (value <= 0)
+        {
+            throw new UsageException(message);
+        }
+
+        return value;
+    }
+
+    private static int RequireNonNegative(int value, string message)
+    {
+        if (value < 0)
+        {
+            throw new UsageException(message);
+        }
+
+        return value;
+    }
+
+    private static double RequireUnitInterval(double value, string message)
+    {
+        if (value < 0 || value > 1)
+        {
+            throw new UsageException(message);
+        }
+
+        return value;
+    }
+
+    private static Regex? CreateDetailsRegex(string? detailsPattern)
+    {
+        if (string.IsNullOrWhiteSpace(detailsPattern))
+        {
+            return null;
+        }
+
+        try
+        {
+            return new Regex(detailsPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new UsageException($"assertEvent detailsPattern is not a valid regular expression: {ex.Message}");
+        }
     }
 
     private static string? NormalizeTelemetryStep(string? step)
@@ -1075,9 +1206,9 @@ public sealed class DeviceRunner(
     private string BuildFailurePrefix(FailureCaptureRequest request)
     {
         var parts = new List<string> { "failure" };
-        if (request.StepIndex is int stepIndex)
+        if (request.StepIndex is { } stepIndex)
         {
-            parts.Add(stepIndex.ToString("000", System.Globalization.CultureInfo.InvariantCulture));
+            parts.Add(stepIndex.ToString("000", CultureInfo.InvariantCulture));
         }
 
         if (!string.IsNullOrWhiteSpace(request.StepName))

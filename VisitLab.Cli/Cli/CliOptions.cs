@@ -1,6 +1,7 @@
 using System.Collections.Frozen;
+using VisitLab.Cli.Errors;
 
-namespace VisitLab.Cli;
+namespace VisitLab.Cli.Cli;
 
 /// <summary>
 /// Minimal command-line parser for command plus dash-prefixed options.
@@ -26,7 +27,7 @@ public sealed class CliOptions
         "logcat",
         "wait-log",
         "record",
-        "run",
+        "run"
     }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     private readonly Dictionary<string, string?> _values = new(StringComparer.OrdinalIgnoreCase);
@@ -65,7 +66,7 @@ public sealed class CliOptions
             }
 
             var key = token.TrimStart('-');
-            string? value = "true";
+            var value = "true";
             if (i + 1 < args.Length && !args[i + 1].StartsWith("-", StringComparison.Ordinal))
             {
                 value = args[++i];

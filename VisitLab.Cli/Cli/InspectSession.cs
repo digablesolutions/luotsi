@@ -2,26 +2,29 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using VisitLab.Cli.Errors;
+using VisitLab.Cli.Infrastructure;
+using VisitLab.Cli.Models;
 
-namespace VisitLab.Cli;
+namespace VisitLab.Cli.Cli;
 
-internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIO console, TimeProvider timeProvider)
+internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIo console, TimeProvider timeProvider)
 {
     private static readonly JsonSerializerOptions OutputJsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        WriteIndented = false,
+        WriteIndented = false
     };
 
     private static readonly JsonSerializerOptions InputJsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true,
+        PropertyNameCaseInsensitive = true
     };
 
     private readonly IDeviceHost _deviceHost = deviceHost ?? throw new ArgumentNullException(nameof(deviceHost));
-    private readonly IConsoleIO _console = console ?? throw new ArgumentNullException(nameof(console));
+    private readonly IConsoleIo _console = console ?? throw new ArgumentNullException(nameof(console));
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
 
     public async Task<int> RunAsync()
@@ -34,7 +37,7 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIO console,
             {
                 type = "session_started",
                 session_id = sessionId,
-                started_at = _timeProvider.GetUtcNow(),
+                started_at = _timeProvider.GetUtcNow()
             });
 
             var currentState = await _deviceHost.GetScreenStateAsync().ConfigureAwait(false);
@@ -50,7 +53,7 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIO console,
                         type = "session_ended",
                         session_id = sessionId,
                         ended_at = _timeProvider.GetUtcNow(),
-                        reason = "stdin_closed",
+                        reason = "stdin_closed"
                     });
                     return 0;
                 }
@@ -73,7 +76,7 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIO console,
                         session_id = sessionId,
                         received_at = _timeProvider.GetUtcNow(),
                         message = ex.Message,
-                        raw_line = line,
+                        raw_line = line
                     });
                     continue;
                 }
@@ -86,7 +89,7 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIO console,
                         session_id = sessionId,
                         received_at = _timeProvider.GetUtcNow(),
                         message = "Inspect command must include 'command'.",
-                        raw_line = line,
+                        raw_line = line
                     });
                     continue;
                 }
@@ -100,7 +103,7 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIO console,
                         session_id = sessionId,
                         id = request.Id,
                         ended_at = _timeProvider.GetUtcNow(),
-                        reason = "client_exit",
+                        reason = "client_exit"
                     });
                     return 0;
                 }
@@ -119,7 +122,7 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIO console,
                         ok = true,
                         started_at = startedAt,
                         ended_at = _timeProvider.GetUtcNow(),
-                        data,
+                        data
                     });
 
                     if (ShouldCaptureScreenState(normalizedCommand))
@@ -141,7 +144,7 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIO console,
                         ok = false,
                         started_at = startedAt,
                         ended_at = _timeProvider.GetUtcNow(),
-                        error = ErrorInfo.From(ex, category),
+                        error = ErrorInfo.From(ex, category)
                     });
                 }
             }
@@ -152,7 +155,7 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIO console,
             {
                 type = "session_error",
                 received_at = _timeProvider.GetUtcNow(),
-                error = ErrorInfo.From(ex, ErrorInfo.Classify(ex.Message)),
+                error = ErrorInfo.From(ex, ErrorInfo.Classify(ex.Message))
             });
             return 1;
         }
@@ -170,7 +173,7 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIO console,
             "keyevent" => await _deviceHost.KeyEventAsync(RequireText(request.Code, "code")).ConfigureAwait(false),
             "telemetry_tail" => await _deviceHost.TelemetryTailAsync(request.Tail ?? 200).ConfigureAwait(false),
             "telemetry_watch" => await _deviceHost.TelemetryWatchAsync(request.TimeoutSec ?? 15).ConfigureAwait(false),
-            _ => throw new UsageException($"Unknown inspect command '{request.Command}'."),
+            _ => throw new UsageException($"Unknown inspect command '{request.Command}'.")
         };
     }
 
@@ -204,7 +207,7 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIO console,
             captured_at = state.CapturedAt,
             screen_hash = ScreenStateDelta.CreateHash(state),
             delta,
-            state,
+            state
         });
     }
 

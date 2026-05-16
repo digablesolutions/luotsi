@@ -1,8 +1,6 @@
-using System.Text;
-using System.Text.Json;
 using System.Xml.Linq;
 
-namespace VisitLab.Cli;
+namespace VisitLab.Cli.Models;
 
 /// <summary>
 /// Process result.
@@ -10,20 +8,7 @@ namespace VisitLab.Cli;
 /// <param name="ExitCode">Exit code.</param>
 /// <param name="Stdout">Captured stdout.</param>
 /// <param name="Stderr">Captured stderr.</param>
-public sealed record ProcessResult(int ExitCode, string Stdout, string Stderr)
-{
-    /// <summary>
-    /// Throws when the process failed.
-    /// </summary>
-    /// <param name="message">Failure context.</param>
-    public void EnsureSuccess(string message)
-    {
-        if (ExitCode != 0)
-        {
-            throw new InvalidOperationException($"{message}: exit {ExitCode}. {Stderr}".Trim());
-        }
-    }
-}
+public sealed record ProcessResult(int ExitCode, string Stdout, string Stderr);
 
 /// <summary>
 /// Device fingerprint metadata.
@@ -174,7 +159,7 @@ public sealed record ScreenElement(
 
     private static Bounds ParseBounds(string value)
     {
-        var numbers = value.Split(new[] { '[', ']', ',' }, StringSplitOptions.RemoveEmptyEntries)
+        var numbers = value.Split(['[', ']', ','], StringSplitOptions.RemoveEmptyEntries)
             .Select(static part => int.TryParse(part, out var parsed) ? parsed : 0)
             .ToArray();
         return numbers.Length >= 4 ? new Bounds(numbers[0], numbers[1], numbers[2], numbers[3]) : new Bounds(0, 0, 0, 0);

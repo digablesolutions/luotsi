@@ -1,7 +1,9 @@
-using System.Diagnostics;
 using System.Text;
+using VisitLab.Cli.Artifacts;
+using VisitLab.Cli.Models;
+using VisitLab.Cli.Scenarios;
 
-namespace VisitLab.Cli;
+namespace VisitLab.Cli.Infrastructure;
 
 public interface IDelay
 {
@@ -119,7 +121,7 @@ public interface IDeviceHostFactory
     IDeviceHost Create(DeviceHostConfiguration configuration, ArtifactSession artifacts);
 }
 
-public interface IConsoleIO
+public interface IConsoleIo
 {
     void WriteLine(string value);
     void WriteErrorLine(string value);
@@ -138,21 +140,19 @@ public interface IUniqueIdGenerator
 
 public sealed record AdbCommandResult(string Executable, string? Serial, IReadOnlyList<string> Args, ProcessResult Process)
 {
-    public int ExitCode => Process.ExitCode;
+    private int ExitCode => Process.ExitCode;
 
     public string Stdout => Process.Stdout;
 
-    public string Stderr => Process.Stderr;
+    private string Stderr => Process.Stderr;
 
     public string Invocation => string.Join(" ", [Executable, .. Args.Select(QuoteArgument)]);
 
     public void EnsureSuccess(string message)
     {
-        if (ExitCode != 0)
-        {
-            var detail = string.IsNullOrWhiteSpace(Stderr) ? Stdout : Stderr;
-            throw new InvalidOperationException($"{message}: `{Invocation}` exited {ExitCode}. {detail}".Trim());
-        }
+        if (ExitCode == 0) return;
+        var detail = string.IsNullOrWhiteSpace(Stderr) ? Stdout : Stderr;
+        throw new InvalidOperationException($"{message}: `{Invocation}` exited {ExitCode}. {detail}".Trim());
     }
 
     private static string QuoteArgument(string value) =>

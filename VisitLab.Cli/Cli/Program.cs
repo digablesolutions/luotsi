@@ -1,4 +1,4 @@
-namespace VisitLab.Cli;
+namespace VisitLab.Cli.Cli;
 
 /// <summary>
 /// Console program entry point.

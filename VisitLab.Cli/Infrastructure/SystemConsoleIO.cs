@@ -1,6 +1,6 @@
-namespace VisitLab.Cli;
+namespace VisitLab.Cli.Infrastructure;
 
-public sealed class SystemConsoleIO : IConsoleIO
+public sealed class SystemConsoleIo : IConsoleIo
 {
     public void WriteLine(string value) => Console.Out.WriteLine(value);
 

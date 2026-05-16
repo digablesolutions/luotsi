@@ -1,5 +1,12 @@
 using System.Text.Json;
 using VisitLab.Cli;
+using VisitLab.Cli.Artifacts;
+using VisitLab.Cli.Cli;
+using VisitLab.Cli.Errors;
+using VisitLab.Cli.Hosts.Android;
+using VisitLab.Cli.Infrastructure;
+using VisitLab.Cli.Models;
+using VisitLab.Cli.Scenarios;
 using Xunit;
 
 namespace VisitLab.Cli.Tests;
@@ -50,7 +57,7 @@ public sealed class AppTests
     public async Task ProcessRunner_Captures_Stdout_And_Exit_Code()
     {
         var (fileName, args) = OperatingSystem.IsWindows()
-            ? ("powershell.exe", new[] { "-NoLogo", "-NoProfile", "-Command", "[Console]::Out.Write('ok')" })
+            ? ("powershell.exe", ["-NoLogo", "-NoProfile", "-Command", "[Console]::Out.Write('ok')"])
             : ("/bin/sh", new[] { "-c", "printf 'ok'" });
         var result = await new DefaultProcessRunner().RunAsync(fileName, args);
 
@@ -146,6 +153,48 @@ public sealed class AppTests
         Assert.Contains("not valid JSON", error.Message, StringComparison.Ordinal);
     }
 
+        [Fact]
+        public async Task RunScenarioAsync_Empty_Steps_Throws_UsageException()
+        {
+                var fileSystem = new FakeFileSystem();
+                var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+                var runner = new DeviceRunner(new FakeAdbClient(), ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
+                var scenarios = new ScenarioExecutor(runner, fileSystem, timeProvider, new FakeDelay(timeProvider));
+                var scenarioPath = "/tmp/empty-steps.json";
+                fileSystem.AddFile(scenarioPath, """
+                {
+                    "name": "empty",
+                    "steps": []
+                }
+                """);
+
+                var error = await Assert.ThrowsAsync<UsageException>(() => scenarios.RunAsync(scenarioPath));
+
+                Assert.Contains("must define at least one step", error.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task RunScenarioAsync_Negative_Sleep_Throws_UsageException()
+        {
+                var fileSystem = new FakeFileSystem();
+                var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+                var runner = new DeviceRunner(new FakeAdbClient(), ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
+                var scenarios = new ScenarioExecutor(runner, fileSystem, timeProvider, new FakeDelay(timeProvider));
+                var scenarioPath = "/tmp/negative-sleep.json";
+                fileSystem.AddFile(scenarioPath, """
+                {
+                    "name": "broken-sleep",
+                    "steps": [
+                        { "name": "pause", "action": "sleep", "milliseconds": -1 }
+                    ]
+                }
+                """);
+
+                var error = await Assert.ThrowsAsync<UsageException>(() => scenarios.RunAsync(scenarioPath));
+
+                Assert.Contains("milliseconds must be zero or greater", error.Message, StringComparison.Ordinal);
+        }
+
     [Fact]
     public async Task GetScreenStateAsync_Writes_Invalid_Dump_Artifact_On_Parse_Failure()
     {
@@ -240,6 +289,68 @@ public sealed class AppTests
 
         Assert.Equal("Target", element.Text);
         Assert.Single(delay.Calls);
+    }
+
+    [Fact]
+    public async Task WaitVisibleAsync_Blank_Text_Throws_UsageException()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var runner = new DeviceRunner(new FakeAdbClient(), ArtifactSession.Create(CliOptions.Parse(["wait-visible"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
+
+        var error = await Assert.ThrowsAsync<UsageException>(() => runner.WaitVisibleAsync("   ", 2));
+
+        Assert.Contains("waitVisible requires non-empty text", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AssertTextInputReadyAsync_Retries_Transient_Invalid_Dumps()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var delay = new FakeDelay(timeProvider);
+                var artifacts = ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider);
+        var adb = new FakeAdbClient();
+        adb.EnqueueShellResult(new ProcessResult(0, "not-xml", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, """
+        <hierarchy>
+          <node text="" content-desc="" resource-id="input/name" class="android.widget.EditText" enabled="true" clickable="true" focused="true" bounds="[0,0][100,100]" />
+        </hierarchy>
+        """, string.Empty));
+                var runner = new DeviceRunner(adb, artifacts, timeProvider, delay, fileSystem);
+
+        var result = await runner.AssertTextInputReadyAsync(requireKeyboard: false, timeoutSec: 2);
+        var json = JsonDocument.Parse(JsonSerializer.Serialize(result)).RootElement;
+
+        Assert.True(json.GetProperty("keyboard_visible").GetBoolean());
+        Assert.Single(delay.Calls);
+        Assert.True(fileSystem.FileExists(Path.Combine(artifacts.Root, "hierarchy-invalid.xml")));
+    }
+
+    [Fact]
+    public async Task RunAsync_Invalid_Telemetry_Tail_Returns_Usage_Error_Envelope()
+    {
+        var console = new FakeConsole();
+        var app = new App(console: console);
+
+        var exitCode = await app.RunAsync(["telemetry-tail", "--tail", "0"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+    }
+
+    [Fact]
+    public async Task AssertEventAsync_Invalid_Regex_Throws_UsageException()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var runner = new DeviceRunner(new FakeAdbClient(), ArtifactSession.Create(CliOptions.Parse(["assert-event"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
+
+        var error = await Assert.ThrowsAsync<UsageException>(() => runner.AssertEventAsync("device_ready", [], "[", 2));
+
+        Assert.Contains("detailsPattern is not a valid regular expression", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -573,7 +684,7 @@ public sealed class AppTests
         var environment = new FakeEnvironmentVariables(new Dictionary<string, string>
         {
             ["DEVICE_E2E_EMULATED_STORAGE_TARGET"] = "/sdcard",
-            ["DEVICE_E2E_EMULATED_STORAGE_SOURCE"] = "/mnt/shell/emulated/0",
+            ["DEVICE_E2E_EMULATED_STORAGE_SOURCE"] = "/mnt/shell/emulated/0"
         });
         var runner = new DeviceRunner(
             adb,
@@ -642,7 +753,7 @@ internal sealed class FakeDelay(ManualTimeProvider timeProvider) : IDelay
     }
 }
 
-internal sealed class FakeConsole : IConsoleIO
+internal sealed class FakeConsole : IConsoleIo
 {
     public List<string> OutputLines { get; } = [];
 
@@ -867,7 +978,7 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
         Task.FromResult(new DeviceFingerprint("device-fingerprint.v1", DateTimeOffset.UtcNow, "SER", "Model", "16", "36", "fingerprint", "arm64-v8a", "focus"));
 
     public Task<FailureArtifactBundle> CaptureFailureArtifactsAsync(FailureCaptureRequest request, Exception exception) =>
-        Task.FromResult(new FailureArtifactBundle("visit-lab-failure-bundle.v1", DateTimeOffset.UtcNow, request.Scope, request.Name, request.File, request.StepIndex, request.StepName, request.Action, exception.GetType().FullName ?? exception.GetType().Name, exception.Message, Array.Empty<FailureArtifact>(), Array.Empty<FailureCaptureError>()));
+        Task.FromResult(new FailureArtifactBundle("visit-lab-failure-bundle.v1", DateTimeOffset.UtcNow, request.Scope, request.Name, request.File, request.StepIndex, request.StepName, request.Action, exception.GetType().FullName ?? exception.GetType().Name, exception.Message, [], []));
 
     public Task<object> LogcatAsync(int tail) => Task.FromResult<object>(new { tail });
 }

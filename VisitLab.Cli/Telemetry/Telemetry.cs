@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace VisitLab.Cli;
+namespace VisitLab.Cli.Telemetry;
 
 /// <summary>
 /// Parses semantic device telemetry emitted through logcat.

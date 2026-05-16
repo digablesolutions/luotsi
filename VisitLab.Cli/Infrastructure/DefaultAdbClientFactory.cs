@@ -1,4 +1,6 @@
-namespace VisitLab.Cli;
+using VisitLab.Cli.Hosts.Android;
+
+namespace VisitLab.Cli.Infrastructure;
 
 public sealed class DefaultAdbClientFactory : IAdbClientFactory
 {

@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace VisitLab.Cli;
+namespace VisitLab.Cli.Infrastructure;
 
 internal static class LogcatTime
 {
