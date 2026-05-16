@@ -764,13 +764,7 @@ public sealed class AppTests
         var fileSystem = new FakeFileSystem();
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var adb = new FakeAdbClient();
-        adb.EnqueueShellResult(new ProcessResult(0, "SER123", string.Empty));
-        adb.EnqueueShellResult(new ProcessResult(0, "Pixel 9", string.Empty));
-        adb.EnqueueShellResult(new ProcessResult(0, "16", string.Empty));
-        adb.EnqueueShellResult(new ProcessResult(0, "36", string.Empty));
-        adb.EnqueueShellResult(new ProcessResult(0, "google/pixel/device", string.Empty));
-        adb.EnqueueShellResult(new ProcessResult(0, "arm64-v8a", string.Empty));
-        adb.EnqueueShellResult(new ProcessResult(0, "mCurrentFocus=App", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, CreateDeviceFingerprintShellOutput("SER123", "Pixel 9", "16", "36", "google/pixel/device", "arm64-v8a", "mCurrentFocus=App"), string.Empty));
         adb.EnqueueLogLines("05-15 12:00:00.000 I/Test: DEVICE_TEST_TELEMETRY {\"schema\":\"systam-device-test-telemetry.v1\",\"seq\":12,\"session\":\"abc\",\"timestamp\":\"2026-05-15T12:00:00Z\",\"event\":\"step\",\"step\":\"STEP_IDLE\"}");
         var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
         var scenarios = new ScenarioExecutor(runner, fileSystem, timeProvider, new FakeDelay(timeProvider));
@@ -864,13 +858,7 @@ public sealed class AppTests
         var fileSystem = new FakeFileSystem();
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var adb = new FakeAdbClient();
-        adb.EnqueueShellResult(new ProcessResult(0, "SER123", string.Empty));
-        adb.EnqueueShellResult(new ProcessResult(0, "Pixel 9", string.Empty));
-        adb.EnqueueShellResult(new ProcessResult(0, "16", string.Empty));
-        adb.EnqueueShellResult(new ProcessResult(0, "36", string.Empty));
-        adb.EnqueueShellResult(new ProcessResult(0, "google/pixel/device", string.Empty));
-        adb.EnqueueShellResult(new ProcessResult(0, "arm64-v8a,x86_64", string.Empty));
-        adb.EnqueueShellResult(new ProcessResult(0, "mCurrentFocus=App", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, CreateDeviceFingerprintShellOutput("SER123", "Pixel 9", "16", "36", "google/pixel/device", "arm64-v8a,x86_64", "mCurrentFocus=App"), string.Empty));
         var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["preflight"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
 
         var result = await runner.PreflightAsync(null);
@@ -879,6 +867,7 @@ public sealed class AppTests
 
         Assert.Equal("Pixel 9", json.GetProperty("model").GetString());
         Assert.Equal("google/pixel/device", json.GetProperty("fingerprint").GetString());
+        Assert.Single(adb.ShellCommands);
         Assert.True(fileSystem.FileExists(Path.Combine(artifactRoot, "device-fingerprint.json")));
     }
 
@@ -898,13 +887,7 @@ public sealed class AppTests
           ]
         }
         """);
-        adb.EnqueueShellResult(new ProcessResult(0, "SER123", string.Empty));
-        adb.EnqueueShellResult(new ProcessResult(0, "Pixel 9", string.Empty));
-        adb.EnqueueShellResult(new ProcessResult(0, "16", string.Empty));
-        adb.EnqueueShellResult(new ProcessResult(0, "36", string.Empty));
-        adb.EnqueueShellResult(new ProcessResult(0, "google/pixel/device", string.Empty));
-        adb.EnqueueShellResult(new ProcessResult(0, "arm64-v8a", string.Empty));
-        adb.EnqueueShellResult(new ProcessResult(0, "mCurrentFocus=App", string.Empty));
+                adb.EnqueueShellResult(new ProcessResult(0, CreateDeviceFingerprintShellOutput("SER123", "Pixel 9", "16", "36", "google/pixel/device", "arm64-v8a", "mCurrentFocus=App"), string.Empty));
         adb.EnqueueLogLines("I/Test: boot", "I/Test: still waiting");
         adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "01-01 00:00:00.000 I/Test: snapshot", string.Empty));
@@ -972,6 +955,24 @@ public sealed class AppTests
 
     private static string CreateUiDump(string text) =>
         $"<hierarchy><node text=\"{text}\" content-desc=\"\" resource-id=\"id/{text}\" class=\"android.widget.TextView\" enabled=\"true\" clickable=\"false\" bounds=\"[0,0][100,100]\" /></hierarchy>";
+
+    private static string CreateDeviceFingerprintShellOutput(string serial, string model, string androidRelease, string sdk, string fingerprint, string abi, string currentFocus) =>
+        string.Join(
+            "\n",
+            "__VISIT_LAB_DEVICE_FINGERPRINT__SERIAL__",
+            serial,
+            "__VISIT_LAB_DEVICE_FINGERPRINT__MODEL__",
+            model,
+            "__VISIT_LAB_DEVICE_FINGERPRINT__ANDROID_RELEASE__",
+            androidRelease,
+            "__VISIT_LAB_DEVICE_FINGERPRINT__SDK__",
+            sdk,
+            "__VISIT_LAB_DEVICE_FINGERPRINT__FINGERPRINT__",
+            fingerprint,
+            "__VISIT_LAB_DEVICE_FINGERPRINT__ABI__",
+            abi,
+            "__VISIT_LAB_DEVICE_FINGERPRINT__CURRENT_FOCUS__",
+            currentFocus);
 
     private static JsonElement SerializeToJsonElement<T>(T value)
     {

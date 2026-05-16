@@ -25,9 +25,22 @@ public sealed class DeviceRunner(
     ITelemetryParser? telemetryParser = null) : IDeviceHost
 {
     private const string DefaultKioskPackage = "fi.systam.visit";
+    private const string DeviceFingerprintMarkerPrefix = "__VISIT_LAB_DEVICE_FINGERPRINT__";
     private const int UiPollDelayMs = 250;
     private static readonly TimeSpan KeyboardVisibilityCacheTtl = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan UiDumpCacheTtl = TimeSpan.FromMilliseconds(250);
+    private static readonly (string Key, string Command)[] DeviceFingerprintReads =
+    [
+        ("serial", "getprop ro.serialno"),
+        ("model", "getprop ro.product.model"),
+        ("android_release", "getprop ro.build.version.release"),
+        ("sdk", "getprop ro.build.version.sdk"),
+        ("fingerprint", "getprop ro.build.fingerprint"),
+        ("abi", "getprop ro.product.cpu.abilist"),
+        ("current_focus", "dumpsys window | grep -E 'mCurrentFocus|mFocusedApp|mResumedActivity' | head -1")
+    ];
+    private static readonly IReadOnlyDictionary<string, string> DeviceFingerprintMarkers = DeviceFingerprintReads
+        .ToDictionary(static field => CreateDeviceFingerprintMarker(field.Key), static field => field.Key, StringComparer.Ordinal);
 
     private readonly IAdbClient _adb = adb ?? throw new ArgumentNullException(nameof(adb));
     private readonly ArtifactSession _artifacts = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
@@ -476,16 +489,17 @@ public sealed class DeviceRunner(
 
     public async Task<DeviceFingerprint> WriteDeviceFingerprintAsync()
     {
+        var snapshot = await ReadDeviceFingerprintSnapshotAsync().ConfigureAwait(false);
         var fingerprint = new DeviceFingerprint(
             "device-fingerprint.v1",
             _timeProvider.GetUtcNow(),
-            await ShellTextAsync("getprop ro.serialno").ConfigureAwait(false),
-            await ShellTextAsync("getprop ro.product.model").ConfigureAwait(false),
-            await ShellTextAsync("getprop ro.build.version.release").ConfigureAwait(false),
-            await ShellTextAsync("getprop ro.build.version.sdk").ConfigureAwait(false),
-            await ShellTextAsync("getprop ro.build.fingerprint").ConfigureAwait(false),
-            await ShellTextAsync("getprop ro.product.cpu.abilist").ConfigureAwait(false),
-            await ShellTextAsync("dumpsys window | grep -E 'mCurrentFocus|mFocusedApp|mResumedActivity' | head -1").ConfigureAwait(false));
+            snapshot.Serial,
+            snapshot.Model,
+            snapshot.AndroidRelease,
+            snapshot.Sdk,
+            snapshot.Fingerprint,
+            snapshot.Abi,
+            snapshot.CurrentFocus);
         await _artifacts.WriteJsonAsync("device-fingerprint.json", fingerprint).ConfigureAwait(false);
         return fingerprint;
     }
@@ -1020,6 +1034,96 @@ public sealed class DeviceRunner(
         return result.Stdout.Trim();
     }
 
+    private async Task<DeviceFingerprintSnapshot> ReadDeviceFingerprintSnapshotAsync()
+    {
+        var output = await ShellTextAsync(BuildDeviceFingerprintCommand()).ConfigureAwait(false);
+        if (TryParseDeviceFingerprintSnapshot(output, out var snapshot))
+        {
+            return snapshot;
+        }
+
+        return await ReadDeviceFingerprintSnapshotIndividuallyAsync().ConfigureAwait(false);
+    }
+
+    private async Task<DeviceFingerprintSnapshot> ReadDeviceFingerprintSnapshotIndividuallyAsync() =>
+        new(
+            await ShellTextAsync("getprop ro.serialno").ConfigureAwait(false),
+            await ShellTextAsync("getprop ro.product.model").ConfigureAwait(false),
+            await ShellTextAsync("getprop ro.build.version.release").ConfigureAwait(false),
+            await ShellTextAsync("getprop ro.build.version.sdk").ConfigureAwait(false),
+            await ShellTextAsync("getprop ro.build.fingerprint").ConfigureAwait(false),
+            await ShellTextAsync("getprop ro.product.cpu.abilist").ConfigureAwait(false),
+            await ShellTextAsync("dumpsys window | grep -E 'mCurrentFocus|mFocusedApp|mResumedActivity' | head -1").ConfigureAwait(false));
+
+    private static string BuildDeviceFingerprintCommand()
+    {
+        var builder = new StringBuilder();
+
+        for (var index = 0; index < DeviceFingerprintReads.Length; index++)
+        {
+            if (index > 0)
+            {
+                builder.Append("; ");
+            }
+
+            var field = DeviceFingerprintReads[index];
+            builder.Append("echo ")
+                .Append(CreateDeviceFingerprintMarker(field.Key))
+                .Append("; ")
+                .Append(field.Command);
+        }
+
+        return builder.ToString();
+    }
+
+    private static bool TryParseDeviceFingerprintSnapshot(string output, out DeviceFingerprintSnapshot snapshot)
+    {
+        var values = DeviceFingerprintReads.ToDictionary(static field => field.Key, static _ => new StringBuilder(), StringComparer.Ordinal);
+        var seenMarkers = new HashSet<string>(StringComparer.Ordinal);
+        string? currentField = null;
+
+        foreach (var rawLine in output.Replace("\r", string.Empty, StringComparison.Ordinal).Split('\n'))
+        {
+            var trimmedLine = rawLine.Trim();
+            if (DeviceFingerprintMarkers.TryGetValue(trimmedLine, out var field))
+            {
+                currentField = field;
+                seenMarkers.Add(field);
+                continue;
+            }
+
+            if (currentField is null)
+            {
+                continue;
+            }
+
+            if (values[currentField].Length > 0)
+            {
+                values[currentField].Append('\n');
+            }
+
+            values[currentField].Append(rawLine);
+        }
+
+        if (seenMarkers.Count != DeviceFingerprintReads.Length)
+        {
+            snapshot = default!;
+            return false;
+        }
+
+        snapshot = new DeviceFingerprintSnapshot(
+            values["serial"].ToString().Trim(),
+            values["model"].ToString().Trim(),
+            values["android_release"].ToString().Trim(),
+            values["sdk"].ToString().Trim(),
+            values["fingerprint"].ToString().Trim(),
+            values["abi"].ToString().Trim(),
+            values["current_focus"].ToString().Trim());
+        return true;
+    }
+
+    private static string CreateDeviceFingerprintMarker(string key) => $"{DeviceFingerprintMarkerPrefix}{key.ToUpperInvariant()}__";
+
     private async Task CaptureScreenshotAsync(string fileName)
     {
         var remote = $"/sdcard/device-e2e-{_idGenerator.NewId()}.png";
@@ -1204,6 +1308,15 @@ public sealed class DeviceRunner(
     private sealed record KeyboardVisibilitySnapshot(bool IsVisible, DateTimeOffset CapturedAt);
 
     private sealed record UiDumpSnapshot(string Xml, DateTimeOffset CapturedAt);
+
+    private sealed record DeviceFingerprintSnapshot(
+        string Serial,
+        string Model,
+        string AndroidRelease,
+        string Sdk,
+        string Fingerprint,
+        string Abi,
+        string CurrentFocus);
 
     private sealed record TelemetryMonitorResult(
         DateTimeOffset StartedAt,
