@@ -44,7 +44,7 @@ public interface IViewSessionFactory
 /// <param name="VideoBitRate">Requested video bit rate.</param>
 /// <param name="OverlayScreenState">Whether screen-state overlays are enabled.</param>
 /// <param name="OverlayTelemetry">Whether telemetry overlays are enabled.</param>
-/// <param name="StatsIntervalMs">Minimum interval between emitted JSONL stats updates.</param>
+/// <param name="StatsIntervalMs">Minimum interval between emitted JSONL stats updates. Set to zero to disable JSONL stats emission.</param>
 public sealed record ViewOptions(
     string DeviceSelector,
     string AdbExecutable,

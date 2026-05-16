@@ -159,9 +159,9 @@ public sealed class App
     private static ViewOptions BuildViewOptions(CliOptions options, string adbExecutable)
     {
         var statsIntervalMs = options.Int("stats-interval-ms", 1000);
-        if (statsIntervalMs <= 0)
+        if (statsIntervalMs < 0)
         {
-            throw new UsageException("view requires --stats-interval-ms greater than zero.");
+            throw new UsageException("view requires --stats-interval-ms zero or greater.");
         }
 
         return new ViewOptions(

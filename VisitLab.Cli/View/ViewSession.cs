@@ -335,7 +335,7 @@ internal sealed class SessionViewRenderer(
 {
     private readonly IViewRenderer? _innerRenderer = innerRenderer;
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
-    private readonly TimeSpan _statsEventInterval = statsEventInterval > TimeSpan.Zero
+    private readonly TimeSpan _statsEventInterval = statsEventInterval >= TimeSpan.Zero
         ? statsEventInterval
         : throw new ArgumentOutOfRangeException(nameof(statsEventInterval));
     private readonly Func<ViewStats, Task> _onStatsAsync = onStatsAsync ?? throw new ArgumentNullException(nameof(onStatsAsync));
@@ -359,6 +359,11 @@ internal sealed class SessionViewRenderer(
             await _innerRenderer.UpdateStatsAsync(stats, cancellationToken).ConfigureAwait(false);
         }
 
+        if (_statsEventInterval == TimeSpan.Zero)
+        {
+            return;
+        }
+
         ViewStats? statsToEmit = null;
         var now = _timeProvider.GetUtcNow();
         lock (_statsGate)
@@ -380,6 +385,11 @@ internal sealed class SessionViewRenderer(
 
     public Task FlushPendingStatsAsync()
     {
+        if (_statsEventInterval == TimeSpan.Zero)
+        {
+            return Task.CompletedTask;
+        }
+
         ViewStats? statsToEmit;
         lock (_statsGate)
         {
