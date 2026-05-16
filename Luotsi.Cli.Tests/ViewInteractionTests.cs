@@ -23,6 +23,7 @@ public sealed partial class AppTests
         var fileSystem = new FakeFileSystem();
         var console = new FakeConsole();
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var artifactOpener = new FakeArtifactFolderOpener();
         var renderer = new ClosingViewRenderer();
         var rendererFactory = new FakeViewRendererFactory(renderer);
         var session = new ViewSession(
@@ -34,7 +35,8 @@ public sealed partial class AppTests
             new FakeViewBackendFactory(new BlockingViewBackend()),
             new FakeViewStreamConnector(new ViewPacketStreamHarness().WriteHeader("h264", 1080, 1920).Build()),
             new ViewPacketStreamReader(),
-            rendererFactory);
+            rendererFactory,
+            artifactFolderOpener: artifactOpener);
 
         var runTask = session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", false, null, 1600, 60, "8M", false, false));
         var interactionHandler = await ViewTestWaitHelpers.WaitForInteractionHandlerAsync(rendererFactory);
@@ -48,22 +50,28 @@ public sealed partial class AppTests
         await interactionHandler(new ViewWindowCommandRequest(ViewWindowCommand.Back));
         await interactionHandler(new ViewWindowCommandRequest(ViewWindowCommand.Home));
         await interactionHandler(new ViewWindowCommandRequest(ViewWindowCommand.Recents));
+        await interactionHandler(new ViewWindowCommandRequest(ViewWindowCommand.Rotate));
+        await interactionHandler(new ViewWindowCommandRequest(ViewWindowCommand.PauseStream));
+        await interactionHandler(new ViewWindowCommandRequest(ViewWindowCommand.PauseStream));
         await interactionHandler(new ViewWindowCommandRequest(ViewWindowCommand.OpenArtifacts));
         renderer.Close();
         var exitCode = await runTask;
 
         Assert.Equal(0, exitCode);
         Assert.Equal(["hello", "paste"], host.TypeTextRequests);
-        Assert.Equal(["KEYCODE_ENTER", "KEYCODE_BACK", "KEYCODE_HOME", "KEYCODE_APP_SWITCH"], host.KeyEventRequests);
+        Assert.Equal(["KEYCODE_ENTER", "KEYCODE_BACK", "KEYCODE_HOME", "KEYCODE_APP_SWITCH", "KEYCODE_ROTATE_SCREEN"], host.KeyEventRequests);
         Assert.Equal([(0, 1)], host.ScrollRequests);
         Assert.Equal([("C:/tmp/note.txt", null)], host.PushFileRequests);
         Assert.Equal([("/sdcard/Download/report.txt", "C:/tmp/pulled")], host.PullFileRequests);
         Assert.Equal(["C:/tmp/app.apk"], host.InstallPackageRequests);
+        Assert.Equal([Path.GetFullPath(ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider).Root)], artifactOpener.OpenedPaths);
         Assert.Contains(console.OutputLines, line => line.Contains("view_clipboard_pasted", StringComparison.Ordinal));
         Assert.Contains(console.OutputLines, line => line.Contains("view_file_pushed", StringComparison.Ordinal));
         Assert.Contains(console.OutputLines, line => line.Contains("view_file_pulled", StringComparison.Ordinal));
         Assert.Contains(console.OutputLines, line => line.Contains("view_package_installed", StringComparison.Ordinal));
-        Assert.Contains(console.OutputLines, line => line.Contains("view_artifacts_requested", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, line => line.Contains("view_stream_paused", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, line => line.Contains("view_stream_resumed", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, line => line.Contains("view_artifacts_opened", StringComparison.Ordinal));
     }
 
 

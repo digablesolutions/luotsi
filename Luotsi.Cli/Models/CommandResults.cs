@@ -70,6 +70,10 @@ public sealed record InstallPackageResult(string PackagePath);
 // Enable adb-over-TCP and connect to the target endpoint.
 public sealed record WirelessConnectResult(string Host, int Port, string Endpoint);
 
+public sealed record ViewProfileListResult(IReadOnlyList<string> Profiles);
+
+public sealed record ViewProfileDeleteResult(string Name, bool Deleted);
+
 // Wait not visible
 public sealed record WaitNotVisibleResult(string Text, int AttemptCount, bool Visible);
 

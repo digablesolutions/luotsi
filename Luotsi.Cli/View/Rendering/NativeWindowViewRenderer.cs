@@ -33,6 +33,7 @@ public interface IViewWindowSurface : IAsyncDisposable
         ViewDisplayInfo displayInfo,
         Func<ViewPointerEvent, Task> pointerHandler,
         Func<ViewInteractionRequest, Task>? interactionHandler = null,
+        ViewWindowOptions? options = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -77,6 +78,13 @@ public enum ViewScaleMode
 }
 
 /// <summary>
+/// Host window options for the native renderer.
+/// </summary>
+/// <param name="AlwaysOnTop">Whether the mirror window should stay above other windows.</param>
+/// <param name="InitialScaleMode">Initial fit/fill scale mode for the mirror window.</param>
+public sealed record ViewWindowOptions(bool AlwaysOnTop = false, ViewScaleMode InitialScaleMode = ViewScaleMode.Fit);
+
+/// <summary>
 /// Pointer event raised by the native window surface.
 /// </summary>
 /// <param name="ClientX">Pointer X within the client area.</param>
@@ -89,10 +97,14 @@ public sealed record ViewPointerEvent(int ClientX, int ClientY, int ClientWidth,
 /// <summary>
 /// In-process native window renderer that presents decoded frames and routes clicks through the existing tap-point host path.
 /// </summary>
-public sealed class NativeWindowViewRenderer(IViewWindowSurfaceFactory windowSurfaceFactory, Func<ViewInteractionRequest, Task> interactionHandler) : IViewRenderer
+public sealed class NativeWindowViewRenderer(
+    IViewWindowSurfaceFactory windowSurfaceFactory,
+    Func<ViewInteractionRequest, Task> interactionHandler,
+    ViewWindowOptions? windowOptions = null) : IViewRenderer
 {
     private readonly IViewWindowSurface _windowSurface = (windowSurfaceFactory ?? throw new ArgumentNullException(nameof(windowSurfaceFactory))).Create();
     private readonly Func<ViewInteractionRequest, Task> _interactionHandler = interactionHandler ?? throw new ArgumentNullException(nameof(interactionHandler));
+    private readonly ViewWindowOptions _windowOptions = windowOptions ?? new ViewWindowOptions();
     private ViewDisplayInfo? _displayInfo;
     private ViewChromeState? _chrome;
     private bool _initialized;
@@ -101,7 +113,7 @@ public sealed class NativeWindowViewRenderer(IViewWindowSurfaceFactory windowSur
     public async Task InitializeAsync(ViewDisplayInfo displayInfo, CancellationToken cancellationToken = default)
     {
         _displayInfo = displayInfo ?? throw new ArgumentNullException(nameof(displayInfo));
-        await _windowSurface.InitializeAsync("Luotsi View", displayInfo, HandlePointerAsync, _interactionHandler, cancellationToken).ConfigureAwait(false);
+        await _windowSurface.InitializeAsync("Luotsi View", displayInfo, HandlePointerAsync, _interactionHandler, _windowOptions, cancellationToken).ConfigureAwait(false);
         _initialized = true;
         if (_chrome is not null)
         {

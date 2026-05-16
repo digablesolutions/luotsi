@@ -27,7 +27,7 @@ internal sealed class UnsupportedDeviceHost : IDeviceHost
 
     public Task<PullFileResult> PullFileAsync(string remotePath, string? localDirectory = null) => Unsupported<PullFileResult>();
 
-    public Task<WirelessConnectResult> EnableWirelessAsync(string host, int port) => Unsupported<WirelessConnectResult>();
+    public Task<WirelessConnectResult> EnableWirelessAsync(string? host, int port) => Unsupported<WirelessConnectResult>();
 
     public Task<InstallPackageResult> InstallPackageAsync(string packagePath) => Unsupported<InstallPackageResult>();
 

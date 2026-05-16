@@ -86,8 +86,14 @@ public sealed class DefaultViewRendererFactory : IViewRendererFactory
             return null;
         }
 
-        return new NativeWindowViewRenderer(new Sdl3ViewWindowSurfaceFactory(), interactionHandler);
+        return new NativeWindowViewRenderer(
+            new Sdl3ViewWindowSurfaceFactory(),
+            interactionHandler,
+            new ViewWindowOptions(options.AlwaysOnTop, ParseScaleMode(options.ScaleMode)));
     }
+
+    private static ViewScaleMode ParseScaleMode(string value) =>
+        string.Equals(value, "fill", StringComparison.OrdinalIgnoreCase) ? ViewScaleMode.Fill : ViewScaleMode.Fit;
 }
 
 /// <summary>
@@ -103,7 +109,8 @@ public sealed class ViewSession(
     IViewStreamConnector streamConnector,
     IViewPacketStreamReader packetStreamReader,
     IViewRendererFactory? viewRendererFactory = null,
-    IViewRecorderFactory? viewRecorderFactory = null) : IViewSession
+    IViewRecorderFactory? viewRecorderFactory = null,
+    IArtifactFolderOpener? artifactFolderOpener = null) : IViewSession
 {
     private static readonly JsonSerializerOptions OutputJsonOptions = new()
     {
@@ -149,7 +156,8 @@ public sealed class ViewSession(
                 recorder,
                 _timeProvider,
                 sessionId,
-                WriteJsonLine);
+                WriteJsonLine,
+                artifactFolderOpener);
             string endReason = "stream_ended";
             try
             {
@@ -171,6 +179,7 @@ public sealed class ViewSession(
 
                     return Task.CompletedTask;
                 });
+                interactionRouter.AttachStreamPauseUpdater(sessionRenderer.SetPaused);
                 interactionRouter.AttachChromeUpdater(chrome => sessionRenderer.UpdateChromeAsync(chrome));
                 var firstConnection = true;
 

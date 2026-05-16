@@ -43,6 +43,12 @@ public static class ViewChromeLayout
                 ViewChromeButtonKind.Screenshot => new ViewChromeCommandHitTarget(ViewWindowCommand.TakeScreenshot),
                 ViewChromeButtonKind.Record => new ViewChromeCommandHitTarget(ViewWindowCommand.ToggleRecording),
                 ViewChromeButtonKind.Reconnect => new ViewChromeCommandHitTarget(ViewWindowCommand.Reconnect),
+                ViewChromeButtonKind.Back => new ViewChromeCommandHitTarget(ViewWindowCommand.Back),
+                ViewChromeButtonKind.Home => new ViewChromeCommandHitTarget(ViewWindowCommand.Home),
+                ViewChromeButtonKind.Recents => new ViewChromeCommandHitTarget(ViewWindowCommand.Recents),
+                ViewChromeButtonKind.Rotate => new ViewChromeCommandHitTarget(ViewWindowCommand.Rotate),
+                ViewChromeButtonKind.PauseStream => new ViewChromeCommandHitTarget(ViewWindowCommand.PauseStream),
+                ViewChromeButtonKind.OpenArtifacts => new ViewChromeCommandHitTarget(ViewWindowCommand.OpenArtifacts),
                 ViewChromeButtonKind.ScaleMode => new ViewChromeLocalHitTarget(ViewChromeLocalAction.ToggleScaleMode),
                 ViewChromeButtonKind.Fullscreen => new ViewChromeLocalHitTarget(ViewChromeLocalAction.ToggleFullscreen),
                 _ => null
@@ -106,6 +112,12 @@ public static class ViewChromeLayout
         AddButton(ViewChromeButtonKind.Screenshot, chrome.CanTakeScreenshot);
         AddButton(ViewChromeButtonKind.Record, chrome.CanToggleRecording, chrome.IsRecording);
         AddButton(ViewChromeButtonKind.Reconnect, chrome.CanReconnect);
+        AddButton(ViewChromeButtonKind.Back, !chrome.ReadOnly);
+        AddButton(ViewChromeButtonKind.Home, !chrome.ReadOnly);
+        AddButton(ViewChromeButtonKind.Recents, !chrome.ReadOnly);
+        AddButton(ViewChromeButtonKind.Rotate, !chrome.ReadOnly);
+        AddButton(ViewChromeButtonKind.PauseStream, true);
+        AddButton(ViewChromeButtonKind.OpenArtifacts, true);
         AddButton(ViewChromeButtonKind.ScaleMode, true);
         AddButton(ViewChromeButtonKind.Fullscreen, true);
 
@@ -150,6 +162,12 @@ public static class ViewChromeLayout
             ViewChromeButtonKind.Screenshot => "Screenshot",
             ViewChromeButtonKind.Record => button.Active ? "Stop Recording" : "Start Recording",
             ViewChromeButtonKind.Reconnect => "Reconnect",
+            ViewChromeButtonKind.Back => "Back",
+            ViewChromeButtonKind.Home => "Home",
+            ViewChromeButtonKind.Recents => "Recents",
+            ViewChromeButtonKind.Rotate => "Rotate",
+            ViewChromeButtonKind.PauseStream => "Pause Stream",
+            ViewChromeButtonKind.OpenArtifacts => "Open Artifacts",
             ViewChromeButtonKind.ScaleMode => scaleMode == ViewScaleMode.Fill ? "Fit" : "Fill",
             ViewChromeButtonKind.Fullscreen => isFullscreen ? "Windowed" : "Fullscreen",
             _ => null
@@ -194,7 +212,13 @@ internal enum ViewChromeButtonKind
     Record = 1,
     Reconnect = 2,
     ScaleMode = 3,
-    Fullscreen = 4
+    Fullscreen = 4,
+    Back = 5,
+    Home = 6,
+    Recents = 7,
+    Rotate = 8,
+    PauseStream = 9,
+    OpenArtifacts = 10
 }
 
 internal sealed record ViewChromeRect(int Left, int Top, int Width, int Height)

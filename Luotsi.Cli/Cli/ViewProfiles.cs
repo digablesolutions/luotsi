@@ -26,32 +26,38 @@ public sealed record ViewProfile(
     string? ShareBind = null,
     string? JoinShare = null,
     bool? AlwaysOnTop = null,
+    string? ScaleMode = null,
     string? Artifacts = null,
     string? PollArtifacts = null)
 {
-    public IReadOnlyDictionary<string, string?> ToOptionDefaults()
+    public IReadOnlyDictionary<string, string?> ToOptionDefaults(bool resetLaunchTuning = false)
     {
         var values = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         Add(values, "device", Device);
         Add(values, "adb", Adb);
-        Add(values, "codec", Codec);
-        Add(values, "decoder", Decoder);
-        Add(values, "preset", Preset);
         Add(values, "headless", Headless);
         Add(values, "record", Record);
-        Add(values, "max-size", MaxSize);
-        Add(values, "max-fps", MaxFps);
-        Add(values, "video-bit-rate", VideoBitRate);
         Add(values, "overlay-screen-state", OverlayScreenState);
         Add(values, "overlay-telemetry", OverlayTelemetry);
-        Add(values, "stats-interval-ms", StatsIntervalMs);
-        Add(values, "renderer-stats-interval-ms", RendererStatsIntervalMs);
         Add(values, "read-only", ReadOnly);
         Add(values, "share-bind", ShareBind);
         Add(values, "join-share", JoinShare);
         Add(values, "always-on-top", AlwaysOnTop);
+        Add(values, "scale-mode", ScaleMode);
         Add(values, "artifacts", Artifacts);
         Add(values, "poll-artifacts", PollArtifacts);
+        if (!resetLaunchTuning)
+        {
+            Add(values, "codec", Codec);
+            Add(values, "decoder", Decoder);
+            Add(values, "preset", Preset);
+            Add(values, "max-size", MaxSize);
+            Add(values, "max-fps", MaxFps);
+            Add(values, "video-bit-rate", VideoBitRate);
+            Add(values, "stats-interval-ms", StatsIntervalMs);
+            Add(values, "renderer-stats-interval-ms", RendererStatsIntervalMs);
+        }
+
         return values;
     }
 
@@ -74,6 +80,7 @@ public sealed record ViewProfile(
         viewOptions.ShareBindEndpoint,
         viewOptions.JoinShareEndpoint,
         viewOptions.AlwaysOnTop,
+        viewOptions.ScaleMode,
         options.Get("artifacts"),
         options.Get("poll-artifacts") ?? CliDefaults.DefaultPollArtifactsPolicy);
 
@@ -105,7 +112,9 @@ public sealed record ViewProfile(
 public interface IViewProfileStore
 {
     Task<ViewProfile?> LoadAsync(string name, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<string>> ListAsync(CancellationToken cancellationToken = default);
     Task SaveAsync(string name, ViewProfile profile, CancellationToken cancellationToken = default);
+    Task<bool> DeleteAsync(string name, CancellationToken cancellationToken = default);
 }
 
 public sealed class JsonViewProfileStore(IFileSystem fileSystem, IEnvironmentVariables environment) : IViewProfileStore
@@ -137,6 +146,28 @@ public sealed class JsonViewProfileStore(IFileSystem fileSystem, IEnvironmentVar
         var path = GetProfilePath(name);
         _fileSystem.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
         await _fileSystem.WriteAllTextAsync(path, JsonSerializer.Serialize(profile, Options), Encoding.UTF8, cancellationToken).ConfigureAwait(false);
+    }
+
+    public Task<IReadOnlyList<string>> ListAsync(CancellationToken cancellationToken = default)
+    {
+        var root = GetProfileRoot();
+        IReadOnlyList<string> profiles = Directory.Exists(root)
+            ? Directory.GetFiles(root, "*.json")
+                .Select(Path.GetFileNameWithoutExtension)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Select(name => name!)
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+            : [];
+        return Task.FromResult(profiles);
+    }
+
+    public Task<bool> DeleteAsync(string name, CancellationToken cancellationToken = default)
+    {
+        var path = GetProfilePath(name);
+        var existed = _fileSystem.FileExists(path);
+        _fileSystem.DeleteFile(path);
+        return Task.FromResult(existed);
     }
 
     private string GetProfilePath(string name)

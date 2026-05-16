@@ -87,24 +87,31 @@ update. `--preset <name>` seeds the launch defaults without blocking explicit
 overrides. The built-in presets are `low-latency`, `balanced`, `high-quality`,
 and `safe`; `--defaults` is a shorthand for the conservative `safe` preset.
 Use `--save-profile <name>` to persist the resolved connection settings and
-`--profile <name>` to reuse them later. Profiles include the device selector,
-decoder, size/FPS/bitrate, record target, stats cadences, share settings, and
-artifact policy. By default they are stored under the user app-data directory;
-set `LUOTSI_PROFILE_ROOT` to use a repo-local or CI-specific profile directory.
-Every `view` launch also refreshes the special `last` profile, so `view --last`
-is the quickest reconnect path after a successful setup.
+`--profile <name>` to reuse them later. `profile-list` lists saved profiles and
+`profile-delete --name <profile>` removes one. Profiles include the device
+selector, decoder, size/FPS/bitrate, record target, stats cadences, share
+settings, initial fit/fill scale mode, always-on-top, and artifact policy. By
+default they are stored under the user app-data directory; set
+`LUOTSI_PROFILE_ROOT` to use a repo-local or CI-specific profile directory.
+When `--defaults` is combined with `--profile`, connection identity and artifact
+settings still come from the profile, but preset-driven launch tuning is reset
+to the conservative safe preset.
+Successful `view` launches refresh the special `last` profile, so `view --last`
+is the quickest reconnect path after a known-good setup.
 The built-in SDL window now exposes an operator control layer: `F12` captures a
 device screenshot into the artifact root, `F9` toggles live stream recording,
-`F5` reconnects the mirrored stream, `F11` toggles fullscreen, and `F8`
-switches between `fit` and `fill` presentation modes. Plain text input, common
+`F7` opens the artifact folder, `F6` toggles a stream pause marker, `F5`
+reconnects the mirrored stream, `F4` sends rotate, `F11` toggles fullscreen, and
+`F8` switches between `fit` and `fill` presentation modes. Plain text input, common
 navigation/editing keys, mouse-wheel scrolling, host clipboard paste via
 `Ctrl+V`, and drag/drop helpers are also routed through the same session-owned
 interaction surface. Dropped `.apk` files install on the device; other dropped
-files are pushed to `/sdcard/Download`; session code also supports pull requests
-from device paths into the artifact root. `F1`, `F2`, and `F3` send Android
+files are pushed to `/sdcard/Download`; dropped `device:/sdcard/...` or
+`adb:/sdcard/...` path tokens pull from the device into the artifact root.
+`F1`, `F2`, and `F3` send Android
 Back, Home, and Recents respectively. The SDL window now also paints a small
 in-window toolbar and multi-device shelf on top of the mirror surface, so
-operators can click screenshot/record/reconnect/fit/fullscreen controls instead
+operators can click screenshot/record/reconnect/navigation/rotate/pause/open-folder/fit/fullscreen controls instead
 of relying only on hotkeys. When multiple adb-visible devices are present, the
 shelf becomes clickable and switches the active mirrored device by reusing the
 same reconnect loop that powers `F5`.
@@ -128,9 +135,10 @@ report instead of opening a stream. The current checks cover FFmpeg decoder
 readiness, Android helper package availability, adb device visibility, device
 preflight, and optional recording target readiness.
 
-`wireless` is the first-pass “go wireless” flow. It runs `adb tcpip <port>` for
-the USB-selected device, then `adb connect <host>:<port>`, returning the TCP/IP
-endpoint that can be saved into a view profile.
+`wireless` is the first-pass “go wireless” flow. It runs `adb shell ip route get
+8.8.8.8` to infer the USB-selected device Wi-Fi address when `--host` is not
+provided, then runs `adb tcpip <port>` and `adb connect <host>:<port>`, returning
+the TCP/IP endpoint that can be saved into a view profile.
 
 Interactive `view` sessions can now emit additional JSONL events beyond
 `view_started`, `view_stats`, `view_error`, and `view_ended`, including:

@@ -146,7 +146,7 @@ public sealed partial class AppTests
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var console = new FakeConsole();
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
-        var session = new FakeViewSession(23);
+        var session = new FakeViewSession(0);
         var app = new App(
             console: console,
             timeProvider: timeProvider,
@@ -158,7 +158,7 @@ public sealed partial class AppTests
             "--device", "192.168.0.134:5555",
             "--preset", "high-quality"]);
 
-        Assert.Equal(23, exitCode);
+        Assert.Equal(0, exitCode);
         var options = Assert.Single(session.Options);
         Assert.Equal("high-quality", options.PresetName);
         Assert.Equal(1920, options.MaxSize);
@@ -172,7 +172,7 @@ public sealed partial class AppTests
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var console = new FakeConsole();
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
-        var session = new FakeViewSession(23);
+        var session = new FakeViewSession(0);
         var app = new App(
             console: console,
             timeProvider: timeProvider,
@@ -184,7 +184,7 @@ public sealed partial class AppTests
             "--device", "192.168.0.134:5555",
             "--preset", "quality"]);
 
-        Assert.Equal(23, exitCode);
+        Assert.Equal(0, exitCode);
         var options = Assert.Single(session.Options);
         Assert.Equal("high-quality", options.PresetName);
         Assert.Equal(1920, options.MaxSize);
@@ -247,6 +247,7 @@ public sealed partial class AppTests
             RendererStatsIntervalMs: 125,
             OverlayScreenState: true,
             OverlayTelemetry: true,
+            ScaleMode: "fill",
             PollArtifacts: "per-attempt");
         var app = new App(
             console: console,
@@ -271,6 +272,7 @@ public sealed partial class AppTests
         Assert.Equal(125, options.RendererStatsIntervalMs);
         Assert.True(options.OverlayScreenState);
         Assert.True(options.OverlayTelemetry);
+        Assert.Equal("fill", options.ScaleMode);
         Assert.Equal("per-attempt", factory.LastArtifacts!.ToData().PollArtifacts);
     }
 
@@ -306,7 +308,7 @@ public sealed partial class AppTests
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var console = new FakeConsole();
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
-        var session = new FakeViewSession(23);
+        var session = new FakeViewSession(0);
         var profiles = new FakeViewProfileStore();
         var app = new App(
             console: console,
@@ -320,10 +322,11 @@ public sealed partial class AppTests
             "--device", "desk-device",
             "--preset", "safe",
             "--record", "capture.mkv",
+            "--scale-mode", "fill",
             "--poll-artifacts", "none",
             "--save-profile", "desk"]);
 
-        Assert.Equal(23, exitCode);
+        Assert.Equal(0, exitCode);
         var profile = profiles.Profiles["desk"];
         Assert.Equal("desk-device", profile.Device);
         Assert.Equal("safe", profile.Preset);
@@ -332,7 +335,89 @@ public sealed partial class AppTests
         Assert.Equal(1280, profile.MaxSize);
         Assert.Equal(30, profile.MaxFps);
         Assert.Equal("4M", profile.VideoBitRate);
+        Assert.Equal("fill", profile.ScaleMode);
         Assert.True(profiles.Profiles.ContainsKey("last"));
+    }
+
+    [Fact]
+    public async Task RunAsync_View_Profile_Defaults_Uses_Safe_Tuning_Over_Profile_Tuning()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var session = new FakeViewSession(23);
+        var profiles = new FakeViewProfileStore();
+        profiles.Profiles["physical-live"] = new ViewProfile(
+            Device: "profile-device",
+            Decoder: "wmf",
+            Preset: "high-quality",
+            MaxSize: 2560,
+            MaxFps: 60,
+            VideoBitRate: "12M",
+            StatsIntervalMs: 20,
+            RendererStatsIntervalMs: 20);
+        var app = new App(
+            console: console,
+            timeProvider: timeProvider,
+            deviceHostFactory: new FakeDeviceHostFactory(host),
+            viewSessionFactory: new FakeViewSessionFactory(session),
+            viewProfileStore: profiles);
+
+        var exitCode = await app.RunAsync(["view", "--profile", "physical-live", "--defaults"]);
+
+        Assert.Equal(23, exitCode);
+        var options = Assert.Single(session.Options);
+        Assert.Equal("profile-device", options.DeviceSelector);
+        Assert.Equal("safe", options.PresetName);
+        Assert.Equal("ffmpeg", options.Decoder);
+        Assert.Equal(1280, options.MaxSize);
+        Assert.Equal(30, options.MaxFps);
+        Assert.Equal("4M", options.VideoBitRate);
+        Assert.Equal(1000, options.StatsIntervalMs);
+    }
+
+    [Fact]
+    public async Task RunAsync_ViewDoctor_Profile_Defaults_Allows_Safe_Reset_When_Profile_Has_Preset()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        host.ConnectedDevices.Add(new DeviceInfo("profile-device", "device", "usb:1-1 product:test"));
+        var profiles = new FakeViewProfileStore();
+        profiles.Profiles["physical-live"] = new ViewProfile(Device: "profile-device", Preset: "high-quality", MaxSize: 2560, MaxFps: 60);
+        var app = new App(
+            console: console,
+            timeProvider: timeProvider,
+            deviceHostFactory: new FakeDeviceHostFactory(host),
+            viewProfileStore: profiles);
+
+        var exitCode = await app.RunAsync(["view-doctor", "--profile", "physical-live", "--defaults"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("safe", envelope.RootElement.GetProperty("data").GetProperty("preset").GetString());
+    }
+
+    [Fact]
+    public async Task RunAsync_View_Does_Not_Refresh_Last_Profile_When_Session_Fails()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var session = new FakeViewSession(23);
+        var profiles = new FakeViewProfileStore();
+        var app = new App(
+            console: console,
+            timeProvider: timeProvider,
+            deviceHostFactory: new FakeDeviceHostFactory(host),
+            viewSessionFactory: new FakeViewSessionFactory(session),
+            viewProfileStore: profiles);
+
+        var exitCode = await app.RunAsync(["view", "--device", "desk-device"]);
+
+        Assert.Equal(23, exitCode);
+        Assert.False(profiles.Profiles.ContainsKey("last"));
     }
 
     [Fact]
@@ -358,6 +443,39 @@ public sealed partial class AppTests
         Assert.Equal("last-device", options.DeviceSelector);
         Assert.Equal("safe", options.PresetName);
         Assert.True(options.AlwaysOnTop);
+    }
+
+    [Fact]
+    public async Task RunAsync_ProfileList_Returns_Profile_Names()
+    {
+        var console = new FakeConsole();
+        var profiles = new FakeViewProfileStore();
+        profiles.Profiles["desk"] = new ViewProfile(Device: "desk-device");
+        profiles.Profiles["safe"] = new ViewProfile(Device: "safe-device");
+        var app = new App(console: console, viewProfileStore: profiles);
+
+        var exitCode = await app.RunAsync(["profile-list"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var names = envelope.RootElement.GetProperty("data").GetProperty("profiles").EnumerateArray().Select(value => value.GetString()!).ToArray();
+        Assert.Equal(["desk", "safe"], names);
+    }
+
+    [Fact]
+    public async Task RunAsync_ProfileDelete_Removes_Profile()
+    {
+        var console = new FakeConsole();
+        var profiles = new FakeViewProfileStore();
+        profiles.Profiles["desk"] = new ViewProfile(Device: "desk-device");
+        var app = new App(console: console, viewProfileStore: profiles);
+
+        var exitCode = await app.RunAsync(["profile-delete", "--name", "desk"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.True(envelope.RootElement.GetProperty("data").GetProperty("deleted").GetBoolean());
+        Assert.False(profiles.Profiles.ContainsKey("desk"));
     }
 
 

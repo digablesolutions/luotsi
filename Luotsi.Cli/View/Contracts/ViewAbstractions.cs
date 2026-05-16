@@ -64,7 +64,8 @@ public sealed record ViewOptions(
     bool ReadOnly = false,
     string? ShareBindEndpoint = null,
     string? JoinShareEndpoint = null,
-    bool AlwaysOnTop = false);
+    bool AlwaysOnTop = false,
+    string ScaleMode = "fit");
 
 /// <summary>
 /// Bootstraps the device-side stream transport.

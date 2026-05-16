@@ -103,6 +103,21 @@ public sealed class App
             var adbExecutable = options.Get("adb") ?? _environment.GetEnvironmentVariable(CliDefaults.AdbExecutableEnvironmentVariable) ?? CliDefaults.DefaultAdbExecutable;
             artifacts = ArtifactSession.Create(options, _fileSystem, _timeProvider);
 
+            if (string.Equals(options.Command, "profile-list", StringComparison.OrdinalIgnoreCase))
+            {
+                var profiles = await _viewProfileStore.ListAsync().ConfigureAwait(false);
+                WriteEnvelope(new CommandEnvelope(true, options.Command, started, _timeProvider.GetUtcNow(), new ViewProfileListResult(profiles), artifacts.ToData(), null));
+                return 0;
+            }
+
+            if (string.Equals(options.Command, "profile-delete", StringComparison.OrdinalIgnoreCase))
+            {
+                var profileName = options.Require("name");
+                var deleted = await _viewProfileStore.DeleteAsync(profileName).ConfigureAwait(false);
+                WriteEnvelope(new CommandEnvelope(true, options.Command, started, _timeProvider.GetUtcNow(), new ViewProfileDeleteResult(profileName, deleted), artifacts.ToData(), null));
+                return 0;
+            }
+
             if (string.Equals(options.Command, "inspect", StringComparison.OrdinalIgnoreCase))
             {
                 runner = _deviceHostFactory.Create(
@@ -119,7 +134,6 @@ public sealed class App
             {
                 var viewOptions = BuildViewOptions(options, adbExecutable, allowJoinShare: true);
                 await SaveProfileIfRequestedAsync(options, viewOptions).ConfigureAwait(false);
-                await _viewProfileStore.SaveAsync("last", ViewProfile.FromResolvedOptions(options, viewOptions)).ConfigureAwait(false);
                 runner = string.IsNullOrWhiteSpace(viewOptions.JoinShareEndpoint)
                     ? _deviceHostFactory.Create(
                         new DeviceHostConfiguration(
@@ -129,7 +143,13 @@ public sealed class App
                         artifacts)
                     : new UnsupportedDeviceHost();
                 var viewSession = _viewSessionFactory.Create(runner, artifacts);
-                return await viewSession.RunAsync(viewOptions).ConfigureAwait(false);
+                var exitCode = await viewSession.RunAsync(viewOptions).ConfigureAwait(false);
+                if (exitCode == 0)
+                {
+                    await _viewProfileStore.SaveAsync("last", ViewProfile.FromResolvedOptions(options, viewOptions)).ConfigureAwait(false);
+                }
+
+                return exitCode;
             }
 
             if (string.Equals(options.Command, "view-doctor", StringComparison.OrdinalIgnoreCase))
@@ -158,7 +178,7 @@ public sealed class App
             {
                 "devices" => await runner.GetDevicesAsync().ConfigureAwait(false),
                 "preflight" => await runner.PreflightAsync(options.Get("package")).ConfigureAwait(false),
-                "wireless" => await runner.EnableWirelessAsync(options.Require("host"), options.Int("port", 5555)).ConfigureAwait(false),
+                "wireless" => await runner.EnableWirelessAsync(options.Get("host"), options.Int("port", 5555)).ConfigureAwait(false),
                 "screen-state" => await runner.GetScreenStateAsync().ConfigureAwait(false),
                 "telemetry-tail" => await runner.TelemetryTailAsync(options.Int("tail", CliDefaults.DefaultLogTail)).ConfigureAwait(false),
                 "telemetry-watch" => await runner.TelemetryWatchAsync(options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
@@ -215,7 +235,7 @@ public sealed class App
 
         var profile = await _viewProfileStore.LoadAsync(profileName).ConfigureAwait(false)
             ?? throw new UsageException($"View profile '{profileName}' was not found.");
-        options.ApplyDefaults(profile.ToOptionDefaults());
+        options.ApplyDefaults(profile.ToOptionDefaults(resetLaunchTuning: options.HasFlag("defaults")));
     }
 
     private Task SaveProfileIfRequestedAsync(CliOptions options, ViewOptions viewOptions)
@@ -228,11 +248,6 @@ public sealed class App
 
     private static ViewOptions BuildViewOptions(CliOptions options, string adbExecutable, bool allowJoinShare)
     {
-        if (options.HasFlag("defaults") && options.Get("preset") is not null)
-        {
-            throw new UsageException("view requires either --defaults or --preset, not both.");
-        }
-
         var joinShareEndpoint = options.Get("join-share");
         if (!allowJoinShare && !string.IsNullOrWhiteSpace(joinShareEndpoint))
         {
@@ -250,6 +265,7 @@ public sealed class App
         }
 
         var preset = ViewPresetCatalog.Resolve(options.HasFlag("defaults") ? ViewPresetCatalog.Safe : options.Get("preset"));
+        var scaleMode = ResolveScaleMode(options.Get("scale-mode"));
         var statsIntervalMs = GetIntOrDefault(options, "stats-interval-ms", preset.StatsIntervalMs);
         var rendererStatsIntervalMs = GetIntOrDefault(options, "renderer-stats-interval-ms", preset.RendererStatsIntervalMs);
         if (statsIntervalMs < 0)
@@ -280,10 +296,26 @@ public sealed class App
             options.HasFlag("read-only") || !string.IsNullOrWhiteSpace(joinShareEndpoint),
             options.Get("share-bind"),
             joinShareEndpoint,
-            options.HasFlag("always-on-top"));
+            options.HasFlag("always-on-top"),
+            scaleMode);
 
         static int GetIntOrDefault(CliOptions options, string key, int defaultValue) =>
             options.Get(key) is null ? defaultValue : options.Int(key, defaultValue);
+
+        static string ResolveScaleMode(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return "fit";
+            }
+
+            return value.Trim().ToLowerInvariant() switch
+            {
+                "fit" => "fit",
+                "fill" => "fill",
+                _ => throw new UsageException("view requires --scale-mode to be either fit or fill.")
+            };
+        }
     }
 
     private void WriteEnvelope(CommandEnvelope envelope) => _console.WriteLine(JsonSerializer.Serialize(envelope, JsonOptions));

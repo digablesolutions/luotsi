@@ -17,6 +17,8 @@ public sealed class CliOptions
         "inspect",
         "view",
         "view-doctor",
+        "profile-list",
+        "profile-delete",
         "wireless",
         "telemetry-tail",
         "telemetry-watch",

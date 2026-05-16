@@ -1,5 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Hosts.Android;
@@ -17,7 +19,8 @@ internal sealed class ViewSessionInteractionRouter(
     SessionControlledViewRecorder recorder,
     TimeProvider timeProvider,
     string sessionId,
-    Action<object> writeJsonLine)
+    Action<object> writeJsonLine,
+    IArtifactFolderOpener? artifactFolderOpener = null)
 {
     private readonly IDeviceHost _deviceHost = deviceHost ?? throw new ArgumentNullException(nameof(deviceHost));
     private readonly ArtifactSession _artifacts = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
@@ -26,13 +29,16 @@ internal sealed class ViewSessionInteractionRouter(
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     private readonly string _sessionId = string.IsNullOrWhiteSpace(sessionId) ? throw new ArgumentException("Session id is required.", nameof(sessionId)) : sessionId;
     private readonly Action<object> _writeJsonLine = writeJsonLine ?? throw new ArgumentNullException(nameof(writeJsonLine));
+    private readonly IArtifactFolderOpener _artifactFolderOpener = artifactFolderOpener ?? new SystemArtifactFolderOpener();
 
     private CancellationTokenSource? _iterationCancellation;
     private TaskCompletionSource _reconnectRequested = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private bool _initialRecordingStarted;
     private int _screenshotSequence;
     private int _recordingSequence;
+    private bool _streamPaused;
     private Func<ViewChromeState, Task>? _chromeUpdater;
+    private Action<bool>? _streamPauseUpdater;
     private IReadOnlyList<ViewChromeDevice> _devices = [];
     private string? _shareEndpoint = options.JoinShareEndpoint;
     private int _observerCount;
@@ -49,6 +55,8 @@ internal sealed class ViewSessionInteractionRouter(
     public void AttachConnection(ViewConnectionInfo connectionInfo) => _ = _recorder.InitializeAsync(connectionInfo);
 
     public void AttachChromeUpdater(Func<ViewChromeState, Task> chromeUpdater) => _chromeUpdater = chromeUpdater;
+
+    public void AttachStreamPauseUpdater(Action<bool> streamPauseUpdater) => _streamPauseUpdater = streamPauseUpdater;
 
     public Task WaitForReconnectAsync() => _reconnectRequested.Task;
 
@@ -280,12 +288,29 @@ internal sealed class ViewSessionInteractionRouter(
                 break;
 
             case ViewWindowCommand.OpenArtifacts:
+                await _artifactFolderOpener.OpenAsync(_artifacts.Root).ConfigureAwait(false);
                 WriteEvent(new
                 {
-                    type = "view_artifacts_requested",
+                    type = "view_artifacts_opened",
                     session_id = _sessionId,
                     occurred_at = _timeProvider.GetUtcNow(),
                     artifact_root = _artifacts.Root
+                });
+                break;
+
+            case ViewWindowCommand.Rotate:
+                await SendDeviceKeyAsync("KEYCODE_ROTATE_SCREEN", "rotate").ConfigureAwait(false);
+                break;
+
+            case ViewWindowCommand.PauseStream:
+                _streamPaused = !_streamPaused;
+                _streamPauseUpdater?.Invoke(_streamPaused);
+                WriteEvent(new
+                {
+                    type = _streamPaused ? "view_stream_paused" : "view_stream_resumed",
+                    session_id = _sessionId,
+                    occurred_at = _timeProvider.GetUtcNow(),
+                    device = ActiveDeviceSelector
                 });
                 break;
 
@@ -522,4 +547,26 @@ internal sealed class ViewSessionInteractionRouter(
     }
 
     private void WriteEvent(object value) => _writeJsonLine(value);
+}
+
+public interface IArtifactFolderOpener
+{
+    Task OpenAsync(string path);
+}
+
+internal sealed class SystemArtifactFolderOpener : IArtifactFolderOpener
+{
+    public Task OpenAsync(string path)
+    {
+        var fullPath = Path.GetFullPath(path);
+        var startInfo = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? new ProcessStartInfo("explorer.exe", fullPath)
+            : RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+                ? new ProcessStartInfo("open", fullPath)
+                : new ProcessStartInfo("xdg-open", fullPath);
+
+        startInfo.UseShellExecute = false;
+        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Failed to open artifact folder '{fullPath}'.");
+        return Task.CompletedTask;
+    }
 }

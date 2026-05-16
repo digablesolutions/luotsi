@@ -32,6 +32,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
 
     private Thread? _windowThread;
     private string _title = "Luotsi View";
+    private ViewWindowOptions _windowOptions = new();
     private Func<ViewPointerEvent, Task>? _pointerHandler;
     private Func<ViewInteractionRequest, Task>? _interactionHandler;
     private ViewFrameSnapshot? _frame;
@@ -60,12 +61,15 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         ViewDisplayInfo displayInfo,
         Func<ViewPointerEvent, Task> pointerHandler,
         Func<ViewInteractionRequest, Task>? interactionHandler = null,
+        ViewWindowOptions? options = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(displayInfo);
         ArgumentNullException.ThrowIfNull(pointerHandler);
 
         _title = string.IsNullOrWhiteSpace(title) ? "Luotsi View" : title;
+        _windowOptions = options ?? new ViewWindowOptions();
+        _scaleMode = _windowOptions.InitialScaleMode;
         _pointerHandler = pointerHandler;
         _interactionHandler = interactionHandler;
         EnsureWindowThread(displayInfo);
@@ -186,6 +190,11 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
             if (_window is null)
             {
                 throw new InvalidOperationException($"Failed to create SDL3 view window: {SDL_GetError()}");
+            }
+
+            if (_windowOptions.AlwaysOnTop && !NativeSdlWindow.SetAlwaysOnTop(_window, true))
+            {
+                throw new InvalidOperationException($"Failed to set SDL3 view window always-on-top: {SDL_GetError()}");
             }
 
             _renderer = SDL_CreateRenderer(_window, (byte*)null);
@@ -654,8 +663,20 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
                 DispatchInteraction(new ViewWindowCommandRequest(ViewWindowCommand.Recents));
                 return false;
 
+            case SDL_Keycode.SDLK_F4:
+                DispatchInteraction(new ViewWindowCommandRequest(ViewWindowCommand.Rotate));
+                return false;
+
             case SDL_Keycode.SDLK_F5:
                 DispatchInteraction(new ViewWindowCommandRequest(ViewWindowCommand.Reconnect));
+                return false;
+
+            case SDL_Keycode.SDLK_F6:
+                DispatchInteraction(new ViewWindowCommandRequest(ViewWindowCommand.PauseStream));
+                return false;
+
+            case SDL_Keycode.SDLK_F7:
+                DispatchInteraction(new ViewWindowCommandRequest(ViewWindowCommand.OpenArtifacts));
                 return false;
 
             case SDL_Keycode.SDLK_F8:
@@ -786,7 +807,31 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
             return;
         }
 
+        if (TryParseRemotePullPath(filePath, out var remotePath))
+        {
+            DispatchInteraction(new ViewFilePullRequest(remotePath));
+            return;
+        }
+
         DispatchInteraction(new ViewFileDropRequest(filePath));
+    }
+
+    internal static bool TryParseRemotePullPath(string path, out string remotePath)
+    {
+        remotePath = string.Empty;
+        var value = path.Trim();
+        var prefixLength = value.StartsWith("device:", StringComparison.OrdinalIgnoreCase)
+            ? "device:".Length
+            : value.StartsWith("adb:", StringComparison.OrdinalIgnoreCase)
+                ? "adb:".Length
+                : 0;
+        if (prefixLength == 0)
+        {
+            return false;
+        }
+
+        remotePath = value[prefixLength..].Trim();
+        return remotePath.StartsWith("/", StringComparison.Ordinal) && remotePath.Length > 1;
     }
 
     private static bool IsCtrlPressed(SDL_Keymod modifiers) => (modifiers & SDL_Keymod.SDL_KMOD_CTRL) != 0;
@@ -980,6 +1025,30 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
                 DrawReconnectIcon(button.Bounds, scaleX, scaleY, stroke.R, stroke.G, stroke.B, stroke.A);
                 break;
 
+            case ViewChromeButtonKind.Back:
+                DrawBackIcon(button.Bounds, scaleX, scaleY, stroke.R, stroke.G, stroke.B, stroke.A);
+                break;
+
+            case ViewChromeButtonKind.Home:
+                DrawHomeIcon(button.Bounds, scaleX, scaleY, stroke.R, stroke.G, stroke.B, stroke.A);
+                break;
+
+            case ViewChromeButtonKind.Recents:
+                DrawRecentsIcon(button.Bounds, scaleX, scaleY, stroke.R, stroke.G, stroke.B, stroke.A);
+                break;
+
+            case ViewChromeButtonKind.Rotate:
+                DrawRotateIcon(button.Bounds, scaleX, scaleY, stroke.R, stroke.G, stroke.B, stroke.A);
+                break;
+
+            case ViewChromeButtonKind.PauseStream:
+                DrawPauseIcon(button.Bounds, scaleX, scaleY, stroke.R, stroke.G, stroke.B, stroke.A);
+                break;
+
+            case ViewChromeButtonKind.OpenArtifacts:
+                DrawFolderIcon(button.Bounds, scaleX, scaleY, stroke.R, stroke.G, stroke.B, stroke.A);
+                break;
+
             case ViewChromeButtonKind.ScaleMode:
                 DrawScaleIcon(button.Bounds, scaleX, scaleY, stroke.R, stroke.G, stroke.B, stroke.A);
                 break;
@@ -1027,6 +1096,51 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         DrawLine(bounds.Right - 9, bounds.Bottom - 16, bounds.Left + 10, bounds.Bottom - 16, scaleX, scaleY, r, g, b, a);
         DrawLine(bounds.Left + 10, bounds.Bottom - 16, bounds.Left + 15, bounds.Bottom - 11, scaleX, scaleY, r, g, b, a);
         DrawLine(bounds.Left + 10, bounds.Bottom - 16, bounds.Left + 15, bounds.Bottom - 21, scaleX, scaleY, r, g, b, a);
+    }
+
+    private unsafe void DrawBackIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
+    {
+        DrawLine(bounds.Left + 12, bounds.Top + bounds.Height / 2, bounds.Right - 10, bounds.Top + bounds.Height / 2, scaleX, scaleY, r, g, b, a);
+        DrawLine(bounds.Left + 12, bounds.Top + bounds.Height / 2, bounds.Left + 20, bounds.Top + 12, scaleX, scaleY, r, g, b, a);
+        DrawLine(bounds.Left + 12, bounds.Top + bounds.Height / 2, bounds.Left + 20, bounds.Bottom - 12, scaleX, scaleY, r, g, b, a);
+    }
+
+    private unsafe void DrawHomeIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
+    {
+        DrawLine(bounds.Left + 10, bounds.Top + 21, bounds.Left + bounds.Width / 2, bounds.Top + 10, scaleX, scaleY, r, g, b, a);
+        DrawLine(bounds.Left + bounds.Width / 2, bounds.Top + 10, bounds.Right - 10, bounds.Top + 21, scaleX, scaleY, r, g, b, a);
+        OutlineRect(new ViewChromeRect(bounds.Left + 14, bounds.Top + 21, bounds.Width - 28, bounds.Height - 31), scaleX, scaleY, r, g, b, a);
+    }
+
+    private unsafe void DrawRecentsIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
+    {
+        OutlineRect(new ViewChromeRect(bounds.Left + 12, bounds.Top + 11, bounds.Width - 26, bounds.Height - 26), scaleX, scaleY, r, g, b, a);
+        OutlineRect(new ViewChromeRect(bounds.Left + 17, bounds.Top + 17, bounds.Width - 26, bounds.Height - 26), scaleX, scaleY, r, g, b, a);
+    }
+
+    private unsafe void DrawRotateIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
+    {
+        var centerX = bounds.Left + bounds.Width / 2;
+        var centerY = bounds.Top + bounds.Height / 2;
+        DrawLine(centerX - 9, centerY - 7, centerX + 7, centerY - 7, scaleX, scaleY, r, g, b, a);
+        DrawLine(centerX + 7, centerY - 7, centerX + 7, centerY + 8, scaleX, scaleY, r, g, b, a);
+        DrawLine(centerX + 7, centerY + 8, centerX + 1, centerY + 2, scaleX, scaleY, r, g, b, a);
+        DrawLine(centerX + 7, centerY + 8, centerX + 13, centerY + 2, scaleX, scaleY, r, g, b, a);
+        DrawLine(centerX - 9, centerY - 7, centerX - 4, centerY - 12, scaleX, scaleY, r, g, b, a);
+        DrawLine(centerX - 9, centerY - 7, centerX - 4, centerY - 2, scaleX, scaleY, r, g, b, a);
+    }
+
+    private unsafe void DrawPauseIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
+    {
+        FillRect(new ViewChromeRect(bounds.Left + 13, bounds.Top + 11, 5, bounds.Height - 22), scaleX, scaleY, r, g, b, a);
+        FillRect(new ViewChromeRect(bounds.Right - 18, bounds.Top + 11, 5, bounds.Height - 22), scaleX, scaleY, r, g, b, a);
+    }
+
+    private unsafe void DrawFolderIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
+    {
+        DrawLine(bounds.Left + 9, bounds.Top + 17, bounds.Left + 18, bounds.Top + 17, scaleX, scaleY, r, g, b, a);
+        DrawLine(bounds.Left + 18, bounds.Top + 17, bounds.Left + 22, bounds.Top + 21, scaleX, scaleY, r, g, b, a);
+        OutlineRect(new ViewChromeRect(bounds.Left + 9, bounds.Top + 21, bounds.Width - 18, bounds.Height - 31), scaleX, scaleY, r, g, b, a);
     }
 
     private unsafe void DrawScaleIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
@@ -1303,4 +1417,14 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
             return new ViewFrameSnapshot(frame.Width, frame.Height, tightStride, normalized);
         }
     }
+}
+
+internal static unsafe class NativeSdlWindow
+{
+    public static bool SetAlwaysOnTop(SDL_Window* window, bool alwaysOnTop) =>
+        SDL_SetWindowAlwaysOnTop(window, alwaysOnTop);
+
+    [DllImport("SDL3", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    private static extern bool SDL_SetWindowAlwaysOnTop(SDL_Window* window, [MarshalAs(UnmanagedType.I1)] bool onTop);
 }

@@ -477,10 +477,11 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
         return Task.FromResult(new PullFileResult(remotePath, Path.Combine(localDirectory ?? "/tmp", Path.GetFileName(remotePath))));
     }
 
-    public Task<WirelessConnectResult> EnableWirelessAsync(string host, int port)
+    public Task<WirelessConnectResult> EnableWirelessAsync(string? host, int port)
     {
-        WirelessRequests.Add((host, port));
-        return Task.FromResult(new WirelessConnectResult(host, port, $"{host}:{port}"));
+        var resolvedHost = string.IsNullOrWhiteSpace(host) ? "192.168.0.44" : host;
+        WirelessRequests.Add((resolvedHost, port));
+        return Task.FromResult(new WirelessConnectResult(resolvedHost, port, $"{resolvedHost}:{port}"));
     }
 
     public Task<InstallPackageResult> InstallPackageAsync(string packagePath)
@@ -518,9 +519,26 @@ internal sealed class FakeViewProfileStore : IViewProfileStore
     public Task<ViewProfile?> LoadAsync(string name, CancellationToken cancellationToken = default) =>
         Task.FromResult(Profiles.TryGetValue(name, out var profile) ? profile : null);
 
+    public Task<IReadOnlyList<string>> ListAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<string>>(Profiles.Keys.Order(StringComparer.OrdinalIgnoreCase).ToArray());
+
     public Task SaveAsync(string name, ViewProfile profile, CancellationToken cancellationToken = default)
     {
         Profiles[name] = profile;
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> DeleteAsync(string name, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Profiles.Remove(name));
+}
+
+internal sealed class FakeArtifactFolderOpener : IArtifactFolderOpener
+{
+    public List<string> OpenedPaths { get; } = [];
+
+    public Task OpenAsync(string path)
+    {
+        OpenedPaths.Add(Path.GetFullPath(path));
         return Task.CompletedTask;
     }
 }

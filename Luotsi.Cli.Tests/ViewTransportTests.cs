@@ -366,6 +366,21 @@ public sealed class ViewTransportTests
     }
 
     [Fact]
+    public async Task NativeWindowViewRenderer_Forwards_Window_Options_To_Surface()
+    {
+        var windowSurface = new FakeViewWindowSurface();
+        var interactions = new RecordingViewInteractionHandler();
+        var renderer = new NativeWindowViewRenderer(
+            new FakeViewWindowSurfaceFactory(windowSurface),
+            interactions.HandleAsync,
+            new ViewWindowOptions(AlwaysOnTop: true));
+
+        await renderer.InitializeAsync(new ViewDisplayInfo(2, 1, "h264", "AV_PIX_FMT_BGRA"));
+
+        Assert.True(windowSurface.Options?.AlwaysOnTop);
+    }
+
+    [Fact]
     public async Task NativeWindowViewRenderer_Forwards_Stats_To_Window_Surface()
     {
         var windowSurface = new FakeViewWindowSurface();
@@ -620,9 +635,11 @@ public sealed class ViewTransportTests
             true);
 
         var commandHit = Assert.IsType<ViewChromeCommandHitTarget>(ViewChromeLayout.HitTest(1280, 720, 20, 20, chrome));
+        var rotateHit = Assert.IsType<ViewChromeCommandHitTarget>(ViewChromeLayout.HitTest(1280, 720, 260, 20, chrome));
         var switchHit = Assert.IsType<ViewChromeSwitchDeviceHitTarget>(ViewChromeLayout.HitTest(1280, 720, 62, 692, chrome));
 
         Assert.Equal(ViewWindowCommand.TakeScreenshot, commandHit.Command);
+        Assert.Equal(ViewWindowCommand.Rotate, rotateHit.Command);
         Assert.Equal("device-b", switchHit.DeviceSelector);
     }
 
@@ -644,14 +661,29 @@ public sealed class ViewTransportTests
         var screenshotTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 20, 20, idleChrome, ViewScaleMode.Fit, false));
         var recordTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 60, 20, idleChrome, ViewScaleMode.Fit, false));
         var activeRecordTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 60, 20, recordingChrome, ViewScaleMode.Fit, false));
-        var scaleTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 140, 20, idleChrome, ViewScaleMode.Fit, false));
-        var fullscreenTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 180, 20, idleChrome, ViewScaleMode.Fit, true));
+        var rotateTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 260, 20, idleChrome, ViewScaleMode.Fit, false));
+        var openArtifactsTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 340, 20, idleChrome, ViewScaleMode.Fit, false));
+        var scaleTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 380, 20, idleChrome, ViewScaleMode.Fit, false));
+        var fullscreenTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 420, 20, idleChrome, ViewScaleMode.Fit, true));
 
         Assert.Equal("Screenshot", screenshotTooltip.Text);
         Assert.Equal("Start Recording", recordTooltip.Text);
         Assert.Equal("Stop Recording", activeRecordTooltip.Text);
+        Assert.Equal("Rotate", rotateTooltip.Text);
+        Assert.Equal("Open Artifacts", openArtifactsTooltip.Text);
         Assert.Equal("Fill", scaleTooltip.Text);
         Assert.Equal("Windowed", fullscreenTooltip.Text);
+    }
+
+    [Fact]
+    public void Sdl3ViewWindowSurface_TryParseRemotePullPath_Accepts_Device_Prefixes()
+    {
+        Assert.True(Sdl3ViewWindowSurface.TryParseRemotePullPath("device:/sdcard/Download/report.txt", out var devicePath));
+        Assert.True(Sdl3ViewWindowSurface.TryParseRemotePullPath("adb:/sdcard/Pictures/capture.png", out var adbPath));
+        Assert.False(Sdl3ViewWindowSurface.TryParseRemotePullPath("C:/tmp/report.txt", out _));
+
+        Assert.Equal("/sdcard/Download/report.txt", devicePath);
+        Assert.Equal("/sdcard/Pictures/capture.png", adbPath);
     }
 
     private static async Task<List<ViewPacket>> ReadAllAsync(IAsyncEnumerable<ViewPacket> packets)
@@ -782,10 +814,12 @@ internal sealed class FakeViewWindowSurface : IViewWindowSurface
         ViewDisplayInfo displayInfo,
         Func<ViewPointerEvent, Task> pointerHandler,
         Func<ViewInteractionRequest, Task>? interactionHandler = null,
+        ViewWindowOptions? options = null,
         CancellationToken cancellationToken = default)
     {
         Title = title;
         DisplayInfo = displayInfo;
+        Options = options;
         _pointerHandler = pointerHandler;
         _interactionHandler = interactionHandler;
         return Task.CompletedTask;
@@ -820,6 +854,8 @@ internal sealed class FakeViewWindowSurface : IViewWindowSurface
     public Task RaisePointerAsync(ViewPointerEvent pointerEvent) => (_pointerHandler ?? throw new InvalidOperationException("Pointer handler was not initialized."))(pointerEvent);
 
     public Task RaiseCommandAsync(ViewWindowCommand command) => (_interactionHandler ?? throw new InvalidOperationException("Interaction handler was not initialized."))(new ViewWindowCommandRequest(command));
+
+    public ViewWindowOptions? Options { get; private set; }
 }
 
 internal sealed class FakeLibavNativeLibraryBinder : ILibavNativeLibraryBinder

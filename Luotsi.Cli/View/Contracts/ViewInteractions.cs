@@ -76,5 +76,7 @@ public enum ViewWindowCommand
     Back = 3,
     Home = 4,
     Recents = 5,
-    OpenArtifacts = 6
+    OpenArtifacts = 6,
+    Rotate = 7,
+    PauseStream = 8
 }

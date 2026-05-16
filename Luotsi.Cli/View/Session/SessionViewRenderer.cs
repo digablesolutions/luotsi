@@ -33,12 +33,15 @@ internal sealed class SessionViewRenderer(
     private ViewStats? _pendingStats;
     private DateTimeOffset? _lastRendererStatsForwardedAt;
     private DateTimeOffset? _lastStatsEmittedAt;
+    private volatile bool _paused;
 
     public Task InitializeAsync(ViewDisplayInfo displayInfo, CancellationToken cancellationToken = default) =>
         _innerRenderer?.InitializeAsync(displayInfo, cancellationToken) ?? Task.CompletedTask;
 
     public Task PresentAsync(ViewFrame frame, CancellationToken cancellationToken = default) =>
-        _innerRenderer?.PresentAsync(frame, cancellationToken) ?? Task.CompletedTask;
+        _paused ? Task.CompletedTask : _innerRenderer?.PresentAsync(frame, cancellationToken) ?? Task.CompletedTask;
+
+    public void SetPaused(bool paused) => _paused = paused;
 
     public async Task UpdateStatsAsync(ViewStats stats, CancellationToken cancellationToken = default)
     {

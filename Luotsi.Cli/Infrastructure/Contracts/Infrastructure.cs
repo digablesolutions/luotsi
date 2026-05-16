@@ -119,7 +119,7 @@ public interface IDeviceHost : IScenarioActionHost
 
     Task<PullFileResult> PullFileAsync(string remotePath, string? localDirectory = null);
 
-    Task<WirelessConnectResult> EnableWirelessAsync(string host, int port);
+    Task<WirelessConnectResult> EnableWirelessAsync(string? host, int port);
 
     /// <summary>
     /// Installs an APK from the host onto the device.

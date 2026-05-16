@@ -400,20 +400,54 @@ public sealed class DeviceRunner(
         return new PullFileResult(validatedRemotePath, localPath);
     }
 
-    public async Task<WirelessConnectResult> EnableWirelessAsync(string host, int port)
+    public async Task<WirelessConnectResult> EnableWirelessAsync(string? host, int port)
     {
-        var validatedHost = RequireNonBlank(host, "wireless requires host.");
         if (port <= 0 || port > 65535)
         {
             throw new UsageException("wireless requires --port between 1 and 65535.");
         }
 
+        var validatedHost = string.IsNullOrWhiteSpace(host)
+            ? await DetectWirelessHostAsync().ConfigureAwait(false)
+            : host.Trim();
         var tcpip = await _adb.RunAsync(["tcpip", port.ToString(System.Globalization.CultureInfo.InvariantCulture)]).ConfigureAwait(false);
         tcpip.EnsureSuccess("adb tcpip failed");
         var endpoint = $"{validatedHost}:{port}";
         var connect = await _adb.RunAsync(["connect", endpoint]).ConfigureAwait(false);
         connect.EnsureSuccess("adb connect failed");
         return new WirelessConnectResult(validatedHost, port, endpoint);
+    }
+
+    private async Task<string> DetectWirelessHostAsync()
+    {
+        var route = await _adb.ShellAsync("ip route get 8.8.8.8").ConfigureAwait(false);
+        route.EnsureSuccess("wireless host auto-detection failed");
+        var sourceAddress = ParseRouteSourceAddress(route.Stdout);
+        if (string.IsNullOrWhiteSpace(sourceAddress))
+        {
+            throw new UsageException("wireless could not auto-detect the device Wi-Fi IP address. Pass --host <ip-or-host>.");
+        }
+
+        return sourceAddress;
+    }
+
+    internal static string? ParseRouteSourceAddress(string output)
+    {
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            return null;
+        }
+
+        var tokens = output.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        for (var index = 0; index < tokens.Length - 1; index++)
+        {
+            if (string.Equals(tokens[index], "src", StringComparison.OrdinalIgnoreCase))
+            {
+                return tokens[index + 1];
+            }
+        }
+
+        return null;
     }
 
     public async Task<InstallPackageResult> InstallPackageAsync(string packagePath)
