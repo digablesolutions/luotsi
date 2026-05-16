@@ -44,7 +44,8 @@ cd <repo-root>
 dotnet run --project Luotsi.Cli -- devices
 dotnet run --project Luotsi.Cli -- preflight --device <serial> --package dev.luotsi.app
 dotnet run --project Luotsi.Cli -- screen-state --device <serial>
-dotnet run --project Luotsi.Cli -- view --device <serial> --decoder ffmpeg --record capture.mp4 --stats-interval-ms 1000
+dotnet run --project Luotsi.Cli -- view --device <serial> --preset safe --decoder ffmpeg --record capture.mp4 --stats-interval-ms 1000
+dotnet run --project Luotsi.Cli -- view-doctor --device <serial> --preset low-latency
 dotnet run --project Luotsi.Cli -- telemetry-tail --device <serial> --tail 200
 dotnet run --project Luotsi.Cli -- telemetry-watch --device <serial> --timeout-sec 10
 dotnet run --project Luotsi.Cli -- tap-text --device <serial> --text "Sign in"
@@ -79,7 +80,16 @@ SDL window title or flooding stdout on long-lived sessions. Use
 `0` disables JSONL `view_stats` emission entirely. Use
 `--renderer-stats-interval-ms <ms>` to throttle local renderer/title stats
 updates independently; the default is `0`, which forwards every renderer stats
-update.
+update. `--preset <name>` seeds the launch defaults without blocking explicit
+overrides, and `--defaults` is a shorthand for the conservative `safe` preset.
+The built-in SDL window now also exposes a first hotkey slice: `F12` captures a
+device screenshot into the artifact root, `F11` toggles fullscreen, and `F8`
+switches between `fit` and `fill` presentation modes.
+
+`view-doctor` runs the same option resolution as `view` and returns a diagnostic
+report instead of opening a stream. The current checks cover FFmpeg decoder
+readiness, Android helper package availability, adb device visibility, device
+preflight, and optional recording target readiness.
 
 The implementation currently supports `--platform android`. The host seam is in
 place so an iOS adapter can be added later without rewriting the command layer.

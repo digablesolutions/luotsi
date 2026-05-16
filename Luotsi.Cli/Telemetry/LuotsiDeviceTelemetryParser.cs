@@ -3,13 +3,11 @@ using System.Text.Json;
 namespace Luotsi.Cli.Telemetry;
 
 /// <summary>
-/// Default parser for the kiosk <c>LUOTSI_DEVICE_TELEMETRY</c> logcat contract.
-/// Temporarily also accepts the legacy <c>DEVICE_TEST_TELEMETRY</c> marker.
+/// Default parser for the kiosk telemetry logcat contract.
+/// Temporarily also accepts the legacy marker during migration.
 /// </summary>
 public sealed class LuotsiDeviceTelemetryParser : ITelemetryParser
 {
-    private static readonly string[] Prefixes = ["LUOTSI_DEVICE_TELEMETRY", "DEVICE_TEST_TELEMETRY"];
-
     /// <summary>
     /// Parses telemetry events and malformed lines from a raw logcat payload.
     /// </summary>
@@ -99,7 +97,7 @@ public sealed class LuotsiDeviceTelemetryParser : ITelemetryParser
 
     private static string? FindPrefix(string line, out int prefixIndex)
     {
-        foreach (var prefix in Prefixes)
+        foreach (var prefix in TelemetryContracts.AcceptedMarkers)
         {
             var index = line.IndexOf(prefix, StringComparison.Ordinal);
             if (index >= 0)

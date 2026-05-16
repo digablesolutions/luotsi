@@ -24,11 +24,6 @@ public sealed class DeviceRunner(
     IEnvironmentVariables? environment = null,
     ITelemetryParser? telemetryParser = null) : IDeviceHost
 {
-    private const string DefaultTargetPackage = "dev.luotsi.app";
-    private const string DeviceFingerprintMarkerPrefix = "__LUOTSI_DEVICE_FINGERPRINT__";
-    private const int UiPollDelayMs = 250;
-    private static readonly TimeSpan KeyboardVisibilityCacheTtl = TimeSpan.FromMilliseconds(500);
-    private static readonly TimeSpan UiDumpCacheTtl = TimeSpan.FromMilliseconds(250);
     private static readonly (string Key, string Command)[] DeviceFingerprintReads =
     [
         ("serial", "getprop ro.serialno"),
@@ -227,7 +222,7 @@ public sealed class DeviceRunner(
             }
             catch (InvalidOperationException ex) when (IsRetryableHierarchyDumpFailure(ex))
             {
-                await _delay.DelayAsync(UiPollDelayMs).ConfigureAwait(false);
+                await _delay.DelayAsync(AndroidRuntimeDefaults.UiPollDelayMs).ConfigureAwait(false);
                 continue;
             }
 
@@ -243,7 +238,7 @@ public sealed class DeviceRunner(
                 return last;
             }
 
-            await _delay.DelayAsync(UiPollDelayMs).ConfigureAwait(false);
+            await _delay.DelayAsync(AndroidRuntimeDefaults.UiPollDelayMs).ConfigureAwait(false);
         }
 
         throw new TimeoutException($"Timed out after {validatedTimeoutSec}s waiting for visible text '{expectedText}'. Last seen: {last?.StableId ?? "none"}");
@@ -478,7 +473,7 @@ public sealed class DeviceRunner(
     {
         var targetOutput = RequireNonBlank(output, "record requires output.");
         var remote = $"/sdcard/device-e2e-{_idGenerator.NewId()}.mp4";
-        var clamped = Math.Clamp(timeLimitSec, 1, 180);
+        var clamped = Math.Clamp(timeLimitSec, AndroidRuntimeDefaults.MinRecordTimeLimitSeconds, AndroidRuntimeDefaults.MaxRecordTimeLimitSeconds);
         var record = await _adb.ShellAsync($"screenrecord --time-limit {clamped} {remote}").ConfigureAwait(false);
         record.EnsureSuccess("screenrecord failed");
         var pull = await _adb.RunAsync(["pull", NormalizeDevicePathForPull(remote), targetOutput]).ConfigureAwait(false);
@@ -578,7 +573,7 @@ public sealed class DeviceRunner(
             }
             catch (InvalidOperationException ex) when (IsRetryableHierarchyDumpFailure(ex))
             {
-                await _delay.DelayAsync(UiPollDelayMs).ConfigureAwait(false);
+                await _delay.DelayAsync(AndroidRuntimeDefaults.UiPollDelayMs).ConfigureAwait(false);
                 continue;
             }
 
@@ -588,7 +583,7 @@ public sealed class DeviceRunner(
                 return new WaitNotVisibleResult(expectedText, attempt, false);
             }
 
-            await _delay.DelayAsync(UiPollDelayMs).ConfigureAwait(false);
+            await _delay.DelayAsync(AndroidRuntimeDefaults.UiPollDelayMs).ConfigureAwait(false);
         }
 
         throw new TimeoutException($"Timed out after {validatedTimeoutSec}s waiting for text '{expectedText}' to disappear.");
@@ -806,7 +801,7 @@ public sealed class DeviceRunner(
         var validatedMaxTopInsetPx = RequireNonNegative(maxTopInsetPx, "assertAppVersion maxTopInsetPx must be zero or greater.");
         var validatedMaxRightInsetPx = RequireNonNegative(maxRightInsetPx, "assertAppVersion maxRightInsetPx must be zero or greater.");
         var activePackage = string.IsNullOrWhiteSpace(packageName)
-            ? _environment.GetEnvironmentVariable("LUOTSI_TARGET_PACKAGE") ?? DefaultTargetPackage
+            ? _environment.GetEnvironmentVariable(AndroidRuntimeDefaults.TargetPackageEnvironmentVariable) ?? AndroidRuntimeDefaults.DefaultTargetPackage
             : packageName;
         var packageInfo = await ShellTextAsync($"dumpsys package {ShellQuote(activePackage)} | grep -E 'versionName=|versionCode=' | head -20").ConfigureAwait(false);
         var versionNameMatch = Regex.Match(packageInfo, @"versionName=(?<value>\S+)");
@@ -838,7 +833,7 @@ public sealed class DeviceRunner(
     private async Task<bool> IsKeyboardVisibleAsync()
     {
         var now = _timeProvider.GetUtcNow();
-        if (_keyboardVisibilityCache is { } cached && now - cached.CapturedAt < KeyboardVisibilityCacheTtl)
+        if (_keyboardVisibilityCache is { } cached && now - cached.CapturedAt < AndroidRuntimeDefaults.KeyboardVisibilityCacheTtl)
         {
             return cached.IsVisible;
         }
@@ -928,7 +923,7 @@ public sealed class DeviceRunner(
         }
     }
 
-    private async Task<XDocument> LoadUiDocumentWithRetryAsync(int maxAttempts = 3, int retryDelayMs = 250)
+    private async Task<XDocument> LoadUiDocumentWithRetryAsync(int maxAttempts = AndroidRuntimeDefaults.UiDumpRetryMaxAttempts, int retryDelayMs = AndroidRuntimeDefaults.UiPollDelayMs)
     {
         for (var attempt = 1; ; attempt++)
         {
@@ -1011,7 +1006,7 @@ public sealed class DeviceRunner(
     private async Task<string> ReadUiDumpXmlAsync()
     {
         var now = _timeProvider.GetUtcNow();
-        if (_uiDumpCache is { } cached && now - cached.CapturedAt < UiDumpCacheTtl)
+        if (_uiDumpCache is { } cached && now - cached.CapturedAt < AndroidRuntimeDefaults.UiDumpCacheTtl)
         {
             return cached.Xml;
         }
@@ -1123,7 +1118,7 @@ public sealed class DeviceRunner(
         return true;
     }
 
-    private static string CreateDeviceFingerprintMarker(string key) => $"{DeviceFingerprintMarkerPrefix}{key.ToUpperInvariant()}__";
+    private static string CreateDeviceFingerprintMarker(string key) => $"{AndroidRuntimeDefaults.DeviceFingerprintMarkerPrefix}{key.ToUpperInvariant()}__";
 
     private async Task CaptureScreenshotAsync(string fileName)
     {

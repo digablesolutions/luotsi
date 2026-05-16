@@ -8,10 +8,10 @@ namespace Luotsi.Cli.View;
 /// </summary>
 public sealed class ViewPacketStreamReader : IViewPacketStreamReader
 {
-    public const uint Magic = 0x42414C56; // VLAB
-    public const int CurrentProtocolVersion = 1;
-    public const int StreamHeaderSize = 16;
-    public const int PacketHeaderSize = 24;
+    public const uint Magic = ViewTransportConstants.Magic;
+    public const int CurrentProtocolVersion = ViewTransportConstants.CurrentProtocolVersion;
+    public const int StreamHeaderSize = ViewTransportConstants.StreamHeaderSize;
+    public const int PacketHeaderSize = ViewTransportConstants.PacketHeaderSize;
 
     /// <inheritdoc />
     public async Task<ViewStreamHeader> ReadHeaderAsync(Stream stream, CancellationToken cancellationToken = default)
@@ -62,7 +62,7 @@ public sealed class ViewPacketStreamReader : IViewPacketStreamReader
 
             var packetType = DecodePacketType(headerBuffer[0]);
             var flags = headerBuffer[1];
-            var isKeyFrame = (flags & 0x1) != 0;
+            var isKeyFrame = (flags & ViewTransportConstants.KeyFrameFlag) != 0;
             var sequence = BinaryPrimitives.ReadInt64LittleEndian(headerBuffer.AsSpan(4, 8));
             var pts = BinaryPrimitives.ReadInt64LittleEndian(headerBuffer.AsSpan(12, 8));
             var payloadSize = BinaryPrimitives.ReadInt32LittleEndian(headerBuffer.AsSpan(20, 4));
@@ -119,8 +119,8 @@ public sealed class ViewPacketStreamReader : IViewPacketStreamReader
 
     private static string DecodeCodec(byte value) => value switch
     {
-        1 => "h264",
-        2 => "h265",
+        ViewTransportConstants.H264CodecId => "h264",
+        ViewTransportConstants.H265CodecId => "h265",
         _ => throw new InvalidOperationException($"Unsupported view stream codec identifier '{value}'.")
     };
 

@@ -1,4 +1,5 @@
 using Luotsi.Cli.Errors;
+using Luotsi.Cli.Hosts.Android;
 using Luotsi.Cli.Infrastructure;
 using Luotsi.Cli.Models;
 using Luotsi.Cli.View;
@@ -33,22 +34,21 @@ public sealed class AndroidViewHelperPackageLocator(IEnvironmentVariables enviro
 {
     private readonly IEnvironmentVariables _environment = environment ?? throw new ArgumentNullException(nameof(environment));
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
-    private const string DefaultHelperRelativePath = "Luotsi.ViewServer.Android\\app\\build\\outputs\\apk\\debug\\app-debug.apk";
 
     /// <inheritdoc />
     public AndroidViewHelperPackage Resolve()
     {
-        var localPath = _environment.GetEnvironmentVariable("DEVICE_E2E_VIEW_HELPER_JAR");
+        var localPath = _environment.GetEnvironmentVariable(AndroidRuntimeDefaults.ViewHelperPathEnvironmentVariable);
         if (string.IsNullOrWhiteSpace(localPath))
         {
-            var currentDirectoryCandidate = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), DefaultHelperRelativePath));
+            var currentDirectoryCandidate = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), AndroidRuntimeDefaults.DefaultViewHelperRelativePath));
             if (_fileSystem.FileExists(currentDirectoryCandidate))
             {
                 localPath = currentDirectoryCandidate;
             }
             else
             {
-                var appBaseCandidate = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", DefaultHelperRelativePath));
+                var appBaseCandidate = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", AndroidRuntimeDefaults.DefaultViewHelperRelativePath));
                 if (_fileSystem.FileExists(appBaseCandidate))
                 {
                     localPath = appBaseCandidate;
@@ -58,10 +58,10 @@ public sealed class AndroidViewHelperPackageLocator(IEnvironmentVariables enviro
 
         if (string.IsNullOrWhiteSpace(localPath) || !_fileSystem.FileExists(localPath))
         {
-            throw new InvalidOperationException($"Android view helper package was not found. Set DEVICE_E2E_VIEW_HELPER_JAR or build the helper APK at {DefaultHelperRelativePath}");
+            throw new InvalidOperationException($"Android view helper package was not found. Set {AndroidRuntimeDefaults.ViewHelperPathEnvironmentVariable} or build the helper APK at {AndroidRuntimeDefaults.DefaultViewHelperRelativePath}");
         }
 
-        return new AndroidViewHelperPackage(localPath, "/data/local/tmp/luotsi-view-server.apk", "dev.luotsi.view.Main", "phase-3-screenrecord");
+        return new AndroidViewHelperPackage(localPath, AndroidRuntimeDefaults.ViewHelperRemotePath, AndroidRuntimeDefaults.ViewHelperMainClass, AndroidRuntimeDefaults.ViewHelperVersion);
     }
 }
 
@@ -146,7 +146,7 @@ public sealed class AndroidViewBootstrap(
         }
 
         var sessionId = _idGenerator.NewId();
-        var socketName = $"luotsi_view_{sessionId}";
+        var socketName = $"{AndroidRuntimeDefaults.ViewSocketPrefix}{sessionId}";
         var adbClient = _adbClientFactory.Create(request.AdbExecutable, request.DeviceSelector, _processRunner);
         var installer = new AndroidViewServerInstaller(adbClient, _packageLocator);
         _adbClient = adbClient;
@@ -168,7 +168,7 @@ public sealed class AndroidViewBootstrap(
             var start = await adbClient.ShellAsync(shellCommand, cancellationToken).ConfigureAwait(false);
             start.EnsureSuccess("view helper start failed");
 
-            return new ViewConnectionInfo(sessionId, request.Codec, ViewPacketStreamReader.CurrentProtocolVersion, 0, 0, localPort, package.Version, "adb-forward");
+            return new ViewConnectionInfo(sessionId, request.Codec, ViewTransportConstants.CurrentProtocolVersion, 0, 0, localPort, package.Version, ViewTransportConstants.AdbForwardTransport);
         }
         catch
         {

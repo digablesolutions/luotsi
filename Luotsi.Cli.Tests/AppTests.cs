@@ -4,6 +4,7 @@ using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Hosts.Android;
+using Luotsi.Cli.Hosts.Android.View;
 using Luotsi.Cli.Infrastructure;
 using Luotsi.Cli.Models;
 using Luotsi.Cli.Scenarios;
@@ -1447,6 +1448,196 @@ public sealed class AppTests
         Assert.Equal(125, options.RendererStatsIntervalMs);
         Assert.True(options.OverlayScreenState);
         Assert.True(options.OverlayTelemetry);
+        Assert.Equal("balanced", options.PresetName);
+    }
+
+    [Fact]
+    public async Task RunAsync_View_Uses_Safe_Preset_Defaults()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var session = new FakeViewSession(23);
+        var factory = new FakeViewSessionFactory(session);
+        var app = new App(
+            console: console,
+            timeProvider: timeProvider,
+            deviceHostFactory: new FakeDeviceHostFactory(host),
+            viewSessionFactory: factory);
+
+        var exitCode = await app.RunAsync([
+            "view",
+            "--device", "192.168.0.134:5555",
+            "--preset", "safe"]);
+
+        Assert.Equal(23, exitCode);
+        var options = Assert.Single(session.Options);
+        Assert.Equal("safe", options.PresetName);
+        Assert.Equal(1280, options.MaxSize);
+        Assert.Equal(30, options.MaxFps);
+        Assert.Equal("4M", options.VideoBitRate);
+        Assert.Equal(1000, options.StatsIntervalMs);
+        Assert.Equal(250, options.RendererStatsIntervalMs);
+    }
+
+    [Fact]
+    public async Task RunAsync_View_With_Defaults_Flag_Uses_Safe_Preset()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var session = new FakeViewSession(23);
+        var factory = new FakeViewSessionFactory(session);
+        var app = new App(
+            console: console,
+            timeProvider: timeProvider,
+            deviceHostFactory: new FakeDeviceHostFactory(host),
+            viewSessionFactory: factory);
+
+        var exitCode = await app.RunAsync([
+            "view",
+            "--device", "192.168.0.134:5555",
+            "--defaults"]);
+
+        Assert.Equal(23, exitCode);
+        var options = Assert.Single(session.Options);
+        Assert.Equal("safe", options.PresetName);
+        Assert.Equal(1280, options.MaxSize);
+        Assert.Equal(30, options.MaxFps);
+        Assert.Equal("4M", options.VideoBitRate);
+    }
+
+    [Fact]
+    public async Task RunAsync_View_Explicit_Options_Override_Preset_Defaults()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var session = new FakeViewSession(23);
+        var factory = new FakeViewSessionFactory(session);
+        var app = new App(
+            console: console,
+            timeProvider: timeProvider,
+            deviceHostFactory: new FakeDeviceHostFactory(host),
+            viewSessionFactory: factory);
+
+        var exitCode = await app.RunAsync([
+            "view",
+            "--device", "192.168.0.134:5555",
+            "--preset", "low-latency",
+            "--max-size", "1920",
+            "--stats-interval-ms", "0",
+            "--video-bit-rate", "10M"]);
+
+        Assert.Equal(23, exitCode);
+        var options = Assert.Single(session.Options);
+        Assert.Equal("low-latency", options.PresetName);
+        Assert.Equal(1920, options.MaxSize);
+        Assert.Equal(60, options.MaxFps);
+        Assert.Equal("10M", options.VideoBitRate);
+        Assert.Equal(0, options.StatsIntervalMs);
+        Assert.Equal(0, options.RendererStatsIntervalMs);
+    }
+
+    [Fact]
+    public async Task RunAsync_View_With_Invalid_Preset_Returns_Usage_Error_Envelope()
+    {
+        var console = new FakeConsole();
+        var app = new App(console: console);
+
+        var exitCode = await app.RunAsync(["view", "--device", "192.168.0.134:5555", "--preset", "turbo"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("Unknown view preset", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ViewDoctor_Uses_Injected_ViewDoctorFactory()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var doctor = new FakeViewDoctor(options => new ViewDoctorResult(
+            false,
+            options.PresetName,
+            options,
+            [],
+            null,
+            [new ViewDoctorCheck("decoder", false, "FFmpeg native decoder is not ready.")]));
+        var factory = new FakeViewDoctorFactory(doctor);
+        var app = new App(
+            console: console,
+            timeProvider: timeProvider,
+            deviceHostFactory: new FakeDeviceHostFactory(host),
+            viewDoctorFactory: factory);
+
+        var exitCode = await app.RunAsync([
+            "view-doctor",
+            "--device", "192.168.0.134:5555",
+            "--preset", "low-latency"]);
+
+        using var envelope = console.ParseSingleOutputAsJson();
+        Assert.Equal(0, exitCode);
+        Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("view-doctor", envelope.RootElement.GetProperty("command").GetString());
+        Assert.False(envelope.RootElement.GetProperty("data").GetProperty("ready").GetBoolean());
+        Assert.Equal("low-latency", envelope.RootElement.GetProperty("data").GetProperty("preset").GetString());
+        Assert.Same(host, factory.LastDeviceHost);
+        var options = Assert.Single(doctor.Options);
+        Assert.Equal("low-latency", options.PresetName);
+        Assert.Equal(1280, options.MaxSize);
+        Assert.Equal(250, options.StatsIntervalMs);
+    }
+
+    [Fact]
+    public async Task ViewDoctor_DiagnoseAsync_Reports_Ready_For_Healthy_Ffmpeg_View_Setup()
+    {
+        var fileSystem = new FakeFileSystem();
+        var helperPath = "/tmp/luotsi-view-helper.apk";
+        fileSystem.AddFile(helperPath, "apk");
+        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>
+        {
+            ["DEVICE_E2E_VIEW_HELPER_JAR"] = helperPath
+        });
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        host.ConnectedDevices.Add(new DeviceInfo("192.168.0.134:5555", "device", "Pixel 9"));
+        var binder = new FakeLibavNativeLibraryBinder();
+        binder.SucceedFor(null);
+        var doctor = new ViewDoctor(
+            host,
+            new AndroidViewHelperPackageLocator(environment, fileSystem),
+            new DefaultViewRecorderFactory(fileSystem, new FakeProcessRunner(), environment),
+            environment,
+            binder);
+
+        var result = await doctor.DiagnoseAsync(new ViewOptions(
+            "192.168.0.134:5555",
+            "adb",
+            "h264",
+            "ffmpeg",
+            true,
+            null,
+            1280,
+            30,
+            "4M",
+            false,
+            false,
+            1000,
+            250,
+            "safe"));
+
+        Assert.True(result.Ready);
+        Assert.Equal("safe", result.Preset);
+        Assert.Equal(5, result.Checks.Count);
+        Assert.All(result.Checks, static check => Assert.True(check.Ok, check.Summary));
+        Assert.Equal("Pixel 9", Assert.Single(result.ConnectedDevices).Details);
+        var preflight = result.Preflight;
+        Assert.NotNull(preflight);
+        Assert.Equal("Model", preflight.Model);
     }
 
     [Fact]
@@ -1965,9 +2156,35 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public List<(string? Label, double? XRatio, double? YRatio, int PostTapDelayMs)> TapPointRequests { get; } = [];
 
-    public Task<DeviceListResult> GetDevicesAsync() => Task.FromResult(new DeviceListResult([]));
+    public List<string> TakeScreenshotRequests { get; } = [];
 
-    public Task<PreflightResult> PreflightAsync(string? packageName) => Task.FromResult(new PreflightResult("Model", "16", "36", "focus", packageName, null, "fingerprint", "arm64-v8a", "SER"));
+    public List<DeviceInfo> ConnectedDevices { get; } = [];
+
+    public PreflightResult PreflightTemplate { get; set; } = new("Model", "16", "36", "focus", null, null, "fingerprint", "arm64-v8a", "SER");
+
+    public Exception? GetDevicesException { get; set; }
+
+    public Exception? PreflightException { get; set; }
+
+    public Task<DeviceListResult> GetDevicesAsync()
+    {
+        if (GetDevicesException is not null)
+        {
+            throw GetDevicesException;
+        }
+
+        return Task.FromResult(new DeviceListResult(ConnectedDevices));
+    }
+
+    public Task<PreflightResult> PreflightAsync(string? packageName)
+    {
+        if (PreflightException is not null)
+        {
+            throw PreflightException;
+        }
+
+        return Task.FromResult(PreflightTemplate with { Package = packageName });
+    }
 
     public Task<ScreenState> GetScreenStateAsync() =>
         Task.FromResult(_screenStates.Count > 1 ? _screenStates.Dequeue() : _screenStates.Peek());
@@ -1997,7 +2214,11 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
     public Task<AssertEventResult> AssertEventAsync(string name, IReadOnlyList<string> contains, string? detailsPattern, int timeoutSec, DateTimeOffset? since = null) =>
         Task.FromResult(new AssertEventResult(name, contains, detailsPattern, string.Empty));
 
-    public Task<TakeScreenshotResult> TakeScreenshotAsync(string label) => Task.FromResult(new TakeScreenshotResult(label, $"{label}.png"));
+    public Task<TakeScreenshotResult> TakeScreenshotAsync(string label)
+    {
+        TakeScreenshotRequests.Add(label);
+        return Task.FromResult(new TakeScreenshotResult(label, $"{label}.png"));
+    }
 
     public Task<CaptureArtifactsResult> CaptureArtifactsAsync(string label) => Task.FromResult(new CaptureArtifactsResult(label, $"{label}.png", $"{label}.txt", $"{label}.json", $"{label}.xml"));
 
@@ -2065,6 +2286,33 @@ internal sealed class FakeViewSessionFactory(IViewSession viewSession) : IViewSe
         LastDeviceHost = deviceHost;
         LastArtifacts = artifacts;
         return _viewSession;
+    }
+}
+
+internal sealed class FakeViewDoctor(Func<ViewOptions, ViewDoctorResult>? resultFactory = null) : IViewDoctor
+{
+    private readonly Func<ViewOptions, ViewDoctorResult> _resultFactory = resultFactory ?? (options =>
+        new ViewDoctorResult(true, options.PresetName, options, [], null, []));
+
+    public List<ViewOptions> Options { get; } = [];
+
+    public Task<ViewDoctorResult> DiagnoseAsync(ViewOptions options, CancellationToken cancellationToken = default)
+    {
+        Options.Add(options);
+        return Task.FromResult(_resultFactory(options));
+    }
+}
+
+internal sealed class FakeViewDoctorFactory(IViewDoctor viewDoctor) : IViewDoctorFactory
+{
+    private readonly IViewDoctor _viewDoctor = viewDoctor;
+
+    public IDeviceHost? LastDeviceHost { get; private set; }
+
+    public IViewDoctor Create(IDeviceHost deviceHost)
+    {
+        LastDeviceHost = deviceHost;
+        return _viewDoctor;
     }
 }
 

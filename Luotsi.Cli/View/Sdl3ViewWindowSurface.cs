@@ -26,12 +26,15 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
     private Thread? _windowThread;
     private string _title = "Luotsi View";
     private Func<ViewPointerEvent, Task>? _pointerHandler;
+    private Func<ViewWindowCommand, Task>? _commandHandler;
     private ViewFrameSnapshot? _frame;
     private ViewStats? _stats;
     private bool _frameDirty;
     private bool _statsDirty;
     private bool _disposeRequested;
     private bool _disposed;
+    private bool _isFullscreen;
+    private ViewScaleMode _scaleMode = ViewScaleMode.Fit;
 
     private unsafe SDL_Window* _window;
     private unsafe SDL_Renderer* _renderer;
@@ -39,13 +42,19 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
     private int _textureWidth;
     private int _textureHeight;
 
-    public async Task InitializeAsync(string title, ViewDisplayInfo displayInfo, Func<ViewPointerEvent, Task> pointerHandler, CancellationToken cancellationToken = default)
+    public async Task InitializeAsync(
+        string title,
+        ViewDisplayInfo displayInfo,
+        Func<ViewPointerEvent, Task> pointerHandler,
+        Func<ViewWindowCommand, Task>? commandHandler = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(displayInfo);
         ArgumentNullException.ThrowIfNull(pointerHandler);
 
         _title = string.IsNullOrWhiteSpace(title) ? "Luotsi View" : title;
         _pointerHandler = pointerHandler;
+        _commandHandler = commandHandler;
         EnsureWindowThread(displayInfo);
         await _readySource.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
@@ -232,6 +241,9 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
                 HandlePointer(sdlEvent.button);
                 return false;
 
+            case (uint)SDL_EventType.SDL_EVENT_KEY_DOWN:
+                return HandleKey(sdlEvent.key);
+
             default:
                 return false;
         }
@@ -281,10 +293,16 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
 
         if (stats is null)
         {
-            return _title;
+            return BuildWindowTitlePrefix();
         }
 
-        return $"{_title} | decode {stats.DecodeFps:0.0} fps | present {stats.PresentFps:0.0} fps | latency {stats.EndToEndLatencyMs} ms";
+        return $"{BuildWindowTitlePrefix()} | decode {stats.DecodeFps:0.0} fps | present {stats.PresentFps:0.0} fps | latency {stats.EndToEndLatencyMs} ms";
+    }
+
+    private string BuildWindowTitlePrefix()
+    {
+        var modeLabel = _scaleMode == ViewScaleMode.Fill ? "fill" : "fit";
+        return _isFullscreen ? $"{_title} | {modeLabel} | fullscreen" : $"{_title} | {modeLabel}";
     }
 
     private unsafe void RenderFrame()
@@ -311,7 +329,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
 
         if (frame is not null && _texture is not null && TryGetWindowPixelSize(out var pixelWidth, out var pixelHeight))
         {
-            var layout = ViewPointerMapper.ComputeLayout(pixelWidth, pixelHeight, frame.Width, frame.Height);
+            var layout = ViewPointerMapper.ComputeLayout(pixelWidth, pixelHeight, frame.Width, frame.Height, _scaleMode);
             if (layout.Width > 0 && layout.Height > 0)
             {
                 var destinationRect = new SDL_FRect
@@ -447,7 +465,8 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
             (int)Math.Round(mouseButtonEvent.x, MidpointRounding.AwayFromZero),
             (int)Math.Round(mouseButtonEvent.y, MidpointRounding.AwayFromZero),
             clientWidth,
-            clientHeight);
+            clientHeight,
+            _scaleMode);
 
         _ = Task.Run(
             async () =>
@@ -455,6 +474,69 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
                 try
                 {
                     await pointerHandler(pointerEvent).ConfigureAwait(false);
+                }
+                catch
+                {
+                }
+            });
+    }
+
+    private bool HandleKey(SDL_KeyboardEvent keyboardEvent)
+    {
+        if (keyboardEvent.repeat)
+        {
+            return false;
+        }
+
+        switch (keyboardEvent.key)
+        {
+            case SDL_Keycode.SDLK_F8:
+                _scaleMode = _scaleMode == ViewScaleMode.Fit ? ViewScaleMode.Fill : ViewScaleMode.Fit;
+                UpdateWindowTitle();
+                return true;
+
+            case SDL_Keycode.SDLK_F11:
+                ToggleFullscreen();
+                return true;
+
+            case SDL_Keycode.SDLK_F12:
+                DispatchCommand(ViewWindowCommand.TakeScreenshot);
+                return false;
+
+            default:
+                return false;
+        }
+    }
+
+    private unsafe void ToggleFullscreen()
+    {
+        if (_window is null)
+        {
+            return;
+        }
+
+        var nextState = !_isFullscreen;
+        if (SDL_SetWindowFullscreen(_window, nextState))
+        {
+            _isFullscreen = !_isFullscreen;
+            UpdateWindowTitle();
+        }
+    }
+
+    private void DispatchCommand(ViewWindowCommand command)
+    {
+        var commandHandler = _commandHandler;
+        if (commandHandler is null)
+        {
+            return;
+        }
+
+        _ = Task.Run(
+            async () =>
+            {
+                try
+                {
+                    await commandHandler(command).ConfigureAwait(false);
                 }
                 catch
                 {

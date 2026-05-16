@@ -435,6 +435,39 @@ public sealed class ViewTransportTests
         Assert.Equal(0.5, request.YRatio!.Value, 3);
     }
 
+    [Fact]
+    public async Task NativeWindowViewRenderer_Forwards_Screenshot_Command_To_DeviceHost()
+    {
+        var windowSurface = new FakeViewWindowSurface();
+        var host = new FakeDeviceHost();
+        var renderer = new NativeWindowViewRenderer(new FakeViewWindowSurfaceFactory(windowSurface), host);
+        await renderer.InitializeAsync(new ViewDisplayInfo(1600, 900, "h264", "AV_PIX_FMT_BGRA"));
+
+        await windowSurface.RaiseCommandAsync(ViewWindowCommand.TakeScreenshot);
+
+        Assert.Equal(["view-window-001"], host.TakeScreenshotRequests);
+    }
+
+    [Fact]
+    public async Task NativeWindowViewRenderer_Maps_Clicks_In_Fill_Mode()
+    {
+        var windowSurface = new FakeViewWindowSurface();
+        var host = new FakeDeviceHost();
+        var renderer = new NativeWindowViewRenderer(new FakeViewWindowSurfaceFactory(windowSurface), host);
+        await renderer.InitializeAsync(new ViewDisplayInfo(1600, 900, "h264", "AV_PIX_FMT_BGRA"));
+        await renderer.PresentAsync(new ViewFrame(1, 33_000, 1600, 900, "AV_PIX_FMT_BGRA", null)
+        {
+            PixelData = new byte[] { 0x01, 0x02, 0x03, 0x04 },
+            RowStride = 6400
+        });
+
+        await windowSurface.RaisePointerAsync(new ViewPointerEvent(400, 100, 800, 800, ViewScaleMode.Fill));
+
+        var request = Assert.Single(host.TapPointRequests);
+        Assert.Equal(0.5, request.XRatio!.Value, 3);
+        Assert.Equal(0.125, request.YRatio!.Value, 3);
+    }
+
     private static async Task<List<ViewPacket>> ReadAllAsync(IAsyncEnumerable<ViewPacket> packets)
     {
         var result = new List<ViewPacket>();
@@ -514,6 +547,7 @@ internal sealed class FakeViewWindowSurfaceFactory(FakeViewWindowSurface windowS
 internal sealed class FakeViewWindowSurface : IViewWindowSurface
 {
     private Func<ViewPointerEvent, Task>? _pointerHandler;
+    private Func<ViewWindowCommand, Task>? _commandHandler;
 
     public string? Title { get; private set; }
 
@@ -525,11 +559,17 @@ internal sealed class FakeViewWindowSurface : IViewWindowSurface
 
     public bool Disposed { get; private set; }
 
-    public Task InitializeAsync(string title, ViewDisplayInfo displayInfo, Func<ViewPointerEvent, Task> pointerHandler, CancellationToken cancellationToken = default)
+    public Task InitializeAsync(
+        string title,
+        ViewDisplayInfo displayInfo,
+        Func<ViewPointerEvent, Task> pointerHandler,
+        Func<ViewWindowCommand, Task>? commandHandler = null,
+        CancellationToken cancellationToken = default)
     {
         Title = title;
         DisplayInfo = displayInfo;
         _pointerHandler = pointerHandler;
+        _commandHandler = commandHandler;
         return Task.CompletedTask;
     }
 
@@ -554,6 +594,8 @@ internal sealed class FakeViewWindowSurface : IViewWindowSurface
     }
 
     public Task RaisePointerAsync(ViewPointerEvent pointerEvent) => (_pointerHandler ?? throw new InvalidOperationException("Pointer handler was not initialized."))(pointerEvent);
+
+    public Task RaiseCommandAsync(ViewWindowCommand command) => (_commandHandler ?? throw new InvalidOperationException("Command handler was not initialized."))(command);
 }
 
 internal sealed class FakeLibavNativeLibraryBinder : ILibavNativeLibraryBinder

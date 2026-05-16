@@ -28,6 +28,7 @@ public sealed class App
     private readonly IConsoleIo _console;
     private readonly IEnvironmentVariables _environment;
     private readonly IViewSessionFactory _viewSessionFactory;
+    private readonly IViewDoctorFactory _viewDoctorFactory;
 
     public App(
         TimeProvider? timeProvider = null,
@@ -39,7 +40,8 @@ public sealed class App
         IEnvironmentVariables? environment = null,
         IUniqueIdGenerator? idGenerator = null,
         IDeviceHostFactory? deviceHostFactory = null,
-        IViewSessionFactory? viewSessionFactory = null)
+        IViewSessionFactory? viewSessionFactory = null,
+        IViewDoctorFactory? viewDoctorFactory = null)
     {
         _timeProvider = timeProvider ?? TimeProvider.System;
         _fileSystem = fileSystem ?? new PhysicalFileSystem();
@@ -64,6 +66,10 @@ public sealed class App
             _environment,
             _fileSystem,
             idGenerator1);
+        _viewDoctorFactory = viewDoctorFactory ?? new DefaultViewDoctorFactory(
+            _environment,
+            _fileSystem,
+            processRunner1);
     }
 
     /// <summary>
@@ -83,18 +89,18 @@ public sealed class App
 
         ArtifactSession? artifacts = null;
         IDeviceHost? runner = null;
-        var adbExecutable = options.Get("adb") ?? _environment.GetEnvironmentVariable("DEVICE_E2E_ADB") ?? "adb";
+        var adbExecutable = options.Get("adb") ?? _environment.GetEnvironmentVariable(CliDefaults.AdbExecutableEnvironmentVariable) ?? CliDefaults.DefaultAdbExecutable;
 
         ArtifactData CreateArtifactData() => artifacts?.ToData() ?? new ArtifactData(
             options.Get("artifacts") ?? string.Empty,
-            options.Get("poll-artifacts") ?? "final");
+            options.Get("poll-artifacts") ?? CliDefaults.DefaultPollArtifactsPolicy);
 
         try
         {
             artifacts = ArtifactSession.Create(options, _fileSystem, _timeProvider);
             runner = _deviceHostFactory.Create(
                 new DeviceHostConfiguration(
-                    options.Get("platform") ?? "android",
+                    options.Get("platform") ?? CliDefaults.DefaultPlatform,
                     adbExecutable,
                     options.Get("device")),
                 artifacts);
@@ -112,23 +118,31 @@ public sealed class App
                 return await viewSession.RunAsync(BuildViewOptions(options, adbExecutable)).ConfigureAwait(false);
             }
 
+            if (string.Equals(options.Command, "view-doctor", StringComparison.OrdinalIgnoreCase))
+            {
+                var viewDoctor = _viewDoctorFactory.Create(runner);
+                var report = await viewDoctor.DiagnoseAsync(BuildViewOptions(options, adbExecutable)).ConfigureAwait(false);
+                WriteEnvelope(new CommandEnvelope(true, options.Command, started, _timeProvider.GetUtcNow(), report, artifacts.ToData(), null));
+                return 0;
+            }
+
             var data = options.Command switch
             {
                 "devices" => await runner.GetDevicesAsync().ConfigureAwait(false),
                 "preflight" => await runner.PreflightAsync(options.Get("package")).ConfigureAwait(false),
                 "screen-state" => await runner.GetScreenStateAsync().ConfigureAwait(false),
-                "telemetry-tail" => await runner.TelemetryTailAsync(options.Int("tail", 200)).ConfigureAwait(false),
-                "telemetry-watch" => await runner.TelemetryWatchAsync(options.Int("timeout-sec", 15)).ConfigureAwait(false),
-                "wait-step" => await runner.WaitForStepAsync(options.Require("step"), options.Int("timeout-sec", 15)).ConfigureAwait(false),
-                "wait-action-ready" => await runner.WaitForActionReadyAsync(options.Require("action"), options.Get("step"), options.Int("timeout-sec", 15)).ConfigureAwait(false),
+                "telemetry-tail" => await runner.TelemetryTailAsync(options.Int("tail", CliDefaults.DefaultLogTail)).ConfigureAwait(false),
+                "telemetry-watch" => await runner.TelemetryWatchAsync(options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
+                "wait-step" => await runner.WaitForStepAsync(options.Require("step"), options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
+                "wait-action-ready" => await runner.WaitForActionReadyAsync(options.Require("action"), options.Get("step"), options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
                 "tap" => await runner.TapAsync(options.Require("x"), options.Require("y")).ConfigureAwait(false),
-                "tap-text" => await runner.TapTextAsync(options.Require("text"), options.Int("timeout-sec", 15)).ConfigureAwait(false),
-                "wait-visible" => await runner.WaitVisibleAsync(options.Require("text"), options.Int("timeout-sec", 15)).ConfigureAwait(false),
+                "tap-text" => await runner.TapTextAsync(options.Require("text"), options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
+                "wait-visible" => await runner.WaitVisibleAsync(options.Require("text"), options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
                 "type-text" => await runner.TypeTextAsync(options.Require("text")).ConfigureAwait(false),
                 "keyevent" => await runner.KeyEventAsync(options.Require("code")).ConfigureAwait(false),
-                "logcat" => await runner.LogcatAsync(options.Int("tail", 200)).ConfigureAwait(false),
-                "wait-log" => await runner.WaitForLogAsync(options.Require("contains"), options.Int("timeout-sec", 15)).ConfigureAwait(false),
-                "record" => await runner.RecordAsync(options.Require("output"), options.Int("time-limit-sec", 30)).ConfigureAwait(false),
+                "logcat" => await runner.LogcatAsync(options.Int("tail", CliDefaults.DefaultLogTail)).ConfigureAwait(false),
+                "wait-log" => await runner.WaitForLogAsync(options.Require("contains"), options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
+                "record" => await runner.RecordAsync(options.Require("output"), options.Int("time-limit-sec", CliDefaults.DefaultRecordTimeLimitSeconds)).ConfigureAwait(false),
                 "run" => await scenarios.RunAsync(options.Require("file")).ConfigureAwait(false),
                 _ => throw new UsageException($"Unknown command '{options.Command}'.")
             };
@@ -158,8 +172,14 @@ public sealed class App
 
     private static ViewOptions BuildViewOptions(CliOptions options, string adbExecutable)
     {
-        var statsIntervalMs = options.Int("stats-interval-ms", 1000);
-        var rendererStatsIntervalMs = options.Int("renderer-stats-interval-ms", 0);
+        if (options.HasFlag("defaults") && options.Get("preset") is not null)
+        {
+            throw new UsageException("view requires either --defaults or --preset, not both.");
+        }
+
+        var preset = ViewPresetCatalog.Resolve(options.HasFlag("defaults") ? ViewPresetCatalog.Safe : options.Get("preset"));
+        var statsIntervalMs = GetIntOrDefault(options, "stats-interval-ms", preset.StatsIntervalMs);
+        var rendererStatsIntervalMs = GetIntOrDefault(options, "renderer-stats-interval-ms", preset.RendererStatsIntervalMs);
         if (statsIntervalMs < 0)
         {
             throw new UsageException("view requires --stats-interval-ms zero or greater.");
@@ -173,17 +193,21 @@ public sealed class App
         return new ViewOptions(
             options.Require("device"),
             adbExecutable,
-            options.Get("codec") ?? "h264",
-            options.Get("decoder") ?? "ffmpeg",
+            options.Get("codec") ?? CliDefaults.DefaultViewCodec,
+            options.Get("decoder") ?? CliDefaults.DefaultViewDecoder,
             options.HasFlag("headless"),
             options.Get("record"),
-            options.Int("max-size", 1600),
-            options.Int("max-fps", 60),
-            options.Get("video-bit-rate") ?? "8M",
+            GetIntOrDefault(options, "max-size", preset.MaxSize),
+            GetIntOrDefault(options, "max-fps", preset.MaxFps),
+            options.Get("video-bit-rate") ?? preset.VideoBitRate,
             options.HasFlag("overlay-screen-state"),
             options.HasFlag("overlay-telemetry"),
-                statsIntervalMs,
-                rendererStatsIntervalMs);
+            statsIntervalMs,
+            rendererStatsIntervalMs,
+            preset.Name);
+
+        static int GetIntOrDefault(CliOptions options, string key, int defaultValue) =>
+            options.Get(key) is null ? defaultValue : options.Int(key, defaultValue);
     }
 
     private void WriteEnvelope(CommandEnvelope envelope) => _console.WriteLine(JsonSerializer.Serialize(envelope, JsonOptions));

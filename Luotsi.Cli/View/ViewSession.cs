@@ -191,6 +191,7 @@ public sealed class ViewSession(
                     session_id = sessionId,
                     started_at = _timeProvider.GetUtcNow(),
                     device = options.DeviceSelector,
+                    preset = options.PresetName,
                     decoder = options.Decoder,
                     codec = negotiatedConnection.Codec,
                     backend = viewBackend.Name,

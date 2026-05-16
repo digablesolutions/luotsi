@@ -25,9 +25,15 @@ public interface IViewWindowSurface : IAsyncDisposable
     /// <param name="title">Window title.</param>
     /// <param name="displayInfo">Initial display info.</param>
     /// <param name="pointerHandler">Pointer callback for click routing.</param>
+    /// <param name="commandHandler">Window command callback for hotkeys or future toolbar actions.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Completion task.</returns>
-    Task InitializeAsync(string title, ViewDisplayInfo displayInfo, Func<ViewPointerEvent, Task> pointerHandler, CancellationToken cancellationToken = default);
+    Task InitializeAsync(
+        string title,
+        ViewDisplayInfo displayInfo,
+        Func<ViewPointerEvent, Task> pointerHandler,
+        Func<ViewWindowCommand, Task>? commandHandler = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Presents a frame to the native window surface.
@@ -54,13 +60,31 @@ public interface IViewWindowSurface : IAsyncDisposable
 }
 
 /// <summary>
+/// Local view scaling mode used by the native window.
+/// </summary>
+public enum ViewScaleMode
+{
+    Fit = 0,
+    Fill = 1
+}
+
+/// <summary>
+/// Window command raised by local UI affordances such as hotkeys.
+/// </summary>
+public enum ViewWindowCommand
+{
+    TakeScreenshot = 0
+}
+
+/// <summary>
 /// Pointer event raised by the native window surface.
 /// </summary>
 /// <param name="ClientX">Pointer X within the client area.</param>
 /// <param name="ClientY">Pointer Y within the client area.</param>
 /// <param name="ClientWidth">Current client width.</param>
 /// <param name="ClientHeight">Current client height.</param>
-public sealed record ViewPointerEvent(int ClientX, int ClientY, int ClientWidth, int ClientHeight);
+/// <param name="ScaleMode">Current view scaling mode.</param>
+public sealed record ViewPointerEvent(int ClientX, int ClientY, int ClientWidth, int ClientHeight, ViewScaleMode ScaleMode = ViewScaleMode.Fit);
 
 /// <summary>
 /// In-process native window renderer that presents decoded frames and routes clicks through the existing tap-point host path.
@@ -70,12 +94,13 @@ public sealed class NativeWindowViewRenderer(IViewWindowSurfaceFactory windowSur
     private readonly IViewWindowSurface _windowSurface = (windowSurfaceFactory ?? throw new ArgumentNullException(nameof(windowSurfaceFactory))).Create();
     private readonly IDeviceHost _deviceHost = deviceHost ?? throw new ArgumentNullException(nameof(deviceHost));
     private ViewDisplayInfo? _displayInfo;
+    private int _screenshotSequence;
 
     /// <inheritdoc />
     public async Task InitializeAsync(ViewDisplayInfo displayInfo, CancellationToken cancellationToken = default)
     {
         _displayInfo = displayInfo ?? throw new ArgumentNullException(nameof(displayInfo));
-        await _windowSurface.InitializeAsync("Luotsi View", displayInfo, HandlePointerAsync, cancellationToken).ConfigureAwait(false);
+        await _windowSurface.InitializeAsync("Luotsi View", displayInfo, HandlePointerAsync, HandleWindowCommandAsync, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -131,6 +156,12 @@ public sealed class NativeWindowViewRenderer(IViewWindowSurfaceFactory windowSur
 
         await _deviceHost.TapPointAsync("view-window", null, null, xRatio, yRatio, 0).ConfigureAwait(false);
     }
+
+    private Task HandleWindowCommandAsync(ViewWindowCommand command) => command switch
+    {
+        ViewWindowCommand.TakeScreenshot => _deviceHost.TakeScreenshotAsync($"view-window-{Interlocked.Increment(ref _screenshotSequence):000}")!,
+        _ => Task.CompletedTask
+    };
 }
 
 internal static class ViewPointerMapper
@@ -142,7 +173,7 @@ internal static class ViewPointerMapper
         out double xRatio,
         out double yRatio)
     {
-        var layout = ComputeLayout(pointerEvent.ClientWidth, pointerEvent.ClientHeight, sourceWidth, sourceHeight);
+        var layout = ComputeLayout(pointerEvent.ClientWidth, pointerEvent.ClientHeight, sourceWidth, sourceHeight, pointerEvent.ScaleMode);
         if (layout.Width <= 0 || layout.Height <= 0)
         {
             xRatio = 0;
@@ -165,14 +196,18 @@ internal static class ViewPointerMapper
         return true;
     }
 
-    public static ViewContentLayout ComputeLayout(int clientWidth, int clientHeight, int sourceWidth, int sourceHeight)
+    public static ViewContentLayout ComputeLayout(int clientWidth, int clientHeight, int sourceWidth, int sourceHeight, ViewScaleMode scaleMode = ViewScaleMode.Fit)
     {
         if (clientWidth <= 0 || clientHeight <= 0 || sourceWidth <= 0 || sourceHeight <= 0)
         {
             return default;
         }
 
-        var scale = Math.Min(1d, Math.Min(clientWidth / (double)sourceWidth, clientHeight / (double)sourceHeight));
+        var horizontalScale = clientWidth / (double)sourceWidth;
+        var verticalScale = clientHeight / (double)sourceHeight;
+        var scale = scaleMode == ViewScaleMode.Fill
+            ? Math.Max(horizontalScale, verticalScale)
+            : Math.Min(1d, Math.Min(horizontalScale, verticalScale));
         var width = Math.Max(1, (int)Math.Round(sourceWidth * scale, MidpointRounding.AwayFromZero));
         var height = Math.Max(1, (int)Math.Round(sourceHeight * scale, MidpointRounding.AwayFromZero));
         var left = (clientWidth - width) / 2;

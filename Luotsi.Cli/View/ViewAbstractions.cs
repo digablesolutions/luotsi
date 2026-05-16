@@ -59,7 +59,8 @@ public sealed record ViewOptions(
     bool OverlayScreenState,
     bool OverlayTelemetry,
     int StatsIntervalMs = 1000,
-    int RendererStatsIntervalMs = 0);
+    int RendererStatsIntervalMs = 0,
+    string PresetName = "balanced");
 
 /// <summary>
 /// Bootstraps the device-side stream transport.
