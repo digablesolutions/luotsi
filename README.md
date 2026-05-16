@@ -43,7 +43,7 @@ cd <repo-root>
 dotnet run --project VisitLab.Cli -- devices
 dotnet run --project VisitLab.Cli -- preflight --device <serial> --package fi.systam.visit
 dotnet run --project VisitLab.Cli -- screen-state --device <serial>
-dotnet run --project VisitLab.Cli -- view --device <serial> --decoder ffmpeg --record capture.mp4
+dotnet run --project VisitLab.Cli -- view --device <serial> --decoder ffmpeg --record capture.mp4 --stats-interval-ms 1000
 dotnet run --project VisitLab.Cli -- telemetry-tail --device <serial> --tail 200
 dotnet run --project VisitLab.Cli -- telemetry-watch --device <serial> --timeout-sec 10
 dotnet run --project VisitLab.Cli -- tap-text --device <serial> --text "Sign in"
@@ -73,7 +73,8 @@ tools on WSL's `PATH`.
 The `view` command is also a long-lived JSONL session. Alongside `view_started`,
 `view_error`, and `view_ended`, it can emit throttled `view_stats` events so
 agents can consume rolling decode/present FPS and latency without scraping the
-SDL window title or flooding stdout on long-lived sessions.
+SDL window title or flooding stdout on long-lived sessions. Use
+`--stats-interval-ms <ms>` to tune that cadence; the default is `1000`.
 
 The implementation currently supports `--platform android`. The host seam is in
 place so an iOS adapter can be added later without rewriting the command layer.

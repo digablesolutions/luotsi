@@ -114,8 +114,6 @@ public sealed class ViewSession(
 
     private const int InitialStreamAttempts = 20;
     private static readonly TimeSpan InitialStreamRetryDelay = TimeSpan.FromMilliseconds(100);
-    private static readonly TimeSpan ViewStatsEventInterval = TimeSpan.FromSeconds(1);
-
     private readonly IDeviceHost _deviceHost = deviceHost ?? throw new ArgumentNullException(nameof(deviceHost));
     private readonly ArtifactSession _artifacts = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
     private readonly IConsoleIo _console = console ?? throw new ArgumentNullException(nameof(console));
@@ -167,7 +165,7 @@ public sealed class ViewSession(
                 };
 
                 renderer = _viewRendererFactory.Create(options, _deviceHost);
-                sessionRenderer = new SessionViewRenderer(renderer, _timeProvider, ViewStatsEventInterval, stats =>
+                sessionRenderer = new SessionViewRenderer(renderer, _timeProvider, TimeSpan.FromMilliseconds(options.StatsIntervalMs), stats =>
                 {
                     WriteJsonLine(new
                     {
@@ -196,6 +194,7 @@ public sealed class ViewSession(
                     max_size = options.MaxSize,
                     max_fps = options.MaxFps,
                     video_bit_rate = options.VideoBitRate,
+                    stats_interval_ms = options.StatsIntervalMs,
                     overlay_screen_state = options.OverlayScreenState,
                     overlay_telemetry = options.OverlayTelemetry,
                     connection = negotiatedConnection,

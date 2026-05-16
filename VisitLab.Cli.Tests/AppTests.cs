@@ -1129,6 +1129,49 @@ public sealed class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_View_Uses_Configured_ViewStats_Interval()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var session = new ViewSession(
+            host,
+            ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
+            console,
+            timeProvider,
+            new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward")),
+            new FakeViewBackendFactory(new ThrottledStatsViewBackend(timeProvider)),
+            new FakeViewStreamConnector(
+                new ViewPacketStreamHarness()
+                    .WriteHeader("h264", 1080, 1920)
+                    .WritePacket(ViewPacketType.StreamEnd, 1, 0, false, [])
+                    .Build()),
+            new ViewPacketStreamReader());
+
+        var exitCode = await session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", true, null, 1600, 60, "8M", false, false, 100));
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(5, console.OutputLines.Count);
+
+        using var started = JsonDocument.Parse(console.OutputLines[0]);
+        Assert.Equal("view_started", started.RootElement.GetProperty("type").GetString());
+        Assert.Equal(100, started.RootElement.GetProperty("stats_interval_ms").GetInt32());
+
+        using var firstStats = JsonDocument.Parse(console.OutputLines[1]);
+        Assert.Equal(10, firstStats.RootElement.GetProperty("stats").GetProperty("decoded_frames").GetInt32());
+
+        using var secondStats = JsonDocument.Parse(console.OutputLines[2]);
+        Assert.Equal(11, secondStats.RootElement.GetProperty("stats").GetProperty("decoded_frames").GetInt32());
+
+        using var thirdStats = JsonDocument.Parse(console.OutputLines[3]);
+        Assert.Equal(12, thirdStats.RootElement.GetProperty("stats").GetProperty("decoded_frames").GetInt32());
+
+        using var ended = JsonDocument.Parse(console.OutputLines[4]);
+        Assert.Equal("view_ended", ended.RootElement.GetProperty("type").GetString());
+    }
+
+    [Fact]
     public async Task RunAsync_View_Uses_Backend_Selected_By_Decoder()
     {
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
@@ -1255,6 +1298,7 @@ public sealed class AppTests
             "--max-size", "1280",
             "--max-fps", "30",
             "--video-bit-rate", "12M",
+            "--stats-interval-ms", "250",
             "--overlay-screen-state",
             "--overlay-telemetry"]);
 
@@ -1270,8 +1314,24 @@ public sealed class AppTests
         Assert.Equal(1280, options.MaxSize);
         Assert.Equal(30, options.MaxFps);
         Assert.Equal("12M", options.VideoBitRate);
+        Assert.Equal(250, options.StatsIntervalMs);
         Assert.True(options.OverlayScreenState);
         Assert.True(options.OverlayTelemetry);
+    }
+
+    [Fact]
+    public async Task RunAsync_View_With_NonPositive_Stats_Interval_Returns_Usage_Error_Envelope()
+    {
+        var console = new FakeConsole();
+        var app = new App(console: console);
+
+        var exitCode = await app.RunAsync(["view", "--device", "192.168.0.134:5555", "--stats-interval-ms", "0"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("--stats-interval-ms", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]

@@ -44,6 +44,7 @@ public interface IViewSessionFactory
 /// <param name="VideoBitRate">Requested video bit rate.</param>
 /// <param name="OverlayScreenState">Whether screen-state overlays are enabled.</param>
 /// <param name="OverlayTelemetry">Whether telemetry overlays are enabled.</param>
+/// <param name="StatsIntervalMs">Minimum interval between emitted JSONL stats updates.</param>
 public sealed record ViewOptions(
     string DeviceSelector,
     string AdbExecutable,
@@ -55,7 +56,8 @@ public sealed record ViewOptions(
     int MaxFps,
     string VideoBitRate,
     bool OverlayScreenState,
-    bool OverlayTelemetry);
+    bool OverlayTelemetry,
+    int StatsIntervalMs = 1000);
 
 /// <summary>
 /// Bootstraps the device-side stream transport.

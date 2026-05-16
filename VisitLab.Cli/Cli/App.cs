@@ -156,8 +156,15 @@ public sealed class App
         }
     }
 
-    private static ViewOptions BuildViewOptions(CliOptions options, string adbExecutable) =>
-        new(
+    private static ViewOptions BuildViewOptions(CliOptions options, string adbExecutable)
+    {
+        var statsIntervalMs = options.Int("stats-interval-ms", 1000);
+        if (statsIntervalMs <= 0)
+        {
+            throw new UsageException("view requires --stats-interval-ms greater than zero.");
+        }
+
+        return new ViewOptions(
             options.Require("device"),
             adbExecutable,
             options.Get("codec") ?? "h264",
@@ -168,7 +175,9 @@ public sealed class App
             options.Int("max-fps", 60),
             options.Get("video-bit-rate") ?? "8M",
             options.HasFlag("overlay-screen-state"),
-            options.HasFlag("overlay-telemetry"));
+            options.HasFlag("overlay-telemetry"),
+            statsIntervalMs);
+    }
 
     private void WriteEnvelope(CommandEnvelope envelope) => _console.WriteLine(JsonSerializer.Serialize(envelope, JsonOptions));
 }
