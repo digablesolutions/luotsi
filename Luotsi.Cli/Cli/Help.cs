@@ -25,6 +25,9 @@ Commands:
   profile-list
   profile-delete --name <profile>
   wireless --device <usb serial> [--host <ip-or-host>] [--port 5555]
+  wireless-scan
+  wireless-pair (--endpoint <host:port> | --service <mdns-service>) --code <pairing-code>
+  wireless-connect [--endpoint <host:port> | --service <mdns-service>] [--save-profile <name>]
   telemetry-tail [--tail 200]
   telemetry-watch [--timeout-sec 15]
   wait-step --step <STEP_NAME> [--timeout-sec 15]

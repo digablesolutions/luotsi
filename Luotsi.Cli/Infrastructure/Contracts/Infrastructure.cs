@@ -122,6 +122,12 @@ public interface IDeviceHost : IScenarioActionHost
 
     Task<WirelessConnectResult> EnableWirelessAsync(string? host, int port);
 
+    Task<WirelessScanResult> ScanWirelessServicesAsync();
+
+    Task<WirelessPairResult> PairWirelessAsync(string? endpoint, string? service, string? pairingCode);
+
+    Task<WirelessMdnsConnectResult> ConnectWirelessAsync(string? endpoint, string? service);
+
     /// <summary>
     /// Installs an APK from the host onto the device.
     /// </summary>

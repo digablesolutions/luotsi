@@ -376,6 +376,14 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public List<(string Host, int Port)> WirelessRequests { get; } = [];
 
+    public List<(string? Endpoint, string? Service, string? PairingCode)> WirelessPairRequests { get; } = [];
+
+    public List<(string? Endpoint, string? Service)> WirelessConnectRequests { get; } = [];
+
+    public List<WirelessMdnsService> WirelessServices { get; } = [];
+
+    public WirelessMdnsConnectResult? WirelessConnectResponse { get; set; }
+
     public List<string> InstallPackageRequests { get; } = [];
 
     public List<DeviceInfo> ConnectedDevices { get; } = [];
@@ -503,6 +511,55 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
         WirelessRequests.Add((resolvedHost, port));
         return Task.FromResult(new WirelessConnectResult(resolvedHost, port, $"{resolvedHost}:{port}"));
     }
+
+    public Task<WirelessScanResult> ScanWirelessServicesAsync() =>
+        Task.FromResult(CreateWirelessScanResult(WirelessServices));
+
+    public Task<WirelessPairResult> PairWirelessAsync(string? endpoint, string? service, string? pairingCode)
+    {
+        WirelessPairRequests.Add((endpoint, service, pairingCode));
+        var resolvedEndpoint = endpoint ?? "192.168.0.44:37123";
+        var selector = service is null ? null : $"{service}._adb-tls-pairing._tcp";
+        var paired = !string.IsNullOrWhiteSpace(pairingCode);
+        return Task.FromResult(new WirelessPairResult(
+            resolvedEndpoint,
+            service,
+            service is null ? null : "_adb-tls-pairing._tcp",
+            selector,
+            paired,
+            !paired,
+            paired ? $"Successfully paired to {resolvedEndpoint}" : "Pairing code required.",
+            paired ? $"Successfully paired to {resolvedEndpoint}" : null));
+    }
+
+    public Task<WirelessMdnsConnectResult> ConnectWirelessAsync(string? endpoint, string? service)
+    {
+        WirelessConnectRequests.Add((endpoint, service));
+        if (WirelessConnectResponse is not null)
+        {
+            return Task.FromResult(WirelessConnectResponse);
+        }
+
+        var resolvedEndpoint = endpoint ?? "192.168.0.44:37123";
+        var selector = service is null ? resolvedEndpoint : $"{service}._adb-tls-connect._tcp";
+        return Task.FromResult(new WirelessMdnsConnectResult(
+            resolvedEndpoint,
+            service,
+            service is null ? null : "_adb-tls-connect._tcp",
+            service is null ? null : selector,
+            selector,
+            selector,
+            true,
+            $"connected to {selector}",
+            $"connected to {selector}"));
+    }
+
+    private static WirelessScanResult CreateWirelessScanResult(IReadOnlyList<WirelessMdnsService> services) =>
+        new(
+            services,
+            services.Where(static service => string.Equals(service.ServiceType, "_adb-tls-pairing._tcp", StringComparison.OrdinalIgnoreCase)).ToArray(),
+            services.Where(static service => string.Equals(service.ServiceType, "_adb-tls-connect._tcp", StringComparison.OrdinalIgnoreCase)).ToArray(),
+            services.Where(static service => string.Equals(service.ServiceType, "_adb._tcp", StringComparison.OrdinalIgnoreCase)).ToArray());
 
     public Task<InstallPackageResult> InstallPackageAsync(string packagePath)
     {

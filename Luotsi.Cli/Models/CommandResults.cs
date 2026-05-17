@@ -70,6 +70,42 @@ public sealed record InstallPackageResult(string PackagePath);
 // Enable adb-over-TCP and connect to the target endpoint.
 public sealed record WirelessConnectResult(string Host, int Port, string Endpoint);
 
+public sealed record WirelessMdnsService(
+    string ServiceName,
+    string ServiceType,
+    string Host,
+    int Port,
+    string Endpoint,
+    string Selector,
+    string Kind);
+
+public sealed record WirelessScanResult(
+    IReadOnlyList<WirelessMdnsService> Services,
+    IReadOnlyList<WirelessMdnsService> PairingServices,
+    IReadOnlyList<WirelessMdnsService> ConnectServices,
+    IReadOnlyList<WirelessMdnsService> LegacyServices);
+
+public sealed record WirelessPairResult(
+    string Endpoint,
+    string? ServiceName,
+    string? ServiceType,
+    string? Selector,
+    bool Paired,
+    bool InteractiveRequired,
+    string Message,
+    string? Stdout);
+
+public sealed record WirelessMdnsConnectResult(
+    string Endpoint,
+    string? ServiceName,
+    string? ServiceType,
+    string? Selector,
+    string ConnectTarget,
+    string DeviceSelector,
+    bool Connected,
+    string Message,
+    string? Stdout);
+
 public sealed record ViewProfileListResult(IReadOnlyList<string> Profiles);
 
 public sealed record ViewProfileDeleteResult(string Name, bool Deleted);

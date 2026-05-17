@@ -29,6 +29,12 @@ internal sealed class UnsupportedDeviceHost : IDeviceHost
 
     public Task<WirelessConnectResult> EnableWirelessAsync(string? host, int port) => Unsupported<WirelessConnectResult>();
 
+    public Task<WirelessScanResult> ScanWirelessServicesAsync() => Unsupported<WirelessScanResult>();
+
+    public Task<WirelessPairResult> PairWirelessAsync(string? endpoint, string? service, string? pairingCode) => Unsupported<WirelessPairResult>();
+
+    public Task<WirelessMdnsConnectResult> ConnectWirelessAsync(string? endpoint, string? service) => Unsupported<WirelessMdnsConnectResult>();
+
     public Task<InstallPackageResult> InstallPackageAsync(string packagePath) => Unsupported<InstallPackageResult>();
 
     public Task<ScreenElement> WaitVisibleAsync(string text, int timeoutSec) => Unsupported<ScreenElement>();

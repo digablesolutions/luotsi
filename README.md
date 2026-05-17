@@ -61,6 +61,9 @@ dotnet run --project Luotsi.Cli -- reconnect --profile desk
 dotnet run --project Luotsi.Cli -- view --last
 dotnet run --project Luotsi.Cli -- view-doctor --device <serial> --preset low-latency
 dotnet run --project Luotsi.Cli -- wireless --device <usb-serial> --host 192.168.0.44
+dotnet run --project Luotsi.Cli -- wireless-scan
+dotnet run --project Luotsi.Cli -- wireless-pair --endpoint 192.168.86.38:33861 --code 515109
+dotnet run --project Luotsi.Cli -- wireless-connect --service adb-14141FDF600081-TnSdi9 --save-profile desk-wifi
 dotnet run --project Luotsi.Cli -- telemetry-tail --device <serial> --tail 200
 dotnet run --project Luotsi.Cli -- telemetry-watch --device <serial> --timeout-sec 10
 dotnet run --project Luotsi.Cli -- tap-text --device <serial> --text "Sign in"
@@ -151,10 +154,39 @@ report instead of opening a stream. The current checks cover FFmpeg decoder
 readiness, Android helper package availability, adb device visibility, device
 preflight, and optional recording target readiness.
 
-`wireless` is the first-pass “go wireless” flow. It runs `adb shell ip route get
-8.8.8.8` to infer the USB-selected device Wi-Fi address when `--host` is not
-provided, then runs `adb tcpip <port>` and `adb connect <host>:<port>`, returning
-the TCP/IP endpoint that can be saved into a view profile.
+`wireless` remains the legacy "go wireless" flow. It runs
+`adb shell ip route get 8.8.8.8` to infer the USB-selected device Wi-Fi address
+when `--host` is not provided, then runs `adb tcpip <port>` and
+`adb connect <host>:<port>`, returning the TCP/IP endpoint.
+
+For Android 11+ Wireless debugging, Luotsi also exposes the TLS/mDNS flow used
+by modern adb Wi-Fi:
+
+- `wireless-scan` runs `adb mdns services` and returns structured
+  `_adb-tls-pairing._tcp`, `_adb-tls-connect._tcp`, and legacy `_adb._tcp`
+  services with service names, endpoints, and adb selectors.
+- `wireless-pair --endpoint <host:port> --code <code>` runs
+  `adb pair <host:port> <code>`. You can also pass `--service <service-name>`
+  from `wireless-scan`; if no endpoint or service is supplied, Luotsi uses the
+  only discovered `_adb-tls-pairing._tcp` service. Omitting `--code` returns a
+  JSON result explaining that Luotsi command mode cannot safely drive adb's
+  interactive prompt; run `adb pair <host:port>` manually or pass `--code`.
+- `wireless-connect --endpoint <host:port>` runs `adb connect <host:port>`.
+  `wireless-connect --service <service-name>` resolves a discovered
+  `_adb-tls-connect._tcp` service and connects with its adb selector. If no
+  endpoint or service is supplied, Luotsi connects the only discovered TLS
+  connect service.
+
+`wireless-connect` returns `device_selector`, which can be passed directly to
+`view --device <selector>`. It can also save a minimal view profile:
+
+```powershell
+dotnet run --project Luotsi.Cli -- wireless-connect --service adb-14141FDF600081-TnSdi9 --save-profile desk-wifi
+dotnet run --project Luotsi.Cli -- view --profile desk-wifi
+```
+
+This relies on adb's mDNS selector convention, where a connected TLS device may
+appear as `<service-name>._adb-tls-connect._tcp` in `adb devices`.
 
 Interactive `view` sessions can now emit additional JSONL events beyond
 `view_started`, `view_stats`, `view_error`, and `view_ended`, including:

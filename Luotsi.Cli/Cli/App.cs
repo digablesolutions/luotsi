@@ -58,7 +58,7 @@ public sealed class App
             resolvedProcessRunner);
         var resolvedViewProfileStore = dependencies.ViewProfileStore ?? new JsonViewProfileStore(resolvedFileSystem, resolvedEnvironment);
         var profileCoordinator = new ViewProfileCoordinator(resolvedViewProfileStore);
-        var commandDispatcher = new AppCommandDispatcher(resolvedFileSystem, resolvedTimeProvider, resolvedDelay, resolvedEnvironment);
+        var commandDispatcher = new AppCommandDispatcher(resolvedFileSystem, resolvedTimeProvider, resolvedDelay, resolvedEnvironment, profileCoordinator);
         var commandHost = new AppCommandHost(new AppCommandHostDependencies
         {
             Console = resolvedConsole,

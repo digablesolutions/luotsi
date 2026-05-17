@@ -44,6 +44,8 @@ internal sealed class ViewProfileCoordinator(IViewProfileStore viewProfileStore)
     public Task SaveLastAsync(CliOptions options, ViewOptions viewOptions) =>
         _viewProfileStore.SaveAsync("last", ViewProfile.FromResolvedOptions(options, viewOptions));
 
+    public Task SaveAsync(string profileName, ViewProfile profile) => _viewProfileStore.SaveAsync(profileName, profile);
+
     public Task<IReadOnlyList<string>> ListAsync() => _viewProfileStore.ListAsync();
 
     public Task<bool> DeleteAsync(string profileName) => _viewProfileStore.DeleteAsync(profileName);
