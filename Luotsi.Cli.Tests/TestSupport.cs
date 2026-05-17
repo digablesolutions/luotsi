@@ -1,13 +1,8 @@
 using System.Text.Json;
-using Luotsi.Cli;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
-using Luotsi.Cli.Errors;
-using Luotsi.Cli.Hosts.Android;
-using Luotsi.Cli.Hosts.Android.View;
 using Luotsi.Cli.Infrastructure;
 using Luotsi.Cli.Models;
-using Luotsi.Cli.Scenarios;
 using Luotsi.Cli.Telemetry;
 using Luotsi.Cli.View;
 using Xunit;
@@ -456,7 +451,7 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
         WaitForDeviceRequests.Add(timeoutSec);
         var wait = new AdbCommandOutput("adb wait-for-device", ["wait-for-device"], 0, true, string.Empty, string.Empty, 1, null, []);
         var ping = new AdbCommandOutput("adb shell \"echo ping\"", ["shell", "echo ping"], 0, true, "ping\n", string.Empty, 1, null, []);
-        return Task.FromResult(new AdbReadinessResult(ResultSchemas.AdbReadiness, true, null, true, true, timeoutSec, wait, ping, "ping"));
+        return Task.FromResult(new AdbReadinessResult(ResultSchemas.AdbReadiness, true, PreflightTemplate.Serial, true, true, timeoutSec, wait, ping, "ping"));
     }
 
     public Task<PreflightResult> ReadPreflightAsync(string? packageName)

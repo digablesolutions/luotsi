@@ -1,15 +1,8 @@
-using System.Text.Json;
-using Luotsi.Cli;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Hosts.Android;
-using Luotsi.Cli.Hosts.Android.View;
-using Luotsi.Cli.Infrastructure;
 using Luotsi.Cli.Models;
-using Luotsi.Cli.Scenarios;
-using Luotsi.Cli.Telemetry;
-using Luotsi.Cli.View;
 using Xunit;
 
 namespace Luotsi.Cli.Tests;
@@ -26,7 +19,7 @@ public sealed partial class AppTests
         adb.EnqueueShellResult(new ProcessResult(0, "not-xml", string.Empty));
         var runner = new DeviceRunner(adb, artifacts, timeProvider, new FakeDelay(timeProvider), fileSystem);
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => runner.GetScreenStateAsync());
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(runner.GetScreenStateAsync);
 
         Assert.Contains("invalid XML", error.Message, StringComparison.OrdinalIgnoreCase);
         Assert.True(fileSystem.FileExists(Path.Combine(artifacts.Root, "hierarchy.xml")));
@@ -436,11 +429,12 @@ public sealed partial class AppTests
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var adb = new FakeAdbClient();
         adb.EnqueueShellResult(new ProcessResult(0, CreateDeviceFingerprintShellOutput("SER123", "Pixel 9", "16", "36", "google/pixel/device", "arm64-v8a,x86_64", "mCurrentFocus=App"), string.Empty));
-        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["preflight"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
+        var artifacts = ArtifactSession.Create(CliOptions.Parse(["preflight"]), fileSystem, timeProvider);
+        var runner = new DeviceRunner(adb, artifacts, timeProvider, new FakeDelay(timeProvider), fileSystem);
 
         var result = await runner.PreflightAsync(null);
         var json = SerializeToJsonElement(result);
-        var artifactRoot = Path.Combine("/tmp", "luotsi", "20260515-120000-preflight");
+        var artifactRoot = artifacts.Root;
 
         Assert.Equal("Pixel 9", json.GetProperty("model").GetString());
         Assert.Equal("google/pixel/device", json.GetProperty("fingerprint").GetString());
@@ -455,11 +449,12 @@ public sealed partial class AppTests
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var adb = new FakeAdbClient();
         adb.EnqueueShellResult(new ProcessResult(0, CreateDeviceFingerprintShellOutput("SER123", "Pixel 9", "16", "36", "google/pixel/device", "arm64-v8a,x86_64", "mCurrentFocus=App"), string.Empty));
-        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["preflight"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
+        var artifacts = ArtifactSession.Create(CliOptions.Parse(["preflight"]), fileSystem, timeProvider);
+        var runner = new DeviceRunner(adb, artifacts, timeProvider, new FakeDelay(timeProvider), fileSystem);
 
         var result = await runner.ReadPreflightAsync(null);
         var json = SerializeToJsonElement(result);
-        var artifactRoot = Path.Combine("/tmp", "luotsi", "20260515-120000-preflight");
+        var artifactRoot = artifacts.Root;
 
         Assert.Equal("Pixel 9", json.GetProperty("model").GetString());
         Assert.Equal("google/pixel/device", json.GetProperty("fingerprint").GetString());

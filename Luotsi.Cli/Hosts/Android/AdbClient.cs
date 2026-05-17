@@ -423,7 +423,7 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
                IsReadOnlyMarkerEcho(trimmed) ||
                trimmed.StartsWith("getprop ", StringComparison.Ordinal) ||
                trimmed.StartsWith("dumpsys ", StringComparison.Ordinal) ||
-               trimmed.StartsWith("wm size", StringComparison.Ordinal) ||
+               string.Equals(trimmed, "wm size", StringComparison.Ordinal) ||
                trimmed.StartsWith("ip route get ", StringComparison.Ordinal);
     }
 

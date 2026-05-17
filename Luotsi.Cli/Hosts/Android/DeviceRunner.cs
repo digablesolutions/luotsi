@@ -116,12 +116,22 @@ public sealed class DeviceRunner(
                 throw new InvalidOperationException($"adb readiness ping returned '{pingOutput}'.");
             }
 
+            string? serial = wait.Serial;
+            if (string.IsNullOrWhiteSpace(serial))
+            {
+                var serialProbe = await _adb.ShellAsync("getprop ro.serialno", timeoutSource.Token).ConfigureAwait(false);
+                serialProbe.EnsureSuccess("adb readiness serial probe failed");
+                serial = serialProbe.Stdout.Trim();
+            }
+
+            serial = string.IsNullOrWhiteSpace(serial) ? null : serial;
+
             return new AdbReadinessResult(
                 ResultSchemas.AdbReadiness,
                 true,
-                wait.Serial,
-                true,
-                true,
+                serial,
+                serial is not null || ping.ExitCode == 0,
+                ping.ExitCode == 0,
                 validatedTimeoutSec,
                 ToAdbCommandOutput(wait),
                 ToAdbCommandOutput(ping),

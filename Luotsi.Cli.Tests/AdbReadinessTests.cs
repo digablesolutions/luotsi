@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
 using Luotsi.Cli.Hosts.Android;
@@ -145,15 +144,18 @@ public sealed class AdbReadinessTests
         var adb = new FakeAdbClient();
         adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
         adb.EnqueueShellResult(new ProcessResult(0, "ping\n", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "SER456\n", string.Empty));
         var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["wait-for-device"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
 
         var result = await runner.WaitForDeviceAsync(10);
 
         Assert.True(result.Ready);
+        Assert.True(result.DeviceSelected);
         Assert.True(result.PingVerified);
+        Assert.Equal("SER456", result.Serial);
         Assert.Equal("ping", result.PingOutput);
         Assert.Equal(["wait-for-device"], adb.RunCommands[0]);
-        Assert.Equal(["echo ping"], adb.ShellCommands);
+        Assert.Equal(["echo ping", "getprop ro.serialno"], adb.ShellCommands);
     }
 
     [Fact]
@@ -228,6 +230,20 @@ public sealed class AdbReadinessTests
         Assert.Equal(["start-server"], processRunner.Calls[1].Args);
         Assert.Equal(["wait-for-device"], processRunner.Calls[2].Args);
         Assert.Equal(["shell", "echo __LUOTSI_DEVICE_FINGERPRINT_SERIAL__; getprop ro.serialno"], processRunner.Calls[3].Args);
+    }
+
+    [Fact]
+    public async Task AdbClient_Does_Not_Retry_Mutating_WmSize_Reset_Shell_Command()
+    {
+        var processRunner = new FakeProcessRunner();
+        processRunner.EnqueueResult(new ProcessResult(1, string.Empty, "protocol fault (no status)"));
+        var adb = new AdbClient("adb", null, processRunner, TimeSpan.FromSeconds(5));
+
+        var result = await adb.RunAsync(["shell", "wm size reset"]);
+
+        Assert.Equal(1, result.AttemptCount);
+        Assert.Null(result.Retry);
+        Assert.Single(processRunner.Calls);
     }
 
     [Fact]
