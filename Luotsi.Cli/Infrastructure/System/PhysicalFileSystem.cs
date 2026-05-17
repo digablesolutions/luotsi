@@ -1,6 +1,7 @@
 using System.Text;
+using Luotsi.Cli.Infrastructure.Contracts;
 
-namespace Luotsi.Cli.Infrastructure;
+namespace Luotsi.Cli.Infrastructure.System;
 
 public sealed class PhysicalFileSystem : IFileSystem
 {

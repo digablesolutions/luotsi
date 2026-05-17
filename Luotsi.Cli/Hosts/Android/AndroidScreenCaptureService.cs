@@ -1,7 +1,7 @@
 using System.Xml;
 using System.Xml.Linq;
 using Luotsi.Cli.Artifacts;
-using Luotsi.Cli.Infrastructure;
+using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Hosts.Android;

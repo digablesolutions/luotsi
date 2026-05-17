@@ -1,15 +1,8 @@
 using System.Text.Json;
-using Luotsi.Cli;
-using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
-using Luotsi.Cli.Errors;
-using Luotsi.Cli.Hosts.Android;
-using Luotsi.Cli.Hosts.Android.View;
-using Luotsi.Cli.Infrastructure;
+using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.Infrastructure.Processes;
 using Luotsi.Cli.Models;
-using Luotsi.Cli.Scenarios;
-using Luotsi.Cli.Telemetry;
-using Luotsi.Cli.View;
 using Xunit;
 
 namespace Luotsi.Cli.Tests;
@@ -164,7 +157,7 @@ public sealed partial class AppTests
         Assert.Contains(adb.LogRequests, request => request.ContainsText == "device_ready");
         var artifactRoot = envelope.RootElement.GetProperty("artifacts").GetProperty("artifact_root").GetString();
         Assert.NotNull(artifactRoot);
-        Assert.True(fileSystem.FileExists(Path.Combine(artifactRoot!, "wait-log.txt")));
+        Assert.True(fileSystem.FileExists(Path.Combine(artifactRoot, "wait-log.txt")));
         Assert.True(fileSystem.FileExists(Path.Combine(artifactRoot, "wait-log.json")));
     }
 
@@ -202,7 +195,7 @@ public sealed partial class AppTests
         Assert.Equal("STEP_IDLE", envelope.RootElement.GetProperty("data").GetProperty("events")[0].GetProperty("step").GetString());
         var artifactRoot = envelope.RootElement.GetProperty("artifacts").GetProperty("artifact_root").GetString();
         Assert.NotNull(artifactRoot);
-        Assert.True(fileSystem.FileExists(Path.Combine(artifactRoot!, "telemetry-tail.txt")));
+        Assert.True(fileSystem.FileExists(Path.Combine(artifactRoot, "telemetry-tail.txt")));
         Assert.True(fileSystem.FileExists(Path.Combine(artifactRoot, "telemetry-tail.json")));
         Assert.Equal(["logcat", "-d", "-v", "brief", "-t", "50"], adb.RunCommands[0]);
     }
@@ -302,7 +295,7 @@ public sealed partial class AppTests
         Assert.Equal("STEP_IDLE", envelope.RootElement.GetProperty("data").GetProperty("step").GetString());
         var artifactRoot = envelope.RootElement.GetProperty("artifacts").GetProperty("artifact_root").GetString();
         Assert.NotNull(artifactRoot);
-        Assert.True(fileSystem.FileExists(Path.Combine(artifactRoot!, "wait-step.txt")));
+        Assert.True(fileSystem.FileExists(Path.Combine(artifactRoot, "wait-step.txt")));
         Assert.True(fileSystem.FileExists(Path.Combine(artifactRoot, "wait-step.json")));
         Assert.Empty(adb.RunCommands);
         Assert.Single(adb.StreamingLogRequests);

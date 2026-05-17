@@ -1,14 +1,6 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using Luotsi.Cli.Artifacts;
-using Luotsi.Cli.Errors;
-using Luotsi.Cli.Hosts.Android;
-using Luotsi.Cli.Hosts.Android.View;
-using Luotsi.Cli.Infrastructure;
-using Luotsi.Cli.Models;
-using Luotsi.Cli.View.Backends.Ffmpeg;
+using Luotsi.Cli.View.Contracts;
 
-namespace Luotsi.Cli.View;
+namespace Luotsi.Cli.View.Transport;
 
 internal sealed class NullViewTransportBootstrap : IViewTransportBootstrap
 {

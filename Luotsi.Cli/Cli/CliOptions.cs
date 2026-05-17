@@ -141,7 +141,7 @@ public sealed class CliOptions
     /// </summary>
     /// <param name="key">Option name.</param>
     /// <returns>The option value, if supplied.</returns>
-    public string? Get(string key) => _values.TryGetValue(key, out var value) ? value : null;
+    public string? Get(string key) => _values.GetValueOrDefault(key);
 
     /// <summary>
     /// Applies default values for options that were not supplied on the command line.

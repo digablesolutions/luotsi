@@ -1,10 +1,14 @@
 using System.Text.Json;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
-using Luotsi.Cli.Infrastructure;
+using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.Infrastructure.Time;
 using Luotsi.Cli.Models;
 using Luotsi.Cli.Telemetry;
-using Luotsi.Cli.View;
+using Luotsi.Cli.View.Contracts;
+using Luotsi.Cli.View.Diagnostics;
+using Luotsi.Cli.View.Session;
+using Luotsi.Cli.View.Transport;
 using Xunit;
 
 namespace Luotsi.Cli.Tests;
@@ -25,15 +29,13 @@ internal sealed class ManualTimeProvider(DateTimeOffset utcNow) : TimeProvider
 
 internal sealed class FakeDelay(ManualTimeProvider timeProvider) : IDelay
 {
-    private readonly ManualTimeProvider _timeProvider = timeProvider;
-
     public List<int> Calls { get; } = [];
 
     public Task DelayAsync(int milliseconds, CancellationToken cancellationToken = default)
     {
         Calls.Add(milliseconds);
         DelayMetrics.RecordDelay(milliseconds);
-        _timeProvider.Advance(TimeSpan.FromMilliseconds(milliseconds));
+        timeProvider.Advance(TimeSpan.FromMilliseconds(milliseconds));
         return Task.CompletedTask;
     }
 }
@@ -69,9 +71,7 @@ internal sealed class FakeConsole : IConsoleIo
 
 internal sealed class FakeUniqueIdGenerator(string value) : IUniqueIdGenerator
 {
-    private readonly string _value = value;
-
-    public string NewId() => _value;
+    public string NewId() => value;
 }
 
 internal sealed class FakeFileSystem : IFileSystem
@@ -149,14 +149,11 @@ internal sealed class FakeFileSystem : IFileSystem
 
     private sealed class FakeWriteStream(FakeFileSystem fileSystem, string path) : MemoryStream
     {
-        private readonly FakeFileSystem _fileSystem = fileSystem;
-        private readonly string _path = path;
-
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
-                _fileSystem.WriteBinaryFile(_path, ToArray());
+                fileSystem.WriteBinaryFile(path, ToArray());
             }
 
             base.Dispose(disposing);
@@ -164,7 +161,7 @@ internal sealed class FakeFileSystem : IFileSystem
 
         public override async ValueTask DisposeAsync()
         {
-            _fileSystem.WriteBinaryFile(_path, ToArray());
+            fileSystem.WriteBinaryFile(path, ToArray());
             await base.DisposeAsync().ConfigureAwait(false);
         }
     }
@@ -176,7 +173,6 @@ internal sealed class FakeAdbClient(string? serial = null) : IAdbClient
     private readonly Queue<ProcessResult> _runResults = new();
     private readonly Queue<string[]> _logLines = new();
     private readonly Queue<AdbLogStreamResult> _logResults = new();
-    private readonly string? _serial = serial;
 
     public List<string> ShellCommands { get; } = [];
 
@@ -208,14 +204,14 @@ internal sealed class FakeAdbClient(string? serial = null) : IAdbClient
                             _shellResults.Count > 0
                                 ? _shellResults.Dequeue()
                                 : new ProcessResult(0, string.Empty, string.Empty);
-        return Task.FromResult(new AdbCommandResult("adb", _serial, finalArgs, result));
+        return Task.FromResult(new AdbCommandResult("adb", serial, finalArgs, result));
     }
 
     public Task<AdbCommandResult> ShellAsync(string command, CancellationToken cancellationToken = default)
     {
         ShellCommands.Add(command);
         var result = _shellResults.Count > 0 ? _shellResults.Dequeue() : new ProcessResult(0, string.Empty, string.Empty);
-        return Task.FromResult(new AdbCommandResult("adb", _serial, ["shell", command], result));
+        return Task.FromResult(new AdbCommandResult("adb", serial, ["shell", command], result));
     }
 
     public Task<IAsyncDisposable> StartShellAsync(string command, CancellationToken cancellationToken = default)
@@ -308,23 +304,19 @@ internal sealed class CountingTelemetryParser : ITelemetryParser
 
 internal sealed class FakeAdbClientFactory(IAdbClient adbClient) : IAdbClientFactory
 {
-    private readonly IAdbClient _adbClient = adbClient;
-
     public List<TimeSpan?> CommandTimeouts { get; } = [];
 
     public IAdbClient Create(string executable, string? serial, IProcessRunner processRunner, TimeSpan? commandTimeout = null)
     {
         CommandTimeouts.Add(commandTimeout);
-        return _adbClient;
+        return adbClient;
     }
 }
 
 internal sealed class FakeEnvironmentVariables(Dictionary<string, string> variables) : IEnvironmentVariables
 {
-    private readonly Dictionary<string, string> _variables = variables;
-
     public string? GetEnvironmentVariable(string variable) =>
-        _variables.TryGetValue(variable, out var value) ? value : null;
+        variables.GetValueOrDefault(variable);
 }
 
 internal sealed class FakeProcessRunner : IProcessRunner
@@ -345,14 +337,12 @@ internal sealed class FakeProcessRunner : IProcessRunner
 
 internal sealed class FakeDeviceHostFactory(IDeviceHost deviceHost) : IDeviceHostFactory
 {
-    private readonly IDeviceHost _deviceHost = deviceHost;
-
     public int CreateCallCount { get; private set; }
 
     public IDeviceHost Create(DeviceHostConfiguration configuration, ArtifactSession artifacts)
     {
         CreateCallCount++;
-        return _deviceHost;
+        return deviceHost;
     }
 }
 
@@ -671,7 +661,7 @@ internal sealed class FakeViewProfileStore : IViewProfileStore
     public Dictionary<string, ViewProfile> Profiles { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     public Task<ViewProfile?> LoadAsync(string name, CancellationToken cancellationToken = default) =>
-        Task.FromResult(Profiles.TryGetValue(name, out var profile) ? profile : null);
+        Task.FromResult(Profiles.GetValueOrDefault(name));
 
     public Task<IReadOnlyList<string>> ListAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<string>>(Profiles.Keys.Order(StringComparer.OrdinalIgnoreCase).ToArray());
@@ -699,8 +689,6 @@ internal sealed class FakeArtifactFolderOpener : IArtifactFolderOpener
 
 internal sealed class FakeViewSessionFactory(IViewSession viewSession) : IViewSessionFactory
 {
-    private readonly IViewSession _viewSession = viewSession;
-
     public IDeviceHost? LastDeviceHost { get; private set; }
 
     public ArtifactSession? LastArtifacts { get; private set; }
@@ -709,7 +697,7 @@ internal sealed class FakeViewSessionFactory(IViewSession viewSession) : IViewSe
     {
         LastDeviceHost = deviceHost;
         LastArtifacts = artifacts;
-        return _viewSession;
+        return viewSession;
     }
 }
 
@@ -729,42 +717,33 @@ internal sealed class FakeViewDoctor(Func<ViewOptions, ViewDoctorResult>? result
 
 internal sealed class FakeViewDoctorFactory(IViewDoctor viewDoctor) : IViewDoctorFactory
 {
-    private readonly IViewDoctor _viewDoctor = viewDoctor;
-
     public IDeviceHost? LastDeviceHost { get; private set; }
 
     public IViewDoctor Create(IDeviceHost deviceHost)
     {
         LastDeviceHost = deviceHost;
-        return _viewDoctor;
+        return viewDoctor;
     }
 }
 
 internal sealed class FakeViewRendererFactory(IViewRenderer renderer) : IViewRendererFactory
 {
-    private readonly IViewRenderer _renderer = renderer;
-
     public Func<ViewInteractionRequest, Task>? LastInteractionHandler { get; private set; }
 
     public IViewRenderer? Create(ViewOptions options, Func<ViewInteractionRequest, Task> interactionHandler)
     {
         LastInteractionHandler = interactionHandler;
-        return options.Headless ? null : _renderer;
+        return options.Headless ? null : renderer;
     }
 }
 
-internal sealed class FakeViewTransportBootstrap : IViewTransportBootstrap
+internal sealed class FakeViewTransportBootstrap(IEnumerable<object> outcomes) : IViewTransportBootstrap
 {
-    private readonly Queue<object> _outcomes;
+    private readonly Queue<object> _outcomes = new(outcomes);
 
     public FakeViewTransportBootstrap(ViewConnectionInfo connectionInfo)
         : this([connectionInfo])
     {
-    }
-
-    public FakeViewTransportBootstrap(IEnumerable<object> outcomes)
-    {
-        _outcomes = new Queue<object>(outcomes);
     }
 
     public int StartCallCount { get; private set; }
@@ -795,13 +774,11 @@ internal sealed class FakeViewTransportBootstrap : IViewTransportBootstrap
 
 internal sealed class FakeViewBackend(string name = "stub") : IViewBackend
 {
-    private readonly string _name = name;
-
     public List<ViewPacket> Packets { get; } = [];
 
     public IViewRecorder? LastRecorder { get; private set; }
 
-    public string Name => _name;
+    public string Name => name;
 
     public Task InitializeAsync(ViewConnectionInfo connectionInfo, IViewRenderer? renderer, IViewRecorder? recorder, CancellationToken cancellationToken = default)
     {
@@ -857,7 +834,6 @@ internal sealed class StatsEmittingViewBackend : IViewBackend
 
 internal sealed class ThrottledStatsViewBackend(ManualTimeProvider timeProvider) : IViewBackend
 {
-    private readonly ManualTimeProvider _timeProvider = timeProvider;
     private IViewRenderer? _renderer;
 
     public string Name => "stats-throttled";
@@ -873,9 +849,9 @@ internal sealed class ThrottledStatsViewBackend(ManualTimeProvider timeProvider)
         if (_renderer is not null)
         {
             await _renderer.UpdateStatsAsync(new ViewStats(10, 9, 1, 59.9d, 58.7d, 84), cancellationToken).ConfigureAwait(false);
-            _timeProvider.Advance(TimeSpan.FromMilliseconds(100));
+            timeProvider.Advance(TimeSpan.FromMilliseconds(100));
             await _renderer.UpdateStatsAsync(new ViewStats(11, 10, 1, 59.6d, 58.3d, 86), cancellationToken).ConfigureAwait(false);
-            _timeProvider.Advance(TimeSpan.FromMilliseconds(100));
+            timeProvider.Advance(TimeSpan.FromMilliseconds(100));
             await _renderer.UpdateStatsAsync(new ViewStats(12, 11, 1, 59.3d, 58.0d, 88), cancellationToken).ConfigureAwait(false);
         }
 
@@ -904,8 +880,6 @@ internal sealed class BlockingViewBackend : IViewBackend
 
 internal sealed class TimeAdvancingViewBackend(ManualTimeProvider timeProvider, TimeSpan advanceAfterFirstPacket) : IViewBackend
 {
-    private readonly ManualTimeProvider _timeProvider = timeProvider;
-    private readonly TimeSpan _advanceAfterFirstPacket = advanceAfterFirstPacket;
     private int _packetCount;
 
     public string Name => "time-advancing";
@@ -924,7 +898,7 @@ internal sealed class TimeAdvancingViewBackend(ManualTimeProvider timeProvider, 
             _packetCount++;
             if (_packetCount == 1)
             {
-                _timeProvider.Advance(_advanceAfterFirstPacket);
+                timeProvider.Advance(advanceAfterFirstPacket);
             }
         }
     }
@@ -981,10 +955,8 @@ internal sealed class StatsCapturingViewRenderer : IViewRenderer
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
-internal sealed class FakeViewBackendFactory : IViewBackendFactory
+internal sealed class FakeViewBackendFactory(IReadOnlyDictionary<string, IViewBackend> backends) : IViewBackendFactory
 {
-    private readonly IReadOnlyDictionary<string, IViewBackend> _backends;
-
     public FakeViewBackendFactory(IViewBackend backend)
         : this(new Dictionary<string, IViewBackend>(StringComparer.OrdinalIgnoreCase)
         {
@@ -993,17 +965,12 @@ internal sealed class FakeViewBackendFactory : IViewBackendFactory
     {
     }
 
-    public FakeViewBackendFactory(IReadOnlyDictionary<string, IViewBackend> backends)
-    {
-        _backends = backends;
-    }
-
     public List<string> RequestedDecoders { get; } = [];
 
     public IViewBackend Create(ViewOptions options)
     {
         RequestedDecoders.Add(options.Decoder);
-        if (_backends.TryGetValue(options.Decoder, out var backend))
+        if (backends.TryGetValue(options.Decoder, out var backend))
         {
             return backend;
         }

@@ -1,7 +1,8 @@
 using System.Net;
 using System.Net.Sockets;
+using Luotsi.Cli.View.Contracts;
 
-namespace Luotsi.Cli.View;
+namespace Luotsi.Cli.View.Transport;
 
 /// <summary>
 /// Connects to the mirrored stream over a TCP endpoint.
@@ -49,13 +50,11 @@ public sealed class LocalhostViewStreamConnector : IViewStreamConnector
 
     private sealed class TcpViewStreamConnection(TcpClient client) : IViewStreamConnection
     {
-        private readonly TcpClient _client = client;
-
-        public Stream Stream => _client.GetStream();
+        public Stream Stream => client.GetStream();
 
         public ValueTask DisposeAsync()
         {
-            _client.Dispose();
+            client.Dispose();
             return ValueTask.CompletedTask;
         }
     }

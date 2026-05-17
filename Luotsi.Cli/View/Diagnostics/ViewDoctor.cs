@@ -1,9 +1,11 @@
 using Luotsi.Cli.Hosts.Android.View;
-using Luotsi.Cli.Infrastructure;
+using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
 using Luotsi.Cli.View.Backends.Ffmpeg;
+using Luotsi.Cli.View.Contracts;
+using Luotsi.Cli.View.Recording;
 
-namespace Luotsi.Cli.View;
+namespace Luotsi.Cli.View.Diagnostics;
 
 /// <summary>
 /// Produces connection diagnostics for the built-in view session.
@@ -71,7 +73,6 @@ public sealed class DefaultViewDoctorFactory(
     private readonly IEnvironmentVariables _environment = environment ?? throw new ArgumentNullException(nameof(environment));
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
     private readonly IProcessRunner _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
-    private readonly ILibavNativeLibraryBinder? _libavBinder = libavBinder;
 
     /// <inheritdoc />
     public IViewDoctor Create(IDeviceHost deviceHost) => new ViewDoctor(
@@ -79,7 +80,7 @@ public sealed class DefaultViewDoctorFactory(
         new AndroidViewHelperPackageLocator(_environment, _fileSystem),
         new DefaultViewRecorderFactory(_fileSystem, _processRunner, _environment),
         _environment,
-        _libavBinder);
+        libavBinder);
 }
 
 /// <summary>
@@ -97,7 +98,6 @@ public sealed class ViewDoctor(
     private readonly IAndroidViewHelperPackageLocator _helperPackageLocator = helperPackageLocator ?? throw new ArgumentNullException(nameof(helperPackageLocator));
     private readonly IViewRecorderFactory _recorderFactory = recorderFactory ?? throw new ArgumentNullException(nameof(recorderFactory));
     private readonly IEnvironmentVariables _environment = environment ?? throw new ArgumentNullException(nameof(environment));
-    private readonly ILibavNativeLibraryBinder? _libavBinder = libavBinder;
 
     /// <inheritdoc />
     public async Task<ViewDoctorResult> DiagnoseAsync(ViewOptions options, CancellationToken cancellationToken = default)
@@ -111,7 +111,7 @@ public sealed class ViewDoctor(
             CheckHelperPackage()
         };
 
-        IReadOnlyList<DeviceInfo> connectedDevices = Array.Empty<DeviceInfo>();
+        IReadOnlyList<DeviceInfo> connectedDevices = [];
         PreflightResult? preflight = null;
         var deviceCheck = await CheckDeviceVisibilityAsync(options, cancellationToken).ConfigureAwait(false);
         connectedDevices = deviceCheck.Devices;
@@ -150,7 +150,7 @@ public sealed class ViewDoctor(
         {
             try
             {
-                var rootPath = new LibavNativeLibraryLoader(_environment, _libavBinder).EnsureLoaded();
+                var rootPath = new LibavNativeLibraryLoader(_environment, libavBinder).EnsureLoaded();
                 var detail = string.IsNullOrWhiteSpace(rootPath) ? "process-path" : rootPath;
                 return new ViewDoctorCheck("decoder", true, "FFmpeg native decoder is ready.", detail);
             }
@@ -318,7 +318,7 @@ public sealed class ViewDoctor(
         {
             return (
                 new ViewDoctorCheck("device_visibility", false, "Unable to enumerate adb-visible devices.", ex.Message, "Check that adb is installed and reachable via --adb or LUOTSI_ADB."),
-                Array.Empty<DeviceInfo>());
+                []);
         }
     }
 

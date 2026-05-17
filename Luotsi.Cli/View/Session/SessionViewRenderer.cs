@@ -1,14 +1,6 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using Luotsi.Cli.Artifacts;
-using Luotsi.Cli.Errors;
-using Luotsi.Cli.Hosts.Android;
-using Luotsi.Cli.Hosts.Android.View;
-using Luotsi.Cli.Infrastructure;
-using Luotsi.Cli.Models;
-using Luotsi.Cli.View.Backends.Ffmpeg;
+using Luotsi.Cli.View.Contracts;
 
-namespace Luotsi.Cli.View;
+namespace Luotsi.Cli.View.Session;
 
 internal sealed class SessionViewRenderer(
     IViewRenderer? innerRenderer,
@@ -17,7 +9,6 @@ internal sealed class SessionViewRenderer(
     TimeSpan statsEventInterval,
     Func<ViewStats, Task> onStatsAsync) : IViewRenderer
 {
-    private readonly IViewRenderer? _innerRenderer = innerRenderer;
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     private readonly TimeSpan _rendererStatsInterval = rendererStatsInterval >= TimeSpan.Zero
         ? rendererStatsInterval
@@ -36,10 +27,10 @@ internal sealed class SessionViewRenderer(
     private volatile bool _paused;
 
     public Task InitializeAsync(ViewDisplayInfo displayInfo, CancellationToken cancellationToken = default) =>
-        _innerRenderer?.InitializeAsync(displayInfo, cancellationToken) ?? Task.CompletedTask;
+        innerRenderer?.InitializeAsync(displayInfo, cancellationToken) ?? Task.CompletedTask;
 
     public Task PresentAsync(ViewFrame frame, CancellationToken cancellationToken = default) =>
-        _paused ? Task.CompletedTask : _innerRenderer?.PresentAsync(frame, cancellationToken) ?? Task.CompletedTask;
+        _paused ? Task.CompletedTask : innerRenderer?.PresentAsync(frame, cancellationToken) ?? Task.CompletedTask;
 
     public void SetPaused(bool paused) => _paused = paused;
 
@@ -49,9 +40,9 @@ internal sealed class SessionViewRenderer(
 
         var now = _timeProvider.GetUtcNow();
         var rendererStatsToForward = CaptureRendererStats(stats, now);
-        if (rendererStatsToForward is not null && _innerRenderer is not null)
+        if (rendererStatsToForward is not null && innerRenderer is not null)
         {
-            await _innerRenderer.UpdateStatsAsync(rendererStatsToForward, cancellationToken).ConfigureAwait(false);
+            await innerRenderer.UpdateStatsAsync(rendererStatsToForward, cancellationToken).ConfigureAwait(false);
         }
 
         var statsToEmit = CaptureJsonStats(stats, now);
@@ -64,16 +55,16 @@ internal sealed class SessionViewRenderer(
     public Task UpdateChromeAsync(ViewChromeState chrome, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(chrome);
-        return _innerRenderer?.UpdateChromeAsync(chrome, cancellationToken) ?? Task.CompletedTask;
+        return innerRenderer?.UpdateChromeAsync(chrome, cancellationToken) ?? Task.CompletedTask;
     }
 
     public async Task FlushPendingStatsAsync()
     {
         var now = _timeProvider.GetUtcNow();
         var rendererStatsToForward = FlushPendingRendererStats(now);
-        if (rendererStatsToForward is not null && _innerRenderer is not null)
+        if (rendererStatsToForward is not null && innerRenderer is not null)
         {
-            await _innerRenderer.UpdateStatsAsync(rendererStatsToForward).ConfigureAwait(false);
+            await innerRenderer.UpdateStatsAsync(rendererStatsToForward).ConfigureAwait(false);
         }
 
         var statsToEmit = FlushPendingJsonStats(now);
@@ -85,7 +76,7 @@ internal sealed class SessionViewRenderer(
 
     private ViewStats? CaptureRendererStats(ViewStats stats, DateTimeOffset now)
     {
-        if (_innerRenderer is null)
+        if (innerRenderer is null)
         {
             return null;
         }
@@ -134,7 +125,7 @@ internal sealed class SessionViewRenderer(
 
     private ViewStats? FlushPendingRendererStats(DateTimeOffset now)
     {
-        if (_innerRenderer is null || _rendererStatsInterval == TimeSpan.Zero)
+        if (innerRenderer is null || _rendererStatsInterval == TimeSpan.Zero)
         {
             return null;
         }
@@ -175,7 +166,7 @@ internal sealed class SessionViewRenderer(
     }
 
     public Task WaitForCloseAsync(CancellationToken cancellationToken = default) =>
-        _innerRenderer?.WaitForCloseAsync(cancellationToken) ?? Task.Delay(Timeout.Infinite, cancellationToken);
+        innerRenderer?.WaitForCloseAsync(cancellationToken) ?? Task.Delay(Timeout.Infinite, cancellationToken);
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }

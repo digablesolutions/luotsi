@@ -1,5 +1,6 @@
-using Luotsi.Cli.Infrastructure;
-using Luotsi.Cli.View;
+using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.View.Contracts;
+using Luotsi.Cli.View.Diagnostics;
 
 namespace Luotsi.Cli.Cli;
 

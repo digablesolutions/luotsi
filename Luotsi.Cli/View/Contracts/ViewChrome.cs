@@ -1,4 +1,4 @@
-namespace Luotsi.Cli.View;
+namespace Luotsi.Cli.View.Contracts;
 
 /// <summary>
 /// Session-owned chrome state rendered by the local view window.

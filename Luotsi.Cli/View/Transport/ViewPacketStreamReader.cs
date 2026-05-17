@@ -1,7 +1,8 @@
 using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
+using Luotsi.Cli.View.Contracts;
 
-namespace Luotsi.Cli.View;
+namespace Luotsi.Cli.View.Transport;
 
 /// <summary>
 /// Reads the private mirrored-stream transport protocol from a raw stream.

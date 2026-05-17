@@ -2,8 +2,9 @@ using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading.Channels;
+using Luotsi.Cli.View.Contracts;
 
-namespace Luotsi.Cli.View;
+namespace Luotsi.Cli.View.Transport;
 
 internal enum ViewShareObserverEventKind
 {
@@ -26,7 +27,7 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
     private readonly string _bindEndpoint = string.IsNullOrWhiteSpace(bindEndpoint)
         ? throw new ArgumentException("Share bind endpoint is required.", nameof(bindEndpoint))
         : bindEndpoint;
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly ViewPacketStreamWriter _writer = new();
     private readonly List<ObserverConnection> _connections = [];
 
@@ -117,7 +118,7 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
     {
         if (_acceptCancellation is not null)
         {
-            _acceptCancellation.Cancel();
+            await _acceptCancellation.CancelAsync();
         }
 
         if (_listener is not null)
@@ -166,7 +167,7 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
                 continue;
             }
 
-            var connection = new ObserverConnection(client, header, _bootstrapPackets, _writer, connection => NotifyConnectionClosedAsync(connection));
+            var connection = new ObserverConnection(client, header, _bootstrapPackets, _writer, NotifyConnectionClosedAsync);
             lock (_gate)
             {
                 _connections.Add(connection);
@@ -213,7 +214,7 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
             return configs;
         }
 
-        if (packet.PacketType == ViewPacketType.Frame && packet.IsKeyFrame)
+        if (packet is {PacketType: ViewPacketType.Frame, IsKeyFrame: true})
         {
             var configs = currentBootstrapPackets.Where(existing => existing.PacketType == ViewPacketType.Config).ToList();
             configs.Add(packet);
@@ -230,13 +231,8 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
         ViewPacketStreamWriter writer,
         Func<ObserverConnection, Task> onClosedAsync) : IAsyncDisposable
     {
-        private readonly TcpClient _client = client;
-        private readonly ViewStreamHeader _header = header;
-        private readonly IReadOnlyList<ViewPacket> _bootstrapPackets = bootstrapPackets;
-        private readonly ViewPacketStreamWriter _writer = writer;
-        private readonly Func<ObserverConnection, Task> _onClosedAsync = onClosedAsync;
         private readonly CancellationTokenSource _cancellation = new();
-        private readonly string? _remoteEndpoint = client.Client.RemoteEndPoint?.ToString();
+
         private readonly Channel<ViewPacket> _packets = Channel.CreateBounded<ViewPacket>(new BoundedChannelOptions(128)
         {
             SingleReader = true,
@@ -246,7 +242,7 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
 
         private Task? _writerTask;
 
-        public string? RemoteEndpoint => _remoteEndpoint;
+        public string? RemoteEndpoint { get; } = client.Client.RemoteEndPoint?.ToString();
 
         public void Start() => _writerTask = Task.Run(WriteLoopAsync);
 
@@ -255,8 +251,8 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
         public async ValueTask DisposeAsync()
         {
             _packets.Writer.TryComplete();
-            _cancellation.Cancel();
-            _client.Dispose();
+            await _cancellation.CancelAsync();
+            client.Dispose();
 
             if (_writerTask is not null)
             {
@@ -276,16 +272,16 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
         {
             try
             {
-                await using var stream = _client.GetStream();
-                await _writer.WriteHeaderAsync(stream, _header, _cancellation.Token).ConfigureAwait(false);
-                foreach (var packet in _bootstrapPackets)
+                await using var stream = client.GetStream();
+                await writer.WriteHeaderAsync(stream, header, _cancellation.Token).ConfigureAwait(false);
+                foreach (var packet in bootstrapPackets)
                 {
-                    await _writer.WritePacketAsync(stream, packet, _cancellation.Token).ConfigureAwait(false);
+                    await writer.WritePacketAsync(stream, packet, _cancellation.Token).ConfigureAwait(false);
                 }
 
                 await foreach (var packet in _packets.Reader.ReadAllAsync(_cancellation.Token).ConfigureAwait(false))
                 {
-                    await _writer.WritePacketAsync(stream, packet, _cancellation.Token).ConfigureAwait(false);
+                    await writer.WritePacketAsync(stream, packet, _cancellation.Token).ConfigureAwait(false);
                 }
             }
             catch (OperationCanceledException) when (_cancellation.IsCancellationRequested)
@@ -296,8 +292,8 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
             }
             finally
             {
-                _client.Dispose();
-                await _onClosedAsync(this).ConfigureAwait(false);
+                client.Dispose();
+                await onClosedAsync(this).ConfigureAwait(false);
             }
         }
     }

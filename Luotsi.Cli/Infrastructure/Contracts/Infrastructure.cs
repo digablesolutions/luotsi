@@ -3,7 +3,7 @@ using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Models;
 using Luotsi.Cli.Scenarios;
 
-namespace Luotsi.Cli.Infrastructure;
+namespace Luotsi.Cli.Infrastructure.Contracts;
 
 public interface IDelay
 {

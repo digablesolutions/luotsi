@@ -1,16 +1,12 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Errors;
-using Luotsi.Cli.Hosts.Android;
-using Luotsi.Cli.Hosts.Android.View;
-using Luotsi.Cli.Infrastructure;
+using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
-using Luotsi.Cli.View.Backends.Ffmpeg;
+using Luotsi.Cli.View.Contracts;
 
-namespace Luotsi.Cli.View;
+namespace Luotsi.Cli.View.Session;
 
 internal sealed class ViewSessionInteractionRouter(
     IDeviceHost deviceHost,
@@ -248,7 +244,7 @@ internal sealed class ViewSessionInteractionRouter(
         UpdateActiveDeviceFlags();
         await PublishChromeAsync().ConfigureAwait(false);
         _reconnectRequested.TrySetResult();
-        _iterationCancellation?.Cancel();
+        await _iterationCancellation?.CancelAsync();
     }
 
     private async Task HandleCommandAsync(ViewWindowCommand command)
@@ -325,9 +321,6 @@ internal sealed class ViewSessionInteractionRouter(
                     occurred_at = _timeProvider.GetUtcNow(),
                     device = ActiveDeviceSelector
                 });
-                break;
-
-            default:
                 break;
         }
     }

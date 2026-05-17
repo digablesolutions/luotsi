@@ -1,6 +1,6 @@
-using Luotsi.Cli.Infrastructure;
+using Luotsi.Cli.View.Contracts;
 
-namespace Luotsi.Cli.View;
+namespace Luotsi.Cli.View.Rendering;
 
 /// <summary>
 /// Creates native window surfaces for the built-in renderer.

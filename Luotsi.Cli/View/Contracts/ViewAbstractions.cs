@@ -1,7 +1,7 @@
 using Luotsi.Cli.Artifacts;
-using Luotsi.Cli.Infrastructure;
+using Luotsi.Cli.Infrastructure.Contracts;
 
-namespace Luotsi.Cli.View;
+namespace Luotsi.Cli.View.Contracts;
 
 /// <summary>
 /// Runs a long-lived device mirror session.

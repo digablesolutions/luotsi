@@ -1,7 +1,9 @@
 using Luotsi.Cli.Cli;
 using Luotsi.Cli.Hosts.Android.View;
 using Luotsi.Cli.Models;
-using Luotsi.Cli.View;
+using Luotsi.Cli.View.Contracts;
+using Luotsi.Cli.View.Diagnostics;
+using Luotsi.Cli.View.Recording;
 using Xunit;
 
 namespace Luotsi.Cli.Tests;

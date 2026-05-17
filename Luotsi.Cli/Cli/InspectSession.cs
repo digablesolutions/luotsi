@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Luotsi.Cli.Errors;
-using Luotsi.Cli.Infrastructure;
+using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Cli;

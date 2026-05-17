@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace Luotsi.Cli.Infrastructure;
+namespace Luotsi.Cli.Infrastructure.Telemetry;
 
 internal static class LogcatTime
 {

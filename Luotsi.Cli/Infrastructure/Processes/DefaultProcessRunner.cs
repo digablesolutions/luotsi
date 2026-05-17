@@ -1,7 +1,8 @@
 using System.Diagnostics;
+using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
 
-namespace Luotsi.Cli.Infrastructure;
+namespace Luotsi.Cli.Infrastructure.Processes;
 
 public sealed class DefaultProcessRunner : IProcessRunner
 {
@@ -20,8 +21,8 @@ public sealed class DefaultProcessRunner : IProcessRunner
         }
 
         using var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Failed to start '{fileName}'.");
-        var stdout = process.StandardOutput.ReadToEndAsync();
-        var stderr = process.StandardError.ReadToEndAsync();
+        var stdout = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var stderr = process.StandardError.ReadToEndAsync(cancellationToken);
 
         try
         {
@@ -41,7 +42,7 @@ public sealed class DefaultProcessRunner : IProcessRunner
                 }
             }
 
-            await process.WaitForExitAsync().ConfigureAwait(false);
+            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
             throw;
         }
 

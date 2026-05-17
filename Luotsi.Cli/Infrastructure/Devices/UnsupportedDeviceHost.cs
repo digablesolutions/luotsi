@@ -1,7 +1,7 @@
+using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
-using Luotsi.Cli.Scenarios;
 
-namespace Luotsi.Cli.Infrastructure;
+namespace Luotsi.Cli.Infrastructure.Devices;
 
 internal sealed class UnsupportedDeviceHost : IDeviceHost
 {

@@ -1,6 +1,6 @@
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Errors;
-using Luotsi.Cli.Infrastructure;
+using Luotsi.Cli.Infrastructure.Contracts;
 
 namespace Luotsi.Cli.Cli;
 

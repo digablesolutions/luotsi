@@ -1,7 +1,8 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
-using Luotsi.Cli.Infrastructure;
+using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.Infrastructure.Telemetry;
 using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Hosts.Android;
@@ -190,21 +191,17 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
 
     private sealed class AdbShellProcess(Process process, Task<string> stdoutTask, Task<string> stderrTask) : IAsyncDisposable
     {
-        private readonly Process _process = process;
-        private readonly Task<string> _stdoutTask = stdoutTask;
-        private readonly Task<string> _stderrTask = stderrTask;
-
         public async ValueTask DisposeAsync()
         {
-            if (!_process.HasExited)
+            if (!process.HasExited)
             {
-                _process.Kill(entireProcessTree: true);
+                process.Kill(entireProcessTree: true);
             }
 
-            await _process.WaitForExitAsync().ConfigureAwait(false);
-            await IgnoreDrainFailureAsync(_stdoutTask).ConfigureAwait(false);
-            await IgnoreDrainFailureAsync(_stderrTask).ConfigureAwait(false);
-            _process.Dispose();
+            await process.WaitForExitAsync().ConfigureAwait(false);
+            await IgnoreDrainFailureAsync(stdoutTask).ConfigureAwait(false);
+            await IgnoreDrainFailureAsync(stderrTask).ConfigureAwait(false);
+            process.Dispose();
         }
 
         private static async Task IgnoreDrainFailureAsync(Task drainTask)

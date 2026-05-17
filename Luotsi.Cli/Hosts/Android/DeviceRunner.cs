@@ -1,11 +1,13 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Xml;
 using System.Xml.Linq;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Errors;
-using Luotsi.Cli.Infrastructure;
+using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.Infrastructure.Ids;
+using Luotsi.Cli.Infrastructure.System;
+using Luotsi.Cli.Infrastructure.Time;
 using Luotsi.Cli.Models;
 using Luotsi.Cli.Telemetry;
 
@@ -422,7 +424,7 @@ public sealed class DeviceRunner(
         var validatedHost = string.IsNullOrWhiteSpace(host)
             ? await DetectWirelessHostAsync().ConfigureAwait(false)
             : host.Trim();
-        var tcpip = await _adb.RunAsync(["tcpip", port.ToString(System.Globalization.CultureInfo.InvariantCulture)]).ConfigureAwait(false);
+        var tcpip = await _adb.RunAsync(["tcpip", port.ToString(CultureInfo.InvariantCulture)]).ConfigureAwait(false);
         tcpip.EnsureSuccess("adb tcpip failed");
         var endpoint = $"{validatedHost}:{port}";
         var connect = await _adb.RunAsync(["connect", endpoint]).ConfigureAwait(false);
@@ -1305,7 +1307,7 @@ public sealed class DeviceRunner(
 
         if (seenMarkers.Count != DeviceFingerprintReads.Length)
         {
-            snapshot = default!;
+            snapshot = null!;
             return false;
         }
 

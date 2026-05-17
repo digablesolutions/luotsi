@@ -1,5 +1,5 @@
 using Luotsi.Cli.Artifacts;
-using Luotsi.Cli.Infrastructure;
+using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
 using Luotsi.Cli.Telemetry;
 
@@ -119,8 +119,6 @@ internal sealed class AndroidTelemetryMonitor(
 
     private sealed class TelemetryStreamAccumulator(ITelemetryParser telemetryParser, Func<TelemetryEvent, bool>? eventMatch)
     {
-        private readonly ITelemetryParser _telemetryParser = telemetryParser;
-        private readonly Func<TelemetryEvent, bool>? _eventMatch = eventMatch;
         private readonly List<TelemetryEvent> _events = [];
         private readonly List<TelemetryParseError> _parseErrors = [];
         private int _inspectedLineCount;
@@ -130,7 +128,7 @@ internal sealed class AndroidTelemetryMonitor(
 
         public void ObserveLine(string line)
         {
-            var parsedLine = _telemetryParser.ParseLine(line);
+            var parsedLine = telemetryParser.ParseLine(line);
             if (!parsedLine.Inspected)
             {
                 return;
@@ -145,7 +143,7 @@ internal sealed class AndroidTelemetryMonitor(
             if (parsedLine.Event is not null)
             {
                 _events.Add(parsedLine.Event);
-                if (MatchedEvent is null && _eventMatch?.Invoke(parsedLine.Event) is true)
+                if (MatchedEvent is null && eventMatch?.Invoke(parsedLine.Event) is true)
                 {
                     MatchedEvent = parsedLine.Event;
                 }

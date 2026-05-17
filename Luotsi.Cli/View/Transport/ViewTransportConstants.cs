@@ -1,4 +1,4 @@
-namespace Luotsi.Cli.View;
+namespace Luotsi.Cli.View.Transport;
 
 /// <summary>
 /// Shared literals for the private mirrored view transport.

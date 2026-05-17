@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Luotsi.Cli.Errors;
-using Luotsi.Cli.Infrastructure;
+using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Scenarios;
