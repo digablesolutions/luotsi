@@ -201,7 +201,9 @@ public sealed partial class AppTests
 
         var runTask = session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", false, null, 1600, 60, "8M", false, false));
         var interactionHandler = await ViewTestWaitHelpers.WaitForInteractionHandlerAsync(rendererFactory);
+        await ViewTestWaitHelpers.WaitForOutputLineAsync(console, SessionEventTypes.View.Started);
         await interactionHandler(new ViewWindowCommandRequest(ViewWindowCommand.Reconnect));
+        await ViewTestWaitHelpers.WaitForOutputLineAsync(console, SessionEventTypes.View.ReconnectRequested);
         await ViewTestWaitHelpers.WaitForStartCallsAsync(bootstrap, 2);
         renderer.Close();
         var exitCode = await runTask;

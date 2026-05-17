@@ -244,7 +244,11 @@ internal sealed class ViewSessionInteractionRouter(
         UpdateActiveDeviceFlags();
         await PublishChromeAsync().ConfigureAwait(false);
         _reconnectRequested.TrySetResult();
-        await _iterationCancellation?.CancelAsync();
+        var iterationCancellation = _iterationCancellation;
+        if (iterationCancellation is not null)
+        {
+            await iterationCancellation.CancelAsync().ConfigureAwait(false);
+        }
     }
 
     private async Task HandleCommandAsync(ViewWindowCommand command)

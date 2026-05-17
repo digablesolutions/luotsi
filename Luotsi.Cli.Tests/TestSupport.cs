@@ -1071,7 +1071,22 @@ internal static class ViewTestWaitHelpers
             await Task.Delay(10);
         }
 
-        throw new InvalidOperationException($"Timed out waiting for {minimumCalls} view transport start calls.");
+        throw new InvalidOperationException($"Timed out waiting for {minimumCalls} view transport start calls; observed {bootstrap.StartCallCount}.");
+    }
+
+    public static async Task WaitForOutputLineAsync(FakeConsole console, string contains)
+    {
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            if (console.OutputLines.Any(line => line.Contains(contains, StringComparison.Ordinal)))
+            {
+                return;
+            }
+
+            await Task.Delay(10);
+        }
+
+        throw new InvalidOperationException($"Timed out waiting for output containing '{contains}'.");
     }
 
     public static async Task WaitForShareObserverAsync(TcpViewShareServer shareServer, int minimumObservers)

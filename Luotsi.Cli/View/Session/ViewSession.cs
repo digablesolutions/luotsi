@@ -339,7 +339,7 @@ public sealed class ViewSession(
                         var completedTask = reconnectTask.IsCompleted
                             ? reconnectTask
                             : await Task.WhenAny(viewTask, windowCloseTask, reconnectTask).ConfigureAwait(false);
-                        if (completedTask == viewTask && reconnectTask.IsCompleted)
+                        if (reconnectTask.IsCompleted)
                         {
                             completedTask = reconnectTask;
                         }
