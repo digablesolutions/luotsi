@@ -48,6 +48,239 @@ public sealed partial class AppTests
     }
 
 
+    [Fact]
+    public async Task ScenarioList_Filters_By_Tag_Name_And_Action()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenarios/login.json", """
+        {
+          "name": "login smoke",
+          "tags": ["smoke", "auth"],
+          "steps": [
+            { "action": "waitVisible", "text": "Sign in" }
+          ]
+        }
+        """);
+        fileSystem.AddFile("/tmp/scenarios/logout.json", """
+        {
+          "name": "logout regression",
+          "tags": ["regression", "auth"],
+          "steps": [
+            { "action": "tapText", "text": "Sign out" }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            AdbClientFactory = new FakeAdbClientFactory(new FakeAdbClient()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["scenario-list", "--path", "/tmp/scenarios", "--include-tag", "smoke", "--name", "login", "--action", "waitVisible"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.True(exitCode == 0, console.OutputLines.SingleOrDefault() ?? string.Join(Environment.NewLine, console.ErrorLines));
+        Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(2, data.GetProperty("total_count").GetInt32());
+        Assert.Equal(1, data.GetProperty("matched_count").GetInt32());
+        Assert.Equal("login smoke", data.GetProperty("scenarios")[0].GetProperty("name").GetString());
+        Assert.Equal("smoke", data.GetProperty("scenarios")[0].GetProperty("tags")[1].GetString());
+    }
+
+
+    [Fact]
+    public async Task RunAsync_Path_DryRun_Returns_Deterministic_Shard_Plan()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenarios/a.json", """
+        {
+          "name": "a",
+          "tags": ["smoke"],
+          "steps": [
+            { "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        fileSystem.AddFile("/tmp/scenarios/b.json", """
+        {
+          "name": "b",
+          "tags": ["smoke"],
+          "steps": [
+            { "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        fileSystem.AddFile("/tmp/scenarios/c.json", """
+        {
+          "name": "c",
+          "tags": ["smoke"],
+          "steps": [
+            { "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var adb = new FakeAdbClient();
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            AdbClientFactory = new FakeAdbClientFactory(adb),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--path", "/tmp/scenarios", "--dry-run", "--include-tag", "smoke", "--shard-count", "2", "--shard-index", "1"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.True(data.GetProperty("dry_run").GetBoolean());
+        Assert.Equal(3, data.GetProperty("total_count").GetInt32());
+        Assert.Equal(3, data.GetProperty("matched_count").GetInt32());
+        Assert.Equal(1, data.GetProperty("selected_count").GetInt32());
+        Assert.Equal("b", data.GetProperty("scenarios")[0].GetProperty("name").GetString());
+        Assert.Empty(adb.RunCommands);
+        Assert.Empty(adb.ShellCommands);
+    }
+
+
+    [Fact]
+    public async Task RunAsync_File_DryRun_Returns_Usage_Error()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json", "--dry-run"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("requires --path", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+
+    [Fact]
+    public async Task ScenarioList_Does_Not_Reject_Unmatched_Invalid_Action()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenarios/valid.json", """
+        {
+          "name": "valid smoke",
+          "tags": ["smoke"],
+          "steps": [
+            { "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        fileSystem.AddFile("/tmp/scenarios/draft.json", """
+        {
+          "name": "draft",
+          "tags": ["draft"],
+          "steps": [
+            { "action": "notYetImplemented" }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["scenario-list", "--path", "/tmp/scenarios", "--include-tag", "smoke"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(2, data.GetProperty("total_count").GetInt32());
+        Assert.Equal(1, data.GetProperty("matched_count").GetInt32());
+        Assert.Equal("valid smoke", data.GetProperty("scenarios")[0].GetProperty("name").GetString());
+    }
+
+
+    [Fact]
+    public async Task RunAsync_Path_Aggregates_Runtime_Failures()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenarios/fails.json", """
+        {
+          "name": "fails",
+          "steps": [
+            { "action": "waitVisible", "text": "Target" }
+          ]
+        }
+        """);
+        fileSystem.AddFile("/tmp/scenarios/passes.json", """
+        {
+          "name": "passes",
+          "steps": [
+            { "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var host = new FakeDeviceHost
+        {
+            WaitVisibleException = new InvalidOperationException("not visible")
+        };
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--path", "/tmp/scenarios"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("failed", data.GetProperty("status").GetString());
+        Assert.Equal(1, data.GetProperty("passed_count").GetInt32());
+        Assert.Equal(1, data.GetProperty("failed_count").GetInt32());
+        Assert.Equal(0, data.GetProperty("sharded_out_count").GetInt32());
+        Assert.Equal(2, data.GetProperty("scenarios").GetArrayLength());
+    }
+
+
         [Fact]
         public async Task RunScenarioAsync_TapPoint_Timing_Reports_PostTap_Delay()
         {

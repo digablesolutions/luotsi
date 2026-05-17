@@ -1,7 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
@@ -10,21 +6,9 @@ namespace Luotsi.Cli.Cli;
 
 internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIo console, TimeProvider timeProvider)
 {
-    private static readonly JsonSerializerOptions OutputJsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        WriteIndented = false
-    };
-
-    private static readonly JsonSerializerOptions InputJsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true
-    };
-
     private readonly IDeviceHost _deviceHost = deviceHost ?? throw new ArgumentNullException(nameof(deviceHost));
-    private readonly IConsoleIo _console = console ?? throw new ArgumentNullException(nameof(console));
+    private readonly InspectSessionProtocol _protocol = new(console ?? throw new ArgumentNullException(nameof(console)));
+    private readonly InspectSessionCommandDispatcher _commandDispatcher = new(deviceHost);
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
 
     public async Task<int> RunAsync()
@@ -33,28 +17,17 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIo console,
 
         try
         {
-            WriteJsonLine(new
-            {
-                type = SessionEventTypes.Inspect.SessionStarted,
-                session_id = sessionId,
-                started_at = _timeProvider.GetUtcNow()
-            });
+            _protocol.WriteSessionStarted(sessionId, _timeProvider.GetUtcNow());
 
             var currentState = await _deviceHost.GetScreenStateAsync().ConfigureAwait(false);
-            WriteStateSnapshot(sessionId, null, currentState);
+            _protocol.WriteStateSnapshot(sessionId, null, currentState);
 
             while (true)
             {
-                var line = _console.ReadLine();
+                var line = _protocol.ReadLine();
                 if (line is null)
                 {
-                    WriteJsonLine(new
-                    {
-                        type = SessionEventTypes.Inspect.SessionEnded,
-                        session_id = sessionId,
-                        ended_at = _timeProvider.GetUtcNow(),
-                        reason = "stdin_closed"
-                    });
+                    _protocol.WriteSessionEnded(sessionId, null, _timeProvider.GetUtcNow(), "stdin_closed");
                     return 0;
                 }
 
@@ -63,48 +36,18 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIo console,
                     continue;
                 }
 
-                InspectCommandRequest? request;
-                try
+                var parseResult = _protocol.ParseCommand(line);
+                if (!parseResult.IsSuccess)
                 {
-                    request = JsonSerializer.Deserialize<InspectCommandRequest>(line, InputJsonOptions);
-                }
-                catch (JsonException ex)
-                {
-                    WriteJsonLine(new
-                    {
-                        type = SessionEventTypes.Inspect.ProtocolError,
-                        session_id = sessionId,
-                        received_at = _timeProvider.GetUtcNow(),
-                        message = ex.Message,
-                        raw_line = line
-                    });
+                    _protocol.WriteProtocolError(sessionId, _timeProvider.GetUtcNow(), parseResult.ErrorMessage!, parseResult.RawLine!);
                     continue;
                 }
 
-                if (request is null || string.IsNullOrWhiteSpace(request.Command))
+                var request = parseResult.Request!;
+                var normalizedCommand = _commandDispatcher.Normalize(request.Command!);
+                if (_commandDispatcher.IsExit(normalizedCommand))
                 {
-                    WriteJsonLine(new
-                    {
-                        type = SessionEventTypes.Inspect.ProtocolError,
-                        session_id = sessionId,
-                        received_at = _timeProvider.GetUtcNow(),
-                        message = "Inspect command must include 'command'.",
-                        raw_line = line
-                    });
-                    continue;
-                }
-
-                var normalizedCommand = NormalizeCommand(request.Command);
-                if (normalizedCommand is "exit" or "quit")
-                {
-                    WriteJsonLine(new
-                    {
-                        type = SessionEventTypes.Inspect.SessionEnded,
-                        session_id = sessionId,
-                        id = request.Id,
-                        ended_at = _timeProvider.GetUtcNow(),
-                        reason = "client_exit"
-                    });
+                    _protocol.WriteSessionEnded(sessionId, request.Id, _timeProvider.GetUtcNow(), "client_exit");
                     return 0;
                 }
 
@@ -112,207 +55,27 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIo console,
 
                 try
                 {
-                    var data = await ExecuteAsync(request, normalizedCommand).ConfigureAwait(false);
-                    WriteJsonLine(new
-                    {
-                        type = SessionEventTypes.Inspect.CommandResult,
-                        session_id = sessionId,
-                        id = request.Id,
-                        command = normalizedCommand,
-                        ok = true,
-                        started_at = startedAt,
-                        ended_at = _timeProvider.GetUtcNow(),
-                        data
-                    });
+                    var data = await _commandDispatcher.ExecuteAsync(request, normalizedCommand).ConfigureAwait(false);
+                    _protocol.WriteCommandResult(sessionId, request.Id, normalizedCommand, true, startedAt, _timeProvider.GetUtcNow(), data);
 
-                    if (ShouldCaptureScreenState(normalizedCommand))
+                    if (_commandDispatcher.ShouldCaptureScreenState(normalizedCommand))
                     {
                         var nextState = await _deviceHost.GetScreenStateAsync().ConfigureAwait(false);
-                        WriteStateSnapshot(sessionId, request.Id, nextState, ScreenStateDelta.Create(currentState, nextState));
+                        _protocol.WriteStateSnapshot(sessionId, request.Id, nextState, InspectScreenStateDelta.Create(currentState, nextState));
                         currentState = nextState;
                     }
                 }
                 catch (Exception ex)
                 {
                     var category = ex is UsageException ? "usage_error" : ErrorInfo.Classify(ex.Message);
-                    WriteJsonLine(new
-                    {
-                        type = SessionEventTypes.Inspect.CommandResult,
-                        session_id = sessionId,
-                        id = request.Id,
-                        command = normalizedCommand,
-                        ok = false,
-                        started_at = startedAt,
-                        ended_at = _timeProvider.GetUtcNow(),
-                        error = ErrorInfo.From(ex, category)
-                    });
+                    _protocol.WriteCommandResult(sessionId, request.Id, normalizedCommand, false, startedAt, _timeProvider.GetUtcNow(), error: ErrorInfo.From(ex, category));
                 }
             }
         }
         catch (Exception ex)
         {
-            WriteJsonLine(new
-            {
-                type = SessionEventTypes.Inspect.SessionError,
-                received_at = _timeProvider.GetUtcNow(),
-                error = ErrorInfo.From(ex, ErrorInfo.Classify(ex.Message))
-            });
+            _protocol.WriteSessionError(_timeProvider.GetUtcNow(), ex);
             return 1;
         }
     }
-
-    private async Task<object> ExecuteAsync(InspectCommandRequest request, string normalizedCommand)
-    {
-        return normalizedCommand switch
-        {
-            "refresh" or "screen_state" or "snapshot" => new { refreshed = true },
-            "tap" => await _deviceHost.TapAsync(RequireInt(request.X, "x").ToString(System.Globalization.CultureInfo.InvariantCulture), RequireInt(request.Y, "y").ToString(System.Globalization.CultureInfo.InvariantCulture)).ConfigureAwait(false),
-            "tap_text" => await _deviceHost.TapTextAsync(RequireText(request.Text, "text"), request.TimeoutSec ?? 15).ConfigureAwait(false),
-            "wait_visible" => await _deviceHost.WaitVisibleAsync(RequireText(request.Text, "text"), request.TimeoutSec ?? 15).ConfigureAwait(false),
-            "type_text" => await _deviceHost.TypeTextAsync(RequireText(request.Text, "text")).ConfigureAwait(false),
-            "keyevent" => await _deviceHost.KeyEventAsync(RequireText(request.Code, "code")).ConfigureAwait(false),
-            "telemetry_tail" => await _deviceHost.TelemetryTailAsync(request.Tail ?? 200).ConfigureAwait(false),
-            "telemetry_watch" => await _deviceHost.TelemetryWatchAsync(request.TimeoutSec ?? 15).ConfigureAwait(false),
-            _ => throw new UsageException($"Unknown inspect command '{request.Command}'.")
-        };
-    }
-
-    private static string NormalizeCommand(string command) => command.Trim().Replace('-', '_').ToLowerInvariant();
-
-    private static bool ShouldCaptureScreenState(string normalizedCommand) => normalizedCommand is
-        "refresh" or
-        "screen_state" or
-        "snapshot" or
-        "tap" or
-        "tap_text" or
-        "wait_visible" or
-        "type_text" or
-        "keyevent";
-
-    private static string RequireText(string? value, string optionName) =>
-        string.IsNullOrWhiteSpace(value)
-            ? throw new UsageException($"Inspect command requires '{optionName}'.")
-            : value;
-
-    private static int RequireInt(int? value, string optionName) =>
-        value ?? throw new UsageException($"Inspect command requires '{optionName}'.");
-
-    private void WriteStateSnapshot(string sessionId, string? requestId, ScreenState state, ScreenStateDelta? delta = null)
-    {
-        WriteJsonLine(new
-        {
-            type = delta is null ? SessionEventTypes.Inspect.ScreenSnapshot : SessionEventTypes.Inspect.ScreenDelta,
-            session_id = sessionId,
-            id = requestId,
-            captured_at = state.CapturedAt,
-            screen_hash = ScreenStateDelta.CreateHash(state),
-            delta,
-            state
-        });
-    }
-
-    private void WriteJsonLine(object value) => _console.WriteLine(JsonSerializer.Serialize(value, OutputJsonOptions));
-
-    private sealed record InspectCommandRequest(
-        string? Id,
-        string? Command,
-        string? Text,
-        string? Code,
-        int? TimeoutSec,
-        int? Tail,
-        int? X,
-        int? Y);
-
-    private sealed record ScreenStateDelta(
-        string PreviousHash,
-        string CurrentHash,
-        int AddedCount,
-        int RemovedCount,
-        int ChangedCount,
-        IReadOnlyList<ScreenElement> Added,
-        IReadOnlyList<string> Removed,
-        IReadOnlyList<ScreenElementChange> Changed)
-    {
-        public static ScreenStateDelta Create(ScreenState previous, ScreenState current)
-        {
-            var previousMap = previous.Elements.ToDictionary(GetElementKey, static element => element, StringComparer.Ordinal);
-            var currentMap = current.Elements.ToDictionary(GetElementKey, static element => element, StringComparer.Ordinal);
-
-            var added = new List<ScreenElement>();
-            var removed = new List<string>();
-            var changed = new List<ScreenElementChange>();
-
-            foreach (var pair in currentMap)
-            {
-                if (!previousMap.TryGetValue(pair.Key, out var previousElement))
-                {
-                    added.Add(pair.Value);
-                    continue;
-                }
-
-                if (!Equals(previousElement, pair.Value))
-                {
-                    changed.Add(new ScreenElementChange(pair.Key, previousElement, pair.Value));
-                }
-            }
-
-            foreach (var key in previousMap.Keys)
-            {
-                if (!currentMap.ContainsKey(key))
-                {
-                    removed.Add(key);
-                }
-            }
-
-            return new ScreenStateDelta(
-                CreateHash(previous),
-                CreateHash(current),
-                added.Count,
-                removed.Count,
-                changed.Count,
-                added,
-                removed,
-                changed);
-        }
-
-        public static string CreateHash(ScreenState state)
-        {
-            var builder = new StringBuilder();
-            foreach (var element in state.Elements.OrderBy(GetElementKey, StringComparer.Ordinal))
-            {
-                builder.Append(GetElementKey(element))
-                    .Append('|')
-                    .Append(element.Text)
-                    .Append('|')
-                    .Append(element.ContentDescription)
-                    .Append('|')
-                    .Append(element.ResourceId)
-                    .Append('|')
-                    .Append(element.ClassName)
-                    .Append('|')
-                    .Append(element.Enabled)
-                    .Append('|')
-                    .Append(element.Clickable)
-                    .Append('|')
-                    .Append(element.Left)
-                    .Append(',')
-                    .Append(element.Top)
-                    .Append(',')
-                    .Append(element.Right)
-                    .Append(',')
-                    .Append(element.Bottom)
-                    .AppendLine();
-            }
-
-            var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()));
-            return Convert.ToHexString(bytes).ToLowerInvariant();
-        }
-
-        private static string GetElementKey(ScreenElement element) =>
-            !string.IsNullOrWhiteSpace(element.StableId)
-                ? element.StableId
-                : string.Join('|', element.ClassName, element.Left, element.Top, element.Right, element.Bottom, element.Text, element.ContentDescription);
-    }
-
-    private sealed record ScreenElementChange(string StableId, ScreenElement Previous, ScreenElement Current);
 }

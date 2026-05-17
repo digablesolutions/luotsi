@@ -22,6 +22,7 @@ public sealed class CliOptions
         "view-doctor",
         "profile-list",
         "profile-delete",
+        "scenario-list",
         "wireless",
         "wireless-scan",
         "wireless-pair",
@@ -64,6 +65,7 @@ public sealed class CliOptions
     {
         "always-on-top",
         "defaults",
+        "dry-run",
         "h",
         "headless",
         "help",

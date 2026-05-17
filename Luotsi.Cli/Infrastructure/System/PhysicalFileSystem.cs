@@ -7,6 +7,11 @@ public sealed class PhysicalFileSystem : IFileSystem
 {
     public void CreateDirectory(string path) => Directory.CreateDirectory(path);
 
+    public bool DirectoryExists(string path) => Directory.Exists(path);
+
+    public IReadOnlyList<string> GetFiles(string path, string searchPattern, SearchOption searchOption) =>
+        Directory.GetFiles(path, searchPattern, searchOption);
+
     public Task WriteAllTextAsync(string path, string text, Encoding encoding, CancellationToken cancellationToken = default) =>
         File.WriteAllTextAsync(path, text, encoding, cancellationToken);
 

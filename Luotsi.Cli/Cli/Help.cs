@@ -54,6 +54,7 @@ Commands:
   list-installed-packages [--third-party]
   grant-permission --package <app.id> --permission <permission>
   revoke-permission --package <app.id> --permission <permission>
+  scenario-list --path <scenario-file-or-directory> [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>]
   telemetry-tail [--tail 200]
   telemetry-watch [--timeout-sec 15]
   wait-step --step <STEP_NAME> [--timeout-sec 15]
@@ -67,6 +68,7 @@ Commands:
   wait-log --contains <text> [--timeout-sec 15]
   record --output <file.mp4> [--time-limit-sec 30]
   run --file <scenario.json>
+  run --path <scenario-file-or-directory> [--dry-run] [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>] [--shard-count <n> --shard-index <zero-based>]
 
 Common options:
   --device <adb serial>

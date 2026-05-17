@@ -49,7 +49,7 @@ public interface IScenarioActionHost
 /// </summary>
 public sealed class ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem fileSystem, TimeProvider timeProvider, IDelay delay, IEnvironmentVariables? environment = null)
 {
-    private static readonly HashSet<string> SupportedScenarioActions =
+    internal static readonly HashSet<string> SupportedScenarioActions =
     [
         "waitVisible",
         "waitNotVisible",
@@ -89,14 +89,24 @@ public sealed class ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem
     private readonly IScenarioActionHost _actionHost = actionHost ?? throw new ArgumentNullException(nameof(actionHost));
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
-    private readonly IDelay _delay = delay ?? throw new ArgumentNullException(nameof(delay));
-    private readonly IEnvironmentVariables _environment = environment ?? new SystemEnvironmentVariables();
     private readonly ScenarioActionDispatcher _actionDispatcher = new(
         actionHost ?? throw new ArgumentNullException(nameof(actionHost)),
         delay ?? throw new ArgumentNullException(nameof(delay)));
-    private readonly ScenarioTemplateResolver _templateResolver = new(
+    private readonly IScenarioTemplateResolver _templateResolver = new ScenarioTemplateResolver(
         timeProvider ?? throw new ArgumentNullException(nameof(timeProvider)),
         environment ?? new SystemEnvironmentVariables());
+
+    internal ScenarioExecutor(
+        IScenarioActionHost actionHost,
+        IFileSystem fileSystem,
+        TimeProvider timeProvider,
+        IDelay delay,
+        IScenarioTemplateResolver templateResolver,
+        IEnvironmentVariables? environment = null)
+        : this(actionHost, fileSystem, timeProvider, delay, environment)
+    {
+        _templateResolver = templateResolver ?? throw new ArgumentNullException(nameof(templateResolver));
+    }
 
     /// <summary>
     /// Runs a JSON scenario playbook.
@@ -106,10 +116,29 @@ public sealed class ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem
     public async Task<object> RunAsync(string file)
     {
         var scenarioStarted = _timeProvider.GetUtcNow();
-        var scenario = ValidateScenario(ResolveTemplates(await LoadAsync(file).ConfigureAwait(false)), file);
-        var steps = new List<object>();
+        var scenario = await LoadValidatedScenarioAsync(file).ConfigureAwait(false);
         await _actionHost.WriteDeviceFingerprintAsync().ConfigureAwait(false);
         var prologueMs = (_timeProvider.GetUtcNow() - scenarioStarted).TotalMilliseconds;
+        var execution = await ExecuteStepsAsync(scenario, file, scenarioStarted, prologueMs).ConfigureAwait(false);
+
+        return new
+        {
+            scenario = scenario.Name,
+            status = "passed",
+            timing = CreateScenarioRunTiming((_timeProvider.GetUtcNow() - scenarioStarted).TotalMilliseconds, prologueMs, execution.ExecutedStepMs),
+            steps = execution.Steps
+        };
+    }
+
+    private async Task<ScenarioFile> LoadValidatedScenarioAsync(string file) =>
+        ValidateScenario(ResolveTemplates(await LoadAsync(file).ConfigureAwait(false)), file);
+
+    private async Task<object> ExecuteStepAsync(ScenarioStep step, DateTimeOffset? previousStepStartedAt) =>
+        await _actionDispatcher.ExecuteAsync(step, previousStepStartedAt).ConfigureAwait(false);
+
+    private async Task<ScenarioExecution> ExecuteStepsAsync(ScenarioFile scenario, string file, DateTimeOffset scenarioStarted, double prologueMs)
+    {
+        var steps = new List<object>(scenario.Steps.Count);
         var executedStepMs = 0d;
         DateTimeOffset? previousStepStartedAt = null;
 
@@ -187,17 +216,8 @@ public sealed class ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem
             }
         }
 
-        return new
-        {
-            scenario = scenario.Name,
-            status = "passed",
-            timing = CreateScenarioRunTiming((_timeProvider.GetUtcNow() - scenarioStarted).TotalMilliseconds, prologueMs, executedStepMs),
-            steps
-        };
+        return new ScenarioExecution(executedStepMs, steps);
     }
-
-    private async Task<object> ExecuteStepAsync(ScenarioStep step, DateTimeOffset? previousStepStartedAt) =>
-        await _actionDispatcher.ExecuteAsync(step, previousStepStartedAt).ConfigureAwait(false);
 
     private async Task<ScenarioFile> LoadAsync(string file)
     {
@@ -256,6 +276,8 @@ public sealed class ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem
         "typePin" when !string.IsNullOrWhiteSpace(step.Text) => Math.Max(0, step.IntervalMs ?? 120) * step.Text.Count(char.IsDigit),
         _ => null
     };
+
+    private sealed record ScenarioExecution(double ExecutedStepMs, IReadOnlyList<object> Steps);
 }
 
 public interface ICommandFailureDetails
