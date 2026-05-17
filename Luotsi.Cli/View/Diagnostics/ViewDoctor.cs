@@ -111,7 +111,7 @@ public sealed class ViewDoctor(
             CheckHelperPackage()
         };
 
-        IReadOnlyList<DeviceInfo> connectedDevices = [];
+        IReadOnlyList<DeviceInfo> connectedDevices;
         PreflightResult? preflight = null;
         var deviceCheck = await CheckDeviceVisibilityAsync(options, cancellationToken).ConfigureAwait(false);
         connectedDevices = deviceCheck.Devices;

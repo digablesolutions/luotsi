@@ -459,7 +459,7 @@ public sealed partial class AppTests
         Assert.Equal("Pixel 9", json.GetProperty("model").GetString());
         Assert.Equal("google/pixel/device", json.GetProperty("fingerprint").GetString());
         Assert.Single(adb.ShellCommands);
-        Assert.False(fileSystem.FileExists(Path.Combine(artifactRoot, "device-fingerprint.json")));
+        Assert.False(fileSystem.FileExists(Path.Join(artifactRoot, "device-fingerprint.json")));
     }
 
 
