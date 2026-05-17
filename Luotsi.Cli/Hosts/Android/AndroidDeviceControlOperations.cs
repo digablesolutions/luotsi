@@ -41,7 +41,9 @@ internal sealed class AndroidDeviceControlOperations(
             ? Directory.GetCurrentDirectory()
             : Path.GetFullPath(localDirectory);
         _fileSystem.CreateDirectory(targetDirectory);
-        var localPath = Path.Combine(targetDirectory, Path.GetFileName(validatedRemotePath.TrimEnd('/')));
+        var remoteFileName = Path.GetFileName(validatedRemotePath.TrimEnd('/'));
+        var safeRemoteFileName = Path.GetFileName(remoteFileName);
+        var localPath = Path.Combine(targetDirectory, safeRemoteFileName);
         var result = await _adb.RunAsync(["pull", validatedRemotePath, localPath]).ConfigureAwait(false);
         result.EnsureSuccess("pull file failed");
         return new PullFileResult(validatedRemotePath, localPath);

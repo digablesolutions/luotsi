@@ -58,6 +58,11 @@ internal sealed class AndroidArtifactOperations(
 
     private async Task CaptureScreenshotAsync(string fileName)
     {
+        if (Path.IsPathRooted(fileName))
+        {
+            throw new InvalidOperationException($"Artifact file name '{fileName}' must be relative.");
+        }
+
         var remote = $"/sdcard/device-e2e-{_idGenerator.NewId()}.png";
         var capture = await _adb.ShellAsync($"screencap {remote}").ConfigureAwait(false);
         capture.EnsureSuccess("screencap failed");
