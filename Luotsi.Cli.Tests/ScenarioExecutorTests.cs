@@ -277,6 +277,65 @@ public sealed partial class AppTests
     }
 
 
+        [Fact]
+        public async Task RunScenarioAsync_Resolves_Nested_Variables_And_Environment_Fallback()
+        {
+                var fileSystem = new FakeFileSystem();
+                var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+                var environment = new FakeEnvironmentVariables(new Dictionary<string, string>());
+                var host = new FakeDeviceHost();
+                var scenarios = new ScenarioExecutor(host, fileSystem, timeProvider, new FakeDelay(timeProvider), environment);
+                var scenarioPath = "/tmp/template-resolution.json";
+                fileSystem.AddFile(scenarioPath, """
+                {
+                    "name": "${var:scenarioName}",
+                    "variables": {
+                        "envName": "${env:SCENARIO_NAME|fallback-title}",
+                        "scenarioName": "case-${var:envName}"
+                    },
+                    "steps": [
+                        { "name": "${var:scenarioName}", "action": "typeText", "text": "${var:envName}" }
+                    ]
+                }
+                """);
+
+                var result = await scenarios.RunAsync(scenarioPath);
+                var json = SerializeToJsonElement(result);
+
+                Assert.Equal("case-fallback-title", json.GetProperty("scenario").GetString());
+                Assert.Equal("case-fallback-title", json.GetProperty("steps")[0].GetProperty("step").GetString());
+                Assert.Equal(["fallback-title"], host.TypeTextRequests);
+        }
+
+
+        [Fact]
+        public async Task RunScenarioAsync_Variable_Cycle_Throws_UsageException()
+        {
+                var fileSystem = new FakeFileSystem();
+                var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+                var host = new FakeDeviceHost();
+                var scenarios = new ScenarioExecutor(host, fileSystem, timeProvider, new FakeDelay(timeProvider), new FakeEnvironmentVariables(new Dictionary<string, string>()));
+                var scenarioPath = "/tmp/template-cycle.json";
+                fileSystem.AddFile(scenarioPath, """
+                {
+                    "name": "${var:first}",
+                    "variables": {
+                        "first": "${var:second}",
+                        "second": "${var:first}"
+                    },
+                    "steps": [
+                        { "action": "sleep", "milliseconds": 1 }
+                    ]
+                }
+                """);
+
+                var error = await Assert.ThrowsAsync<UsageException>(() => scenarios.RunAsync(scenarioPath));
+
+                Assert.Contains("part of a cycle", error.Message, StringComparison.Ordinal);
+                Assert.Empty(host.TypeTextRequests);
+        }
+
+
     [Fact]
     public void ScenarioCatalog_Files_Are_Valid_Json()
     {

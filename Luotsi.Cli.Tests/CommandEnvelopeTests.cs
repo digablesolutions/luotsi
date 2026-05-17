@@ -17,6 +17,34 @@ namespace Luotsi.Cli.Tests;
 public sealed partial class AppTests
 {
     [Fact]
+    public async Task RunAsync_Without_Command_Writes_Help_And_Returns_Usage_Exit_Code()
+    {
+        var console = new FakeConsole();
+        var app = new App(console: console);
+
+        var exitCode = await app.RunAsync([]);
+
+        Assert.Equal(2, exitCode);
+        Assert.Empty(console.OutputLines);
+        Assert.Single(console.ErrorLines);
+        Assert.Equal(Help.Text, console.ErrorLines[0]);
+    }
+
+    [Fact]
+    public async Task RunAsync_Help_Flag_Writes_Help_And_Returns_Success()
+    {
+        var console = new FakeConsole();
+        var app = new App(console: console);
+
+        var exitCode = await app.RunAsync(["--help"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(console.OutputLines);
+        Assert.Single(console.ErrorLines);
+        Assert.Equal(Help.Text, console.ErrorLines[0]);
+    }
+
+    [Fact]
     public async Task RunAsync_Invalid_Tap_Coordinates_Return_Usage_Error_Envelope()
     {
         var console = new FakeConsole();

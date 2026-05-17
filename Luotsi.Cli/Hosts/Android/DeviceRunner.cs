@@ -42,13 +42,22 @@ public sealed class DeviceRunner(
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private readonly IDelay _delay = delay ?? new TaskDelay(timeProvider);
     private readonly IFileSystem _fileSystem = fileSystem ?? new PhysicalFileSystem();
+    private readonly AndroidScreenCaptureService _screenCapture = new(
+        adb ?? throw new ArgumentNullException(nameof(adb)),
+        artifacts ?? throw new ArgumentNullException(nameof(artifacts)),
+        timeProvider ?? TimeProvider.System,
+        delay ?? new TaskDelay(timeProvider),
+        fileSystem ?? new PhysicalFileSystem());
+    private readonly AndroidTelemetryMonitor _telemetryMonitor = new(
+        adb ?? throw new ArgumentNullException(nameof(adb)),
+        artifacts ?? throw new ArgumentNullException(nameof(artifacts)),
+        timeProvider ?? TimeProvider.System,
+        telemetryParser ?? new LuotsiDeviceTelemetryParser());
     private readonly IUniqueIdGenerator _idGenerator = idGenerator ?? new GuidUniqueIdGenerator();
     private readonly IEnvironmentVariables _environment = environment ?? new SystemEnvironmentVariables();
-    private readonly ITelemetryParser _telemetryParser = telemetryParser ?? new LuotsiDeviceTelemetryParser();
 
     private (int Width, int Height)? _displaySizeCache;
     private KeyboardVisibilitySnapshot? _keyboardVisibilityCache;
-    private UiDumpSnapshot? _uiDumpCache;
 
     /// <summary>
     /// Lists connected devices.
@@ -112,90 +121,17 @@ public sealed class DeviceRunner(
     /// Captures and normalizes the current UI hierarchy.
     /// </summary>
     /// <returns>Screen state data.</returns>
-    public async Task<ScreenState> GetScreenStateAsync()
-    {
-        var capture = await ReadScreenCaptureAsync(writeInvalidArtifact: true).ConfigureAwait(false);
-        await WriteScreenCaptureArtifactsAsync(capture).ConfigureAwait(false);
-        return capture.State;
-    }
+    public async Task<ScreenState> GetScreenStateAsync() =>
+        await _screenCapture.GetScreenStateAsync().ConfigureAwait(false);
 
-    private async Task<ScreenState> CaptureScreenStateAsync(string? snapshotPrefix)
-    {
-        var capture = await ReadScreenCaptureAsync(writeInvalidArtifact: true).ConfigureAwait(false);
-        await WriteScreenCaptureArtifactsAsync(capture, snapshotPrefix).ConfigureAwait(false);
-        return capture.State;
-    }
+    private Task<ScreenState> CaptureScreenStateAsync(string? snapshotPrefix) =>
+        _screenCapture.CaptureScreenStateAsync(snapshotPrefix);
 
-    private async Task<ScreenCapture> ReadScreenCaptureAsync(bool writeInvalidArtifact)
-    {
-        var xml = await ReadUiDumpXmlAsync().ConfigureAwait(false);
-
-        XDocument doc;
-        try
-        {
-            doc = XDocument.Parse(xml);
-            CacheUiDump(xml);
-        }
-        catch (Exception ex) when (ex is XmlException || ex is InvalidOperationException)
-        {
-            InvalidateUiDumpCache();
-            if (writeInvalidArtifact)
-            {
-                await _artifacts.WriteTextAsync(DeviceArtifactNames.HierarchyXml, xml).ConfigureAwait(false);
-                await _artifacts.WriteTextAsync(DeviceArtifactNames.InvalidHierarchyXml, xml).ConfigureAwait(false);
-            }
-
-            throw new InvalidOperationException($"UI hierarchy dump was empty or invalid XML. See {DeviceArtifactNames.InvalidHierarchyXml} for the raw dump.", ex);
-        }
-
-        var elements = doc.Descendants("node")
-            .Select(static node => ScreenElement.From(node))
-            .Where(static element => element.IsUseful)
-            .ToArray();
-        return new ScreenCapture(xml, new ScreenState(_timeProvider.GetUtcNow(), elements.Length, elements));
-    }
-
-    private async Task WriteScreenCaptureArtifactsAsync(ScreenCapture capture, string? snapshotPrefix = null)
-    {
-        await _artifacts.WriteTextAsync(DeviceArtifactNames.HierarchyXml, capture.Xml).ConfigureAwait(false);
-        await _artifacts.WriteJsonAsync(DeviceArtifactNames.ScreenStateJson, capture.State).ConfigureAwait(false);
-
-        if (string.IsNullOrWhiteSpace(snapshotPrefix))
-        {
-            return;
-        }
-
-        var screenStatePath = Path.Combine(_artifacts.Root, DeviceArtifactNames.ScreenStateJson);
-        var hierarchyPath = Path.Combine(_artifacts.Root, DeviceArtifactNames.HierarchyXml);
-        _fileSystem.CopyFile(screenStatePath, Path.Combine(_artifacts.Root, DeviceArtifactNames.ScreenStateForLabel(snapshotPrefix)), true);
-        _fileSystem.CopyFile(hierarchyPath, Path.Combine(_artifacts.Root, DeviceArtifactNames.HierarchyForLabel(snapshotPrefix)), true);
-
-        var invalidHierarchyPath = Path.Combine(_artifacts.Root, DeviceArtifactNames.InvalidHierarchyXml);
-        if (_fileSystem.FileExists(invalidHierarchyPath))
-        {
-            _fileSystem.CopyFile(invalidHierarchyPath, Path.Combine(_artifacts.Root, DeviceArtifactNames.InvalidHierarchyForLabel(snapshotPrefix)), true);
-        }
-    }
-
-    private async Task<ScreenCapture> CapturePollingScreenStateAsync(string snapshotPrefix)
-    {
-        var writePerAttemptArtifacts = _artifacts.UiPollArtifactPolicy == UiPollArtifactPolicy.PerAttempt;
-        var capture = await ReadScreenCaptureAsync(writePerAttemptArtifacts).ConfigureAwait(false);
-        if (writePerAttemptArtifacts)
-        {
-            await WriteScreenCaptureArtifactsAsync(capture, snapshotPrefix).ConfigureAwait(false);
-        }
-
-        return capture;
-    }
+    private Task<ScreenCapture> CapturePollingScreenStateAsync(string snapshotPrefix) =>
+        _screenCapture.CapturePollingScreenStateAsync(snapshotPrefix);
 
     private Task PersistPollingArtifactsAsync(ScreenCapture capture, string snapshotPrefix) =>
-        _artifacts.UiPollArtifactPolicy switch
-        {
-            UiPollArtifactPolicy.Final => WriteScreenCaptureArtifactsAsync(capture, snapshotPrefix),
-            UiPollArtifactPolicy.PerAttempt or UiPollArtifactPolicy.None => Task.CompletedTask,
-            _ => throw new InvalidOperationException($"Unsupported UI poll artifact policy '{_artifacts.UiPollArtifactPolicy}'.")
-        };
+        _screenCapture.PersistPollingArtifactsAsync(capture, snapshotPrefix);
 
     /// <summary>
     /// Waits for visible text.
@@ -220,7 +156,7 @@ public sealed class DeviceRunner(
             {
                 capture = await CapturePollingScreenStateAsync(snapshotPrefix).ConfigureAwait(false);
             }
-            catch (InvalidOperationException ex) when (IsRetryableHierarchyDumpFailure(ex))
+            catch (InvalidOperationException ex) when (AndroidScreenCaptureService.IsRetryableHierarchyDumpFailure(ex))
             {
                 await _delay.DelayAsync(AndroidRuntimeDefaults.UiPollDelayMs).ConfigureAwait(false);
                 continue;
@@ -243,9 +179,6 @@ public sealed class DeviceRunner(
 
         throw new TimeoutException($"Timed out after {validatedTimeoutSec}s waiting for visible text '{expectedText}'. Last seen: {last?.StableId ?? "none"}");
     }
-
-    private static bool IsRetryableHierarchyDumpFailure(InvalidOperationException exception) =>
-        exception.Message.Contains("UI hierarchy dump was empty or invalid XML", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Taps the center of visible text.
@@ -720,7 +653,7 @@ public sealed class DeviceRunner(
             {
                 capture = await CapturePollingScreenStateAsync(snapshotPrefix).ConfigureAwait(false);
             }
-            catch (InvalidOperationException ex) when (IsRetryableHierarchyDumpFailure(ex))
+            catch (InvalidOperationException ex) when (AndroidScreenCaptureService.IsRetryableHierarchyDumpFailure(ex))
             {
                 await _delay.DelayAsync(AndroidRuntimeDefaults.UiPollDelayMs).ConfigureAwait(false);
                 continue;
@@ -1055,37 +988,8 @@ public sealed class DeviceRunner(
         return ((match.Bounds.Left + match.Bounds.Right) / 2, (match.Bounds.Top + match.Bounds.Bottom) / 2);
     }
 
-    private async Task<XDocument> LoadUiDocumentAsync()
-    {
-        var xml = await ReadUiDumpXmlAsync().ConfigureAwait(false);
-        try
-        {
-            var document = XDocument.Parse(xml);
-            CacheUiDump(xml);
-            return document;
-        }
-        catch (Exception ex) when (ex is XmlException || ex is InvalidOperationException)
-        {
-            InvalidateUiDumpCache();
-            await _artifacts.WriteTextAsync(DeviceArtifactNames.InvalidHierarchyXml, xml).ConfigureAwait(false);
-            throw new InvalidOperationException("UI hierarchy dump was empty or invalid XML.", ex);
-        }
-    }
-
-    private async Task<XDocument> LoadUiDocumentWithRetryAsync(int maxAttempts = AndroidRuntimeDefaults.UiDumpRetryMaxAttempts, int retryDelayMs = AndroidRuntimeDefaults.UiPollDelayMs)
-    {
-        for (var attempt = 1; ; attempt++)
-        {
-            try
-            {
-                return await LoadUiDocumentAsync().ConfigureAwait(false);
-            }
-            catch (InvalidOperationException ex) when (attempt < maxAttempts && IsRetryableHierarchyDumpFailure(ex))
-            {
-                await _delay.DelayAsync(retryDelayMs).ConfigureAwait(false);
-            }
-        }
-    }
+    private Task<XDocument> LoadUiDocumentWithRetryAsync(int maxAttempts = AndroidRuntimeDefaults.UiDumpRetryMaxAttempts, int retryDelayMs = AndroidRuntimeDefaults.UiPollDelayMs) =>
+        _screenCapture.LoadUiDocumentWithRetryAsync(maxAttempts, retryDelayMs);
 
     private static bool EventLineMatches(string line, string name, IReadOnlyList<string> contains, Regex? detailsRegex)
     {
@@ -1131,45 +1035,10 @@ public sealed class DeviceRunner(
         return numbers.Length >= 4 ? new Bounds(numbers[0], numbers[1], numbers[2], numbers[3]) : new Bounds(0, 0, 0, 0);
     }
 
-    private async Task<string> DumpUiAsync()
-    {
-        var result = await _adb.RunAsync(["exec-out", "uiautomator", "dump", "/dev/tty"]).ConfigureAwait(false);
-        result.EnsureSuccess("uiautomator dump failed");
-        var xml = result.Stdout;
-        var xmlStart = xml.IndexOf("<?xml", StringComparison.Ordinal);
-        if (xmlStart < 0)
-        {
-            xmlStart = xml.IndexOf("<hierarchy", StringComparison.Ordinal);
-        }
-
-        var xmlEnd = xml.LastIndexOf("</hierarchy>", StringComparison.Ordinal);
-        if (xmlStart >= 0 && xmlEnd >= xmlStart)
-        {
-            xmlEnd += "</hierarchy>".Length;
-            return xml[xmlStart..xmlEnd];
-        }
-
-        return xmlStart >= 0 ? xml[xmlStart..] : xml;
-    }
-
-    private async Task<string> ReadUiDumpXmlAsync()
-    {
-        var now = _timeProvider.GetUtcNow();
-        if (_uiDumpCache is { } cached && now - cached.CapturedAt < AndroidRuntimeDefaults.UiDumpCacheTtl)
-        {
-            return cached.Xml;
-        }
-
-        return await DumpUiAsync().ConfigureAwait(false);
-    }
-    private void CacheUiDump(string xml) => _uiDumpCache = new UiDumpSnapshot(xml, _timeProvider.GetUtcNow());
-
-    private void InvalidateUiDumpCache() => _uiDumpCache = null;
-
     private void InvalidateUiReadCaches()
     {
         _keyboardVisibilityCache = null;
-        InvalidateUiDumpCache();
+        _screenCapture.InvalidateUiDumpCache();
     }
 
     private async Task<string> ShellTextAsync(string command)
@@ -1294,7 +1163,7 @@ public sealed class DeviceRunner(
             {
                 return await CaptureScreenStateAsync(snapshotPrefix).ConfigureAwait(false);
             }
-            catch (InvalidOperationException ex) when (attempt < maxAttempts && IsRetryableHierarchyDumpFailure(ex))
+            catch (InvalidOperationException ex) when (attempt < maxAttempts && AndroidScreenCaptureService.IsRetryableHierarchyDumpFailure(ex))
             {
                 await _delay.DelayAsync(retryDelayMs).ConfigureAwait(false);
             }
@@ -1302,31 +1171,7 @@ public sealed class DeviceRunner(
     }
 
     private async Task<TelemetryResult> CaptureTelemetryAsync(string artifactBaseName, string logOutput, object metadata, TelemetryParseResult? parsed = null)
-    {
-        parsed ??= _telemetryParser.ParseLog(logOutput);
-        var result = new TelemetryResult(
-            parsed.InspectedLineCount,
-            parsed.TelemetryLineCount,
-            parsed.Events.Count,
-            parsed.ParseErrors.Count,
-            parsed.Events,
-            parsed.ParseErrors);
-        await _artifacts.WriteTextAsync(DeviceArtifactNames.TextFromBase(artifactBaseName), logOutput).ConfigureAwait(false);
-        await _artifacts.WriteJsonAsync(
-            DeviceArtifactNames.JsonFromBase(artifactBaseName),
-            new
-            {
-                metadata,
-                inspected_line_count = result.InspectedLineCount,
-                telemetry_line_count = result.TelemetryLineCount,
-                event_count = result.EventCount,
-                parse_error_count = result.ParseErrorCount,
-                events = result.Events,
-                parse_errors = result.ParseErrors
-            }).ConfigureAwait(false);
-
-        return result;
-    }
+        => await _telemetryMonitor.CaptureTelemetryAsync(artifactBaseName, logOutput, metadata, parsed).ConfigureAwait(false);
 
     private async Task<TelemetryMatchResult> WaitForTelemetryEventAsync(
         int timeoutSec,
@@ -1335,61 +1180,16 @@ public sealed class DeviceRunner(
         string artifactBaseName,
         Func<string, object> metadataFactory,
         Func<Exception> timeoutExceptionFactory)
-    {
-        var telemetrySession = await MonitorTelemetryAsync(timeoutSec, eventMatch).ConfigureAwait(false);
-        var match = telemetrySession.MatchedEvent;
-
-        if (match is not null)
-        {
-            await _artifacts.WriteTextAsync(DeviceArtifactNames.TextFromBase(artifactBaseName), telemetrySession.LogOutput).ConfigureAwait(false);
-            await _artifacts.WriteJsonAsync(
-                DeviceArtifactNames.JsonFromBase(artifactBaseName),
-                new
-                {
-                    metadata = metadataFactory(telemetrySession.Invocation),
-                    event_count = telemetrySession.Parsed.Events.Count,
-                    parse_error_count = telemetrySession.Parsed.ParseErrors.Count,
-                    matched = successDataFactory(match),
-                    events = telemetrySession.Parsed.Events,
-                    parse_errors = telemetrySession.Parsed.ParseErrors
-                }).ConfigureAwait(false);
-
-            return successDataFactory(match);
-        }
-
-        await _artifacts.WriteTextAsync(DeviceArtifactNames.TextFromBase(artifactBaseName), telemetrySession.LogOutput).ConfigureAwait(false);
-        await _artifacts.WriteJsonAsync(
-            DeviceArtifactNames.JsonFromBase(artifactBaseName),
-            new
-            {
-                metadata = metadataFactory(telemetrySession.Invocation),
-                event_count = telemetrySession.Parsed.Events.Count,
-                parse_error_count = telemetrySession.Parsed.ParseErrors.Count,
-                events = telemetrySession.Parsed.Events,
-                parse_errors = telemetrySession.Parsed.ParseErrors
-            }).ConfigureAwait(false);
-
-        throw timeoutExceptionFactory();
-    }
+        => await _telemetryMonitor.WaitForTelemetryEventAsync(
+            timeoutSec,
+            eventMatch,
+            successDataFactory,
+            artifactBaseName,
+            metadataFactory,
+            timeoutExceptionFactory).ConfigureAwait(false);
 
     private async Task<TelemetryMonitorResult> MonitorTelemetryAsync(int timeoutSec, Func<TelemetryEvent, bool>? eventMatch = null)
-    {
-        var started = _timeProvider.GetUtcNow();
-        var accumulator = new TelemetryStreamAccumulator(_telemetryParser, eventMatch);
-
-        var monitor = await _adb.MonitorLogAsync(
-            started,
-            timeoutSec,
-            eventMatch is null ? null : accumulator.ShouldStop,
-            accumulator.ObserveLine).ConfigureAwait(false);
-
-        if (monitor.ExitCode != 0)
-        {
-            throw new InvalidOperationException($"adb logcat failed: {monitor.Stderr}".Trim());
-        }
-
-        return new TelemetryMonitorResult(started, monitor.Invocation, monitor.LogOutput, accumulator.ToParseResult(), accumulator.MatchedEvent);
-    }
+        => await _telemetryMonitor.MonitorTelemetryAsync(timeoutSec, eventMatch).ConfigureAwait(false);
 
     private static string RequireNonBlank(string value, string message)
     {
@@ -1447,12 +1247,7 @@ public sealed class DeviceRunner(
             throw new UsageException($"assertEvent detailsPattern is not a valid regular expression: {ex.Message}");
         }
     }
-
-    private sealed record ScreenCapture(string Xml, ScreenState State);
-
     private sealed record KeyboardVisibilitySnapshot(bool IsVisible, DateTimeOffset CapturedAt);
-
-    private sealed record UiDumpSnapshot(string Xml, DateTimeOffset CapturedAt);
 
     private sealed record DeviceFingerprintSnapshot(
         string Serial,
@@ -1462,58 +1257,6 @@ public sealed class DeviceRunner(
         string Fingerprint,
         string Abi,
         string CurrentFocus);
-
-    private sealed record TelemetryMonitorResult(
-        DateTimeOffset StartedAt,
-        string Invocation,
-        string LogOutput,
-        TelemetryParseResult Parsed,
-        TelemetryEvent? MatchedEvent);
-
-    private sealed class TelemetryStreamAccumulator(ITelemetryParser telemetryParser, Func<TelemetryEvent, bool>? eventMatch)
-    {
-        private readonly ITelemetryParser _telemetryParser = telemetryParser;
-        private readonly Func<TelemetryEvent, bool>? _eventMatch = eventMatch;
-        private readonly List<TelemetryEvent> _events = [];
-        private readonly List<TelemetryParseError> _parseErrors = [];
-        private int _inspectedLineCount;
-        private int _telemetryLineCount;
-
-        public TelemetryEvent? MatchedEvent { get; private set; }
-
-        public void ObserveLine(string line)
-        {
-            var parsedLine = _telemetryParser.ParseLine(line);
-            if (!parsedLine.Inspected)
-            {
-                return;
-            }
-
-            _inspectedLineCount++;
-            if (parsedLine.TelemetryLine)
-            {
-                _telemetryLineCount++;
-            }
-
-            if (parsedLine.Event is not null)
-            {
-                _events.Add(parsedLine.Event);
-                if (MatchedEvent is null && _eventMatch?.Invoke(parsedLine.Event) is true)
-                {
-                    MatchedEvent = parsedLine.Event;
-                }
-            }
-
-            if (parsedLine.ParseError is not null)
-            {
-                _parseErrors.Add(parsedLine.ParseError);
-            }
-        }
-
-        public bool ShouldStop(string _) => MatchedEvent is not null;
-
-        public TelemetryParseResult ToParseResult() => new(_events, _parseErrors, _inspectedLineCount, _telemetryLineCount);
-    }
 
     private static string? NormalizeTelemetryStep(string? step)
     {
