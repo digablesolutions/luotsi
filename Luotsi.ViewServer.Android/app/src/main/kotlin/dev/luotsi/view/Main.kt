@@ -27,12 +27,15 @@ object Main {
     @Throws(Exception::class)
     fun main(args: Array<String>) {
         val options = Options.parse(args)
-        LocalServerSocket(options.socketName).use { serverSocket ->
+        val serverSocket = LocalServerSocket(options.socketName)
+        try {
             serverSocket.accept().use { client ->
                 client.outputStream.use { output ->
                     ScreenrecordCaptureSession(options, PacketWriter(output)).run()
                 }
             }
+        } finally {
+            serverSocket.close()
         }
     }
 

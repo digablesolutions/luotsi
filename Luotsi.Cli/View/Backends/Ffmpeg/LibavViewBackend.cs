@@ -64,7 +64,7 @@ public sealed class LibavNativeLibraryLoader(IEnvironmentVariables environment, 
                 _loadedRootPath = candidate;
                 return candidate ?? string.Empty;
             }
-            catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException)
+            catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException or NotSupportedException)
             {
                 lastError = ex;
             }

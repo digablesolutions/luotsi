@@ -31,6 +31,7 @@ public interface IAdbClient
 {
     Task<AdbCommandResult> RunAsync(IEnumerable<string> args, CancellationToken cancellationToken = default);
     Task<AdbCommandResult> ShellAsync(string command, CancellationToken cancellationToken = default);
+    Task<IAsyncDisposable> StartShellAsync(string command, CancellationToken cancellationToken = default);
     Task<AdbLogStreamResult> MonitorLogAsync(string containsText, DateTimeOffset since, int timeoutSec, CancellationToken cancellationToken = default);
     Task<AdbLogStreamResult> MonitorLogAsync(DateTimeOffset since, int timeoutSec, Func<string, bool>? stopWhen = null, Action<string>? observeLine = null, CancellationToken cancellationToken = default);
 }
