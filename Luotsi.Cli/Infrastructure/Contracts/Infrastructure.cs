@@ -120,6 +120,19 @@ public interface IDeviceHost : IScenarioActionHost
 
     Task<PullFileResult> PullFileAsync(string remotePath, string? localDirectory = null);
 
+    /// <summary>
+    /// Installs an APK from the host onto the device.
+    /// </summary>
+    /// <param name="packagePath">Host-local package path.</param>
+    /// <returns>Installation metadata.</returns>
+    Task<InstallPackageResult> InstallPackageAsync(string packagePath);
+}
+
+/// <summary>
+/// Wireless ADB workflows exposed only to wireless CLI commands.
+/// </summary>
+public interface IWirelessDebugHost
+{
     Task<WirelessConnectResult> EnableWirelessAsync(string? host, int port);
 
     Task<WirelessScanResult> ScanWirelessServicesAsync();
@@ -127,13 +140,6 @@ public interface IDeviceHost : IScenarioActionHost
     Task<WirelessPairResult> PairWirelessAsync(string? endpoint, string? service, string? pairingCode);
 
     Task<WirelessMdnsConnectResult> ConnectWirelessAsync(string? endpoint, string? service);
-
-    /// <summary>
-    /// Installs an APK from the host onto the device.
-    /// </summary>
-    /// <param name="packagePath">Host-local package path.</param>
-    /// <returns>Installation metadata.</returns>
-    Task<InstallPackageResult> InstallPackageAsync(string packagePath);
 }
 
 /// <summary>

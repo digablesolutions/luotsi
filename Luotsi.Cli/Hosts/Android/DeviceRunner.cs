@@ -22,12 +22,8 @@ public sealed class DeviceRunner(
     IFileSystem? fileSystem = null,
     IUniqueIdGenerator? idGenerator = null,
     IEnvironmentVariables? environment = null,
-    ITelemetryParser? telemetryParser = null) : IDeviceHost
+    ITelemetryParser? telemetryParser = null) : IDeviceHost, IWirelessDebugHost
 {
-    private const string AdbLegacyServiceType = "_adb._tcp";
-    private const string AdbTlsPairingServiceType = "_adb-tls-pairing._tcp";
-    private const string AdbTlsConnectServiceType = "_adb-tls-connect._tcp";
-
     private static readonly (string Key, string Command)[] DeviceFingerprintReads =
     [
         ("serial", "getprop ro.serialno"),
@@ -359,7 +355,7 @@ public sealed class DeviceRunner(
     {
         var result = await _adb.RunAsync(["mdns", "services"]).ConfigureAwait(false);
         result.EnsureSuccess("adb mdns services failed");
-        return CreateWirelessScanResult(ParseWirelessMdnsServices(result.Stdout));
+        return WirelessDebugResolver.CreateScanResult(ParseWirelessMdnsServices(result.Stdout));
     }
 
     public async Task<WirelessPairResult> PairWirelessAsync(string? endpoint, string? service, string? pairingCode)
@@ -412,243 +408,30 @@ public sealed class DeviceRunner(
             string.IsNullOrWhiteSpace(stdout) ? null : stdout);
     }
 
-    internal static IReadOnlyList<WirelessMdnsService> ParseWirelessMdnsServices(string output)
-    {
-        if (string.IsNullOrWhiteSpace(output))
-        {
-            return [];
-        }
-
-        var services = new List<WirelessMdnsService>();
-        foreach (var rawLine in output.Replace("\r", string.Empty, StringComparison.Ordinal).Split('\n'))
-        {
-            var line = rawLine.Trim();
-            if (line.Length == 0 ||
-                line.StartsWith("List of discovered mdns services", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            var parts = Regex.Split(line, @"\s+").Where(static part => part.Length > 0).ToArray();
-            if (parts.Length < 3)
-            {
-                continue;
-            }
-
-            var endpoint = parts[^1];
-            if (!TryParseWirelessEndpoint(endpoint, out var host, out var port))
-            {
-                continue;
-            }
-
-            var serviceType = NormalizeWirelessServiceType(parts[^2]);
-            var serviceName = string.Join(" ", parts.Take(parts.Length - 2)).Trim();
-            if (string.IsNullOrWhiteSpace(serviceName) || string.IsNullOrWhiteSpace(serviceType))
-            {
-                continue;
-            }
-
-            var normalizedEndpoint = FormatWirelessEndpoint(host, port);
-            services.Add(new WirelessMdnsService(
-                serviceName,
-                serviceType,
-                host,
-                port,
-                normalizedEndpoint,
-                BuildWirelessServiceSelector(serviceName, serviceType),
-                GetWirelessServiceKind(serviceType)));
-        }
-
-        return services;
-    }
-
-    private static WirelessScanResult CreateWirelessScanResult(IReadOnlyList<WirelessMdnsService> services) =>
-        new(
-            services,
-            services.Where(static service => string.Equals(service.ServiceType, AdbTlsPairingServiceType, StringComparison.OrdinalIgnoreCase)).ToArray(),
-            services.Where(static service => string.Equals(service.ServiceType, AdbTlsConnectServiceType, StringComparison.OrdinalIgnoreCase)).ToArray(),
-            services.Where(static service => string.Equals(service.ServiceType, AdbLegacyServiceType, StringComparison.OrdinalIgnoreCase)).ToArray());
+    internal static IReadOnlyList<WirelessMdnsService> ParseWirelessMdnsServices(string output) =>
+        WirelessDebugResolver.ParseMdnsServices(output);
 
     private async Task<ResolvedWirelessService> ResolvePairingServiceAsync(string? endpoint, string? service)
     {
-        if (!string.IsNullOrWhiteSpace(endpoint) && !string.IsNullOrWhiteSpace(service))
-        {
-            throw new UsageException("wireless-pair accepts either --endpoint or --service, not both.");
-        }
-
         if (!string.IsNullOrWhiteSpace(endpoint))
         {
-            return new ResolvedWirelessService(NormalizeWirelessEndpoint(endpoint, "wireless-pair"), null, null, null);
+            return WirelessDebugResolver.ResolvePairingService([], endpoint, service);
         }
 
         var scan = await ScanWirelessServicesAsync().ConfigureAwait(false);
-        var pairingServices = scan.PairingServices;
-        if (!string.IsNullOrWhiteSpace(service))
-        {
-            return SelectWirelessServiceByName(pairingServices, service, "wireless-pair", AdbTlsPairingServiceType);
-        }
-
-        return SelectSingleWirelessService(pairingServices, "wireless-pair", AdbTlsPairingServiceType);
+        return WirelessDebugResolver.ResolvePairingService(scan.PairingServices, endpoint, service);
     }
 
     private async Task<ResolvedWirelessService> ResolveConnectServiceAsync(string? endpoint, string? service)
     {
-        if (!string.IsNullOrWhiteSpace(endpoint) && !string.IsNullOrWhiteSpace(service))
-        {
-            throw new UsageException("wireless-connect accepts either --endpoint or --service, not both.");
-        }
-
         if (!string.IsNullOrWhiteSpace(endpoint))
         {
-            return new ResolvedWirelessService(NormalizeWirelessEndpoint(endpoint, "wireless-connect"), null, null, null);
+            return WirelessDebugResolver.ResolveConnectService(new WirelessScanResult([], [], [], []), endpoint, service);
         }
 
         var scan = await ScanWirelessServicesAsync().ConfigureAwait(false);
-        if (!string.IsNullOrWhiteSpace(service))
-        {
-            var connectableServices = scan.Services
-                .Where(static item =>
-                    string.Equals(item.ServiceType, AdbTlsConnectServiceType, StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(item.ServiceType, AdbLegacyServiceType, StringComparison.OrdinalIgnoreCase))
-                .ToArray();
-            return SelectWirelessServiceByName(connectableServices, service, "wireless-connect", $"{AdbTlsConnectServiceType} or {AdbLegacyServiceType}");
-        }
-
-        return SelectSingleWirelessService(scan.ConnectServices, "wireless-connect", AdbTlsConnectServiceType);
+        return WirelessDebugResolver.ResolveConnectService(scan, endpoint, service);
     }
-
-    private static ResolvedWirelessService SelectWirelessServiceByName(
-        IReadOnlyList<WirelessMdnsService> services,
-        string service,
-        string commandName,
-        string expectedServiceType)
-    {
-        var matches = services.Where(item => WirelessServiceMatches(item, service)).ToArray();
-        if (matches.Length == 0)
-        {
-            throw new UsageException($"{commandName} could not find service '{service}' among discovered {expectedServiceType} services. Run wireless-scan to inspect current mDNS services, or pass --endpoint <host:port>.");
-        }
-
-        if (matches.Length > 1)
-        {
-            throw new UsageException($"{commandName} found multiple services matching '{service}': {DescribeWirelessServices(matches)}. Pass --endpoint <host:port>.");
-        }
-
-        return ResolvedWirelessService.From(matches[0]);
-    }
-
-    private static ResolvedWirelessService SelectSingleWirelessService(
-        IReadOnlyList<WirelessMdnsService> services,
-        string commandName,
-        string expectedServiceType)
-    {
-        if (services.Count == 0)
-        {
-            throw new UsageException($"{commandName} found no discovered {expectedServiceType} services. Run wireless-scan, enable Wireless debugging on the device, or pass --endpoint <host:port>.");
-        }
-
-        if (services.Count > 1)
-        {
-            throw new UsageException($"{commandName} found multiple discovered {expectedServiceType} services: {DescribeWirelessServices(services)}. Pass --service <service-name> or --endpoint <host:port>.");
-        }
-
-        return ResolvedWirelessService.From(services[0]);
-    }
-
-    private static string NormalizeWirelessEndpoint(string endpoint, string commandName)
-    {
-        var trimmed = RequireNonBlank(endpoint, $"{commandName} requires a non-empty endpoint.");
-        if (!TryParseWirelessEndpoint(trimmed, out var host, out var port))
-        {
-            throw new UsageException($"{commandName} requires --endpoint in <host>:<port> form.");
-        }
-
-        return FormatWirelessEndpoint(host, port);
-    }
-
-    private static bool TryParseWirelessEndpoint(string endpoint, out string host, out int port)
-    {
-        host = string.Empty;
-        port = 0;
-        var trimmed = endpoint.Trim();
-        var separator = trimmed.LastIndexOf(':');
-        if (separator <= 0 || separator == trimmed.Length - 1)
-        {
-            return false;
-        }
-
-        var parsedHost = trimmed[..separator].Trim();
-        var portText = trimmed[(separator + 1)..].Trim();
-        if (parsedHost.Length == 0 ||
-            !int.TryParse(portText, NumberStyles.None, CultureInfo.InvariantCulture, out var parsedPort) ||
-            parsedPort <= 0 ||
-            parsedPort > 65535)
-        {
-            return false;
-        }
-
-        host = parsedHost;
-        port = parsedPort;
-        return true;
-    }
-
-    private static string FormatWirelessEndpoint(string host, int port) =>
-        $"{host}:{port.ToString(CultureInfo.InvariantCulture)}";
-
-    private static string NormalizeWirelessServiceType(string serviceType)
-    {
-        var normalized = serviceType.Trim();
-        while (normalized.EndsWith(".", StringComparison.Ordinal))
-        {
-            normalized = normalized[..^1];
-        }
-
-        if (normalized.EndsWith(".local", StringComparison.OrdinalIgnoreCase))
-        {
-            normalized = normalized[..^6].TrimEnd('.');
-        }
-
-        return normalized;
-    }
-
-    private static string BuildWirelessServiceSelector(string serviceName, string serviceType) =>
-        $"{serviceName}.{NormalizeWirelessServiceType(serviceType)}";
-
-    private static string NormalizeWirelessServiceLookup(string service)
-    {
-        var normalized = service.Trim();
-        while (normalized.EndsWith(".", StringComparison.Ordinal))
-        {
-            normalized = normalized[..^1];
-        }
-
-        if (normalized.EndsWith(".local", StringComparison.OrdinalIgnoreCase))
-        {
-            normalized = normalized[..^6].TrimEnd('.');
-        }
-
-        return normalized;
-    }
-
-    private static bool WirelessServiceMatches(WirelessMdnsService service, string lookup)
-    {
-        var normalizedLookup = NormalizeWirelessServiceLookup(lookup);
-        return string.Equals(service.ServiceName, normalizedLookup, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(service.Selector, normalizedLookup, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(service.Endpoint, normalizedLookup, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string GetWirelessServiceKind(string serviceType) =>
-        NormalizeWirelessServiceType(serviceType).ToLowerInvariant() switch
-        {
-            AdbTlsPairingServiceType => "pairing",
-            AdbTlsConnectServiceType => "connect",
-            AdbLegacyServiceType => "legacy",
-            _ => "other"
-        };
-
-    private static string DescribeWirelessServices(IEnumerable<WirelessMdnsService> services) =>
-        string.Join(", ", services.Select(static service => $"{service.ServiceName} ({service.ServiceType} {service.Endpoint})"));
 
     private async Task<string> DetectWirelessHostAsync()
     {
@@ -1545,12 +1328,6 @@ public sealed class DeviceRunner(
         {
             throw new UsageException($"assertEvent detailsPattern is not a valid regular expression: {ex.Message}");
         }
-    }
-
-    private sealed record ResolvedWirelessService(string Endpoint, string? ServiceName, string? ServiceType, string? Selector)
-    {
-        public static ResolvedWirelessService From(WirelessMdnsService service) =>
-            new(service.Endpoint, service.ServiceName, service.ServiceType, service.Selector);
     }
 
     private sealed record KeyboardVisibilitySnapshot(bool IsVisible, DateTimeOffset CapturedAt);

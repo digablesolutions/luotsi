@@ -55,7 +55,7 @@ internal sealed class AppCommandFamilyRouter(AppCommandFamilyRouterDependencies 
         }
 
         context.Runner = _dependencies.DeviceHostLauncher.Create(options, adbExecutable, artifacts);
-        return await _dependencies.CommandHost.RunCommandAsync(options, started, context.Runner, artifacts).ConfigureAwait(false);
+        return await _dependencies.CommandHost.RunCommandAsync(options, started, adbExecutable, context.Runner, artifacts).ConfigureAwait(false);
     }
 
     private static bool IsViewCommand(string? command) =>

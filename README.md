@@ -173,7 +173,8 @@ by modern adb Wi-Fi:
   interactive prompt; run `adb pair <host:port>` manually or pass `--code`.
 - `wireless-connect --endpoint <host:port>` runs `adb connect <host:port>`.
   `wireless-connect --service <service-name>` resolves a discovered
-  `_adb-tls-connect._tcp` service and connects with its adb selector. If no
+  `_adb-tls-connect._tcp` service and connects to its published endpoint. The
+  returned `device_selector` stays reusable for later `view --device` calls. If no
   endpoint or service is supplied, Luotsi connects the only discovered TLS
   connect service.
 

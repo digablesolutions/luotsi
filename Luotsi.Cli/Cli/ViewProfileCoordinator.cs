@@ -41,6 +41,9 @@ internal sealed class ViewProfileCoordinator(IViewProfileStore viewProfileStore)
             : _viewProfileStore.SaveAsync(profileName, ViewProfile.FromResolvedOptions(options, viewOptions));
     }
 
+    public Task SaveConnectedDeviceAsync(string profileName, string deviceSelector, string adbExecutable, string? pollArtifacts) =>
+        _viewProfileStore.SaveAsync(profileName, ViewProfile.CreateConnectedDeviceProfile(deviceSelector, adbExecutable, pollArtifacts));
+
     public Task SaveLastAsync(CliOptions options, ViewOptions viewOptions) =>
         _viewProfileStore.SaveAsync("last", ViewProfile.FromResolvedOptions(options, viewOptions));
 

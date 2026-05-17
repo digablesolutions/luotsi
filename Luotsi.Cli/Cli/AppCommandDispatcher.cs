@@ -18,7 +18,7 @@ internal sealed class AppCommandDispatcher(
     private readonly IEnvironmentVariables _environment = environment ?? throw new ArgumentNullException(nameof(environment));
     private readonly ViewProfileCoordinator _profileCoordinator = profileCoordinator ?? throw new ArgumentNullException(nameof(profileCoordinator));
 
-    public async Task<object> ExecuteAsync(string command, CliOptions options, IDeviceHost runner)
+    public async Task<object> ExecuteAsync(string command, CliOptions options, string adbExecutable, IDeviceHost runner)
     {
         var scenarios = new ScenarioExecutor(runner, _fileSystem, _timeProvider, _delay, _environment);
 
@@ -26,10 +26,10 @@ internal sealed class AppCommandDispatcher(
         {
             "devices" => await runner.GetDevicesAsync().ConfigureAwait(false),
             "preflight" => await runner.PreflightAsync(options.Get("package")).ConfigureAwait(false),
-            "wireless" => await runner.EnableWirelessAsync(options.Get("host"), options.Int("port", 5555)).ConfigureAwait(false),
-            "wireless-scan" => await runner.ScanWirelessServicesAsync().ConfigureAwait(false),
-            "wireless-pair" => await runner.PairWirelessAsync(GetWirelessEndpoint(options, "wireless-pair"), options.Get("service"), options.Get("code") ?? options.Get("pairing-code")).ConfigureAwait(false),
-            "wireless-connect" => await ConnectWirelessAsync(options, runner).ConfigureAwait(false),
+            "wireless" => await GetWirelessHost(runner).EnableWirelessAsync(options.Get("host"), options.Int("port", 5555)).ConfigureAwait(false),
+            "wireless-scan" => await GetWirelessHost(runner).ScanWirelessServicesAsync().ConfigureAwait(false),
+            "wireless-pair" => await GetWirelessHost(runner).PairWirelessAsync(GetWirelessEndpoint(options, "wireless-pair"), options.Get("service"), options.Get("code") ?? options.Get("pairing-code")).ConfigureAwait(false),
+            "wireless-connect" => await ConnectWirelessAsync(options, adbExecutable, GetWirelessHost(runner)).ConfigureAwait(false),
             "screen-state" => await runner.GetScreenStateAsync().ConfigureAwait(false),
             "telemetry-tail" => await runner.TelemetryTailAsync(options.Int("tail", CliDefaults.DefaultLogTail)).ConfigureAwait(false),
             "telemetry-watch" => await runner.TelemetryWatchAsync(options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
@@ -48,22 +48,25 @@ internal sealed class AppCommandDispatcher(
         };
     }
 
-    private async Task<WirelessMdnsConnectResult> ConnectWirelessAsync(CliOptions options, IDeviceHost runner)
+    private async Task<WirelessMdnsConnectResult> ConnectWirelessAsync(CliOptions options, string adbExecutable, IWirelessDebugHost runner)
     {
         var result = await runner.ConnectWirelessAsync(GetWirelessEndpoint(options, "wireless-connect"), options.Get("service")).ConfigureAwait(false);
         var profileName = options.Get("save-profile");
         if (!string.IsNullOrWhiteSpace(profileName))
         {
-            await _profileCoordinator.SaveAsync(
+            await _profileCoordinator.SaveConnectedDeviceAsync(
                 profileName,
-                new ViewProfile(
-                    Device: result.DeviceSelector,
-                    Adb: options.Get("adb"),
-                    PollArtifacts: options.Get("poll-artifacts"))).ConfigureAwait(false);
+                result.DeviceSelector,
+                adbExecutable,
+                options.Get("poll-artifacts")).ConfigureAwait(false);
         }
 
         return result;
     }
+
+    private static IWirelessDebugHost GetWirelessHost(IDeviceHost runner) =>
+        runner as IWirelessDebugHost
+        ?? throw new InvalidOperationException("The selected device host does not support wireless ADB commands.");
 
     private static string? GetWirelessEndpoint(CliOptions options, string commandName)
     {

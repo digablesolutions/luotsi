@@ -354,7 +354,7 @@ internal sealed class FakeDeviceHostFactory(IDeviceHost deviceHost) : IDeviceHos
     }
 }
 
-internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDeviceHost
+internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDeviceHost, IWirelessDebugHost
 {
     private readonly Queue<ScreenState> _screenStates = new(screenStates);
 
@@ -547,11 +547,11 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
             service,
             service is null ? null : "_adb-tls-connect._tcp",
             service is null ? null : selector,
-            selector,
+            resolvedEndpoint,
             selector,
             true,
-            $"connected to {selector}",
-            $"connected to {selector}"));
+            $"connected to {resolvedEndpoint}",
+            $"connected to {resolvedEndpoint}"));
     }
 
     private static WirelessScanResult CreateWirelessScanResult(IReadOnlyList<WirelessMdnsService> services) =>

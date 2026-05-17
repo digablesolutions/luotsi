@@ -99,6 +99,43 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_WirelessConnect_SaveProfile_Persists_Resolved_Adb_And_Default_PollArtifacts()
+    {
+        var console = new FakeConsole();
+        var profiles = new FakeViewProfileStore();
+        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>
+        {
+            [CliDefaults.AdbExecutableEnvironmentVariable] = "platform-tools/adb"
+        });
+        var host = new FakeDeviceHost(CreateScreenState(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind), "Sign in"))
+        {
+            WirelessConnectResponse = new WirelessMdnsConnectResult(
+                "192.168.86.38:33015",
+                "adb-14141FDF600081-TnSdi9",
+                "_adb-tls-connect._tcp",
+                "adb-14141FDF600081-TnSdi9._adb-tls-connect._tcp",
+                "192.168.86.38:33015",
+                "adb-14141FDF600081-TnSdi9._adb-tls-connect._tcp",
+                true,
+                "connected to 192.168.86.38:33015",
+                "connected to 192.168.86.38:33015")
+        };
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            ViewProfileStore = profiles,
+            Environment = environment
+        });
+
+        var exitCode = await app.RunAsync(["wireless-connect", "--service", "adb-14141FDF600081-TnSdi9", "--save-profile", "desk"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("platform-tools/adb", profiles.Profiles["desk"].Adb);
+        Assert.Equal(CliDefaults.DefaultPollArtifactsPolicy, profiles.Profiles["desk"].PollArtifacts);
+    }
+
+    [Fact]
     public async Task DeviceRunner_EnableWirelessAsync_AutoDetects_Host_When_Not_Provided()
     {
         var adb = new FakeAdbClient();
@@ -207,6 +244,8 @@ adb-14141FDF600081-TnSdi9  _adb-tls-connect._tcp    192.168.86.38:33015
         Assert.Equal(["mdns", "services"], adb.RunCommands[0]);
         Assert.Equal(["connect", "192.168.86.38:33015"], adb.RunCommands[1]);
         Assert.Equal("192.168.86.38:33015", result.Endpoint);
+        Assert.Equal("192.168.86.38:33015", result.ConnectTarget);
         Assert.Equal("adb-14141FDF600081-TnSdi9._adb-tls-connect._tcp", result.DeviceSelector);
+        Assert.Equal("connected to adb-14141FDF600081-TnSdi9._adb-tls-connect._tcp", result.Stdout);
     }
 }

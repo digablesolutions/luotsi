@@ -87,6 +87,13 @@ public sealed record ViewProfile(
         options.Get("artifacts"),
         options.Get("poll-artifacts") ?? CliDefaults.DefaultPollArtifactsPolicy);
 
+    public static ViewProfile CreateConnectedDeviceProfile(string deviceSelector, string adbExecutable, string? pollArtifacts) => new(
+        Device: RequireNonBlank(deviceSelector, "Connected device selector is required."),
+        Adb: RequireNonBlank(adbExecutable, "ADB executable is required."),
+        PollArtifacts: string.IsNullOrWhiteSpace(pollArtifacts)
+            ? CliDefaults.DefaultPollArtifactsPolicy
+            : pollArtifacts.Trim());
+
     private static void Add(Dictionary<string, string?> values, string key, string? value)
     {
         if (!string.IsNullOrWhiteSpace(value))
@@ -110,6 +117,9 @@ public sealed record ViewProfile(
             values[key] = "true";
         }
     }
+
+    private static string RequireNonBlank(string value, string message) =>
+        string.IsNullOrWhiteSpace(value) ? throw new ArgumentException(message) : value.Trim();
 }
 
 public interface IViewProfileStore
