@@ -52,7 +52,7 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
         }
 
         var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Failed to start '{_executable}'.");
-        return Task.FromResult<IAsyncDisposable>(new AdbShellProcess(process));
+        return Task.FromResult<IAsyncDisposable>(new AdbShellProcess(process, process.StandardOutput.ReadToEndAsync(), process.StandardError.ReadToEndAsync()));
     }
 
     public Task<AdbLogStreamResult> MonitorLogAsync(string containsText, DateTimeOffset since, int timeoutSec, CancellationToken cancellationToken = default) =>
@@ -159,9 +159,11 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
         return new LogReaderResult(logBuilder.ToString(), matchedLine, lineCount);
     }
 
-    private sealed class AdbShellProcess(Process process) : IAsyncDisposable
+    private sealed class AdbShellProcess(Process process, Task<string> stdoutTask, Task<string> stderrTask) : IAsyncDisposable
     {
         private readonly Process _process = process;
+        private readonly Task<string> _stdoutTask = stdoutTask;
+        private readonly Task<string> _stderrTask = stderrTask;
 
         public async ValueTask DisposeAsync()
         {
@@ -170,13 +172,26 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
                 _process.Kill(entireProcessTree: true);
             }
 
+            await _process.WaitForExitAsync().ConfigureAwait(false);
+            await IgnoreDrainFailureAsync(_stdoutTask).ConfigureAwait(false);
+            await IgnoreDrainFailureAsync(_stderrTask).ConfigureAwait(false);
+            _process.Dispose();
+        }
+
+        private static async Task IgnoreDrainFailureAsync(Task drainTask)
+        {
             try
             {
-                await _process.WaitForExitAsync().ConfigureAwait(false);
+                await drainTask.ConfigureAwait(false);
             }
-            finally
+            catch (OperationCanceledException)
             {
-                _process.Dispose();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+            catch (InvalidOperationException)
+            {
             }
         }
     }

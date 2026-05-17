@@ -81,8 +81,24 @@ public sealed class ViewTransportTests
         Assert.Equal(38543, connection.LocalPort);
         Assert.Equal(["push", "C:/tmp/helper.apk", "/data/local/tmp/luotsi-view-server.apk"], adb.RunCommands[0]);
         Assert.Equal(["forward", "tcp:0", "localabstract:luotsi_view_session123"], adb.RunCommands[1]);
-        Assert.Contains("CLASSPATH=/data/local/tmp/luotsi-view-server.apk app_process / dev.luotsi.view.Main", adb.ShellCommands[0], StringComparison.Ordinal);
-        Assert.Contains("--codec h264", adb.ShellCommands[0], StringComparison.Ordinal);
+        Assert.Contains("CLASSPATH='/data/local/tmp/luotsi-view-server.apk' app_process / 'dev.luotsi.view.Main'", adb.ShellCommands[0], StringComparison.Ordinal);
+        Assert.Contains("--codec 'h264'", adb.ShellCommands[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AndroidViewBootstrap_StartAsync_ShellQuotes_Screenrecord_Request_Values()
+    {
+        var adb = new FakeAdbClient();
+        adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "38543\n", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        var locator = new FakeAndroidViewHelperPackageLocator(new AndroidViewHelperPackage("C:/tmp/helper.apk", "/data/local/tmp/luotsi-view-server.apk", "dev.luotsi.view.Main", "test-helper"));
+        var bootstrap = new AndroidViewBootstrap(new FakeAdbClientFactory(adb), new DefaultProcessRunner(), locator, new FakeUniqueIdGenerator("session123"));
+
+        await bootstrap.StartAsync(new ViewStartRequest("adb", "device-1", 1280, 30, "8M; input keyevent HOME", "h264", ViewCaptureBackends.Screenrecord));
+
+        Assert.Contains("--video-bit-rate '8M; input keyevent HOME'", adb.ShellCommands[0], StringComparison.Ordinal);
+        Assert.DoesNotContain("--video-bit-rate 8M; input keyevent HOME", adb.ShellCommands[0], StringComparison.Ordinal);
     }
 
     [Fact]
