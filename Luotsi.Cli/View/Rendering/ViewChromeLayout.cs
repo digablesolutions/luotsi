@@ -85,15 +85,10 @@ public static class ViewChromeLayout
             return text is null ? null : new ViewChromeTooltip(button.Bounds, text);
         }
 
-        foreach (var device in layout.DeviceSlots)
-        {
-            if (device.Bounds.Contains(x, y))
-            {
-                return new ViewChromeTooltip(device.Bounds, $"{device.Label} {device.StatusLabel} {device.DeviceSelector}".Trim());
-            }
-        }
-
-        return null;
+        return layout.DeviceSlots
+            .Where(device => device.Bounds.Contains(x, y))
+            .Select(device => new ViewChromeTooltip(device.Bounds, $"{device.Label} {device.StatusLabel} {device.DeviceSelector}".Trim()))
+            .FirstOrDefault();
     }
 
     internal static ViewChromeRenderLayout BuildRenderLayout(int clientWidth, int clientHeight, ViewChromeState? chrome)
