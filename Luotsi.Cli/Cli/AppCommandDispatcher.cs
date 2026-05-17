@@ -1,31 +1,26 @@
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
-using Luotsi.Cli.Scenarios;
 
 namespace Luotsi.Cli.Cli;
 
 internal sealed class AppCommandDispatcher(
-    IFileSystem fileSystem,
-    TimeProvider timeProvider,
-    IDelay delay,
-    IEnvironmentVariables environment,
+    AdbSubcommandDispatcher adbSubcommandDispatcher,
+    ScenarioCommandDispatcher scenarioCommandDispatcher,
     ViewProfileCoordinator profileCoordinator)
 {
-    private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
-    private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
-    private readonly IDelay _delay = delay ?? throw new ArgumentNullException(nameof(delay));
-    private readonly IEnvironmentVariables _environment = environment ?? throw new ArgumentNullException(nameof(environment));
+    private readonly AdbSubcommandDispatcher _adbSubcommandDispatcher = adbSubcommandDispatcher ?? throw new ArgumentNullException(nameof(adbSubcommandDispatcher));
+    private readonly ScenarioCommandDispatcher _scenarioCommandDispatcher = scenarioCommandDispatcher ?? throw new ArgumentNullException(nameof(scenarioCommandDispatcher));
     private readonly ViewProfileCoordinator _profileCoordinator = profileCoordinator ?? throw new ArgumentNullException(nameof(profileCoordinator));
 
     public async Task<object> ExecuteAsync(string command, CliOptions options, string adbExecutable, IDeviceHost runner)
     {
-        var scenarios = new ScenarioExecutor(runner, _fileSystem, _timeProvider, _delay, _environment);
-        var scenarioCatalog = new ScenarioCatalog(_fileSystem, _timeProvider, _environment);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(runner);
 
         return command switch
         {
-            "adb" => await ExecuteAdbCommandAsync(options, RequireAdbCommandHost(runner, command)).ConfigureAwait(false),
+            "adb" => await AdbSubcommandDispatcher.ExecuteAsync(options, RequireAdbCommandHost(runner, command)).ConfigureAwait(false),
             "devices" => await runner.GetDevicesAsync().ConfigureAwait(false),
             "device-wait" or "wait-for-device" => await RequireAdbCommandHost(runner, command).WaitForDeviceAsync(options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
             "preflight" => await RequireAdbCommandHost(runner, command).PreflightAsync(options.Get("package")).ConfigureAwait(false),
@@ -49,7 +44,7 @@ internal sealed class AppCommandDispatcher(
             "list-installed-packages" => await runner.ListInstalledPackagesAsync(options.HasFlag("third-party")).ConfigureAwait(false),
             "grant-permission" => await runner.GrantPermissionAsync(options.Require("package"), options.Require("permission")).ConfigureAwait(false),
             "revoke-permission" => await runner.RevokePermissionAsync(options.Require("package"), options.Require("permission")).ConfigureAwait(false),
-            "scenario-list" => await ListScenariosAsync(options, scenarioCatalog).ConfigureAwait(false),
+            "scenario-list" => await _scenarioCommandDispatcher.ListAsync(options).ConfigureAwait(false),
             "screen-state" => await runner.GetScreenStateAsync().ConfigureAwait(false),
             "telemetry-tail" => await runner.TelemetryTailAsync(options.Int("tail", CliDefaults.DefaultLogTail)).ConfigureAwait(false),
             "telemetry-watch" => await runner.TelemetryWatchAsync(options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
@@ -63,86 +58,10 @@ internal sealed class AppCommandDispatcher(
             "logcat" => await runner.LogcatAsync(options.Int("tail", CliDefaults.DefaultLogTail)).ConfigureAwait(false),
             "wait-log" => await runner.WaitForLogAsync(options.Require("contains"), options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
             "record" => await runner.RecordAsync(options.Require("output"), options.Int("time-limit-sec", CliDefaults.DefaultRecordTimeLimitSeconds)).ConfigureAwait(false),
-            "run" when options.Get("path") is not null || options.HasFlag("dry-run") => await RunScenariosAsync(options, scenarios, scenarioCatalog).ConfigureAwait(false),
-            "run" => await scenarios.RunAsync(options.Require("file")).ConfigureAwait(false),
+            "run" => await _scenarioCommandDispatcher.RunAsync(options, runner).ConfigureAwait(false),
             _ => throw new UsageException($"Unknown command '{command}'.")
         };
     }
-
-    private static async Task<ScenarioListResult> ListScenariosAsync(CliOptions options, ScenarioCatalog scenarioCatalog)
-    {
-        var query = CreateScenarioQuery(options, requirePath: true);
-        var discovered = await scenarioCatalog.DiscoverAsync(query.Path).ConfigureAwait(false);
-        var matched = ScenarioCatalog.Filter(discovered, query);
-        return new ScenarioListResult(query.Path, discovered.Count, matched.Count, matched);
-    }
-
-    private static async Task<object> RunScenariosAsync(CliOptions options, ScenarioExecutor scenarios, ScenarioCatalog scenarioCatalog)
-    {
-        var query = CreateScenarioQuery(options, requirePath: false);
-        var discovered = await scenarioCatalog.DiscoverAsync(query.Path).ConfigureAwait(false);
-        var matched = ScenarioCatalog.Filter(discovered, query);
-        var selected = ScenarioCatalog.SelectShard(matched, query);
-
-        if (query.DryRun)
-        {
-            return new ScenarioRunPlanResult(
-                query.Path,
-                true,
-                discovered.Count,
-                matched.Count,
-                selected.Count,
-                query.ShardCount,
-                query.ShardIndex,
-                selected);
-        }
-
-        var results = new List<object>(selected.Count);
-        foreach (var scenario in selected)
-        {
-            results.Add(await scenarios.RunAsync(scenario.File).ConfigureAwait(false));
-        }
-
-        return new ScenarioRunBatchResult(
-            query.Path,
-            "passed",
-            discovered.Count,
-            matched.Count,
-            selected.Count,
-            selected.Count,
-            0,
-            matched.Count - selected.Count,
-            query.ShardCount,
-            query.ShardIndex,
-            results);
-    }
-
-    private static ScenarioQuery CreateScenarioQuery(CliOptions options, bool requirePath)
-    {
-        var path = options.Get("path") ?? options.Get("file");
-        if (requirePath && string.IsNullOrWhiteSpace(path))
-        {
-            throw new UsageException("Missing required option --path.");
-        }
-
-        path ??= options.Require("file");
-        int? shardCount = options.Get("shard-count") is null ? null : options.Int("shard-count", 0);
-        int? shardIndex = options.Get("shard-index") is null ? null : options.Int("shard-index", 0);
-        return new ScenarioQuery(
-            path,
-            SplitOption(options.Get("include-tag") ?? options.Get("tag")),
-            SplitOption(options.Get("exclude-tag")),
-            options.Get("name"),
-            options.Get("action"),
-            shardCount,
-            shardIndex,
-            options.HasFlag("dry-run"));
-    }
-
-    private static IReadOnlyList<string> SplitOption(string? value) =>
-        string.IsNullOrWhiteSpace(value)
-            ? []
-            : value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
     private async Task<WirelessMdnsConnectResult> ConnectWirelessAsync(CliOptions options, string adbExecutable, IWirelessDebugHost runner)
     {
@@ -189,25 +108,4 @@ internal sealed class AppCommandDispatcher(
 
     private static IAdbCommandHost RequireAdbCommandHost(IDeviceHost runner, string command) =>
         runner as IAdbCommandHost ?? throw new InvalidOperationException($"Command '{command}' requires a direct adb-backed device host.");
-
-    private static async Task<object> ExecuteAdbCommandAsync(CliOptions options, IAdbCommandHost runner)
-    {
-        var args = options.Arguments;
-        if (args.Count == 0)
-        {
-            throw new UsageException("Missing adb subcommand. Supported forms: adb server-status, adb version, adb features, adb mdns check, adb wait-for-device, adb reconnect [offline|device].");
-        }
-
-        return args[0] switch
-        {
-            "server-status" when args.Count == 1 => await runner.GetAdbServerStatusAsync().ConfigureAwait(false),
-            "version" when args.Count == 1 => await runner.GetAdbVersionAsync().ConfigureAwait(false),
-            "features" when args.Count == 1 => await runner.GetAdbFeaturesAsync().ConfigureAwait(false),
-            "mdns" when args.Count == 2 && string.Equals(args[1], "check", StringComparison.OrdinalIgnoreCase) => await runner.CheckAdbMdnsAsync().ConfigureAwait(false),
-            "wait-for-device" when args.Count == 1 => await runner.WaitForDeviceAsync(options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
-            "device-wait" when args.Count == 1 => await runner.WaitForDeviceAsync(options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
-            "reconnect" when args.Count <= 2 => await runner.ReconnectAdbAsync(args.Count > 1 ? args[1] : options.Get("target") ?? "offline").ConfigureAwait(false),
-            _ => throw new UsageException($"Unknown adb subcommand '{string.Join(" ", args)}'.")
-        };
-    }
 }

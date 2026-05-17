@@ -39,7 +39,7 @@ public sealed record ScenarioRunBatchResult(
     int SelectedCount,
     int PassedCount,
     int FailedCount,
-    int SkippedCount,
+    int ShardedOutCount,
     int? ShardCount,
     int? ShardIndex,
     IReadOnlyList<object> Scenarios);
@@ -69,7 +69,6 @@ internal sealed class ScenarioCatalog(IFileSystem fileSystem, TimeProvider timeP
         foreach (var file in files)
         {
             var scenario = _templateResolver.ResolveScenario(await LoadAsync(file).ConfigureAwait(false));
-            ScenarioValidator.ValidateScenario(scenario, file, ScenarioExecutor.SupportedScenarioActions);
             entries.Add(ToEntry(file, scenario));
         }
 

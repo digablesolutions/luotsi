@@ -17,9 +17,8 @@ public sealed class App
     private readonly AppCommandFamilyRouter _commandFamilyRouter;
 
     /// <summary>
-    /// Creates the CLI application with optional service overrides.
+    /// Creates the CLI application with default services.
     /// </summary>
-    /// <param name="dependencies">Optional dependency overrides for tests or specialized hosting.</param>
     public App()
         : this(null)
     {
@@ -63,7 +62,10 @@ public sealed class App
             resolvedProcessRunner);
         var resolvedViewProfileStore = dependencies.ViewProfileStore ?? new JsonViewProfileStore(resolvedFileSystem, resolvedEnvironment);
         var profileCoordinator = new ViewProfileCoordinator(resolvedViewProfileStore);
-        var commandDispatcher = new AppCommandDispatcher(resolvedFileSystem, resolvedTimeProvider, resolvedDelay, resolvedEnvironment, profileCoordinator);
+        var commandDispatcher = new AppCommandDispatcher(
+            new AdbSubcommandDispatcher(),
+            new ScenarioCommandDispatcher(resolvedFileSystem, resolvedTimeProvider, resolvedDelay, resolvedEnvironment),
+            profileCoordinator);
         var commandHost = new AppCommandHost(new AppCommandHostDependencies
         {
             Console = resolvedConsole,

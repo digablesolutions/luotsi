@@ -460,6 +460,8 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public Exception? PreflightException { get; set; }
 
+    public Exception? WaitVisibleException { get; set; }
+
     public Task<DeviceListResult> GetDevicesAsync()
     {
         if (GetDevicesException is not null)
@@ -580,8 +582,15 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public Task<RecordResult> RecordAsync(string output, int timeLimitSec) => Task.FromResult(new RecordResult(output, timeLimitSec));
 
-    public Task<ScreenElement> WaitVisibleAsync(string text, int timeoutSec) =>
-        Task.FromResult(new ScreenElement(text, null, $"id/{text}", "android.widget.TextView", true, true, 0, 0, 100, 100));
+    public Task<ScreenElement> WaitVisibleAsync(string text, int timeoutSec)
+    {
+        if (WaitVisibleException is not null)
+        {
+            throw WaitVisibleException;
+        }
+
+        return Task.FromResult(new ScreenElement(text, null, $"id/{text}", "android.widget.TextView", true, true, 0, 0, 100, 100));
+    }
 
     public Task<TapResult> TapTextAsync(string text, int timeoutSec)
     {
