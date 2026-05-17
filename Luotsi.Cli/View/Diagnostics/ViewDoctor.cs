@@ -243,13 +243,28 @@ public sealed class ViewDoctor(
                 null,
                 "Use --codec h264."));
 
-        checks.Add(new ViewDoctorCheck(
-            "mediaprojection_consent",
-            true,
-            "MediaProjection consent is requested by the installed helper activity at session start.",
-            "If consent is denied or times out, --capture-backend auto falls back to screenrecord."));
+        checks.Add(CheckMediaProjectionConsent(options));
 
         return checks;
+    }
+
+    private static ViewDoctorCheck CheckMediaProjectionConsent(ViewOptions options)
+    {
+        if (string.Equals(options.CaptureBackend, ViewCaptureBackends.Auto, StringComparison.OrdinalIgnoreCase))
+        {
+            return new ViewDoctorCheck(
+                "mediaprojection_consent",
+                true,
+                "MediaProjection consent will be requested by the helper activity when auto starts; screenrecord remains available if consent is denied or times out.",
+                "consent_state=interactive; fallback=screenrecord");
+        }
+
+        return new ViewDoctorCheck(
+            "mediaprojection_consent",
+            false,
+            "MediaProjection consent cannot be preflighted before the Android consent activity runs.",
+            "consent_state=interactive; fallback=none",
+            "Start a MediaProjection view session on the physical device and approve the Android screen-capture prompt, or use --capture-backend auto/screenrecord.");
     }
 
     private static bool UsesMediaProjection(ViewOptions options) =>

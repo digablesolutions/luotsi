@@ -3,6 +3,7 @@ package dev.luotsi.view
 import android.media.MediaCodec
 import android.os.SystemClock
 import java.io.Closeable
+import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -32,8 +33,13 @@ internal class MediaCodecPacketizer(private val output: OutputStream) : Closeabl
             return
         }
 
+        val normalized = normalizeH264Payload(payload)
+        if (normalized.isEmpty()) {
+            return
+        }
+
         wroteConfig = true
-        writePacket(TYPE_CONFIG, false, 0L, ensureAnnexB(payload))
+        writePacket(TYPE_CONFIG, false, 0L, normalized)
     }
 
     fun writeEncodedBuffer(codec: MediaCodec, index: Int, info: MediaCodec.BufferInfo) {
@@ -53,8 +59,13 @@ internal class MediaCodecPacketizer(private val output: OutputStream) : Closeabl
             return
         }
 
+        val normalized = normalizeH264Payload(payload)
+        if (normalized.isEmpty()) {
+            return
+        }
+
         val keyFrame = (info.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0
-        writePacket(TYPE_FRAME, keyFrame, info.presentationTimeUs, ensureAnnexB(payload))
+        writePacket(TYPE_FRAME, keyFrame, info.presentationTimeUs, normalized)
     }
 
     fun writeServerError(message: String) = writePacket(TYPE_SERVER_ERROR, false, 0L, message.encodeToByteArray())
@@ -89,15 +100,64 @@ internal class MediaCodecPacketizer(private val output: OutputStream) : Closeabl
         output.flush()
     }
 
-    private fun ensureAnnexB(payload: ByteArray): ByteArray {
+    private fun normalizeH264Payload(payload: ByteArray): ByteArray {
+        if (payload.isEmpty()) {
+            return payload
+        }
+
         if (hasStartCode(payload)) {
             return payload
+        }
+
+        val convertedLengthPrefixed = tryConvertLengthPrefixed(payload)
+        if (convertedLengthPrefixed != null) {
+            return convertedLengthPrefixed
         }
 
         val converted = ByteArray(START_CODE.size + payload.size)
         START_CODE.copyInto(converted)
         payload.copyInto(converted, destinationOffset = START_CODE.size)
         return converted
+    }
+
+    private fun tryConvertLengthPrefixed(payload: ByteArray): ByteArray? {
+        for (lengthSize in 4 downTo 1) {
+            val converted = tryConvertLengthPrefixed(payload, lengthSize)
+            if (converted != null) {
+                return converted
+            }
+        }
+
+        return null
+    }
+
+    private fun tryConvertLengthPrefixed(payload: ByteArray, lengthSize: Int): ByteArray? {
+        var offset = 0
+        val output = ByteArrayOutputStream(payload.size + START_CODE.size)
+        var nalCount = 0
+
+        while (offset < payload.size) {
+            if (payload.size - offset < lengthSize) {
+                return null
+            }
+
+            var nalLength = 0
+            for (index in 0 until lengthSize) {
+                nalLength = (nalLength shl 8) or (payload[offset + index].toInt() and 0xFF)
+            }
+            offset += lengthSize
+
+            if (nalLength <= 0 || nalLength > payload.size - offset) {
+                return null
+            }
+
+            output.write(START_CODE)
+            output.write(payload, offset, nalLength)
+            offset += nalLength
+            nalCount++
+        }
+
+        return if (nalCount > 0 && offset == payload.size) output.toByteArray() else null
     }
 
     private fun hasStartCode(payload: ByteArray): Boolean {

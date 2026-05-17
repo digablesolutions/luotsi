@@ -135,8 +135,11 @@ internal class MediaProjectionCaptureSession(
     private fun writeFormatConfig(format: MediaFormat, packetizer: MediaCodecPacketizer) {
         val sps = format.getByteBuffer("csd-0")?.toByteArray() ?: ByteArray(0)
         val pps = format.getByteBuffer("csd-1")?.toByteArray() ?: ByteArray(0)
-        if (sps.isNotEmpty() || pps.isNotEmpty()) {
-            packetizer.writeCodecConfig(sps + pps)
+        if (sps.isNotEmpty()) {
+            packetizer.writeCodecConfig(sps)
+        }
+        if (pps.isNotEmpty()) {
+            packetizer.writeCodecConfig(pps)
         }
     }
 

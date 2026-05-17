@@ -18,6 +18,9 @@ class CaptureService : Service() {
     @Volatile
     private var serverSocket: LocalServerSocket? = null
 
+    @Volatile
+    private var captureThread: Thread? = null
+
     override fun onCreate() {
         super.onCreate()
         ensureNotificationChannel()
@@ -39,14 +42,13 @@ class CaptureService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
-        activeSession?.stop()
-        activeSession = null
-        runCatching { serverSocket?.close() }
-        serverSocket = null
+        stopActiveCapture()
         super.onDestroy()
     }
 
     private fun startCapture(intent: Intent) {
+        stopActiveCapture()
+
         val resultData = intent.getParcelableExtra<Intent>(EXTRA_RESULT_DATA)
         val socketName = intent.getStringExtra(EXTRA_SOCKET_NAME)
         if (resultData == null || socketName.isNullOrBlank()) {
@@ -60,7 +62,7 @@ class CaptureService : Service() {
         val maxFps = intent.getIntExtra(EXTRA_MAX_FPS, 60)
         val videoBitRate = intent.getStringExtra(EXTRA_VIDEO_BIT_RATE) ?: "8M"
 
-        thread(start = true, isDaemon = true, name = "luotsi-mediaprojection-capture") {
+        captureThread = thread(start = true, isDaemon = true, name = "luotsi-mediaprojection-capture") {
             try {
                 LocalServerSocket(socketName).use { server ->
                     serverSocket = server
@@ -83,11 +85,23 @@ class CaptureService : Service() {
                     }
                 }
             } finally {
-                activeSession = null
-                serverSocket = null
+                if (captureThread === Thread.currentThread()) {
+                    activeSession = null
+                    serverSocket = null
+                    captureThread = null
+                }
                 stopSelf()
             }
         }
+    }
+
+    private fun stopActiveCapture() {
+        activeSession?.stop()
+        activeSession = null
+        runCatching { serverSocket?.close() }
+        serverSocket = null
+        captureThread?.interrupt()
+        captureThread = null
     }
 
     private fun ensureNotificationChannel() {
