@@ -5,7 +5,7 @@ namespace Luotsi.Cli.Cli;
 
 internal sealed class AdbSubcommandDispatcher
 {
-    public static async Task<object> ExecuteAsync(CliOptions options, IAdbCommandHost runner)
+    public async Task<object> ExecuteAsync(CliOptions options, IAdbCommandHost runner)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(runner);
