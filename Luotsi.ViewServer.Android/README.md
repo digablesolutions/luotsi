@@ -1,12 +1,18 @@
 # Luotsi View Server Android
 
-This project builds the device-side helper used by Luotsi's `view` command.
+Luotsi is a host-driven device automation and live-view tool. This project
+builds the Android-side helper that the host CLI installs and launches for
+interactive view sessions.
 
-The helper project uses Kotlin source and Kotlin DSL Gradle build scripts.
+In product terms, this module is the thin on-device capture and transport
+component. Session orchestration, reconnect policy, artifacts, and operator UX
+stay on the host. The Android helper's job is to expose the device display as
+Luotsi's private stream over an Android `localabstract` socket.
 
-It is intentionally small and currently provides only the Phase 2 transport
-stub: it binds an Android localabstract socket, writes the private stream header,
-emits a `stream_end` packet, and exits.
+The helper project uses Kotlin source and Kotlin DSL Gradle build scripts. It
+is intentionally small. Today it wraps Android `screenrecord`, packetizes the
+H.264 byte stream into Luotsi's private packet format, and emits stream header,
+frame/config, and stream-end packets for the host decoder.
 
 ## Build
 

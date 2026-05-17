@@ -1,0 +1,62 @@
+name: Bug report
+description: Report a reproducible defect in the CLI, live view runtime, or Android helper.
+title: "[bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Include the exact command, environment, and any relevant logs or artifacts.
+
+  - type: input
+    id: area
+    attributes:
+      label: Area
+      description: Which part of Luotsi is affected?
+      placeholder: cli, scenarios, view, android-helper, telemetry, packaging
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Command or reproduction sequence
+      description: Paste the exact command, scenario, or sequence that reproduces the issue.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Host OS, .NET SDK, adb version, and device details if relevant.
+      placeholder: |
+        Host OS:
+        .NET SDK:
+        adb version:
+        Device:
+    validations:
+      required: true
+
+  - type: textarea
+    id: artifacts
+    attributes:
+      label: Logs or artifacts
+      description: Paste key output or point to files produced under the artifact root.
+      render: text

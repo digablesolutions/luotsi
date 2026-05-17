@@ -1,0 +1,10 @@
+{
+  "name": "android-home-smoke",
+  "steps": [
+    { "name": "go home", "action": "keyevent", "code": "KEYCODE_HOME" },
+    { "name": "let launcher settle", "action": "sleep", "milliseconds": 750 },
+    { "name": "capture screen state", "action": "screenState" },
+    { "name": "capture screenshot", "action": "takeScreenshot", "label": "android-home-smoke" },
+    { "name": "capture artifacts", "action": "captureArtifacts", "label": "android-home-smoke" }
+  ]
+}

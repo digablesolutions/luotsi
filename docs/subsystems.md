@@ -31,7 +31,7 @@ Relevant code:
 
 ## Scenario subsystem
 
-- Scenario files live under `scenarios/`.
+- The repo ships generic scenario examples under `examples/scenarios/`.
 - `ScenarioExecutor` resolves templates, validates steps, and routes them
   through host-side actions.
 - Failure handling is artifact-heavy by design.

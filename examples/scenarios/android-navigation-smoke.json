@@ -1,0 +1,11 @@
+{
+  "name": "android-navigation-smoke",
+  "steps": [
+    { "name": "go home", "action": "keyevent", "code": "KEYCODE_HOME" },
+    { "name": "open recents", "action": "keyevent", "code": "KEYCODE_APP_SWITCH" },
+    { "name": "let recents settle", "action": "sleep", "milliseconds": 500 },
+    { "name": "return home", "action": "keyevent", "code": "KEYCODE_HOME" },
+    { "name": "capture screenshot", "action": "takeScreenshot", "label": "android-navigation-smoke" },
+    { "name": "capture artifacts", "action": "captureArtifacts", "label": "android-navigation-smoke" }
+  ]
+}

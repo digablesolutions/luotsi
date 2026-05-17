@@ -6,6 +6,10 @@
 # dotenv files
 .env
 
+# Local-only repo settings and app-specific local scenarios
+.claude/settings.local.json
+/scenarios/
+
 # User-specific files
 *.rsuser
 *.suo

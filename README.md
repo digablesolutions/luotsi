@@ -1,28 +1,38 @@
+<p align="center">
+  <img src="docs/luotsi-logo.svg" alt="Luotsi" width="360">
+</p>
+
+<p align="center">
+  <a href="https://github.com/digablesolutions/luotsi/actions/workflows/ci.yml"><img alt="CI workflow" src="https://github.com/digablesolutions/luotsi/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/digablesolutions/luotsi/actions/workflows/release.yml"><img alt="Release workflow" src="https://github.com/digablesolutions/luotsi/actions/workflows/release.yml/badge.svg"></a>
+  <img alt=".NET 10" src="https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white">
+  <img alt="Platform Android" src="https://img.shields.io/badge/platform-Android-3DDC84?logo=android&logoColor=0F172A">
+</p>
+
 # Luotsi
 
-Luotsi is a host-side .NET CLI for cross-platform on-device end-to-end
-automation.
+Luotsi is a host-driven CLI for device automation, inspection, and live view.
+It runs on the engineer or CI machine, talks to real devices, and returns
+structured results plus artifacts. Android is the first supported platform.
 
-The current kiosk harness proved the useful shape:
+In product terms, Luotsi is the host control plane for:
 
-- host-side commands that drive a real Android device through `adb`
-- stdout as exactly one JSON envelope for agents
-- artifacts by default
-- scenarios as small readable playbooks
-- app-side semantic telemetry as the high-value oracle when available
+- direct device commands and bounded waits
+- scenario execution from small JSON playbooks
+- long-lived inspect and live-view sessions
+- artifact capture, semantic telemetry parsing, and reconnectable streaming
 
-This repo packages the next version as a typed .NET CLI rather than
-PowerShell. It stays separate from the kiosk repo while the host-side harness
-is generalized beyond the original kiosk-specific runner.
+The design is intentionally boring:
 
-## Why look at this approach?
+- normal command mode returns one JSON envelope
+- long-lived sessions use JSONL
+- orchestration, policy, and diagnostics stay on the host
+- platform helpers stay thin and purpose-built
+- Android support is ADB-first rather than server-protocol-first
 
-This approach has a useful architecture lesson even if we do not copy its protocol:
-
-
-Luotsi v1 does **not** vendor any specific tool or implement its server protocol. It
-keeps boring ADB primitives first, with room to add an optional binary
-adapter later for low-latency mirroring, recording, or HID/OTG control.
+Luotsi does not vendor or depend on a third-party device automation server.
+The goal is a typed, scriptable interface that works for engineers, CI, and
+agent-driven flows against real devices.
 
 ## Code layout
 
@@ -31,7 +41,7 @@ adapter later for low-latency mirroring, recording, or HID/OTG control.
 - `Luotsi.Cli/Artifacts/` contains artifact session management.
 - `Luotsi.Cli/Models/` contains shared records, envelopes, and screen/scenario data models.
 - `Luotsi.Cli/Scenarios/` contains scenario execution flow and scenario-specific failure plumbing.
-- `Luotsi.Cli/Telemetry/` contains telemetry parsing contracts and the kiosk telemetry parser.
+- `Luotsi.Cli/Telemetry/` contains telemetry parsing contracts and the current app telemetry parser.
 - `Luotsi.Cli/Errors/` contains typed command and wait exceptions.
 - `Luotsi.Cli/Infrastructure/` contains interfaces plus the default system-backed implementations used by the CLI.
 
@@ -46,6 +56,8 @@ dotnet run --project Luotsi.Cli -- preflight --device <serial> --package dev.luo
 dotnet run --project Luotsi.Cli -- screen-state --device <serial>
 dotnet run --project Luotsi.Cli -- view --device <serial> --preset safe --decoder ffmpeg --record capture.mp4 --stats-interval-ms 1000
 dotnet run --project Luotsi.Cli -- view --profile desk
+dotnet run --project Luotsi.Cli -- reconnect
+dotnet run --project Luotsi.Cli -- reconnect --profile desk
 dotnet run --project Luotsi.Cli -- view --last
 dotnet run --project Luotsi.Cli -- view-doctor --device <serial> --preset low-latency
 dotnet run --project Luotsi.Cli -- wireless --device <usb-serial> --host 192.168.0.44
@@ -53,7 +65,7 @@ dotnet run --project Luotsi.Cli -- telemetry-tail --device <serial> --tail 200
 dotnet run --project Luotsi.Cli -- telemetry-watch --device <serial> --timeout-sec 10
 dotnet run --project Luotsi.Cli -- tap-text --device <serial> --text "Sign in"
 dotnet run --project Luotsi.Cli -- wait-log --device <serial> --contains "DEVICE_READY" --timeout-sec 20
-dotnet run --project Luotsi.Cli -- run --device <serial> --file scenarios/idle-language-switch-finnish.json
+dotnet run --project Luotsi.Cli -- run --device <serial> --file examples/scenarios/android-home-smoke.json
 ```
 
 Inspect mode is intentionally different: it is a long-lived JSONL session over
@@ -96,14 +108,18 @@ default they are stored under the user app-data directory; set
 When `--defaults` is combined with `--profile`, connection identity and artifact
 settings still come from the profile, but preset-driven launch tuning is reset
 to the conservative safe preset.
-Successful `view` launches refresh the special `last` profile, so `view --last`
-is the quickest reconnect path after a known-good setup.
+Successful `view` launches refresh the special `last` profile. `reconnect`
+reuses that last successful profile and session target by default, so a bare
+`reconnect` is the quickest way back to a known-good stream. `view --last`
+remains available when you want the same behavior through the main `view`
+command surface.
 The built-in SDL window now exposes an operator control layer: `F12` captures a
 device screenshot into the artifact root, `F9` toggles live stream recording,
 `F7` opens the artifact folder, `F6` toggles a stream pause marker, `F5`
-reconnects the mirrored stream, `F4` sends rotate, `F11` toggles fullscreen, and
-`F8` switches between `fit` and `fill` presentation modes. Plain text input, common
-navigation/editing keys, mouse-wheel scrolling, host clipboard paste via
+reconnects the mirrored stream, `F4` sends rotate, `F11` or `Alt+Enter`
+toggle local fullscreen, `Esc` exits fullscreen back to windowed mode, and
+`F8` switches between `fit` and `fill` presentation modes. Plain text input,
+common navigation/editing keys, mouse-wheel scrolling, host clipboard paste via
 `Ctrl+V`, and drag/drop helpers are also routed through the same session-owned
 interaction surface. Dropped `.apk` files install on the device; other dropped
 files are pushed to `/sdcard/Download`; dropped `device:/sdcard/...` or
@@ -178,7 +194,7 @@ includes top-level timing for non-step overhead:
 
 ```json
 {
-  "scenario": "idle-visitor-sign-in-happy-path",
+  "scenario": "android-home-smoke",
   "status": "passed",
   "timing": {
     "total_ms": 86361.4686,
@@ -206,15 +222,15 @@ the device.
 ## Scenario playbook
 
 The first playbook format is JSON to keep parsing unambiguous across OSes and
-agents. The ported kiosk scenarios now live under `scenarios/`:
+agents. The repo ships generic examples under `examples/scenarios/`:
 
 ```json
 {
-  "name": "idle-language-switch-finnish",
+  "name": "android-home-smoke",
   "steps": [
-    { "name": "open language menu", "action": "tapText", "text": "English", "timeoutSec": 10 },
-    { "name": "choose Finnish", "action": "tapText", "text": "Suomi", "timeoutSec": 10 },
-    { "name": "assert Finnish sign-in", "action": "waitVisible", "text": "Kirjaudu sisään", "timeoutSec": 15 }
+    { "name": "go home", "action": "keyevent", "code": "KEYCODE_HOME" },
+    { "name": "let launcher settle", "action": "sleep", "milliseconds": 750 },
+    { "name": "capture screenshot", "action": "takeScreenshot", "label": "android-home-smoke" }
   ]
 }
 ```
@@ -258,23 +274,22 @@ Supported actions:
 observation window should begin at the previous step's start time instead of the
 assert step's own start time.
 
-Current physical visitor-home smoke runs can stay on pure UI state until the app
-starts emitting `LUOTSI_DEVICE_TELEMETRY`:
+The repo also includes generic Android smoke examples that avoid app-specific
+selectors or copy:
 
-- `scenarios/idle-visitor-home-smoke-basics.json`
-- `scenarios/idle-visitor-home-smoke-language-roundtrip.json`
-- `scenarios/idle-header-logo-sync-settings.json`
+- `examples/scenarios/android-home-smoke.json`
+- `examples/scenarios/android-navigation-smoke.json`
 
 ## Telemetry support
 
-Luotsi currently understands the kiosk `LUOTSI_DEVICE_TELEMETRY` logcat marker.
+Luotsi currently understands the `LUOTSI_DEVICE_TELEMETRY` logcat marker.
 
 - `telemetry-tail` reads recent logcat lines, parses matching telemetry JSON,
   and returns both parsed events and malformed telemetry lines.
 - `telemetry-watch` waits for a bounded window, then dumps and parses telemetry
   emitted during that interval.
-- `wait-step` waits for a semantic kiosk step event.
-- `wait-action-ready` waits for a semantic kiosk action-ready event, optionally
+- `wait-step` waits for a semantic step event.
+- `wait-action-ready` waits for a semantic action-ready event, optionally
   scoped to a step.
 
 ## Inspect mode
@@ -312,20 +327,3 @@ Luotsi.Cli/bin/Release/net10.0/<rid>/publish/
 The published app is self-contained and single-file by default. If you want a
 framework-dependent or non-single-file build, override the MSBuild properties
 at publish time.
-
-## Next experiment lanes
-
-- See `docs/architecture.md` for the current high-level CLI and view runtime
-  architecture, and `docs/subsystems.md` for the active subsystem map.
-- For the native `view --decoder ffmpeg` runtime, populate `ffmpeg/bin` with
-  host-native shared libraries via `ffmpeg/download-ffmpeg.ps1` or set
-  `DEVICE_E2E_FFMPEG_ROOT`.
-- `view --record <file.h264|file.mp4|file.mkv>` supports raw H.264 capture and
-  container remuxing. `.mp4` and `.mkv` recording require an `ffmpeg`
-  executable resolvable from `ffmpeg/bin`, `DEVICE_E2E_FFMPEG_ROOT`, or `PATH`.
-- Current macOS publishes already include the SDL3 native runtime, but FFmpeg
-  shared libraries still need to be staged separately for live `view` runs.
-- Build typed semantic waits such as `wait-step` and `wait-action-ready` on top
-  of the raw `LUOTSI_DEVICE_TELEMETRY` parser.
-- Expand inspect mode with optional event subscriptions and continuous polling.
-- Add an iOS host adapter if the new host interface holds up outside Android.
