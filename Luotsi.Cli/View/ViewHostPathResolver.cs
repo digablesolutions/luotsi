@@ -7,7 +7,7 @@ namespace Luotsi.Cli.View;
 /// </summary>
 public sealed class ViewHostPathResolver(IEnvironmentVariables environment)
 {
-    private const string FfmpegRootEnvironmentVariable = "DEVICE_E2E_FFMPEG_ROOT";
+    private const string FfmpegRootEnvironmentVariable = "LUOTSI_FFMPEG_ROOT";
 
     private readonly IEnvironmentVariables _environment = environment ?? throw new ArgumentNullException(nameof(environment));
 

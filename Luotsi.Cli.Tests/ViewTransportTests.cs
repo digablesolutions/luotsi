@@ -202,7 +202,7 @@ public sealed class ViewTransportTests
         var loader = new LibavNativeLibraryLoader(
             new FakeEnvironmentVariables(new Dictionary<string, string>
             {
-                ["DEVICE_E2E_FFMPEG_ROOT"] = "C:\\ffmpeg-custom"
+                ["LUOTSI_FFMPEG_ROOT"] = "C:\\ffmpeg-custom"
             }),
             binder);
 
@@ -224,7 +224,7 @@ public sealed class ViewTransportTests
         var loader = new LibavNativeLibraryLoader(
             new FakeEnvironmentVariables(new Dictionary<string, string>
             {
-                ["DEVICE_E2E_FFMPEG_ROOT"] = configuredRoot
+                ["LUOTSI_FFMPEG_ROOT"] = configuredRoot
             }),
             binder);
 
@@ -243,7 +243,7 @@ public sealed class ViewTransportTests
 
         var error = Assert.Throws<InvalidOperationException>(() => loader.EnsureLoaded());
 
-        Assert.Contains("DEVICE_E2E_FFMPEG_ROOT", error.Message, StringComparison.Ordinal);
+        Assert.Contains("LUOTSI_FFMPEG_ROOT", error.Message, StringComparison.Ordinal);
         Assert.Contains("ffmpeg", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -352,7 +352,7 @@ public sealed class ViewTransportTests
             new FakeProcessRunner(),
             new FakeEnvironmentVariables(new Dictionary<string, string>
             {
-                ["DEVICE_E2E_FFMPEG_ROOT"] = Path.GetDirectoryName(ffmpegPath)!
+                ["LUOTSI_FFMPEG_ROOT"] = Path.GetDirectoryName(ffmpegPath)!
             }));
 
         var recorder = factory.Create(new ViewOptions("device-1", "adb", "h264", "ffmpeg", true, "capture.mp4", 1600, 60, "8M", false, false));
@@ -372,7 +372,7 @@ public sealed class ViewTransportTests
             new FakeProcessRunner(),
             new FakeEnvironmentVariables(new Dictionary<string, string>
             {
-                ["DEVICE_E2E_FFMPEG_ROOT"] = ffmpegRoot
+                ["LUOTSI_FFMPEG_ROOT"] = ffmpegRoot
             }));
 
         var recorder = factory.Create(new ViewOptions("device-1", "adb", "h264", "ffmpeg", true, "capture.mp4", 1600, 60, "8M", false, false));

@@ -52,10 +52,6 @@ public sealed class AndroidViewHelperPackageLocator(IEnvironmentVariables enviro
         var localPath = _environment.GetEnvironmentVariable(AndroidRuntimeDefaults.ViewHelperPathEnvironmentVariable);
         if (string.IsNullOrWhiteSpace(localPath))
         {
-            localPath = _environment.GetEnvironmentVariable(AndroidRuntimeDefaults.LegacyViewHelperPathEnvironmentVariable);
-        }
-        if (string.IsNullOrWhiteSpace(localPath))
-        {
             foreach (var candidate in _pathResolver.GetRepositoryRelativeFileCandidates(AndroidRuntimeDefaults.DefaultViewHelperRelativePath))
             {
                 if (_fileSystem.FileExists(candidate))

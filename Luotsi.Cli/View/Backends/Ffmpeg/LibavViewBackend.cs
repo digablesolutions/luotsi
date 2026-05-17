@@ -73,7 +73,7 @@ public sealed class LibavNativeLibraryLoader(IEnvironmentVariables environment, 
         var renderedCandidates = string.Join(", ",
             candidates.Select(static candidate => string.IsNullOrWhiteSpace(candidate) ? "<process-path>" : candidate));
         throw new InvalidOperationException(
-            $"Unable to load FFmpeg native libraries. Set DEVICE_E2E_FFMPEG_ROOT to a directory containing the host-native FFmpeg shared libraries or place them under ffmpeg/bin next to the repo or published app. Probed: {renderedCandidates}.",
+            $"Unable to load FFmpeg native libraries. Set LUOTSI_FFMPEG_ROOT to a directory containing the host-native FFmpeg shared libraries or place them under ffmpeg/bin next to the repo or published app. Probed: {renderedCandidates}.",
             lastError);
     }
 }

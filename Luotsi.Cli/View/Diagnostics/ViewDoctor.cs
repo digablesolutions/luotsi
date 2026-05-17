@@ -155,7 +155,7 @@ public sealed class ViewDoctor(
             }
             catch (Exception ex)
             {
-                return new ViewDoctorCheck("decoder", false, "FFmpeg native decoder is not ready.", ex.Message, "Set DEVICE_E2E_FFMPEG_ROOT or run view with --defaults --decoder ffmpeg after installing the bundled FFmpeg libraries.");
+                return new ViewDoctorCheck("decoder", false, "FFmpeg native decoder is not ready.", ex.Message, "Set LUOTSI_FFMPEG_ROOT or run view with --defaults --decoder ffmpeg after installing the bundled FFmpeg libraries.");
             }
         }
 
@@ -280,7 +280,7 @@ public sealed class ViewDoctor(
         }
         catch (Exception ex)
         {
-            return new ViewDoctorCheck("helper_package", false, "Android view helper package is not ready.", ex.Message, "Build the Android helper APK or set DEVICE_E2E_VIEW_HELPER_APK to a valid helper package.");
+            return new ViewDoctorCheck("helper_package", false, "Android view helper package is not ready.", ex.Message, "Build the Android helper APK or set LUOTSI_VIEW_HELPER_APK to a valid helper package.");
         }
     }
 
@@ -316,7 +316,7 @@ public sealed class ViewDoctor(
         catch (Exception ex)
         {
             return (
-                new ViewDoctorCheck("device_visibility", false, "Unable to enumerate adb-visible devices.", ex.Message, "Check that adb is installed and reachable via --adb or DEVICE_E2E_ADB."),
+                new ViewDoctorCheck("device_visibility", false, "Unable to enumerate adb-visible devices.", ex.Message, "Check that adb is installed and reachable via --adb or LUOTSI_ADB."),
                 Array.Empty<DeviceInfo>());
         }
     }

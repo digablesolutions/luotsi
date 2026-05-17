@@ -5,7 +5,7 @@ namespace Luotsi.Cli.Cli;
 /// </summary>
 internal static class CliDefaults
 {
-    public const string AdbExecutableEnvironmentVariable = "DEVICE_E2E_ADB";
+    public const string AdbExecutableEnvironmentVariable = "LUOTSI_ADB";
     public const string DefaultAdbExecutable = "adb";
     public const string DefaultPlatform = "android";
     public const string DefaultPollArtifactsPolicy = "final";

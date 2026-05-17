@@ -1283,8 +1283,8 @@ public sealed class DeviceRunner(
             throw new InvalidOperationException($"Device path '{path}' contains unsupported parent traversal.");
         }
 
-        var source = _environment.GetEnvironmentVariable("DEVICE_E2E_EMULATED_STORAGE_SOURCE")?.Trim();
-        var target = _environment.GetEnvironmentVariable("DEVICE_E2E_EMULATED_STORAGE_TARGET")?.Trim();
+        var source = _environment.GetEnvironmentVariable("LUOTSI_EMULATED_STORAGE_SOURCE")?.Trim();
+        var target = _environment.GetEnvironmentVariable("LUOTSI_EMULATED_STORAGE_TARGET")?.Trim();
         if (!string.IsNullOrWhiteSpace(source) &&
             !string.IsNullOrWhiteSpace(target) &&
             normalized.StartsWith(target, StringComparison.Ordinal) &&

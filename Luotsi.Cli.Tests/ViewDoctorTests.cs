@@ -66,7 +66,7 @@ public sealed partial class AppTests
         fileSystem.AddFile(helperPath, "apk");
         var environment = new FakeEnvironmentVariables(new Dictionary<string, string>
         {
-            ["DEVICE_E2E_VIEW_HELPER_JAR"] = helperPath
+            ["LUOTSI_VIEW_HELPER_APK"] = helperPath
         });
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
@@ -114,7 +114,7 @@ public sealed partial class AppTests
         fileSystem.AddFile(helperPath, "apk");
         var environment = new FakeEnvironmentVariables(new Dictionary<string, string>
         {
-            ["DEVICE_E2E_VIEW_HELPER_JAR"] = helperPath
+            ["LUOTSI_VIEW_HELPER_APK"] = helperPath
         });
         var host = new FakeDeviceHost(CreateScreenState(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind), "Sign in"));
         host.ConnectedDevices.Add(new DeviceInfo("usb-device", "unauthorized", "Pixel 9"));
@@ -144,7 +144,7 @@ public sealed partial class AppTests
         fileSystem.AddFile(helperPath, "apk");
         var environment = new FakeEnvironmentVariables(new Dictionary<string, string>
         {
-            ["DEVICE_E2E_VIEW_HELPER_JAR"] = helperPath
+            ["LUOTSI_VIEW_HELPER_APK"] = helperPath
         });
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));

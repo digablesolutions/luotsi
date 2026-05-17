@@ -74,7 +74,7 @@ public sealed class FfmpegExecutableResolver(IEnvironmentVariables environment, 
         }
 
         throw new InvalidOperationException(
-            "Container view recording requires an ffmpeg executable. Stage ffmpeg under ffmpeg/bin, set DEVICE_E2E_FFMPEG_ROOT to a directory containing ffmpeg, or place ffmpeg on PATH.");
+            "Container view recording requires an ffmpeg executable. Stage ffmpeg under ffmpeg/bin, set LUOTSI_FFMPEG_ROOT to a directory containing ffmpeg, or place ffmpeg on PATH.");
     }
 
     private IEnumerable<string> GetCandidateExecutablePaths()
