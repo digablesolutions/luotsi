@@ -1,6 +1,5 @@
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
-using Luotsi.Cli.Models;
 using Luotsi.Cli.Scenarios;
 
 namespace Luotsi.Cli.Cli;
@@ -15,6 +14,9 @@ internal sealed class ScenarioCommandDispatcher(
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     private readonly IDelay _delay = delay ?? throw new ArgumentNullException(nameof(delay));
     private readonly IEnvironmentVariables _environment = environment ?? throw new ArgumentNullException(nameof(environment));
+    private readonly IScenarioTemplateResolver _templateResolver = new ScenarioTemplateResolver(
+        timeProvider ?? throw new ArgumentNullException(nameof(timeProvider)),
+        environment ?? throw new ArgumentNullException(nameof(environment)));
 
     public async Task<ScenarioListResult> ListAsync(CliOptions options)
     {
@@ -30,7 +32,7 @@ internal sealed class ScenarioCommandDispatcher(
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(runner);
 
-        var scenarios = new ScenarioExecutor(runner, _fileSystem, _timeProvider, _delay, _environment);
+        var scenarios = new ScenarioExecutor(runner, _fileSystem, _timeProvider, _delay, _templateResolver, _environment);
         if (!UsesCatalogExecution(options))
         {
             if (options.HasFlag("dry-run"))
@@ -57,43 +59,11 @@ internal sealed class ScenarioCommandDispatcher(
                 selection.Selected);
         }
 
-        var results = new List<object>(selection.Selected.Count);
-        var passedCount = 0;
-        var failedCount = 0;
-        foreach (var scenario in selection.Selected)
-        {
-            try
-            {
-                results.Add(await scenarios.RunAsync(scenario.File).ConfigureAwait(false));
-                passedCount++;
-            }
-            catch (Exception ex) when (ex is not UsageException)
-            {
-                failedCount++;
-                var failure = ex as ICommandFailureDetails;
-                results.Add(new
-                {
-                    scenario = scenario.Name,
-                    file = scenario.File,
-                    status = "failed",
-                    data = failure?.DataPayload,
-                    error = ErrorInfo.From(ex, failure?.CategoryOverride ?? ErrorInfo.Classify(ex.Message))
-                });
-            }
-        }
-
-        return new ScenarioRunBatchResult(
-            query.Path,
-            failedCount == 0 ? "passed" : "failed",
+        return await new ScenarioBatchExecutor(scenarios).RunAsync(new ScenarioBatchExecutionRequest(
+            query,
             selection.TotalCount,
             selection.Matched.Count,
-            selection.Selected.Count,
-            passedCount,
-            failedCount,
-            selection.Matched.Count - selection.Selected.Count,
-            query.ShardCount,
-            query.ShardIndex,
-            results);
+            selection.Selected)).ConfigureAwait(false);
     }
 
     private static bool UsesCatalogExecution(CliOptions options) =>
@@ -108,7 +78,7 @@ internal sealed class ScenarioCommandDispatcher(
     }
 
     private ScenarioCatalog CreateScenarioCatalog() =>
-        new(_fileSystem, _timeProvider, _environment);
+        new(_fileSystem, _templateResolver);
 
     private static ScenarioQuery CreateQuery(CliOptions options, bool requirePath)
     {

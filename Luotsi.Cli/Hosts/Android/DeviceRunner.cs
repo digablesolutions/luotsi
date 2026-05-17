@@ -953,60 +953,7 @@ public sealed class DeviceRunner(
     }
 
     public async Task<FailureArtifactBundle> CaptureFailureArtifactsAsync(FailureCaptureRequest request, Exception exception)
-    {
-        var prefix = BuildFailurePrefix(request);
-        var captured = new List<FailureArtifact>();
-        var captureFailures = new List<FailureCaptureError>();
-
-        async Task CaptureAsync(string name, Func<Task<string>> action)
-        {
-            try
-            {
-                captured.Add(new FailureArtifact(name, await action().ConfigureAwait(false)));
-            }
-            catch (Exception captureException)
-            {
-                captureFailures.Add(new FailureCaptureError(name, captureException.Message));
-            }
-        }
-
-        await CaptureAsync("screenshot", async () =>
-        {
-            var fileName = DeviceArtifactNames.ScreenshotForLabel(prefix);
-            await CaptureScreenshotAsync(fileName).ConfigureAwait(false);
-            return fileName;
-        }).ConfigureAwait(false);
-
-        await CaptureAsync("logcat", async () =>
-        {
-            var fileName = DeviceArtifactNames.LogcatForLabel(prefix);
-            await CaptureLogcatSnapshotAsync(fileName, 1000).ConfigureAwait(false);
-            return fileName;
-        }).ConfigureAwait(false);
-
-        await CaptureAsync("screen-state", async () =>
-        {
-            await CaptureScreenStateWithRetryAsync(prefix).ConfigureAwait(false);
-            return DeviceArtifactNames.ScreenStateForLabel(prefix);
-        }).ConfigureAwait(false);
-
-        var metadata = new FailureArtifactBundle(
-            ResultSchemas.FailureBundle,
-            _timeProvider.GetUtcNow(),
-            request.Scope,
-            request.Name,
-            request.File,
-            request.StepIndex,
-            request.StepName,
-            request.Action,
-            exception.GetType().FullName ?? exception.GetType().Name,
-            exception.Message,
-            captured,
-            captureFailures);
-        var metadataFile = DeviceArtifactNames.FailureMetadataForLabel(prefix);
-        await _artifacts.WriteJsonAsync(metadataFile, metadata).ConfigureAwait(false);
-        return metadata with { MetadataFile = metadataFile };
-    }
+        => await FailureArtifactCapturer.CaptureAsync(request, exception).ConfigureAwait(false);
 
     public async Task<WaitNotVisibleResult> WaitNotVisibleAsync(string text, int timeoutSec)
     {
@@ -1333,8 +1280,6 @@ public sealed class DeviceRunner(
             int.Parse(match.Groups["height"].Value, CultureInfo.InvariantCulture));
         return _displaySizeCache.Value;
     }
-
-    private void InvalidateKeyboardVisibilityCache() => _keyboardVisibilityCache = null;
 
     private async Task<(int X, int Y)> ResolveHeaderLogoTargetAsync()
     {
@@ -1676,6 +1621,15 @@ public sealed class DeviceRunner(
 
     private async Task<TelemetryMonitorResult> MonitorTelemetryAsync(int timeoutSec, Func<TelemetryEvent, bool>? eventMatch = null)
         => await _telemetryMonitor.MonitorTelemetryAsync(timeoutSec, eventMatch).ConfigureAwait(false);
+
+    private AndroidFailureArtifactCapturer FailureArtifactCapturer =>
+        field ??= new AndroidFailureArtifactCapturer(
+            _artifacts,
+            _timeProvider,
+            BuildFailurePrefix,
+            CaptureScreenshotAsync,
+            CaptureLogcatSnapshotAsync,
+            prefix => CaptureScreenStateWithRetryAsync(prefix));
 
     private static string RequireNonBlank(string value, string message)
     {

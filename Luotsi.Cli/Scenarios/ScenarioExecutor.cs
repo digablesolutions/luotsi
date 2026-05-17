@@ -92,9 +92,21 @@ public sealed class ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem
     private readonly ScenarioActionDispatcher _actionDispatcher = new(
         actionHost ?? throw new ArgumentNullException(nameof(actionHost)),
         delay ?? throw new ArgumentNullException(nameof(delay)));
-    private readonly ScenarioTemplateResolver _templateResolver = new(
+    private readonly IScenarioTemplateResolver _templateResolver = new ScenarioTemplateResolver(
         timeProvider ?? throw new ArgumentNullException(nameof(timeProvider)),
         environment ?? new SystemEnvironmentVariables());
+
+    internal ScenarioExecutor(
+        IScenarioActionHost actionHost,
+        IFileSystem fileSystem,
+        TimeProvider timeProvider,
+        IDelay delay,
+        IScenarioTemplateResolver templateResolver,
+        IEnvironmentVariables? environment = null)
+        : this(actionHost, fileSystem, timeProvider, delay, environment)
+    {
+        _templateResolver = templateResolver ?? throw new ArgumentNullException(nameof(templateResolver));
+    }
 
     /// <summary>
     /// Runs a JSON scenario playbook.

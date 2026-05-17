@@ -54,17 +54,28 @@ public sealed record ScenarioQuery(
     int? ShardIndex,
     bool DryRun);
 
-internal sealed class ScenarioCatalog(IFileSystem fileSystem, TimeProvider timeProvider, IEnvironmentVariables? environment = null)
+internal sealed class ScenarioCatalog(
+    IFileSystem fileSystem,
+    TimeProvider timeProvider,
+    IEnvironmentVariables? environment = null)
 {
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
-    private readonly ScenarioTemplateResolver _templateResolver = new(
+
+    private readonly IScenarioTemplateResolver _templateResolver = new ScenarioTemplateResolver(
         timeProvider ?? throw new ArgumentNullException(nameof(timeProvider)),
         environment ?? new SystemEnvironmentVariables());
+
+    internal ScenarioCatalog(IFileSystem fileSystem, IScenarioTemplateResolver templateResolver)
+        : this(fileSystem, TimeProvider.System, new SystemEnvironmentVariables())
+    {
+        _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+        _templateResolver = templateResolver ?? throw new ArgumentNullException(nameof(templateResolver));
+    }
 
     public async Task<IReadOnlyList<ScenarioCatalogEntry>> DiscoverAsync(string path)
     {
         var files = ResolveScenarioFiles(path);
-        var entries = new List<ScenarioCatalogEntry>(files.Count);
+        var entries = new List<ScenarioCatalogEntry>(files.Length);
 
         foreach (var file in files)
         {
@@ -78,19 +89,16 @@ internal sealed class ScenarioCatalog(IFileSystem fileSystem, TimeProvider timeP
             .ToArray();
     }
 
-    public static IReadOnlyList<ScenarioCatalogEntry> Filter(IReadOnlyList<ScenarioCatalogEntry> entries, ScenarioQuery query)
+    public static IReadOnlyList<ScenarioCatalogEntry> Filter(IReadOnlyList<ScenarioCatalogEntry> entries,
+        ScenarioQuery query)
     {
-        IEnumerable<ScenarioCatalogEntry> filtered = entries;
+        var filtered = query.IncludeTags.Aggregate<string?, IEnumerable<ScenarioCatalogEntry>>(entries,
+            (current, includeTag) =>
+                current.Where(entry => entry.Tags.Contains(includeTag, StringComparer.OrdinalIgnoreCase)));
 
-        foreach (var includeTag in query.IncludeTags)
-        {
-            filtered = filtered.Where(entry => entry.Tags.Contains(includeTag, StringComparer.OrdinalIgnoreCase));
-        }
-
-        foreach (var excludeTag in query.ExcludeTags)
-        {
-            filtered = filtered.Where(entry => !entry.Tags.Contains(excludeTag, StringComparer.OrdinalIgnoreCase));
-        }
+        filtered = query.ExcludeTags.Aggregate(filtered,
+            (current, excludeTag) =>
+                current.Where(entry => !entry.Tags.Contains(excludeTag, StringComparer.OrdinalIgnoreCase)));
 
         if (!string.IsNullOrWhiteSpace(query.Name))
         {
@@ -105,15 +113,18 @@ internal sealed class ScenarioCatalog(IFileSystem fileSystem, TimeProvider timeP
         return filtered.ToArray();
     }
 
-    public static IReadOnlyList<ScenarioCatalogEntry> SelectShard(IReadOnlyList<ScenarioCatalogEntry> entries, ScenarioQuery query)
+    public static IReadOnlyList<ScenarioCatalogEntry> SelectShard(IReadOnlyList<ScenarioCatalogEntry> entries,
+        ScenarioQuery query)
     {
         if (query.ShardCount is null && query.ShardIndex is null)
         {
             return entries;
         }
 
-        var shardCount = query.ShardCount ?? throw new UsageException("--shard-count is required when --shard-index is supplied.");
-        var shardIndex = query.ShardIndex ?? throw new UsageException("--shard-index is required when --shard-count is supplied.");
+        var shardCount = query.ShardCount ??
+                         throw new UsageException("--shard-count is required when --shard-index is supplied.");
+        var shardIndex = query.ShardIndex ??
+                         throw new UsageException("--shard-index is required when --shard-count is supplied.");
         if (shardCount <= 0)
         {
             throw new UsageException("--shard-count must be greater than zero.");
@@ -125,13 +136,13 @@ internal sealed class ScenarioCatalog(IFileSystem fileSystem, TimeProvider timeP
         }
 
         return entries
-            .Select((entry, index) => new { entry, index })
+            .Select((entry, index) => new {entry, index})
             .Where(item => item.index % shardCount == shardIndex)
             .Select(static item => item.entry)
             .ToArray();
     }
 
-    private IReadOnlyList<string> ResolveScenarioFiles(string path)
+    private string[] ResolveScenarioFiles(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
         {
@@ -150,22 +161,25 @@ internal sealed class ScenarioCatalog(IFileSystem fileSystem, TimeProvider timeP
                 .ToArray();
         }
 
-        if (path.Contains('*', StringComparison.Ordinal) || path.Contains('?', StringComparison.Ordinal))
+        if (!path.Contains('*', StringComparison.Ordinal) && !path.Contains('?', StringComparison.Ordinal))
         {
-            var directory = Path.GetDirectoryName(path);
-            var searchRoot = string.IsNullOrWhiteSpace(directory) ? "." : directory;
-            var pattern = Path.GetFileName(path);
-            if (!_fileSystem.DirectoryExists(searchRoot))
-            {
-                throw new UsageException($"Scenario path '{path}' does not exist.");
-            }
-
-            return _fileSystem.GetFiles(searchRoot, pattern, SearchOption.TopDirectoryOnly)
-                .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
+            throw new UsageException($"Scenario path '{path}' does not exist.");
         }
 
-        throw new UsageException($"Scenario path '{path}' does not exist.");
+        var directory = Path.GetDirectoryName(path);
+
+        var searchRoot = string.IsNullOrWhiteSpace(directory) ? "." : directory;
+
+        var pattern = Path.GetFileName(path);
+
+        if (!_fileSystem.DirectoryExists(searchRoot))
+        {
+            throw new UsageException($"Scenario path '{path}' does not exist.");
+        }
+
+        return _fileSystem.GetFiles(searchRoot, pattern, SearchOption.TopDirectoryOnly)
+            .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private async Task<ScenarioFile> LoadAsync(string file)

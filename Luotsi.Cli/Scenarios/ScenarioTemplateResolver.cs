@@ -6,7 +6,12 @@ using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Scenarios;
 
-internal sealed class ScenarioTemplateResolver(TimeProvider timeProvider, IEnvironmentVariables environment)
+internal interface IScenarioTemplateResolver
+{
+    ScenarioFile ResolveScenario(ScenarioFile scenario);
+}
+
+internal sealed class ScenarioTemplateResolver(TimeProvider timeProvider, IEnvironmentVariables environment) : IScenarioTemplateResolver
 {
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     private readonly IEnvironmentVariables _environment = environment ?? throw new ArgumentNullException(nameof(environment));
