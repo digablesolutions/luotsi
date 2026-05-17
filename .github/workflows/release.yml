@@ -95,7 +95,7 @@ jobs:
           ref: ${{ needs.validate-tag.outputs.tag }}
 
       - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
           cache: true
@@ -168,7 +168,7 @@ jobs:
           ref: ${{ needs.validate-tag.outputs.tag }}
 
       - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
           cache: true
