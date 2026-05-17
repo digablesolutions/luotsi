@@ -289,6 +289,12 @@ public sealed record ScenarioFile(string Name, IReadOnlyList<ScenarioStep> Steps
 /// <param name="IntervalMs">Interval between double taps or keyed characters.</param>
 /// <param name="ObserveFromPreviousStep">Whether an assertEvent step should start observing from the previous step's start time.</param>
 /// <param name="ContinueOnError">Whether the scenario should continue after a step failure.</param>
+/// <param name="Activity">Activity/component argument for app lifecycle actions.</param>
+/// <param name="Uri">URI argument for startUri.</param>
+/// <param name="Permission">Android permission argument for grant/revoke actions.</param>
+/// <param name="IntentAction">Intent action override for startUri.</param>
+/// <param name="Wait">Whether app/URI starts should wait for launch completion.</param>
+/// <param name="ThirdPartyOnly">Whether package listing should include only third-party apps.</param>
 public sealed record ScenarioStep(
     string? Name,
     string Action,
@@ -317,7 +323,13 @@ public sealed record ScenarioStep(
     int? MaxRightInsetPx = null,
     int? IntervalMs = null,
     bool? ObserveFromPreviousStep = null,
-    bool? ContinueOnError = null);
+    bool? ContinueOnError = null,
+    string? Activity = null,
+    string? Uri = null,
+    string? Permission = null,
+    string? IntentAction = null,
+    bool? Wait = null,
+    bool? ThirdPartyOnly = null);
 
 /// <summary>
 /// JSON command envelope.

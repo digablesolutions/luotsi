@@ -82,10 +82,11 @@ public interface IDeviceHost : IScenarioActionHost
     Task<DeviceListResult> GetDevicesAsync();
 
     /// <summary>
-    /// Captures the current normalized screen state.
+    /// Checks whether the target device and app are ready.
     /// </summary>
-    /// <returns>Screen state data.</returns>
-    Task<ScreenState> GetScreenStateAsync();
+    /// <param name="packageName">Optional foreground package to require.</param>
+    /// <returns>Preflight data.</returns>
+    Task<PreflightResult> PreflightAsync(string? packageName);
 
     /// <summary>
     /// Sends a tap at absolute coordinates.
@@ -142,6 +143,17 @@ public interface IDeviceHost : IScenarioActionHost
 
     Task<PullFileResult> PullFileAsync(string remotePath, string? localDirectory = null);
 
+    Task<PortForwardListResult> ListForwardsAsync();
+
+    Task<PortForwardResult> ForwardAsync(string local, string remote, bool noRebind);
+
+    Task<PortForwardRemoveResult> RemoveForwardAsync(string local);
+
+    Task<PortReverseListResult> ListReversesAsync();
+
+    Task<PortReverseResult> ReverseAsync(string remote, string local, bool noRebind);
+
+    Task<PortReverseRemoveResult> RemoveReverseAsync(string remote);
     /// <summary>
     /// Installs an APK from the host onto the device.
     /// </summary>

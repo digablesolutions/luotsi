@@ -4,9 +4,9 @@ using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Scenarios;
 
-internal sealed class ScenarioActionDispatcher(IDeviceHost actionHost, IDelay delay)
+internal sealed class ScenarioActionDispatcher(IScenarioActionHost actionHost, IDelay delay)
 {
-    private readonly IDeviceHost _actionHost = actionHost ?? throw new ArgumentNullException(nameof(actionHost));
+    private readonly IScenarioActionHost _actionHost = actionHost ?? throw new ArgumentNullException(nameof(actionHost));
     private readonly IDelay _delay = delay ?? throw new ArgumentNullException(nameof(delay));
 
     public async Task<object> ExecuteAsync(ScenarioStep step, DateTimeOffset? previousStepStartedAt)
@@ -33,6 +33,16 @@ internal sealed class ScenarioActionDispatcher(IDeviceHost actionHost, IDelay de
             "assertBelow" => await _actionHost.AssertBelowAsync(step.Text ?? throw new UsageException("assertBelow requires text."), step.Below ?? throw new UsageException("assertBelow requires below."), step.MaxGapPx ?? 260).ConfigureAwait(false),
             "assertAligned" => await _actionHost.AssertAlignedAsync(step.Text ?? throw new UsageException("assertAligned requires text."), step.With ?? throw new UsageException("assertAligned requires with."), step.MaxDeltaPx ?? 160).ConfigureAwait(false),
             "assertAppVersion" => await _actionHost.AssertAppVersionAsync(step.Package ?? step.Text, step.MaxTopInsetPx ?? 140, step.MaxRightInsetPx ?? 300).ConfigureAwait(false),
+            "startApp" => await _actionHost.StartAppAsync(step.Package ?? throw new UsageException("startApp requires package."), step.Activity, step.Wait is true).ConfigureAwait(false),
+            "startUri" => await _actionHost.StartUriAsync(step.Uri ?? step.Text ?? throw new UsageException("startUri requires uri."), step.Package, step.Activity, step.IntentAction, step.Wait is true).ConfigureAwait(false),
+            "forceStop" => await _actionHost.ForceStopAsync(step.Package ?? throw new UsageException("forceStop requires package.")).ConfigureAwait(false),
+            "clear" or "clearApp" => await _actionHost.ClearAppAsync(step.Package ?? throw new UsageException("clear requires package.")).ConfigureAwait(false),
+            "waitForActivity" => await _actionHost.WaitForActivityAsync(step.Activity ?? step.Text ?? throw new UsageException("waitForActivity requires activity."), step.TimeoutSec ?? 15).ConfigureAwait(false),
+            "waitForNotActivity" => await _actionHost.WaitForNotActivityAsync(step.Activity ?? step.Text ?? throw new UsageException("waitForNotActivity requires activity."), step.TimeoutSec ?? 15).ConfigureAwait(false),
+            "isAppInstalled" => await _actionHost.IsAppInstalledAsync(step.Package ?? throw new UsageException("isAppInstalled requires package.")).ConfigureAwait(false),
+            "listInstalledPackages" => await _actionHost.ListInstalledPackagesAsync(step.ThirdPartyOnly is true).ConfigureAwait(false),
+            "grantPermission" => await _actionHost.GrantPermissionAsync(step.Package ?? throw new UsageException("grantPermission requires package."), step.Permission ?? throw new UsageException("grantPermission requires permission.")).ConfigureAwait(false),
+            "revokePermission" => await _actionHost.RevokePermissionAsync(step.Package ?? throw new UsageException("revokePermission requires package."), step.Permission ?? throw new UsageException("revokePermission requires permission.")).ConfigureAwait(false),
             "screenState" => await _actionHost.GetScreenStateAsync().ConfigureAwait(false),
             "sleep" => await SleepAsync(step.Milliseconds ?? 1000).ConfigureAwait(false),
             _ => throw new UsageException($"Unknown scenario action '{step.Action}'.")

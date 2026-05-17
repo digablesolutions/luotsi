@@ -131,6 +131,50 @@ internal static class ScenarioValidator
                 RequireScenarioValue(step.Text, $"{stepLabel} assertAligned requires text.");
                 RequireScenarioValue(step.With, $"{stepLabel} assertAligned requires with.");
                 break;
+
+            case "startApp":
+                RequireScenarioValue(step.Package, $"{stepLabel} startApp requires package.");
+                if (step.Wait is true && string.IsNullOrWhiteSpace(step.Activity))
+                {
+                    throw new UsageException($"{stepLabel} startApp wait requires activity.");
+                }
+
+                break;
+
+            case "startUri":
+                if (string.IsNullOrWhiteSpace(step.Uri) && string.IsNullOrWhiteSpace(step.Text))
+                {
+                    throw new UsageException($"{stepLabel} startUri requires uri.");
+                }
+
+                if (!string.IsNullOrWhiteSpace(step.Activity) && string.IsNullOrWhiteSpace(step.Package))
+                {
+                    throw new UsageException($"{stepLabel} startUri activity requires package.");
+                }
+
+                break;
+
+            case "forceStop":
+            case "clear":
+            case "clearApp":
+            case "isAppInstalled":
+                RequireScenarioValue(step.Package, $"{stepLabel} {action} requires package.");
+                break;
+
+            case "waitForActivity":
+            case "waitForNotActivity":
+                if (string.IsNullOrWhiteSpace(step.Activity) && string.IsNullOrWhiteSpace(step.Text))
+                {
+                    throw new UsageException($"{stepLabel} {action} requires activity.");
+                }
+
+                break;
+
+            case "grantPermission":
+            case "revokePermission":
+                RequireScenarioValue(step.Package, $"{stepLabel} {action} requires package.");
+                RequireScenarioValue(step.Permission, $"{stepLabel} {action} requires permission.");
+                break;
         }
 
         if (string.Equals(action, "tapPoint", StringComparison.OrdinalIgnoreCase))

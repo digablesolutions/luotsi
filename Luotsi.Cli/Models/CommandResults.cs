@@ -67,6 +67,38 @@ public sealed record PullFileResult(string RemotePath, string LocalPath);
 // Install package on device
 public sealed record InstallPackageResult(string PackagePath);
 
+// ADB port forwarding
+public sealed record PortForwardEntry(string? Serial, string Local, string Remote);
+
+public sealed record PortForwardListResult(IReadOnlyList<PortForwardEntry> Entries);
+
+public sealed record PortForwardResult(string Local, string Remote, bool NoRebind);
+
+public sealed record PortForwardRemoveResult(string Local);
+
+public sealed record PortReverseEntry(string? Serial, string Remote, string Local);
+
+public sealed record PortReverseListResult(IReadOnlyList<PortReverseEntry> Entries);
+
+public sealed record PortReverseResult(string Remote, string Local, bool NoRebind);
+
+public sealed record PortReverseRemoveResult(string Remote);
+
+// App lifecycle and package state
+public sealed record StartAppResult(string Package, string? Activity, string? Component, bool Wait, string Output);
+
+public sealed record StartUriResult(string Uri, string? Package, string? Activity, string? Component, string Action, bool Wait, string Output);
+
+public sealed record AppPackageCommandResult(string Package);
+
+public sealed record ActivityWaitResult(string Activity, int TimeoutSec, string CurrentActivity, int AttemptCount);
+
+public sealed record AppInstalledResult(string Package, bool Installed);
+
+public sealed record InstalledPackageListResult(IReadOnlyList<string> Packages, bool ThirdPartyOnly);
+
+public sealed record PermissionCommandResult(string Package, string Permission);
+
 // Enable adb-over-TCP and connect to the target endpoint.
 public sealed record WirelessConnectResult(string Host, int Port, string Endpoint);
 
