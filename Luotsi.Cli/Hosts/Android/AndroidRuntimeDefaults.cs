@@ -14,10 +14,13 @@ internal static class AndroidRuntimeDefaults
     public const int UiDumpRetryMaxAttempts = 3;
     public const int MinRecordTimeLimitSeconds = 1;
     public const int MaxRecordTimeLimitSeconds = 180;
-    public const string ViewHelperPathEnvironmentVariable = "DEVICE_E2E_VIEW_HELPER_JAR";
+    public const string ViewHelperPathEnvironmentVariable = "LUOTSI_VIEW_HELPER_APK";
     public const string DefaultViewHelperRelativePath = "Luotsi.ViewServer.Android\\app\\build\\outputs\\apk\\debug\\app-debug.apk";
     public const string ViewHelperRemotePath = "/data/local/tmp/luotsi-view-server.apk";
     public const string ViewHelperMainClass = "dev.luotsi.view.Main";
-    public const string ViewHelperVersion = "phase-3-screenrecord";
+    public const string ViewHelperPackageName = "dev.luotsi.view";
+    public const string ViewHelperConsentActivity = "dev.luotsi.view/.ConsentActivity";
+    public const string ViewHelperCaptureService = "dev.luotsi.view/.CaptureService";
+    public const string ViewHelperVersion = "android-app-process";
     public const string ViewSocketPrefix = "luotsi_view_";
 }

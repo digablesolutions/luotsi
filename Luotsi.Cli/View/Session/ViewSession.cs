@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Runtime.CompilerServices;
+using System.Diagnostics;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Hosts.Android;
@@ -98,7 +99,7 @@ public sealed class DefaultViewRendererFactory : IViewRendererFactory
 }
 
 /// <summary>
-/// Phase 1 scaffold for the built-in device mirror session.
+/// Built-in device mirror session.
 /// </summary>
 public sealed class ViewSession(
     IDeviceHost deviceHost,
@@ -121,7 +122,7 @@ public sealed class ViewSession(
         WriteIndented = false
     };
 
-    private const int InitialStreamAttempts = 20;
+    private const int InitialStreamAttempts = 600;
     private static readonly TimeSpan InitialStreamRetryDelay = TimeSpan.FromMilliseconds(100);
     private static readonly TimeSpan DefaultAutoReconnectAfter = TimeSpan.FromSeconds(170);
     private readonly IDeviceHost _deviceHost = deviceHost ?? throw new ArgumentNullException(nameof(deviceHost));
@@ -193,182 +194,206 @@ public sealed class ViewSession(
                     using var sessionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                     interactionRouter.BeginIteration(activeDeviceSelector, sessionCancellation);
                     await interactionRouter.PublishChromeAsync().ConfigureAwait(false);
-                    var connectionInfo = usesSharedTransport
-                        ? BuildSharedConnectionInfo(options.JoinShareEndpoint!)
-                        : await _transportBootstrap.StartAsync(
-                            new ViewStartRequest(
-                                options.AdbExecutable,
-                                activeDeviceSelector,
-                                options.MaxSize,
-                                options.MaxFps,
-                                options.VideoBitRate,
-                                options.Codec),
-                            cancellationToken).ConfigureAwait(false);
-
-                    var streamStart = await ConnectAndReadHeaderAsync(connectionInfo, cancellationToken).ConfigureAwait(false);
-                    await using var streamConnection = streamStart.Connection;
-                    var header = streamStart.Header;
-                    var negotiatedConnection = connectionInfo with
+                    var streamStart = usesSharedTransport
+                        ? await ConnectAndReadHeaderAsync(BuildSharedConnectionInfo(options.JoinShareEndpoint!), cancellationToken).ConfigureAwait(false)
+                        : await StartTransportAndReadHeaderAsync(options, activeDeviceSelector, sessionId, cancellationToken).ConfigureAwait(false);
+                    var connectionInfo = streamStart.ConnectionInfo;
+                    var streamConnection = streamStart.Connection;
+                    try
                     {
-                        Codec = header.Codec,
-                        ProtocolVersion = header.ProtocolVersion,
-                        Width = header.Width,
-                        Height = header.Height
-                    };
-
-                    if (!string.IsNullOrWhiteSpace(options.ShareBindEndpoint))
-                    {
-                        if (shareServer is null)
+                        var packetSource = _packetStreamReader.ReadPacketsAsync(streamConnection.Stream, sessionCancellation.Token);
+                        if (!usesSharedTransport)
                         {
-                            shareServer = new TcpViewShareServer(options.ShareBindEndpoint);
-                            shareServer.ObserverChanged += observerEvent =>
-                            {
-                                _ = interactionRouter.UpdateShareStateAsync(shareServer.BoundEndpoint, observerEvent.ObserverCount);
-                                WriteJsonLine(new
-                                {
-                                    type = observerEvent.Kind == ViewShareObserverEventKind.Connected
-                                        ? SessionEventTypes.View.ShareClientConnected
-                                        : SessionEventTypes.View.ShareClientDisconnected,
-                                    session_id = sessionId,
-                                    occurred_at = _timeProvider.GetUtcNow(),
-                                    endpoint = shareServer.BoundEndpoint,
-                                    remote_endpoint = observerEvent.RemoteEndpoint,
-                                    observer_count = observerEvent.ObserverCount,
-                                    reason = observerEvent.Reason
-                                });
-                            };
+                            var startupFallback = await TryFallbackOnStartupServerErrorAsync(
+                                options,
+                                activeDeviceSelector,
+                                sessionId,
+                                connectionInfo,
+                                streamStart.Header,
+                                streamConnection,
+                                packetSource,
+                                cancellationToken).ConfigureAwait(false);
+                            connectionInfo = startupFallback.ConnectionInfo;
+                            streamConnection = startupFallback.Connection;
+                            packetSource = startupFallback.Packets;
+                            streamStart = (startupFallback.ConnectionInfo, startupFallback.Connection, startupFallback.Header);
                         }
 
-                        var shareEndpoint = await shareServer.StartAsync(cancellationToken).ConfigureAwait(false);
-                        await shareServer.BeginStreamAsync(header, cancellationToken).ConfigureAwait(false);
-                        await interactionRouter.UpdateShareStateAsync(shareEndpoint, shareServer.ObserverCount).ConfigureAwait(false);
-                        if (!emittedShareStarted)
+                        var header = streamStart.Header;
+                        var negotiatedConnection = connectionInfo with
+                        {
+                            Codec = header.Codec,
+                            ProtocolVersion = header.ProtocolVersion,
+                            Width = header.Width,
+                            Height = header.Height
+                        };
+
+                        if (!string.IsNullOrWhiteSpace(options.ShareBindEndpoint))
+                        {
+                            if (shareServer is null)
+                            {
+                                shareServer = new TcpViewShareServer(options.ShareBindEndpoint);
+                                shareServer.ObserverChanged += observerEvent =>
+                                {
+                                    _ = interactionRouter.UpdateShareStateAsync(shareServer.BoundEndpoint, observerEvent.ObserverCount);
+                                    WriteJsonLine(new
+                                    {
+                                        type = observerEvent.Kind == ViewShareObserverEventKind.Connected
+                                            ? SessionEventTypes.View.ShareClientConnected
+                                            : SessionEventTypes.View.ShareClientDisconnected,
+                                        session_id = sessionId,
+                                        occurred_at = _timeProvider.GetUtcNow(),
+                                        endpoint = shareServer.BoundEndpoint,
+                                        remote_endpoint = observerEvent.RemoteEndpoint,
+                                        observer_count = observerEvent.ObserverCount,
+                                        reason = observerEvent.Reason
+                                    });
+                                };
+                            }
+
+                            var shareEndpoint = await shareServer.StartAsync(cancellationToken).ConfigureAwait(false);
+                            await shareServer.BeginStreamAsync(header, cancellationToken).ConfigureAwait(false);
+                            await interactionRouter.UpdateShareStateAsync(shareEndpoint, shareServer.ObserverCount).ConfigureAwait(false);
+                            if (!emittedShareStarted)
+                            {
+                                WriteJsonLine(new
+                                {
+                                    type = SessionEventTypes.View.ShareStarted,
+                                    session_id = sessionId,
+                                    occurred_at = _timeProvider.GetUtcNow(),
+                                    endpoint = shareEndpoint,
+                                    observer_count = shareServer.ObserverCount
+                                });
+                                emittedShareStarted = true;
+                            }
+                        }
+
+                        interactionRouter.AttachConnection(negotiatedConnection);
+                        await viewBackend.InitializeAsync(negotiatedConnection, sessionRenderer, recorder, sessionCancellation.Token).ConfigureAwait(false);
+
+                        if (firstConnection)
                         {
                             WriteJsonLine(new
                             {
-                                type = SessionEventTypes.View.ShareStarted,
+                                type = SessionEventTypes.View.Started,
                                 session_id = sessionId,
-                                occurred_at = _timeProvider.GetUtcNow(),
-                                endpoint = shareEndpoint,
-                                observer_count = shareServer.ObserverCount
+                                started_at = _timeProvider.GetUtcNow(),
+                                device = activeDeviceSelector,
+                                preset = options.PresetName,
+                                decoder = options.Decoder,
+                                codec = negotiatedConnection.Codec,
+                                backend = viewBackend.Name,
+                                capture_backend = negotiatedConnection.CaptureBackend,
+                                requested_capture_backend = options.CaptureBackend,
+                                headless = options.Headless,
+                                record_path = options.RecordPath,
+                                max_size = options.MaxSize,
+                                max_fps = options.MaxFps,
+                                video_bit_rate = options.VideoBitRate,
+                                read_only = options.ReadOnly,
+                                stats_interval_ms = options.StatsIntervalMs,
+                                renderer_stats_interval_ms = options.RendererStatsIntervalMs,
+                                overlay_screen_state = options.OverlayScreenState,
+                                overlay_telemetry = options.OverlayTelemetry,
+                                connection = negotiatedConnection,
+                                artifacts = _artifacts.ToData()
                             });
-                            emittedShareStarted = true;
+                            await interactionRouter.EmitDeviceShelfSnapshotIfNeededAsync().ConfigureAwait(false);
+                            firstConnection = false;
+                            await interactionRouter.StartInitialRecordingIfNeededAsync().ConfigureAwait(false);
                         }
-                    }
-
-                    interactionRouter.AttachConnection(negotiatedConnection);
-                    await viewBackend.InitializeAsync(negotiatedConnection, sessionRenderer, recorder, sessionCancellation.Token).ConfigureAwait(false);
-
-                    if (firstConnection)
-                    {
-                        WriteJsonLine(new
+                        else
                         {
-                            type = SessionEventTypes.View.Started,
-                            session_id = sessionId,
-                            started_at = _timeProvider.GetUtcNow(),
-                            device = activeDeviceSelector,
-                            preset = options.PresetName,
-                            decoder = options.Decoder,
-                            codec = negotiatedConnection.Codec,
-                            backend = viewBackend.Name,
-                            headless = options.Headless,
-                            record_path = options.RecordPath,
-                            max_size = options.MaxSize,
-                            max_fps = options.MaxFps,
-                            video_bit_rate = options.VideoBitRate,
-                            read_only = options.ReadOnly,
-                            stats_interval_ms = options.StatsIntervalMs,
-                            renderer_stats_interval_ms = options.RendererStatsIntervalMs,
-                            overlay_screen_state = options.OverlayScreenState,
-                            overlay_telemetry = options.OverlayTelemetry,
-                            connection = negotiatedConnection,
-                            artifacts = _artifacts.ToData()
-                        });
-                        await interactionRouter.EmitDeviceShelfSnapshotIfNeededAsync().ConfigureAwait(false);
-                        firstConnection = false;
-                        await interactionRouter.StartInitialRecordingIfNeededAsync().ConfigureAwait(false);
-                    }
-                    else
-                    {
-                        WriteJsonLine(new
-                        {
-                            type = SessionEventTypes.View.Reconnected,
-                            session_id = sessionId,
-                            reconnected_at = _timeProvider.GetUtcNow(),
-                            device = activeDeviceSelector,
-                            connection = negotiatedConnection
-                        });
-                        await interactionRouter.EmitDeviceShelfSnapshotIfNeededAsync().ConfigureAwait(false);
-                    }
-
-                    var sourcePackets = GuardReconnectBudgetAsync(
-                        _packetStreamReader.ReadPacketsAsync(streamConnection.Stream, sessionCancellation.Token),
-                        interactionRouter,
-                        usesSharedTransport ? null : _timeProvider.GetUtcNow().Add(_autoReconnectAfter),
-                        sessionCancellation.Token);
-                    var sharedPackets = shareServer is null
-                        ? sourcePackets
-                        : RelayPacketsAsync(sourcePackets, shareServer, sessionCancellation.Token);
-                    var viewTask = viewBackend.RunAsync(sharedPackets, sessionCancellation.Token);
-                    var reconnectTask = interactionRouter.WaitForReconnectAsync();
-                    var windowCloseTask = renderer is not null
-                        ? renderer.WaitForCloseAsync()
-                        : Task.Delay(Timeout.Infinite, cancellationToken);
-
-                    var completedTask = reconnectTask.IsCompleted
-                        ? reconnectTask
-                        : await Task.WhenAny(viewTask, windowCloseTask, reconnectTask).ConfigureAwait(false);
-                    if (completedTask == viewTask && reconnectTask.IsCompleted)
-                    {
-                        completedTask = reconnectTask;
-                    }
-                    if (completedTask == reconnectTask)
-                    {
-                        await interactionRouter.StopRecordingForReconnectAsync().ConfigureAwait(false);
-                        sessionCancellation.Cancel();
-                        if (!usesSharedTransport)
-                        {
-                            await _transportBootstrap.StopAsync(CancellationToken.None).ConfigureAwait(false);
-                        }
-                        try
-                        {
-                            await viewTask.ConfigureAwait(false);
-                        }
-                        catch (OperationCanceledException) when (sessionCancellation.IsCancellationRequested)
-                        {
+                            WriteJsonLine(new
+                            {
+                                type = SessionEventTypes.View.Reconnected,
+                                session_id = sessionId,
+                                reconnected_at = _timeProvider.GetUtcNow(),
+                                device = activeDeviceSelector,
+                                capture_backend = negotiatedConnection.CaptureBackend,
+                                requested_capture_backend = options.CaptureBackend,
+                                connection = negotiatedConnection
+                            });
+                            await interactionRouter.EmitDeviceShelfSnapshotIfNeededAsync().ConfigureAwait(false);
                         }
 
-                        if (sessionRenderer is not null)
+                        var sourcePackets = GuardReconnectBudgetAsync(
+                            packetSource,
+                            interactionRouter,
+                            usesSharedTransport || !string.Equals(negotiatedConnection.CaptureBackend, ViewCaptureBackends.Screenrecord, StringComparison.OrdinalIgnoreCase)
+                                ? null
+                                : _timeProvider.GetUtcNow().Add(_autoReconnectAfter),
+                            sessionCancellation.Token);
+                        var sharedPackets = shareServer is null
+                            ? sourcePackets
+                            : RelayPacketsAsync(sourcePackets, shareServer, sessionCancellation.Token);
+                        var viewTask = viewBackend.RunAsync(sharedPackets, sessionCancellation.Token);
+                        var reconnectTask = interactionRouter.WaitForReconnectAsync();
+                        var windowCloseTask = renderer is not null
+                            ? renderer.WaitForCloseAsync()
+                            : Task.Delay(Timeout.Infinite, cancellationToken);
+
+                        var completedTask = reconnectTask.IsCompleted
+                            ? reconnectTask
+                            : await Task.WhenAny(viewTask, windowCloseTask, reconnectTask).ConfigureAwait(false);
+                        if (completedTask == viewTask && reconnectTask.IsCompleted)
                         {
-                            await sessionRenderer.FlushPendingStatsAsync().ConfigureAwait(false);
+                            completedTask = reconnectTask;
+                        }
+                        if (completedTask == reconnectTask)
+                        {
+                            await interactionRouter.StopRecordingForReconnectAsync().ConfigureAwait(false);
+                            sessionCancellation.Cancel();
+                            if (!usesSharedTransport)
+                            {
+                                await _transportBootstrap.StopAsync(CancellationToken.None).ConfigureAwait(false);
+                            }
+                            try
+                            {
+                                await viewTask.ConfigureAwait(false);
+                            }
+                            catch (OperationCanceledException ex) when (sessionCancellation.IsCancellationRequested)
+                            {
+                                Debug.WriteLine($"View backend stopped for reconnect cancellation: {ex.Message}");
+                            }
+
+                            if (sessionRenderer is not null)
+                            {
+                                await sessionRenderer.FlushPendingStatsAsync().ConfigureAwait(false);
+                            }
+
+                            interactionRouter.ResetReconnectSignal();
+                            activeDeviceSelector = interactionRouter.ActiveDeviceSelector;
+                            continue;
                         }
 
-                        interactionRouter.ResetReconnectSignal();
-                        activeDeviceSelector = interactionRouter.ActiveDeviceSelector;
-                        continue;
-                    }
+                        if (completedTask == windowCloseTask)
+                        {
+                            endReason = "window_closed";
+                            sessionCancellation.Cancel();
+                            if (!usesSharedTransport)
+                            {
+                                await _transportBootstrap.StopAsync(CancellationToken.None).ConfigureAwait(false);
+                            }
+                            try
+                            {
+                                await viewTask.ConfigureAwait(false);
+                            }
+                            catch (OperationCanceledException ex) when (sessionCancellation.IsCancellationRequested)
+                            {
+                                Debug.WriteLine($"View backend stopped for window-close cancellation: {ex.Message}");
+                            }
 
-                    if (completedTask == windowCloseTask)
-                    {
-                        endReason = "window_closed";
-                        sessionCancellation.Cancel();
-                        if (!usesSharedTransport)
-                        {
-                            await _transportBootstrap.StopAsync(CancellationToken.None).ConfigureAwait(false);
-                        }
-                        try
-                        {
-                            await viewTask.ConfigureAwait(false);
-                        }
-                        catch (OperationCanceledException) when (sessionCancellation.IsCancellationRequested)
-                        {
+                            break;
                         }
 
+                        await viewTask.ConfigureAwait(false);
                         break;
                     }
-
-                    await viewTask.ConfigureAwait(false);
-                    break;
+                    finally
+                    {
+                        await streamConnection.DisposeAsync().ConfigureAwait(false);
+                    }
                 }
 
                 if (sessionRenderer is not null)
@@ -478,7 +503,128 @@ public sealed class ViewSession(
         }
     }
 
-    private async Task<(IViewStreamConnection Connection, ViewStreamHeader Header)> ConnectAndReadHeaderAsync(
+    private async Task<(ViewConnectionInfo ConnectionInfo, IViewStreamConnection Connection, ViewStreamHeader Header, IAsyncEnumerable<ViewPacket> Packets)> TryFallbackOnStartupServerErrorAsync(
+        ViewOptions options,
+        string activeDeviceSelector,
+        string sessionId,
+        ViewConnectionInfo connectionInfo,
+        ViewStreamHeader header,
+        IViewStreamConnection connection,
+        IAsyncEnumerable<ViewPacket> packets,
+        CancellationToken cancellationToken)
+    {
+        if (!string.Equals(options.CaptureBackend, ViewCaptureBackends.Auto, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(connectionInfo.CaptureBackend, ViewCaptureBackends.MediaProjection, StringComparison.OrdinalIgnoreCase))
+        {
+            return (connectionInfo, connection, header, packets);
+        }
+
+        var enumerator = packets.GetAsyncEnumerator(cancellationToken);
+        if (!await enumerator.MoveNextAsync().ConfigureAwait(false))
+        {
+            await enumerator.DisposeAsync().ConfigureAwait(false);
+            return (connectionInfo, connection, header, EmptyPackets());
+        }
+
+        var firstPacket = enumerator.Current;
+        if (firstPacket.PacketType != ViewPacketType.ServerError)
+        {
+            return (connectionInfo, connection, header, PrependPacket(firstPacket, enumerator, cancellationToken));
+        }
+
+        await enumerator.DisposeAsync().ConfigureAwait(false);
+        await connection.DisposeAsync().ConfigureAwait(false);
+        await _transportBootstrap.StopAsync(CancellationToken.None).ConfigureAwait(false);
+
+        var reason = firstPacket.Payload.IsEmpty
+            ? "MediaProjection helper reported a startup error."
+            : System.Text.Encoding.UTF8.GetString(firstPacket.Payload.Span);
+        WriteJsonLine(new
+        {
+            type = SessionEventTypes.View.CaptureBackendFallback,
+            session_id = sessionId,
+            occurred_at = _timeProvider.GetUtcNow(),
+            requested_capture_backend = options.CaptureBackend,
+            failed_capture_backend = ViewCaptureBackends.MediaProjection,
+            fallback_capture_backend = ViewCaptureBackends.Screenrecord,
+            reason
+        });
+
+        var fallback = await StartTransportWithBackendAndReadHeaderAsync(options, activeDeviceSelector, ViewCaptureBackends.Screenrecord, cancellationToken).ConfigureAwait(false);
+        return (fallback.ConnectionInfo, fallback.Connection, fallback.Header, _packetStreamReader.ReadPacketsAsync(fallback.Connection.Stream, cancellationToken));
+    }
+
+    private static async IAsyncEnumerable<ViewPacket> EmptyPackets()
+    {
+        await Task.CompletedTask.ConfigureAwait(false);
+        yield break;
+    }
+
+    private static async IAsyncEnumerable<ViewPacket> PrependPacket(
+        ViewPacket firstPacket,
+        IAsyncEnumerator<ViewPacket> remainingPackets,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await using (remainingPackets.ConfigureAwait(false))
+        {
+            yield return firstPacket;
+            while (await remainingPackets.MoveNextAsync().ConfigureAwait(false))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                yield return remainingPackets.Current;
+            }
+        }
+    }
+
+    private async Task<(ViewConnectionInfo ConnectionInfo, IViewStreamConnection Connection, ViewStreamHeader Header)> StartTransportAndReadHeaderAsync(
+        ViewOptions options,
+        string activeDeviceSelector,
+        string sessionId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await StartTransportWithBackendAndReadHeaderAsync(options, activeDeviceSelector, options.CaptureBackend, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (string.Equals(options.CaptureBackend, ViewCaptureBackends.Auto, StringComparison.OrdinalIgnoreCase))
+        {
+            await _transportBootstrap.StopAsync(CancellationToken.None).ConfigureAwait(false);
+            WriteJsonLine(new
+            {
+                type = SessionEventTypes.View.CaptureBackendFallback,
+                session_id = sessionId,
+                occurred_at = _timeProvider.GetUtcNow(),
+                requested_capture_backend = options.CaptureBackend,
+                failed_capture_backend = ViewCaptureBackends.MediaProjection,
+                fallback_capture_backend = ViewCaptureBackends.Screenrecord,
+                reason = ex.Message
+            });
+
+            return await StartTransportWithBackendAndReadHeaderAsync(options, activeDeviceSelector, ViewCaptureBackends.Screenrecord, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<(ViewConnectionInfo ConnectionInfo, IViewStreamConnection Connection, ViewStreamHeader Header)> StartTransportWithBackendAndReadHeaderAsync(
+        ViewOptions options,
+        string activeDeviceSelector,
+        string captureBackend,
+        CancellationToken cancellationToken)
+    {
+        var connectionInfo = await _transportBootstrap.StartAsync(
+            new ViewStartRequest(
+                options.AdbExecutable,
+                activeDeviceSelector,
+                options.MaxSize,
+                options.MaxFps,
+                options.VideoBitRate,
+                options.Codec,
+                captureBackend),
+            cancellationToken).ConfigureAwait(false);
+
+        return await ConnectAndReadHeaderAsync(connectionInfo, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<(ViewConnectionInfo ConnectionInfo, IViewStreamConnection Connection, ViewStreamHeader Header)> ConnectAndReadHeaderAsync(
         ViewConnectionInfo connectionInfo,
         CancellationToken cancellationToken)
     {
@@ -489,7 +635,7 @@ public sealed class ViewSession(
             try
             {
                 var header = await _packetStreamReader.ReadHeaderAsync(connection.Stream, cancellationToken).ConfigureAwait(false);
-                return (connection, header);
+                return (connectionInfo, connection, header);
             }
             catch (Exception ex) when (attempt < InitialStreamAttempts && IsTransientStartFailure(ex))
             {

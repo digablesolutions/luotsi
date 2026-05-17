@@ -599,9 +599,19 @@ internal sealed class FakeViewRendererFactory(IViewRenderer renderer) : IViewRen
     }
 }
 
-internal sealed class FakeViewTransportBootstrap(ViewConnectionInfo connectionInfo) : IViewTransportBootstrap
+internal sealed class FakeViewTransportBootstrap : IViewTransportBootstrap
 {
-    private readonly ViewConnectionInfo _connectionInfo = connectionInfo;
+    private readonly Queue<object> _outcomes;
+
+    public FakeViewTransportBootstrap(ViewConnectionInfo connectionInfo)
+        : this([connectionInfo])
+    {
+    }
+
+    public FakeViewTransportBootstrap(IEnumerable<object> outcomes)
+    {
+        _outcomes = new Queue<object>(outcomes);
+    }
 
     public int StartCallCount { get; private set; }
 
@@ -613,7 +623,13 @@ internal sealed class FakeViewTransportBootstrap(ViewConnectionInfo connectionIn
     {
         StartCallCount++;
         StartRequests.Add(request);
-        return Task.FromResult(_connectionInfo);
+        var outcome = _outcomes.Count > 1 ? _outcomes.Dequeue() : _outcomes.Peek();
+        if (outcome is Exception exception)
+        {
+            throw exception;
+        }
+
+        return Task.FromResult((ViewConnectionInfo)outcome);
     }
 
     public Task StopAsync(CancellationToken cancellationToken = default)

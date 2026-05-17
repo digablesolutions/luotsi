@@ -66,7 +66,7 @@ public sealed partial class AppTests
         fileSystem.AddFile(helperPath, "apk");
         var environment = new FakeEnvironmentVariables(new Dictionary<string, string>
         {
-            ["DEVICE_E2E_VIEW_HELPER_JAR"] = helperPath
+            ["LUOTSI_VIEW_HELPER_APK"] = helperPath
         });
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
@@ -98,7 +98,7 @@ public sealed partial class AppTests
 
         Assert.True(result.Ready);
         Assert.Equal("safe", result.Preset);
-        Assert.Equal(5, result.Checks.Count);
+        Assert.Equal(9, result.Checks.Count);
         Assert.All(result.Checks, static check => Assert.True(check.Ok, check.Summary));
         Assert.Equal("Pixel 9", Assert.Single(result.ConnectedDevices).Details);
         var preflight = result.Preflight;
@@ -114,7 +114,7 @@ public sealed partial class AppTests
         fileSystem.AddFile(helperPath, "apk");
         var environment = new FakeEnvironmentVariables(new Dictionary<string, string>
         {
-            ["DEVICE_E2E_VIEW_HELPER_JAR"] = helperPath
+            ["LUOTSI_VIEW_HELPER_APK"] = helperPath
         });
         var host = new FakeDeviceHost(CreateScreenState(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind), "Sign in"));
         host.ConnectedDevices.Add(new DeviceInfo("usb-device", "unauthorized", "Pixel 9"));
@@ -134,6 +134,49 @@ public sealed partial class AppTests
         Assert.False(deviceCheck.Ok);
         Assert.Contains("unauthorized", deviceCheck.Summary, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("USB debugging", deviceCheck.Recommendation, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ViewDoctor_DiagnoseAsync_Flags_Explicit_MediaProjection_Consent_As_Interactive()
+    {
+        var fileSystem = new FakeFileSystem();
+        var helperPath = "/tmp/luotsi-view-helper.apk";
+        fileSystem.AddFile(helperPath, "apk");
+        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>
+        {
+            ["LUOTSI_VIEW_HELPER_APK"] = helperPath
+        });
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        host.ConnectedDevices.Add(new DeviceInfo("192.168.0.134:5555", "device", "Pixel 9"));
+        var binder = new FakeLibavNativeLibraryBinder();
+        binder.SucceedFor(null);
+        var doctor = new ViewDoctor(
+            host,
+            new AndroidViewHelperPackageLocator(environment, fileSystem),
+            new DefaultViewRecorderFactory(fileSystem, new FakeProcessRunner(), environment),
+            environment,
+            binder);
+
+        var result = await doctor.DiagnoseAsync(new ViewOptions(
+            "192.168.0.134:5555",
+            "adb",
+            "h264",
+            "ffmpeg",
+            true,
+            null,
+            1280,
+            30,
+            "4M",
+            false,
+            false,
+            CaptureBackend: ViewCaptureBackends.MediaProjection));
+
+        Assert.False(result.Ready);
+        var consentCheck = Assert.Single(result.Checks, check => check.Name == "mediaprojection_consent");
+        Assert.False(consentCheck.Ok);
+        Assert.Contains("cannot be preflighted", consentCheck.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("fallback=none", consentCheck.Detail, StringComparison.OrdinalIgnoreCase);
     }
 
 

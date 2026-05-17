@@ -37,6 +37,8 @@ internal static class ViewCommandOptionsFactory
             throw new UsageException("view requires --renderer-stats-interval-ms zero or greater.");
         }
 
+        var captureBackend = ResolveCaptureBackend(options.Get("capture-backend"));
+
         return new ViewOptions(
             device ?? joinShareEndpoint ?? string.Empty,
             adbExecutable,
@@ -56,7 +58,8 @@ internal static class ViewCommandOptionsFactory
             options.Get("share-bind"),
             joinShareEndpoint,
             options.HasFlag("always-on-top"),
-            scaleMode);
+            scaleMode,
+            captureBackend);
     }
 
     private static int GetIntOrDefault(CliOptions options, string key, int defaultValue) =>
@@ -74,6 +77,22 @@ internal static class ViewCommandOptionsFactory
             "fit" => "fit",
             "fill" => "fill",
             _ => throw new UsageException("view requires --scale-mode to be either fit or fill.")
+        };
+    }
+
+    private static string ResolveCaptureBackend(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return ViewCaptureBackends.Auto;
+        }
+
+        return value.Trim().ToLowerInvariant() switch
+        {
+            ViewCaptureBackends.Auto => ViewCaptureBackends.Auto,
+            ViewCaptureBackends.Screenrecord => ViewCaptureBackends.Screenrecord,
+            ViewCaptureBackends.MediaProjection => ViewCaptureBackends.MediaProjection,
+            _ => throw new UsageException("view requires --capture-backend to be auto, screenrecord, or mediaprojection.")
         };
     }
 }

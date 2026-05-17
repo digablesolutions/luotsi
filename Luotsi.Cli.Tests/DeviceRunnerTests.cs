@@ -461,8 +461,8 @@ public sealed partial class AppTests
         adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
         var environment = new FakeEnvironmentVariables(new Dictionary<string, string>
         {
-            ["DEVICE_E2E_EMULATED_STORAGE_TARGET"] = "/sdcard",
-            ["DEVICE_E2E_EMULATED_STORAGE_SOURCE"] = "/mnt/shell/emulated/0"
+            ["LUOTSI_EMULATED_STORAGE_TARGET"] = "/sdcard",
+            ["LUOTSI_EMULATED_STORAGE_SOURCE"] = "/mnt/shell/emulated/0"
         });
         var runner = new DeviceRunner(
             adb,

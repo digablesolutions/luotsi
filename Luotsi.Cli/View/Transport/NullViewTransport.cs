@@ -13,14 +13,22 @@ namespace Luotsi.Cli.View;
 internal sealed class NullViewTransportBootstrap : IViewTransportBootstrap
 {
     public Task<ViewConnectionInfo> StartAsync(ViewStartRequest request, CancellationToken cancellationToken = default) =>
-        Task.FromResult(new ViewConnectionInfo(Guid.NewGuid().ToString("N"), request.Codec, ViewPacketStreamReader.CurrentProtocolVersion, 0, 0, 0, "phase-1-stub", "stub"));
+        Task.FromResult(new ViewConnectionInfo(
+            Guid.NewGuid().ToString("N"),
+            request.Codec,
+            ViewPacketStreamReader.CurrentProtocolVersion,
+            0,
+            0,
+            0,
+            ViewTransportConstants.NullTransportVersion,
+            ViewTransportConstants.NullTransport));
 
     public Task StopAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 internal sealed class NullViewBackend : IViewBackend
 {
-    public string Name => "stub";
+    public string Name => ViewTransportConstants.NullTransport;
 
     public Task InitializeAsync(ViewConnectionInfo connectionInfo, IViewRenderer? renderer, IViewRecorder? recorder, CancellationToken cancellationToken = default) =>
         Task.CompletedTask;

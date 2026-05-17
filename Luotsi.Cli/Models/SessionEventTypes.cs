@@ -30,6 +30,7 @@ public static class SessionEventTypes
         public const string ShareClientConnected = "view_share_client_connected";
         public const string ShareClientDisconnected = "view_share_client_disconnected";
         public const string Reconnected = "view_reconnected";
+        public const string CaptureBackendFallback = "view_capture_backend_fallback";
         public const string Ended = "view_ended";
         public const string Error = "view_error";
         public const string RecordingStarted = "view_recording_started";

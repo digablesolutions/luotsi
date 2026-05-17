@@ -1047,7 +1047,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
             FillRect(layout.ShelfBounds, scaleX, scaleY, 12, 12, 12, 208);
             foreach (var slot in layout.DeviceSlots)
             {
-                DrawDeviceSlot(slot, scaleX, scaleY, chrome.ActiveDevice);
+                DrawDeviceSlot(slot, scaleX, scaleY);
             }
         }
 
@@ -1116,12 +1116,26 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         }
     }
 
-    private unsafe void DrawDeviceSlot(ViewChromeDeviceSlotLayout slot, float scaleX, float scaleY, string activeDevice)
+    private unsafe void DrawDeviceSlot(ViewChromeDeviceSlotLayout slot, float scaleX, float scaleY)
     {
-        var isActive = string.Equals(slot.DeviceSelector, activeDevice, StringComparison.OrdinalIgnoreCase);
-        FillRect(slot.Bounds, scaleX, scaleY, isActive ? (byte)26 : (byte)24, isActive ? (byte)86 : (byte)36, isActive ? (byte)52 : (byte)36, 230);
-        OutlineRect(slot.Bounds, scaleX, scaleY, isActive ? (byte)120 : (byte)120, isActive ? (byte)220 : (byte)120, isActive ? (byte)160 : (byte)120, 255);
-        DrawNumber(slot.Index, slot.Bounds, scaleX, scaleY, 245, 245, 245, 255);
+        var isBlocked = !slot.Enabled && !slot.IsActive;
+        FillRect(slot.Bounds, scaleX, scaleY,
+            slot.IsActive ? (byte)26 : isBlocked ? (byte)70 : (byte)24,
+            slot.IsActive ? (byte)86 : isBlocked ? (byte)24 : (byte)50,
+            slot.IsActive ? (byte)52 : isBlocked ? (byte)24 : (byte)70,
+            230);
+        OutlineRect(slot.Bounds, scaleX, scaleY,
+            slot.IsActive ? (byte)120 : isBlocked ? (byte)230 : (byte)140,
+            slot.IsActive ? (byte)220 : isBlocked ? (byte)100 : (byte)190,
+            slot.IsActive ? (byte)160 : isBlocked ? (byte)100 : (byte)230,
+            255);
+        DrawTinyText(slot.Label, slot.Bounds.Left + 8, slot.Bounds.Top + 7, scaleX, scaleY, 245, 245, 245, 255, 2);
+        DrawTinyText(slot.StatusLabel, slot.Bounds.Left + 8, slot.Bounds.Top + 22, scaleX, scaleY,
+            slot.IsActive ? (byte)170 : isBlocked ? (byte)255 : (byte)180,
+            slot.IsActive ? (byte)255 : isBlocked ? (byte)160 : (byte)225,
+            slot.IsActive ? (byte)195 : isBlocked ? (byte)160 : (byte)255,
+            255,
+            1);
     }
 
     private unsafe void DrawScreenshotIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
@@ -1236,6 +1250,74 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
             DrawDigit(text[index], startX + index * (digitWidth + 4f), startY, digitWidth, digitHeight, scaleX, scaleY, r, g, b, a);
         }
     }
+
+    private unsafe void DrawTinyText(string text, int left, int top, float scaleX, float scaleY, byte r, byte g, byte b, byte a, int pixelSize)
+    {
+        var cursor = left;
+        foreach (var rawCharacter in text.ToUpperInvariant())
+        {
+            if (rawCharacter == ' ')
+            {
+                cursor += 4 * pixelSize;
+                continue;
+            }
+
+            var glyph = GetTinyGlyph(rawCharacter);
+            if (glyph is null)
+            {
+                cursor += 4 * pixelSize;
+                continue;
+            }
+
+            for (var row = 0; row < glyph.Length; row++)
+            {
+                for (var column = 0; column < glyph[row].Length; column++)
+                {
+                    if (glyph[row][column] == '1')
+                    {
+                        FillRect(new ViewChromeRect(cursor + column * pixelSize, top + row * pixelSize, pixelSize, pixelSize), scaleX, scaleY, r, g, b, a);
+                    }
+                }
+            }
+
+            cursor += 6 * pixelSize;
+        }
+    }
+
+    private static string[]? GetTinyGlyph(char character) => character switch
+    {
+        '0' => ["111", "101", "101", "101", "111"],
+        '1' => ["010", "110", "010", "010", "111"],
+        '2' => ["111", "001", "111", "100", "111"],
+        '3' => ["111", "001", "111", "001", "111"],
+        '4' => ["101", "101", "111", "001", "001"],
+        '5' => ["111", "100", "111", "001", "111"],
+        '6' => ["111", "100", "111", "101", "111"],
+        '7' => ["111", "001", "010", "010", "010"],
+        '8' => ["111", "101", "111", "101", "111"],
+        '9' => ["111", "101", "111", "001", "111"],
+        'A' => ["111", "101", "111", "101", "101"],
+        'C' => ["111", "100", "100", "100", "111"],
+        'D' => ["110", "101", "101", "101", "110"],
+        'E' => ["111", "100", "110", "100", "111"],
+        'F' => ["111", "100", "110", "100", "100"],
+        'H' => ["101", "101", "111", "101", "101"],
+        'I' => ["111", "010", "010", "010", "111"],
+        'K' => ["101", "101", "110", "101", "101"],
+        'N' => ["101", "111", "111", "111", "101"],
+        'O' => ["111", "101", "101", "101", "111"],
+        'R' => ["110", "101", "110", "101", "101"],
+        'T' => ["111", "010", "010", "010", "010"],
+        'U' => ["101", "101", "101", "101", "111"],
+        'V' => ["101", "101", "101", "101", "010"],
+        'W' => ["101", "101", "111", "111", "101"],
+        'Y' => ["101", "101", "010", "010", "010"],
+        '-' => ["000", "000", "111", "000", "000"],
+        '_' => ["000", "000", "000", "000", "111"],
+        ':' => ["000", "010", "000", "010", "000"],
+        '.' => ["000", "000", "000", "000", "010"],
+        _ => null
+    };
 
     private unsafe void DrawDigit(char digit, float left, float top, float width, float height, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
     {

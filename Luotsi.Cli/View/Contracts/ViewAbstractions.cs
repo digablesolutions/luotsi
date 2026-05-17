@@ -46,6 +46,7 @@ public interface IViewSessionFactory
 /// <param name="OverlayTelemetry">Whether telemetry overlays are enabled.</param>
 /// <param name="StatsIntervalMs">Minimum interval between emitted JSONL stats updates. Set to zero to disable JSONL stats emission.</param>
 /// <param name="RendererStatsIntervalMs">Minimum interval between forwarded renderer stats updates. Set to zero to forward every renderer stats update.</param>
+/// <param name="CaptureBackend">Requested Android capture backend.</param>
 public sealed record ViewOptions(
     string DeviceSelector,
     string AdbExecutable,
@@ -65,7 +66,18 @@ public sealed record ViewOptions(
     string? ShareBindEndpoint = null,
     string? JoinShareEndpoint = null,
     bool AlwaysOnTop = false,
-    string ScaleMode = "fit");
+    string ScaleMode = "fit",
+    string CaptureBackend = ViewCaptureBackends.Auto);
+
+/// <summary>
+/// Android view capture backend names.
+/// </summary>
+public static class ViewCaptureBackends
+{
+    public const string Auto = "auto";
+    public const string Screenrecord = "screenrecord";
+    public const string MediaProjection = "mediaprojection";
+}
 
 /// <summary>
 /// Bootstraps the device-side stream transport.
@@ -97,13 +109,15 @@ public interface IViewTransportBootstrap
 /// <param name="MaxFps">Maximum frame rate.</param>
 /// <param name="VideoBitRate">Requested video bit rate.</param>
 /// <param name="Codec">Requested codec.</param>
+/// <param name="CaptureBackend">Requested capture backend.</param>
 public sealed record ViewStartRequest(
     string AdbExecutable,
     string DeviceSelector,
     int MaxSize,
     int MaxFps,
     string VideoBitRate,
-    string Codec);
+    string Codec,
+    string CaptureBackend = ViewCaptureBackends.Auto);
 
 /// <summary>
 /// Connection metadata for a view session.
@@ -116,6 +130,7 @@ public sealed record ViewStartRequest(
 /// <param name="ServerVersion">Device-side server version.</param>
 /// <param name="Transport">Transport description.</param>
 /// <param name="Host">Host name or address exposing the transport endpoint.</param>
+/// <param name="CaptureBackend">Active device-side capture backend.</param>
 public sealed record ViewConnectionInfo(
     string SessionId,
     string Codec,
@@ -125,7 +140,8 @@ public sealed record ViewConnectionInfo(
     int LocalPort,
     string ServerVersion,
     string Transport,
-    string Host = "127.0.0.1");
+    string Host = "127.0.0.1",
+    string CaptureBackend = ViewCaptureBackends.Screenrecord);
 
 /// <summary>
 /// Decodes and optionally presents a stream of view packets.
@@ -237,7 +253,7 @@ public interface IViewStreamConnector
     /// <summary>
     /// Connects to the local transport endpoint for a view session.
     /// </summary>
-    /// <param name="connectionInfo">Connection metadata from the bootstrap phase.</param>
+    /// <param name="connectionInfo">Connection metadata from the transport bootstrap.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Active stream connection.</returns>
     Task<IViewStreamConnection> ConnectAsync(ViewConnectionInfo connectionInfo, CancellationToken cancellationToken = default);

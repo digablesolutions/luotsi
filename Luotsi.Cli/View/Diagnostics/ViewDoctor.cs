@@ -106,6 +106,7 @@ public sealed class ViewDoctor(
         var checks = new List<ViewDoctorCheck>
         {
             CheckDecoder(options),
+            CheckCaptureBackend(options),
             CheckHelperPackage()
         };
 
@@ -120,6 +121,7 @@ public sealed class ViewDoctor(
             var preflightCheck = await CheckPreflightAsync(cancellationToken).ConfigureAwait(false);
             preflight = preflightCheck.Preflight;
             checks.Add(preflightCheck.Check);
+            checks.AddRange(CheckMediaProjectionReadiness(options, preflight));
         }
         else
         {
@@ -127,9 +129,10 @@ public sealed class ViewDoctor(
                 "preflight",
                 false,
                 "Skipped device preflight because the configured device is not currently visible to adb."));
+            checks.AddRange(CheckMediaProjectionReadiness(options, null));
         }
 
-        checks.Add(CheckRecorder(options));
+        checks.Add(await CheckRecorderAsync(options).ConfigureAwait(false));
 
         return new ViewDoctorResult(
             checks.All(static check => check.Ok),
@@ -152,7 +155,7 @@ public sealed class ViewDoctor(
             }
             catch (Exception ex)
             {
-                return new ViewDoctorCheck("decoder", false, "FFmpeg native decoder is not ready.", ex.Message, "Set DEVICE_E2E_FFMPEG_ROOT or run view with --defaults --decoder ffmpeg after installing the bundled FFmpeg libraries.");
+                return new ViewDoctorCheck("decoder", false, "FFmpeg native decoder is not ready.", ex.Message, "Set LUOTSI_FFMPEG_ROOT or run view with --defaults --decoder ffmpeg after installing the bundled FFmpeg libraries.");
             }
         }
 
@@ -164,6 +167,110 @@ public sealed class ViewDoctor(
         return new ViewDoctorCheck("decoder", false, $"Unsupported view decoder '{options.Decoder}'.", null, "Use --decoder ffmpeg.");
     }
 
+    private static ViewDoctorCheck CheckCaptureBackend(ViewOptions options)
+    {
+        return options.CaptureBackend.ToLowerInvariant() switch
+        {
+            ViewCaptureBackends.Auto => new ViewDoctorCheck(
+                "capture_backend",
+                true,
+                "Capture backend is auto; the host will prefer MediaProjection and keep screenrecord available as the explicit fallback.",
+                "preferred=mediaprojection; fallback=screenrecord"),
+            ViewCaptureBackends.Screenrecord => new ViewDoctorCheck(
+                "capture_backend",
+                true,
+                "Capture backend is screenrecord.",
+                "screenrecord has Android's 180-second session limit."),
+            ViewCaptureBackends.MediaProjection => new ViewDoctorCheck(
+                "capture_backend",
+                true,
+                "Capture backend is mediaprojection.",
+                "Requires Android screen-capture consent and an AVC MediaCodec encoder."),
+            _ => new ViewDoctorCheck(
+                "capture_backend",
+                false,
+                $"Unsupported capture backend '{options.CaptureBackend}'.",
+                null,
+                "Use --capture-backend auto, screenrecord, or mediaprojection.")
+        };
+    }
+
+    private static IReadOnlyList<ViewDoctorCheck> CheckMediaProjectionReadiness(ViewOptions options, PreflightResult? preflight)
+    {
+        if (!UsesMediaProjection(options))
+        {
+            return [];
+        }
+
+        var checks = new List<ViewDoctorCheck>();
+        if (preflight is null)
+        {
+            checks.Add(new ViewDoctorCheck(
+                "mediaprojection_api",
+                false,
+                "Unable to verify MediaProjection API support because device preflight did not run.",
+                null,
+                "Fix device visibility/preflight first, or use --capture-backend screenrecord."));
+        }
+        else if (int.TryParse(preflight.Sdk, out var sdk) && sdk >= 21)
+        {
+            checks.Add(new ViewDoctorCheck(
+                "mediaprojection_api",
+                true,
+                $"Device SDK {sdk} supports MediaProjection.",
+                $"Android {preflight.AndroidRelease}; model={preflight.Model}"));
+        }
+        else
+        {
+            checks.Add(new ViewDoctorCheck(
+                "mediaprojection_api",
+                false,
+                $"Device SDK '{preflight.Sdk}' does not meet the MediaProjection minimum.",
+                $"Android {preflight.AndroidRelease}; model={preflight.Model}",
+                "Use --capture-backend screenrecord on this device."));
+        }
+
+        checks.Add(string.Equals(options.Codec, "h264", StringComparison.OrdinalIgnoreCase)
+            ? new ViewDoctorCheck(
+                "mediaprojection_encoder",
+                true,
+                "MediaProjection capture will request an AVC/H.264 MediaCodec encoder.",
+                $"max_size={options.MaxSize}; max_fps={options.MaxFps}; bit_rate={options.VideoBitRate}")
+            : new ViewDoctorCheck(
+                "mediaprojection_encoder",
+                false,
+                $"MediaProjection capture currently supports only h264, not '{options.Codec}'.",
+                null,
+                "Use --codec h264."));
+
+        checks.Add(CheckMediaProjectionConsent(options));
+
+        return checks;
+    }
+
+    private static ViewDoctorCheck CheckMediaProjectionConsent(ViewOptions options)
+    {
+        if (string.Equals(options.CaptureBackend, ViewCaptureBackends.Auto, StringComparison.OrdinalIgnoreCase))
+        {
+            return new ViewDoctorCheck(
+                "mediaprojection_consent",
+                true,
+                "MediaProjection consent will be requested by the helper activity when auto starts; screenrecord remains available if consent is denied or times out.",
+                "consent_state=interactive; fallback=screenrecord");
+        }
+
+        return new ViewDoctorCheck(
+            "mediaprojection_consent",
+            false,
+            "MediaProjection consent cannot be preflighted before the Android consent activity runs.",
+            "consent_state=interactive; fallback=none",
+            "Start a MediaProjection view session on the physical device and approve the Android screen-capture prompt, or use --capture-backend auto/screenrecord.");
+    }
+
+    private static bool UsesMediaProjection(ViewOptions options) =>
+        string.Equals(options.CaptureBackend, ViewCaptureBackends.Auto, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(options.CaptureBackend, ViewCaptureBackends.MediaProjection, StringComparison.OrdinalIgnoreCase);
+
     private ViewDoctorCheck CheckHelperPackage()
     {
         try
@@ -173,7 +280,7 @@ public sealed class ViewDoctor(
         }
         catch (Exception ex)
         {
-            return new ViewDoctorCheck("helper_package", false, "Android view helper package is not ready.", ex.Message, "Build the Android helper APK or set DEVICE_E2E_VIEW_HELPER_APK to a valid helper package.");
+            return new ViewDoctorCheck("helper_package", false, "Android view helper package is not ready.", ex.Message, "Build the Android helper APK or set LUOTSI_VIEW_HELPER_APK to a valid helper package.");
         }
     }
 
@@ -209,7 +316,7 @@ public sealed class ViewDoctor(
         catch (Exception ex)
         {
             return (
-                new ViewDoctorCheck("device_visibility", false, "Unable to enumerate adb-visible devices.", ex.Message, "Check that adb is installed and reachable via --adb or DEVICE_E2E_ADB."),
+                new ViewDoctorCheck("device_visibility", false, "Unable to enumerate adb-visible devices.", ex.Message, "Check that adb is installed and reachable via --adb or LUOTSI_ADB."),
                 Array.Empty<DeviceInfo>());
         }
     }
@@ -228,7 +335,7 @@ public sealed class ViewDoctor(
         }
     }
 
-    private ViewDoctorCheck CheckRecorder(ViewOptions options)
+    private async Task<ViewDoctorCheck> CheckRecorderAsync(ViewOptions options)
     {
         if (string.IsNullOrWhiteSpace(options.RecordPath))
         {
@@ -240,7 +347,7 @@ public sealed class ViewDoctor(
             var recorder = _recorderFactory.Create(options);
             if (recorder is not null)
             {
-                recorder.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                await recorder.DisposeAsync().ConfigureAwait(false);
             }
 
             return new ViewDoctorCheck("recording", true, "Live recording target is ready.", options.RecordPath);
