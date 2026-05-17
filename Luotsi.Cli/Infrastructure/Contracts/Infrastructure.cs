@@ -13,6 +13,8 @@ public interface IDelay
 public interface IFileSystem
 {
     void CreateDirectory(string path);
+    bool DirectoryExists(string path);
+    IReadOnlyList<string> GetFiles(string path, string searchPattern, SearchOption searchOption);
     Task WriteAllTextAsync(string path, string text, Encoding encoding, CancellationToken cancellationToken = default);
     Task<string> ReadAllTextAsync(string path, CancellationToken cancellationToken = default);
     Stream OpenWrite(string path, bool overwrite = true);

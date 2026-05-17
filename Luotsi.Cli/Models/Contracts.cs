@@ -256,7 +256,12 @@ public sealed record Bounds(int Left, int Top, int Right, int Bottom);
 /// <param name="Name">Scenario name.</param>
 /// <param name="Steps">Scenario steps.</param>
 /// <param name="Variables">Optional scenario variables.</param>
-public sealed record ScenarioFile(string Name, IReadOnlyList<ScenarioStep> Steps, IReadOnlyDictionary<string, string>? Variables = null);
+/// <param name="Tags">Optional runner tags used for filtering and reporting.</param>
+public sealed record ScenarioFile(
+    string Name,
+    IReadOnlyList<ScenarioStep> Steps,
+    IReadOnlyDictionary<string, string>? Variables = null,
+    IReadOnlyList<string>? Tags = null);
 
 /// <summary>
 /// Scenario playbook step.

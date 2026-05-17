@@ -26,6 +26,7 @@ internal sealed class ScenarioTemplateResolver(TimeProvider timeProvider, IEnvir
         return scenario with
         {
             Name = ResolveValue(scenario.Name, scenario.Variables, resolvedVariables) ?? scenario.Name,
+            Tags = scenario.Tags?.Select(value => ResolveValue(value, scenario.Variables, resolvedVariables) ?? value).ToArray(),
             Steps = scenario.Steps.Select(step => step with
             {
                 Name = ResolveValue(step.Name, scenario.Variables, resolvedVariables),

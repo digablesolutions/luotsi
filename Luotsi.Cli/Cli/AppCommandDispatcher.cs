@@ -21,6 +21,7 @@ internal sealed class AppCommandDispatcher(
     public async Task<object> ExecuteAsync(string command, CliOptions options, string adbExecutable, IDeviceHost runner)
     {
         var scenarios = new ScenarioExecutor(runner, _fileSystem, _timeProvider, _delay, _environment);
+        var scenarioCatalog = new ScenarioCatalog(_fileSystem, _timeProvider, _environment);
 
         return command switch
         {
@@ -48,6 +49,7 @@ internal sealed class AppCommandDispatcher(
             "list-installed-packages" => await runner.ListInstalledPackagesAsync(options.HasFlag("third-party")).ConfigureAwait(false),
             "grant-permission" => await runner.GrantPermissionAsync(options.Require("package"), options.Require("permission")).ConfigureAwait(false),
             "revoke-permission" => await runner.RevokePermissionAsync(options.Require("package"), options.Require("permission")).ConfigureAwait(false),
+            "scenario-list" => await ListScenariosAsync(options, scenarioCatalog).ConfigureAwait(false),
             "screen-state" => await runner.GetScreenStateAsync().ConfigureAwait(false),
             "telemetry-tail" => await runner.TelemetryTailAsync(options.Int("tail", CliDefaults.DefaultLogTail)).ConfigureAwait(false),
             "telemetry-watch" => await runner.TelemetryWatchAsync(options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
@@ -61,10 +63,86 @@ internal sealed class AppCommandDispatcher(
             "logcat" => await runner.LogcatAsync(options.Int("tail", CliDefaults.DefaultLogTail)).ConfigureAwait(false),
             "wait-log" => await runner.WaitForLogAsync(options.Require("contains"), options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
             "record" => await runner.RecordAsync(options.Require("output"), options.Int("time-limit-sec", CliDefaults.DefaultRecordTimeLimitSeconds)).ConfigureAwait(false),
+            "run" when options.Get("path") is not null || options.HasFlag("dry-run") => await RunScenariosAsync(options, scenarios, scenarioCatalog).ConfigureAwait(false),
             "run" => await scenarios.RunAsync(options.Require("file")).ConfigureAwait(false),
             _ => throw new UsageException($"Unknown command '{command}'.")
         };
     }
+
+    private static async Task<ScenarioListResult> ListScenariosAsync(CliOptions options, ScenarioCatalog scenarioCatalog)
+    {
+        var query = CreateScenarioQuery(options, requirePath: true);
+        var discovered = await scenarioCatalog.DiscoverAsync(query.Path).ConfigureAwait(false);
+        var matched = ScenarioCatalog.Filter(discovered, query);
+        return new ScenarioListResult(query.Path, discovered.Count, matched.Count, matched);
+    }
+
+    private static async Task<object> RunScenariosAsync(CliOptions options, ScenarioExecutor scenarios, ScenarioCatalog scenarioCatalog)
+    {
+        var query = CreateScenarioQuery(options, requirePath: false);
+        var discovered = await scenarioCatalog.DiscoverAsync(query.Path).ConfigureAwait(false);
+        var matched = ScenarioCatalog.Filter(discovered, query);
+        var selected = ScenarioCatalog.SelectShard(matched, query);
+
+        if (query.DryRun)
+        {
+            return new ScenarioRunPlanResult(
+                query.Path,
+                true,
+                discovered.Count,
+                matched.Count,
+                selected.Count,
+                query.ShardCount,
+                query.ShardIndex,
+                selected);
+        }
+
+        var results = new List<object>(selected.Count);
+        foreach (var scenario in selected)
+        {
+            results.Add(await scenarios.RunAsync(scenario.File).ConfigureAwait(false));
+        }
+
+        return new ScenarioRunBatchResult(
+            query.Path,
+            "passed",
+            discovered.Count,
+            matched.Count,
+            selected.Count,
+            selected.Count,
+            0,
+            matched.Count - selected.Count,
+            query.ShardCount,
+            query.ShardIndex,
+            results);
+    }
+
+    private static ScenarioQuery CreateScenarioQuery(CliOptions options, bool requirePath)
+    {
+        var path = options.Get("path") ?? options.Get("file");
+        if (requirePath && string.IsNullOrWhiteSpace(path))
+        {
+            throw new UsageException("Missing required option --path.");
+        }
+
+        path ??= options.Require("file");
+        int? shardCount = options.Get("shard-count") is null ? null : options.Int("shard-count", 0);
+        int? shardIndex = options.Get("shard-index") is null ? null : options.Int("shard-index", 0);
+        return new ScenarioQuery(
+            path,
+            SplitOption(options.Get("include-tag") ?? options.Get("tag")),
+            SplitOption(options.Get("exclude-tag")),
+            options.Get("name"),
+            options.Get("action"),
+            shardCount,
+            shardIndex,
+            options.HasFlag("dry-run"));
+    }
+
+    private static IReadOnlyList<string> SplitOption(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? []
+            : value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
     private async Task<WirelessMdnsConnectResult> ConnectWirelessAsync(CliOptions options, string adbExecutable, IWirelessDebugHost runner)
     {

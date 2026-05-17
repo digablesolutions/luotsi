@@ -1,3 +1,4 @@
+using System.IO.Enumeration;
 using System.Text.Json;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
@@ -89,7 +90,19 @@ internal sealed class FakeFileSystem : IFileSystem
         _binaryFiles.Remove(path);
     }
 
-    public void CreateDirectory(string path) => _directories.Add(path);
+    public void CreateDirectory(string path) => _directories.Add(NormalizeDirectory(path));
+
+    public bool DirectoryExists(string path) => _directories.Contains(NormalizeDirectory(path));
+
+    public IReadOnlyList<string> GetFiles(string path, string searchPattern, SearchOption searchOption)
+    {
+        var root = NormalizeDirectory(path);
+        return _files.Keys.Concat(_binaryFiles.Keys)
+            .Where(file => IsUnderDirectory(file, root, searchOption))
+            .Where(file => FileSystemName.MatchesSimpleExpression(searchPattern, Path.GetFileName(file), ignoreCase: true))
+            .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
 
     public Task WriteAllTextAsync(string path, string text, System.Text.Encoding encoding, CancellationToken cancellationToken = default)
     {
@@ -139,6 +152,29 @@ internal sealed class FakeFileSystem : IFileSystem
     public string GetTempPath() => "/tmp";
 
     public byte[] ReadBytes(string path) => _binaryFiles[path];
+
+    private static bool IsUnderDirectory(string file, string root, SearchOption searchOption)
+    {
+        var directory = NormalizeDirectory(Path.GetDirectoryName(file));
+        if (string.IsNullOrWhiteSpace(directory))
+        {
+            return false;
+        }
+
+        if (searchOption == SearchOption.TopDirectoryOnly)
+        {
+            return string.Equals(directory, root, StringComparison.Ordinal);
+        }
+
+        return string.Equals(directory, root, StringComparison.Ordinal) ||
+            directory.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal) ||
+            directory.StartsWith(root + Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
+    }
+
+    private static string NormalizeDirectory(string? path) =>
+        string.IsNullOrWhiteSpace(path)
+            ? string.Empty
+            : path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
 
     private void WriteBinaryFile(string path, byte[] content)
     {

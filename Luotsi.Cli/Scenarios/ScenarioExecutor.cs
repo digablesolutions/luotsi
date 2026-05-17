@@ -49,7 +49,7 @@ public interface IScenarioActionHost
 /// </summary>
 public sealed class ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem fileSystem, TimeProvider timeProvider, IDelay delay, IEnvironmentVariables? environment = null)
 {
-    private static readonly HashSet<string> SupportedScenarioActions =
+    internal static readonly HashSet<string> SupportedScenarioActions =
     [
         "waitVisible",
         "waitNotVisible",
