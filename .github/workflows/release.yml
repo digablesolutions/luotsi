@@ -133,7 +133,7 @@ jobs:
 
       - name: Upload validation diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-validation-diagnostics
           path: |
@@ -219,7 +219,7 @@ jobs:
           "$($hash.Hash.ToLowerInvariant())  $(Split-Path $archive -Leaf)" | Set-Content "$archive.sha256" -Encoding ascii
 
       - name: Upload package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-package-${{ matrix.rid }}
           path: |
@@ -228,7 +228,7 @@ jobs:
 
       - name: Upload publish binlog
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-publish-binlog-${{ matrix.rid }}
           path: |
