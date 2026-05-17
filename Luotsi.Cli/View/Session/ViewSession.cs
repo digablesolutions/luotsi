@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Runtime.CompilerServices;
+using System.Diagnostics;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Hosts.Android;
@@ -351,8 +352,9 @@ public sealed class ViewSession(
                             {
                                 await viewTask.ConfigureAwait(false);
                             }
-                            catch (OperationCanceledException) when (sessionCancellation.IsCancellationRequested)
+                            catch (OperationCanceledException ex) when (sessionCancellation.IsCancellationRequested)
                             {
+                                Debug.WriteLine($"View backend stopped for reconnect cancellation: {ex.Message}");
                             }
 
                             if (sessionRenderer is not null)
@@ -377,8 +379,9 @@ public sealed class ViewSession(
                             {
                                 await viewTask.ConfigureAwait(false);
                             }
-                            catch (OperationCanceledException) when (sessionCancellation.IsCancellationRequested)
+                            catch (OperationCanceledException ex) when (sessionCancellation.IsCancellationRequested)
                             {
+                                Debug.WriteLine($"View backend stopped for window-close cancellation: {ex.Message}");
                             }
 
                             break;

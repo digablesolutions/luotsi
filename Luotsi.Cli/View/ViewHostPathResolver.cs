@@ -25,10 +25,11 @@ public sealed class ViewHostPathResolver(IEnvironmentVariables environment)
         }
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var buildOutputRepositoryRoot = Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "..", "..", "..", ".."));
         foreach (var candidate in new[]
                  {
-                     Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), relativePath)),
-                     Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", relativePath))
+                     Path.GetFullPath(Path.Join(Directory.GetCurrentDirectory(), relativePath)),
+                     Path.GetFullPath(Path.Join(buildOutputRepositoryRoot, relativePath))
                  }.Where(seen.Add))
         {
             yield return candidate;
@@ -98,7 +99,7 @@ public sealed class ViewHostPathResolver(IEnvironmentVariables environment)
             yield return candidate;
         }
 
-        foreach (var candidate in GetProcessRelativeDirectoryCandidates(Path.Combine("ffmpeg", "bin")).Where(seen.Add))
+        foreach (var candidate in GetProcessRelativeDirectoryCandidates(Path.Join("ffmpeg", "bin")).Where(seen.Add))
         {
             yield return candidate;
         }
@@ -138,7 +139,7 @@ public sealed class ViewHostPathResolver(IEnvironmentVariables environment)
 
         if (!IsBinDirectory(normalizedRoot))
         {
-            yield return Path.Combine(normalizedRoot, "bin");
+            yield return Path.Join(normalizedRoot, "bin");
         }
     }
 
@@ -149,8 +150,8 @@ public sealed class ViewHostPathResolver(IEnvironmentVariables environment)
             throw new ArgumentException("Path must be process-relative.", nameof(relativePath));
         }
 
-        yield return Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), relativePath));
-        yield return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, relativePath));
+        yield return Path.GetFullPath(Path.Join(Directory.GetCurrentDirectory(), relativePath));
+        yield return Path.GetFullPath(Path.Join(AppContext.BaseDirectory, relativePath));
     }
 
     private static bool IsBinDirectory(string path) =>

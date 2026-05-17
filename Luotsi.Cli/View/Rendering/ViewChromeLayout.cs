@@ -10,7 +10,7 @@ public static class ViewChromeLayout
     private const int ButtonGap = 8;
     private const int ToolbarHeight = 48;
     private const int ShelfHeight = 52;
-    private const int DeviceSlotWidth = 44;
+    private const int DeviceSlotWidth = 116;
     private const int DeviceSlotGap = 8;
     private const int ShareBadgeWidth = 52;
 
@@ -85,6 +85,14 @@ public static class ViewChromeLayout
             return text is null ? null : new ViewChromeTooltip(button.Bounds, text);
         }
 
+        foreach (var device in layout.DeviceSlots)
+        {
+            if (device.Bounds.Contains(x, y))
+            {
+                return new ViewChromeTooltip(device.Bounds, $"{device.Label} {device.StatusLabel} {device.DeviceSelector}".Trim());
+            }
+        }
+
         return null;
     }
 
@@ -131,8 +139,11 @@ public static class ViewChromeLayout
                 deviceSlots.Add(new ViewChromeDeviceSlotLayout(
                     device.DeviceSelector,
                     device.Index,
+                    BuildDeviceLabel(device),
+                    BuildDeviceStatusLabel(device),
+                    device.IsActive,
                     new ViewChromeRect(shelfLeft, shelfTop, DeviceSlotWidth, ButtonSize + 4),
-                    !device.IsActive));
+                    !device.IsActive && string.Equals(device.Status, "device", StringComparison.OrdinalIgnoreCase)));
                 shelfLeft += DeviceSlotWidth + DeviceSlotGap;
             }
         }
@@ -172,6 +183,38 @@ public static class ViewChromeLayout
             ViewChromeButtonKind.Fullscreen => isFullscreen ? "Windowed" : "Fullscreen",
             _ => null
         };
+
+    private static string BuildDeviceLabel(ViewChromeDevice device)
+    {
+        var selector = device.DeviceSelector;
+        var hostEnd = selector.LastIndexOf('.');
+        var portStart = selector.LastIndexOf(':');
+        var suffix = hostEnd >= 0 && portStart > hostEnd
+            ? selector[(hostEnd + 1)..portStart]
+            : selector.Length <= 8 ? selector : selector[^8..];
+        return $"{device.Index} {suffix}";
+    }
+
+    private static string BuildDeviceStatusLabel(ViewChromeDevice device)
+    {
+        if (device.IsActive)
+        {
+            return "ACTIVE";
+        }
+
+        if (string.Equals(device.Status, "device", StringComparison.OrdinalIgnoreCase))
+        {
+            return "READY";
+        }
+
+        if (string.Equals(device.Status, "unauthorized", StringComparison.OrdinalIgnoreCase))
+        {
+            return "UNAUTH";
+        }
+
+        var status = string.IsNullOrWhiteSpace(device.Status) ? "UNKNOWN" : device.Status.ToUpperInvariant();
+        return status.Length <= 7 ? status : status[..7];
+    }
 }
 
 /// <summary>
@@ -232,7 +275,7 @@ internal sealed record ViewChromeRect(int Left, int Top, int Width, int Height)
 
 internal sealed record ViewChromeButtonLayout(ViewChromeButtonKind Kind, ViewChromeRect Bounds, bool Enabled, bool Active);
 
-internal sealed record ViewChromeDeviceSlotLayout(string DeviceSelector, int Index, ViewChromeRect Bounds, bool Enabled);
+internal sealed record ViewChromeDeviceSlotLayout(string DeviceSelector, int Index, string Label, string StatusLabel, bool IsActive, ViewChromeRect Bounds, bool Enabled);
 
 internal sealed record ViewChromeBadgeLayout(ViewChromeRect Bounds, int ObserverCount);
 

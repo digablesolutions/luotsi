@@ -192,7 +192,7 @@ public sealed class ViewTransportTests
     public void AndroidViewHelperPackageLocator_Uses_Default_Project_Output_When_Environment_Is_Missing()
     {
         var fileSystem = new FakeFileSystem();
-        var expectedPath = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "Luotsi.ViewServer.Android", "app", "build", "outputs", "apk", "debug", "app-debug.apk"));
+        var expectedPath = Path.GetFullPath(Path.Join(Directory.GetCurrentDirectory(), "Luotsi.ViewServer.Android", "app", "build", "outputs", "apk", "debug", "app-debug.apk"));
         fileSystem.AddFile(expectedPath, "apk");
         var locator = new AndroidViewHelperPackageLocator(new FakeEnvironmentVariables(new Dictionary<string, string>()), fileSystem);
 
@@ -226,7 +226,7 @@ public sealed class ViewTransportTests
     public void LibavNativeLibraryLoader_Uses_Bin_Subdirectory_When_Configured_Root_Is_Ffmpeg_Home()
     {
         var configuredRoot = Path.GetFullPath("C:\\tools\\ffmpeg");
-        var expectedRoot = Path.Combine(configuredRoot, "bin");
+        var expectedRoot = Path.Join(configuredRoot, "bin");
         var binder = new FakeLibavNativeLibraryBinder();
         binder.SucceedFor(expectedRoot);
         var loader = new LibavNativeLibraryLoader(
@@ -353,7 +353,7 @@ public sealed class ViewTransportTests
     public void DefaultViewRecorderFactory_Creates_FfmpegMuxingRecorder_For_Container_Output()
     {
         var fileSystem = new FakeFileSystem();
-        var ffmpegPath = Path.GetFullPath(Path.Combine("C:\\tools\\ffmpeg\\bin", "ffmpeg.exe"));
+        var ffmpegPath = Path.GetFullPath(Path.Join("C:\\tools\\ffmpeg\\bin", "ffmpeg.exe"));
         fileSystem.AddFile(ffmpegPath, string.Empty);
         var factory = new DefaultViewRecorderFactory(
             fileSystem,
@@ -373,7 +373,7 @@ public sealed class ViewTransportTests
     {
         var fileSystem = new FakeFileSystem();
         var ffmpegRoot = Path.GetFullPath("C:\\tools\\ffmpeg");
-        var ffmpegPath = Path.Combine(ffmpegRoot, "bin", "ffmpeg.exe");
+        var ffmpegPath = Path.Join(ffmpegRoot, "bin", "ffmpeg.exe");
         fileSystem.AddFile(ffmpegPath, string.Empty);
         var factory = new DefaultViewRecorderFactory(
             fileSystem,
@@ -394,7 +394,7 @@ public sealed class ViewTransportTests
         var fileSystem = new FakeFileSystem();
         var processRunner = new FakeProcessRunner();
         processRunner.EnqueueResult(new ProcessResult(0, string.Empty, string.Empty));
-        var ffmpegPath = Path.GetFullPath(Path.Combine("C:\\tools\\ffmpeg\\bin", "ffmpeg.exe"));
+        var ffmpegPath = Path.GetFullPath(Path.Join("C:\\tools\\ffmpeg\\bin", "ffmpeg.exe"));
         fileSystem.AddFile(ffmpegPath, string.Empty);
         var recorder = new FfmpegMuxingViewRecorder(fileSystem, processRunner, ffmpegPath, Path.GetFullPath("capture.mkv"), 60);
 
@@ -707,11 +707,36 @@ public sealed class ViewTransportTests
 
         var commandHit = Assert.IsType<ViewChromeCommandHitTarget>(ViewChromeLayout.HitTest(1280, 720, 20, 20, chrome));
         var rotateHit = Assert.IsType<ViewChromeCommandHitTarget>(ViewChromeLayout.HitTest(1280, 720, 260, 20, chrome));
-        var switchHit = Assert.IsType<ViewChromeSwitchDeviceHitTarget>(ViewChromeLayout.HitTest(1280, 720, 62, 692, chrome));
+        var switchHit = Assert.IsType<ViewChromeSwitchDeviceHitTarget>(ViewChromeLayout.HitTest(1280, 720, 140, 692, chrome));
 
         Assert.Equal(ViewWindowCommand.TakeScreenshot, commandHit.Command);
         Assert.Equal(ViewWindowCommand.Rotate, rotateHit.Command);
         Assert.Equal("device-b", switchHit.DeviceSelector);
+    }
+
+    [Fact]
+    public void ViewChromeLayout_HitTest_Shows_But_Disables_Unavailable_Devices()
+    {
+        var chrome = new ViewChromeState(
+            "device-a",
+            [
+                new ViewChromeDevice(1, "device-a", "device", "Primary", true),
+                new ViewChromeDevice(2, "device-b", "unauthorized", "Secondary", false)
+            ],
+            false,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true);
+
+        var unavailableDeviceHit = ViewChromeLayout.HitTest(1280, 720, 140, 692, chrome);
+        var unavailableDeviceTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 140, 692, chrome, ViewScaleMode.Fit, false));
+
+        Assert.Null(unavailableDeviceHit);
+        Assert.Contains("UNAUTH", unavailableDeviceTooltip.Text, StringComparison.Ordinal);
+        Assert.Contains("device-b", unavailableDeviceTooltip.Text, StringComparison.Ordinal);
     }
 
     [Fact]
