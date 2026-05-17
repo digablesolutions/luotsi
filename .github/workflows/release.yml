@@ -40,7 +40,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -90,12 +90,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ needs.validate-tag.outputs.tag }}
 
       - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
           cache: true
@@ -133,7 +133,7 @@ jobs:
 
       - name: Upload validation diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-validation-diagnostics
           path: |
@@ -163,12 +163,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ needs.validate-tag.outputs.tag }}
 
       - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
           cache: true
@@ -219,7 +219,7 @@ jobs:
           "$($hash.Hash.ToLowerInvariant())  $(Split-Path $archive -Leaf)" | Set-Content "$archive.sha256" -Encoding ascii
 
       - name: Upload package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-package-${{ matrix.rid }}
           path: |
@@ -228,7 +228,7 @@ jobs:
 
       - name: Upload publish binlog
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-publish-binlog-${{ matrix.rid }}
           path: |
@@ -247,12 +247,12 @@ jobs:
 
     steps:
       - name: Checkout tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ needs.validate-tag.outputs.tag }}
 
       - name: Download release packages
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: release-package-*
           path: release-assets
@@ -266,7 +266,7 @@ jobs:
           cat SHA256SUMS
 
       - name: Attest release assets
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             release-assets/*.zip
