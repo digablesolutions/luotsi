@@ -73,7 +73,7 @@ public sealed class ViewTransportTests
         var locator = new FakeAndroidViewHelperPackageLocator(new AndroidViewHelperPackage("C:/tmp/helper.apk", "/data/local/tmp/luotsi-view-server.apk", "dev.luotsi.view.Main", "test-helper"));
         var bootstrap = new AndroidViewBootstrap(new FakeAdbClientFactory(adb), new DefaultProcessRunner(), locator, new FakeUniqueIdGenerator("session123"));
 
-        var connection = await bootstrap.StartAsync(new ViewStartRequest("adb", "device-1", 1280, 30, "8M", "h264"));
+        var connection = await bootstrap.StartAsync(new ViewStartRequest("adb", "device-1", 1280, 30, "8M", "h264", ViewCaptureBackends.Screenrecord));
 
         Assert.Equal("session123", connection.SessionId);
         Assert.Equal("h264", connection.Codec);
@@ -98,7 +98,7 @@ public sealed class ViewTransportTests
         var locator = new FakeAndroidViewHelperPackageLocator(new AndroidViewHelperPackage("C:/tmp/helper.apk", "/data/local/tmp/luotsi-view-server.apk", "dev.luotsi.view.Main", "test-helper"));
         var bootstrap = new AndroidViewBootstrap(new FakeAdbClientFactory(adb), new DefaultProcessRunner(), locator, new FakeUniqueIdGenerator("session123"));
 
-        await bootstrap.StartAsync(new ViewStartRequest("adb", "device-1", 1280, 30, "8M", "h264"));
+        await bootstrap.StartAsync(new ViewStartRequest("adb", "device-1", 1280, 30, "8M", "h264", ViewCaptureBackends.Screenrecord));
         await bootstrap.StopAsync();
 
         Assert.Equal(["forward", "--remove", "tcp:38543"], adb.RunCommands[2]);
@@ -119,7 +119,7 @@ public sealed class ViewTransportTests
         var locator = new FakeAndroidViewHelperPackageLocator(new AndroidViewHelperPackage("C:/tmp/helper.apk", "/data/local/tmp/luotsi-view-server.apk", "dev.luotsi.view.Main", "test-helper"));
         var bootstrap = new AndroidViewBootstrap(new FakeAdbClientFactory(adb), new DefaultProcessRunner(), locator, new FakeUniqueIdGenerator("session123"));
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => bootstrap.StartAsync(new ViewStartRequest("adb", "device-1", 1280, 30, "8M", "h264")));
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => bootstrap.StartAsync(new ViewStartRequest("adb", "device-1", 1280, 30, "8M", "h264", ViewCaptureBackends.Screenrecord)));
 
         Assert.Contains("view helper start failed", error.Message, StringComparison.Ordinal);
         Assert.Equal(["forward", "--remove", "tcp:38543"], adb.RunCommands[2]);
@@ -138,7 +138,7 @@ public sealed class ViewTransportTests
         var locator = new FakeAndroidViewHelperPackageLocator(new AndroidViewHelperPackage("C:/tmp/helper.apk", "/data/local/tmp/luotsi-view-server.apk", "dev.luotsi.view.Main", "test-helper"));
         var bootstrap = new AndroidViewBootstrap(new FakeAdbClientFactory(adb), new DefaultProcessRunner(), locator, new FakeUniqueIdGenerator("session123"));
 
-        var connection = await bootstrap.StartAsync(new ViewStartRequest("adb", "device-1", 1280, 30, "8M", "h264"));
+        var connection = await bootstrap.StartAsync(new ViewStartRequest("adb", "device-1", 1280, 30, "8M", "h264", ViewCaptureBackends.Screenrecord));
 
         Assert.Equal(41237, connection.LocalPort);
         Assert.Equal(["forward", "--list"], adb.RunCommands[2]);
@@ -155,6 +155,29 @@ public sealed class ViewTransportTests
 
         Assert.Contains("h264", error.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(adb.RunCommands);
+    }
+
+    [Fact]
+    public async Task AndroidViewBootstrap_StartAsync_Installs_And_Launches_MediaProjection_Consent_Activity()
+    {
+        var adb = new FakeAdbClient();
+        adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "38543\n", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "Starting: Intent { cmp=dev.luotsi.view/.ConsentActivity }\n", string.Empty));
+        var locator = new FakeAndroidViewHelperPackageLocator(new AndroidViewHelperPackage("C:/tmp/helper.apk", "/data/local/tmp/luotsi-view-server.apk", "dev.luotsi.view.Main", "test-helper"));
+        var bootstrap = new AndroidViewBootstrap(new FakeAdbClientFactory(adb), new DefaultProcessRunner(), locator, new FakeUniqueIdGenerator("session123"));
+
+        var connection = await bootstrap.StartAsync(new ViewStartRequest("adb", "device-1", 1280, 30, "8M", "h264", ViewCaptureBackends.MediaProjection));
+
+        Assert.Equal(ViewCaptureBackends.MediaProjection, connection.CaptureBackend);
+        Assert.Equal(["install", "-r", "C:/tmp/helper.apk"], adb.RunCommands[0]);
+        Assert.Equal(["forward", "tcp:0", "localabstract:luotsi_view_session123"], adb.RunCommands[1]);
+        Assert.Equal("shell", adb.RunCommands[2][0]);
+        Assert.Equal("am", adb.RunCommands[2][1]);
+        Assert.Equal("start", adb.RunCommands[2][2]);
+        Assert.Contains("dev.luotsi.view/.ConsentActivity", adb.RunCommands[2], StringComparer.Ordinal);
+        Assert.Contains("luotsi_view_session123", adb.RunCommands[2], StringComparer.Ordinal);
+        Assert.Empty(adb.ShellCommands);
     }
 
     [Fact]
@@ -189,6 +212,26 @@ public sealed class ViewTransportTests
         Assert.Equal("C:\\ffmpeg-custom", firstRoot);
         Assert.Equal(firstRoot, secondRoot);
         Assert.Equal(["C:\\ffmpeg-custom"], binder.AttemptedRoots);
+    }
+
+    [Fact]
+    public void LibavNativeLibraryLoader_Uses_Bin_Subdirectory_When_Configured_Root_Is_Ffmpeg_Home()
+    {
+        var configuredRoot = Path.GetFullPath("C:\\tools\\ffmpeg");
+        var expectedRoot = Path.Combine(configuredRoot, "bin");
+        var binder = new FakeLibavNativeLibraryBinder();
+        binder.SucceedFor(expectedRoot);
+        var loader = new LibavNativeLibraryLoader(
+            new FakeEnvironmentVariables(new Dictionary<string, string>
+            {
+                ["DEVICE_E2E_FFMPEG_ROOT"] = configuredRoot
+            }),
+            binder);
+
+        var resolvedRoot = loader.EnsureLoaded();
+
+        Assert.Equal(expectedRoot, resolvedRoot);
+        Assert.Equal([configuredRoot, expectedRoot], binder.AttemptedRoots);
     }
 
     [Fact]
@@ -310,6 +353,26 @@ public sealed class ViewTransportTests
             new FakeEnvironmentVariables(new Dictionary<string, string>
             {
                 ["DEVICE_E2E_FFMPEG_ROOT"] = Path.GetDirectoryName(ffmpegPath)!
+            }));
+
+        var recorder = factory.Create(new ViewOptions("device-1", "adb", "h264", "ffmpeg", true, "capture.mp4", 1600, 60, "8M", false, false));
+
+        Assert.IsType<FfmpegMuxingViewRecorder>(recorder);
+    }
+
+    [Fact]
+    public void DefaultViewRecorderFactory_Creates_FfmpegMuxingRecorder_When_FfmpegRoot_Points_To_Ffmpeg_Home()
+    {
+        var fileSystem = new FakeFileSystem();
+        var ffmpegRoot = Path.GetFullPath("C:\\tools\\ffmpeg");
+        var ffmpegPath = Path.Combine(ffmpegRoot, "bin", "ffmpeg.exe");
+        fileSystem.AddFile(ffmpegPath, string.Empty);
+        var factory = new DefaultViewRecorderFactory(
+            fileSystem,
+            new FakeProcessRunner(),
+            new FakeEnvironmentVariables(new Dictionary<string, string>
+            {
+                ["DEVICE_E2E_FFMPEG_ROOT"] = ffmpegRoot
             }));
 
         var recorder = factory.Create(new ViewOptions("device-1", "adb", "h264", "ffmpeg", true, "capture.mp4", 1600, 60, "8M", false, false));

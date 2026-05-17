@@ -53,6 +53,7 @@ public sealed partial class AppTests
             "view",
             "--device", "192.168.0.134:5555",
             "--decoder", "wmf",
+            "--capture-backend", "screenrecord",
             "--headless",
             "--record", "capture.mkv",
             "--max-size", "1280",
@@ -70,6 +71,7 @@ public sealed partial class AppTests
         Assert.Equal("192.168.0.134:5555", options.DeviceSelector);
         Assert.Equal("h264", options.Codec);
         Assert.Equal("wmf", options.Decoder);
+        Assert.Equal(ViewCaptureBackends.Screenrecord, options.CaptureBackend);
         Assert.True(options.Headless);
         Assert.Equal("capture.mkv", options.RecordPath);
         Assert.Equal(1280, options.MaxSize);

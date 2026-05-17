@@ -36,6 +36,16 @@ public static class ViewTransportConstants
     public const string AdbForwardTransport = "adb-forward";
 
     /// <summary>
+    /// Transport name reported by the in-process null transport.
+    /// </summary>
+    public const string NullTransport = "null";
+
+    /// <summary>
+    /// Server version label reported by the in-process null transport.
+    /// </summary>
+    public const string NullTransportVersion = "null-transport";
+
+    /// <summary>
     /// Codec identifier for H.264 payloads.
     /// </summary>
     public const byte H264CodecId = 1;

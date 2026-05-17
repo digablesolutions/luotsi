@@ -106,6 +106,7 @@ public sealed class ViewDoctor(
         var checks = new List<ViewDoctorCheck>
         {
             CheckDecoder(options),
+            CheckCaptureBackend(options),
             CheckHelperPackage()
         };
 
@@ -120,6 +121,7 @@ public sealed class ViewDoctor(
             var preflightCheck = await CheckPreflightAsync(cancellationToken).ConfigureAwait(false);
             preflight = preflightCheck.Preflight;
             checks.Add(preflightCheck.Check);
+            checks.AddRange(CheckMediaProjectionReadiness(options, preflight));
         }
         else
         {
@@ -127,9 +129,10 @@ public sealed class ViewDoctor(
                 "preflight",
                 false,
                 "Skipped device preflight because the configured device is not currently visible to adb."));
+            checks.AddRange(CheckMediaProjectionReadiness(options, null));
         }
 
-        checks.Add(CheckRecorder(options));
+        checks.Add(await CheckRecorderAsync(options).ConfigureAwait(false));
 
         return new ViewDoctorResult(
             checks.All(static check => check.Ok),
@@ -163,6 +166,95 @@ public sealed class ViewDoctor(
 
         return new ViewDoctorCheck("decoder", false, $"Unsupported view decoder '{options.Decoder}'.", null, "Use --decoder ffmpeg.");
     }
+
+    private static ViewDoctorCheck CheckCaptureBackend(ViewOptions options)
+    {
+        return options.CaptureBackend.ToLowerInvariant() switch
+        {
+            ViewCaptureBackends.Auto => new ViewDoctorCheck(
+                "capture_backend",
+                true,
+                "Capture backend is auto; the host will prefer MediaProjection and keep screenrecord available as the explicit fallback.",
+                "preferred=mediaprojection; fallback=screenrecord"),
+            ViewCaptureBackends.Screenrecord => new ViewDoctorCheck(
+                "capture_backend",
+                true,
+                "Capture backend is screenrecord.",
+                "screenrecord has Android's 180-second session limit."),
+            ViewCaptureBackends.MediaProjection => new ViewDoctorCheck(
+                "capture_backend",
+                true,
+                "Capture backend is mediaprojection.",
+                "Requires Android screen-capture consent and an AVC MediaCodec encoder."),
+            _ => new ViewDoctorCheck(
+                "capture_backend",
+                false,
+                $"Unsupported capture backend '{options.CaptureBackend}'.",
+                null,
+                "Use --capture-backend auto, screenrecord, or mediaprojection.")
+        };
+    }
+
+    private static IReadOnlyList<ViewDoctorCheck> CheckMediaProjectionReadiness(ViewOptions options, PreflightResult? preflight)
+    {
+        if (!UsesMediaProjection(options))
+        {
+            return [];
+        }
+
+        var checks = new List<ViewDoctorCheck>();
+        if (preflight is null)
+        {
+            checks.Add(new ViewDoctorCheck(
+                "mediaprojection_api",
+                false,
+                "Unable to verify MediaProjection API support because device preflight did not run.",
+                null,
+                "Fix device visibility/preflight first, or use --capture-backend screenrecord."));
+        }
+        else if (int.TryParse(preflight.Sdk, out var sdk) && sdk >= 21)
+        {
+            checks.Add(new ViewDoctorCheck(
+                "mediaprojection_api",
+                true,
+                $"Device SDK {sdk} supports MediaProjection.",
+                $"Android {preflight.AndroidRelease}; model={preflight.Model}"));
+        }
+        else
+        {
+            checks.Add(new ViewDoctorCheck(
+                "mediaprojection_api",
+                false,
+                $"Device SDK '{preflight.Sdk}' does not meet the MediaProjection minimum.",
+                $"Android {preflight.AndroidRelease}; model={preflight.Model}",
+                "Use --capture-backend screenrecord on this device."));
+        }
+
+        checks.Add(string.Equals(options.Codec, "h264", StringComparison.OrdinalIgnoreCase)
+            ? new ViewDoctorCheck(
+                "mediaprojection_encoder",
+                true,
+                "MediaProjection capture will request an AVC/H.264 MediaCodec encoder.",
+                $"max_size={options.MaxSize}; max_fps={options.MaxFps}; bit_rate={options.VideoBitRate}")
+            : new ViewDoctorCheck(
+                "mediaprojection_encoder",
+                false,
+                $"MediaProjection capture currently supports only h264, not '{options.Codec}'.",
+                null,
+                "Use --codec h264."));
+
+        checks.Add(new ViewDoctorCheck(
+            "mediaprojection_consent",
+            true,
+            "MediaProjection consent is requested by the installed helper activity at session start.",
+            "If consent is denied or times out, --capture-backend auto falls back to screenrecord."));
+
+        return checks;
+    }
+
+    private static bool UsesMediaProjection(ViewOptions options) =>
+        string.Equals(options.CaptureBackend, ViewCaptureBackends.Auto, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(options.CaptureBackend, ViewCaptureBackends.MediaProjection, StringComparison.OrdinalIgnoreCase);
 
     private ViewDoctorCheck CheckHelperPackage()
     {
@@ -228,7 +320,7 @@ public sealed class ViewDoctor(
         }
     }
 
-    private ViewDoctorCheck CheckRecorder(ViewOptions options)
+    private async Task<ViewDoctorCheck> CheckRecorderAsync(ViewOptions options)
     {
         if (string.IsNullOrWhiteSpace(options.RecordPath))
         {
@@ -240,7 +332,7 @@ public sealed class ViewDoctor(
             var recorder = _recorderFactory.Create(options);
             if (recorder is not null)
             {
-                recorder.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                await recorder.DisposeAsync().ConfigureAwait(false);
             }
 
             return new ViewDoctorCheck("recording", true, "Live recording target is ready.", options.RecordPath);

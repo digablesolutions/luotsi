@@ -98,7 +98,7 @@ public sealed class DefaultViewRendererFactory : IViewRendererFactory
 }
 
 /// <summary>
-/// Phase 1 scaffold for the built-in device mirror session.
+/// Built-in device mirror session.
 /// </summary>
 public sealed class ViewSession(
     IDeviceHost deviceHost,
@@ -121,7 +121,7 @@ public sealed class ViewSession(
         WriteIndented = false
     };
 
-    private const int InitialStreamAttempts = 20;
+    private const int InitialStreamAttempts = 600;
     private static readonly TimeSpan InitialStreamRetryDelay = TimeSpan.FromMilliseconds(100);
     private static readonly TimeSpan DefaultAutoReconnectAfter = TimeSpan.FromSeconds(170);
     private readonly IDeviceHost _deviceHost = deviceHost ?? throw new ArgumentNullException(nameof(deviceHost));
@@ -193,19 +193,10 @@ public sealed class ViewSession(
                     using var sessionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                     interactionRouter.BeginIteration(activeDeviceSelector, sessionCancellation);
                     await interactionRouter.PublishChromeAsync().ConfigureAwait(false);
-                    var connectionInfo = usesSharedTransport
-                        ? BuildSharedConnectionInfo(options.JoinShareEndpoint!)
-                        : await _transportBootstrap.StartAsync(
-                            new ViewStartRequest(
-                                options.AdbExecutable,
-                                activeDeviceSelector,
-                                options.MaxSize,
-                                options.MaxFps,
-                                options.VideoBitRate,
-                                options.Codec),
-                            cancellationToken).ConfigureAwait(false);
-
-                    var streamStart = await ConnectAndReadHeaderAsync(connectionInfo, cancellationToken).ConfigureAwait(false);
+                    var streamStart = usesSharedTransport
+                        ? await ConnectAndReadHeaderAsync(BuildSharedConnectionInfo(options.JoinShareEndpoint!), cancellationToken).ConfigureAwait(false)
+                        : await StartTransportAndReadHeaderAsync(options, activeDeviceSelector, sessionId, cancellationToken).ConfigureAwait(false);
+                    var connectionInfo = streamStart.ConnectionInfo;
                     await using var streamConnection = streamStart.Connection;
                     var header = streamStart.Header;
                     var negotiatedConnection = connectionInfo with
@@ -271,6 +262,8 @@ public sealed class ViewSession(
                             decoder = options.Decoder,
                             codec = negotiatedConnection.Codec,
                             backend = viewBackend.Name,
+                            capture_backend = negotiatedConnection.CaptureBackend,
+                            requested_capture_backend = options.CaptureBackend,
                             headless = options.Headless,
                             record_path = options.RecordPath,
                             max_size = options.MaxSize,
@@ -296,6 +289,8 @@ public sealed class ViewSession(
                             session_id = sessionId,
                             reconnected_at = _timeProvider.GetUtcNow(),
                             device = activeDeviceSelector,
+                            capture_backend = negotiatedConnection.CaptureBackend,
+                            requested_capture_backend = options.CaptureBackend,
                             connection = negotiatedConnection
                         });
                         await interactionRouter.EmitDeviceShelfSnapshotIfNeededAsync().ConfigureAwait(false);
@@ -304,7 +299,9 @@ public sealed class ViewSession(
                     var sourcePackets = GuardReconnectBudgetAsync(
                         _packetStreamReader.ReadPacketsAsync(streamConnection.Stream, sessionCancellation.Token),
                         interactionRouter,
-                        usesSharedTransport ? null : _timeProvider.GetUtcNow().Add(_autoReconnectAfter),
+                        usesSharedTransport || !string.Equals(negotiatedConnection.CaptureBackend, ViewCaptureBackends.Screenrecord, StringComparison.OrdinalIgnoreCase)
+                            ? null
+                            : _timeProvider.GetUtcNow().Add(_autoReconnectAfter),
                         sessionCancellation.Token);
                     var sharedPackets = shareServer is null
                         ? sourcePackets
@@ -478,7 +475,55 @@ public sealed class ViewSession(
         }
     }
 
-    private async Task<(IViewStreamConnection Connection, ViewStreamHeader Header)> ConnectAndReadHeaderAsync(
+    private async Task<(ViewConnectionInfo ConnectionInfo, IViewStreamConnection Connection, ViewStreamHeader Header)> StartTransportAndReadHeaderAsync(
+        ViewOptions options,
+        string activeDeviceSelector,
+        string sessionId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await StartTransportWithBackendAndReadHeaderAsync(options, activeDeviceSelector, options.CaptureBackend, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (string.Equals(options.CaptureBackend, ViewCaptureBackends.Auto, StringComparison.OrdinalIgnoreCase))
+        {
+            await _transportBootstrap.StopAsync(CancellationToken.None).ConfigureAwait(false);
+            WriteJsonLine(new
+            {
+                type = SessionEventTypes.View.CaptureBackendFallback,
+                session_id = sessionId,
+                occurred_at = _timeProvider.GetUtcNow(),
+                requested_capture_backend = options.CaptureBackend,
+                failed_capture_backend = ViewCaptureBackends.MediaProjection,
+                fallback_capture_backend = ViewCaptureBackends.Screenrecord,
+                reason = ex.Message
+            });
+
+            return await StartTransportWithBackendAndReadHeaderAsync(options, activeDeviceSelector, ViewCaptureBackends.Screenrecord, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<(ViewConnectionInfo ConnectionInfo, IViewStreamConnection Connection, ViewStreamHeader Header)> StartTransportWithBackendAndReadHeaderAsync(
+        ViewOptions options,
+        string activeDeviceSelector,
+        string captureBackend,
+        CancellationToken cancellationToken)
+    {
+        var connectionInfo = await _transportBootstrap.StartAsync(
+            new ViewStartRequest(
+                options.AdbExecutable,
+                activeDeviceSelector,
+                options.MaxSize,
+                options.MaxFps,
+                options.VideoBitRate,
+                options.Codec,
+                captureBackend),
+            cancellationToken).ConfigureAwait(false);
+
+        return await ConnectAndReadHeaderAsync(connectionInfo, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<(ViewConnectionInfo ConnectionInfo, IViewStreamConnection Connection, ViewStreamHeader Header)> ConnectAndReadHeaderAsync(
         ViewConnectionInfo connectionInfo,
         CancellationToken cancellationToken)
     {
@@ -489,7 +534,7 @@ public sealed class ViewSession(
             try
             {
                 var header = await _packetStreamReader.ReadHeaderAsync(connection.Stream, cancellationToken).ConfigureAwait(false);
-                return (connection, header);
+                return (connectionInfo, connection, header);
             }
             catch (Exception ex) when (attempt < InitialStreamAttempts && IsTransientStartFailure(ex))
             {

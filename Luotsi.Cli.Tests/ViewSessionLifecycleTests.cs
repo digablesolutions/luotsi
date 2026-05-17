@@ -135,6 +135,48 @@ public sealed partial class AppTests
         Assert.Contains(console.OutputLines, line => line.Contains(SessionEventTypes.View.Started, StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task RunAsync_View_AutoCaptureBackend_Falls_Back_To_Screenrecord_When_MediaProjection_Start_Fails()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var backend = new FakeViewBackend();
+        var bootstrap = new FakeViewTransportBootstrap([
+            new InvalidOperationException("mediaprojection consent was not granted"),
+            new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward", CaptureBackend: ViewCaptureBackends.Screenrecord)
+        ]);
+        var session = new ViewSession(
+            host,
+            ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
+            console,
+            timeProvider,
+            bootstrap,
+            new FakeViewBackendFactory(backend),
+            new FakeViewStreamConnector(
+                new ViewPacketStreamHarness()
+                    .WriteHeader("h264", 1080, 1920)
+                    .WritePacket(ViewPacketType.StreamEnd, 1, 0, false, [])
+                    .Build()),
+            new ViewPacketStreamReader());
+
+        var exitCode = await session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", true, null, 1600, 60, "8M", false, false));
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal([ViewCaptureBackends.Auto, ViewCaptureBackends.Screenrecord], bootstrap.StartRequests.Select(static request => request.CaptureBackend).ToArray());
+        Assert.Equal(2, bootstrap.StopCallCount);
+
+        using var fallback = JsonDocument.Parse(console.OutputLines[0]);
+        Assert.Equal(SessionEventTypes.View.CaptureBackendFallback, fallback.RootElement.GetProperty("type").GetString());
+        Assert.Equal(ViewCaptureBackends.MediaProjection, fallback.RootElement.GetProperty("failed_capture_backend").GetString());
+        Assert.Equal(ViewCaptureBackends.Screenrecord, fallback.RootElement.GetProperty("fallback_capture_backend").GetString());
+
+        using var started = JsonDocument.Parse(console.OutputLines[1]);
+        Assert.Equal(SessionEventTypes.View.Started, started.RootElement.GetProperty("type").GetString());
+        Assert.Equal(ViewCaptureBackends.Screenrecord, started.RootElement.GetProperty("capture_backend").GetString());
+    }
+
 
 
     [Fact]

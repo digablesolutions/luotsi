@@ -98,7 +98,7 @@ public sealed partial class AppTests
 
         Assert.True(result.Ready);
         Assert.Equal("safe", result.Preset);
-        Assert.Equal(5, result.Checks.Count);
+        Assert.Equal(9, result.Checks.Count);
         Assert.All(result.Checks, static check => Assert.True(check.Ok, check.Summary));
         Assert.Equal("Pixel 9", Assert.Single(result.ConnectedDevices).Details);
         var preflight = result.Preflight;

@@ -56,8 +56,8 @@ public sealed class DefaultViewRecorderFactory(IFileSystem fileSystem, IProcessR
 /// </summary>
 public sealed class FfmpegExecutableResolver(IEnvironmentVariables environment, IFileSystem fileSystem)
 {
-    private readonly IEnvironmentVariables _environment = environment ?? throw new ArgumentNullException(nameof(environment));
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+    private readonly ViewHostPathResolver _pathResolver = new(environment ?? throw new ArgumentNullException(nameof(environment)));
 
     /// <summary>
     /// Resolves an ffmpeg executable path.
@@ -79,54 +79,9 @@ public sealed class FfmpegExecutableResolver(IEnvironmentVariables environment, 
 
     private IEnumerable<string> GetCandidateExecutablePaths()
     {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var executableName = OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg";
-
-        foreach (var candidateDirectory in GetCandidateDirectories())
+        foreach (var candidate in _pathResolver.GetFfmpegExecutablePathCandidates())
         {
-            if (string.IsNullOrWhiteSpace(candidateDirectory))
-            {
-                continue;
-            }
-
-            var fullPath = Path.GetFullPath(Path.Combine(candidateDirectory, executableName));
-            if (seen.Add(fullPath))
-            {
-                yield return fullPath;
-            }
-        }
-    }
-
-    private IEnumerable<string> GetCandidateDirectories()
-    {
-        var configuredRoot = _environment.GetEnvironmentVariable("DEVICE_E2E_FFMPEG_ROOT");
-        if (!string.IsNullOrWhiteSpace(configuredRoot))
-        {
-            var normalizedRoot = Path.GetFullPath(configuredRoot);
-            yield return normalizedRoot;
-
-            var parentDirectory = Path.GetDirectoryName(normalizedRoot);
-            if (!string.IsNullOrWhiteSpace(parentDirectory))
-            {
-                yield return parentDirectory;
-                yield return Path.Combine(parentDirectory, "bin");
-            }
-        }
-
-        yield return Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "ffmpeg", "bin"));
-        yield return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "ffmpeg", "bin"));
-        yield return Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "ffmpeg"));
-        yield return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "ffmpeg"));
-
-        var path = _environment.GetEnvironmentVariable("PATH");
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            yield break;
-        }
-
-        foreach (var entry in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            yield return entry;
+            yield return candidate;
         }
     }
 }

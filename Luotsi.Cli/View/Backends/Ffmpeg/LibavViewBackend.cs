@@ -37,8 +37,8 @@ public sealed class DefaultLibavNativeLibraryBinder : ILibavNativeLibraryBinder
 /// </summary>
 public sealed class LibavNativeLibraryLoader(IEnvironmentVariables environment, ILibavNativeLibraryBinder? binder = null)
 {
-    private readonly IEnvironmentVariables _environment = environment ?? throw new ArgumentNullException(nameof(environment));
     private readonly ILibavNativeLibraryBinder _binder = binder ?? new DefaultLibavNativeLibraryBinder();
+    private readonly ViewHostPathResolver _pathResolver = new(environment ?? throw new ArgumentNullException(nameof(environment)));
     private bool _loaded;
     private string? _loadedRootPath;
 
@@ -54,7 +54,7 @@ public sealed class LibavNativeLibraryLoader(IEnvironmentVariables environment, 
         }
 
         Exception? lastError = null;
-        var candidates = GetCandidateRootPaths().ToArray();
+        var candidates = _pathResolver.GetFfmpegLibraryRootCandidates().ToArray();
         foreach (var candidate in candidates)
         {
             try
@@ -75,35 +75,6 @@ public sealed class LibavNativeLibraryLoader(IEnvironmentVariables environment, 
         throw new InvalidOperationException(
             $"Unable to load FFmpeg native libraries. Set DEVICE_E2E_FFMPEG_ROOT to a directory containing the host-native FFmpeg shared libraries or place them under ffmpeg/bin next to the repo or published app. Probed: {renderedCandidates}.",
             lastError);
-    }
-
-    private IEnumerable<string?> GetCandidateRootPaths()
-    {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var configuredRoot = _environment.GetEnvironmentVariable("DEVICE_E2E_FFMPEG_ROOT");
-        if (!string.IsNullOrWhiteSpace(configuredRoot))
-        {
-            var normalizedConfiguredRoot = Path.GetFullPath(configuredRoot);
-            if (seen.Add(normalizedConfiguredRoot))
-            {
-                yield return normalizedConfiguredRoot;
-            }
-        }
-
-        foreach (var candidate in new[]
-                 {
-                     Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "ffmpeg", "bin")),
-                     Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "ffmpeg", "bin")),
-                     Path.GetFullPath(AppContext.BaseDirectory)
-                 })
-        {
-            if (seen.Add(candidate))
-            {
-                yield return candidate;
-            }
-        }
-
-        yield return null;
     }
 }
 

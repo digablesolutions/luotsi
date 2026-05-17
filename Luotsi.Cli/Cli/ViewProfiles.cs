@@ -12,6 +12,7 @@ public sealed record ViewProfile(
     string? Adb = null,
     string? Codec = null,
     string? Decoder = null,
+    string? CaptureBackend = null,
     string? Preset = null,
     bool? Headless = null,
     string? Record = null,
@@ -50,6 +51,7 @@ public sealed record ViewProfile(
         {
             Add(values, "codec", Codec);
             Add(values, "decoder", Decoder);
+            Add(values, "capture-backend", CaptureBackend);
             Add(values, "preset", Preset);
             Add(values, "max-size", MaxSize);
             Add(values, "max-fps", MaxFps);
@@ -66,6 +68,7 @@ public sealed record ViewProfile(
         viewOptions.AdbExecutable,
         viewOptions.Codec,
         viewOptions.Decoder,
+        viewOptions.CaptureBackend,
         viewOptions.PresetName,
         viewOptions.Headless,
         viewOptions.RecordPath,
