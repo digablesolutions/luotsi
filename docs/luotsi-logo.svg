@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="180" viewBox="0 0 820 180" role="img" aria-labelledby="title desc">
+  <title id="title">Luotsi</title>
+  <desc id="desc">Luotsi wordmark with a minimal guide-mark icon.</desc>
+  <g fill="none" fill-rule="evenodd">
+    <rect x="18" y="18" width="144" height="144" rx="32" fill="#0F172A"/>
+    <circle cx="90" cy="90" r="44" stroke="#E2E8F0" stroke-width="8"/>
+    <path d="M90 48 L118 90 L90 82 L62 90 Z" fill="#38BDF8"/>
+    <circle cx="90" cy="90" r="10" fill="#F8FAFC"/>
+    <text x="198" y="103" fill="#0F172A" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="72" font-weight="700" letter-spacing="1">Luotsi</text>
+    <text x="202" y="134" fill="#475569" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="500">Host-driven device automation, inspection, and live view</text>
+  </g>
+</svg>

@@ -1,0 +1,97 @@
+using Luotsi.Cli.Infrastructure;
+using Luotsi.Cli.View;
+
+namespace Luotsi.Cli.Cli;
+
+/// <summary>
+/// Entry point for the Luotsi command-line application.
+/// </summary>
+public sealed class App
+{
+    private readonly AppExecutionShell _executionShell;
+    private readonly AppCommandFamilyRouter _commandFamilyRouter;
+
+    /// <summary>
+    /// Creates the CLI application with optional service overrides.
+    /// </summary>
+    /// <param name="dependencies">Optional dependency overrides for tests or specialized hosting.</param>
+    public App()
+        : this((AppDependencies?)null)
+    {
+    }
+
+    /// <summary>
+    /// Creates the CLI application with optional service overrides.
+    /// </summary>
+    /// <param name="dependencies">Optional dependency overrides for tests or specialized hosting.</param>
+    public App(AppDependencies? dependencies)
+    {
+        dependencies ??= new AppDependencies();
+
+        var resolvedTimeProvider = dependencies.TimeProvider ?? TimeProvider.System;
+        var resolvedFileSystem = dependencies.FileSystem ?? new PhysicalFileSystem();
+        var resolvedProcessRunner = dependencies.ProcessRunner ?? new DefaultProcessRunner();
+        var resolvedDelay = dependencies.Delay ?? new TaskDelay(resolvedTimeProvider);
+        var resolvedConsole = dependencies.Console ?? new SystemConsoleIo();
+        var resolvedEnvironment = dependencies.Environment ?? new SystemEnvironmentVariables();
+        var resolvedIdGenerator = dependencies.IdGenerator ?? new GuidUniqueIdGenerator();
+        var resolvedAdbClientFactory = dependencies.AdbClientFactory ?? new DefaultAdbClientFactory();
+        var resolvedDeviceHostFactory = dependencies.DeviceHostFactory ?? new DefaultDeviceHostFactory(
+            resolvedAdbClientFactory,
+            resolvedProcessRunner,
+            resolvedDelay,
+            resolvedFileSystem,
+            resolvedTimeProvider,
+            resolvedEnvironment,
+            resolvedIdGenerator);
+        var resolvedViewSessionFactory = dependencies.ViewSessionFactory ?? new DefaultViewSessionFactory(
+            resolvedConsole,
+            resolvedTimeProvider,
+            resolvedAdbClientFactory,
+            resolvedProcessRunner,
+            resolvedEnvironment,
+            resolvedFileSystem,
+            resolvedIdGenerator);
+        var resolvedViewDoctorFactory = dependencies.ViewDoctorFactory ?? new DefaultViewDoctorFactory(
+            resolvedEnvironment,
+            resolvedFileSystem,
+            resolvedProcessRunner);
+        var resolvedViewProfileStore = dependencies.ViewProfileStore ?? new JsonViewProfileStore(resolvedFileSystem, resolvedEnvironment);
+        var profileCoordinator = new ViewProfileCoordinator(resolvedViewProfileStore);
+        var commandDispatcher = new AppCommandDispatcher(resolvedFileSystem, resolvedTimeProvider, resolvedDelay, resolvedEnvironment);
+        var commandHost = new AppCommandHost(new AppCommandHostDependencies
+        {
+            Console = resolvedConsole,
+            TimeProvider = resolvedTimeProvider,
+            ProfileCoordinator = profileCoordinator,
+            CommandDispatcher = commandDispatcher,
+            ViewDoctorFactory = resolvedViewDoctorFactory
+        });
+        var deviceHostLauncher = new DeviceHostLauncher(resolvedDeviceHostFactory);
+        _executionShell = new AppExecutionShell(new AppExecutionShellDependencies
+        {
+            Console = resolvedConsole,
+            TimeProvider = resolvedTimeProvider,
+            CommandHost = commandHost
+        });
+        _commandFamilyRouter = new AppCommandFamilyRouter(new AppCommandFamilyRouterDependencies
+        {
+            TimeProvider = resolvedTimeProvider,
+            FileSystem = resolvedFileSystem,
+            Environment = resolvedEnvironment,
+            ProfileCoordinator = profileCoordinator,
+            CommandHost = commandHost,
+            ViewSessionCommandPreparer = new ViewSessionCommandPreparer(deviceHostLauncher, resolvedViewSessionFactory, profileCoordinator),
+            InspectSessionLauncher = new InspectSessionLauncher(deviceHostLauncher, resolvedConsole, resolvedTimeProvider),
+            ViewDoctorLauncher = new ViewDoctorLauncher(deviceHostLauncher, commandHost),
+            DeviceHostLauncher = deviceHostLauncher
+        });
+    }
+
+    /// <summary>
+    /// Runs the command-line application.
+    /// </summary>
+    /// <param name="args">Command-line arguments.</param>
+    /// <returns>The process exit code.</returns>
+    public Task<int> RunAsync(string[] args) => _executionShell.RunAsync(args, _commandFamilyRouter.DispatchAsync);
+}

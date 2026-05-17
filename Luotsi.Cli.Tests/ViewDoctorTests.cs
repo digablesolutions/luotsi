@@ -1,0 +1,140 @@
+using System.Text.Json;
+using Luotsi.Cli;
+using Luotsi.Cli.Artifacts;
+using Luotsi.Cli.Cli;
+using Luotsi.Cli.Errors;
+using Luotsi.Cli.Hosts.Android;
+using Luotsi.Cli.Hosts.Android.View;
+using Luotsi.Cli.Infrastructure;
+using Luotsi.Cli.Models;
+using Luotsi.Cli.Scenarios;
+using Luotsi.Cli.Telemetry;
+using Luotsi.Cli.View;
+using Xunit;
+
+namespace Luotsi.Cli.Tests;
+
+public sealed partial class AppTests
+{
+    [Fact]
+    public async Task RunAsync_ViewDoctor_Uses_Injected_ViewDoctorFactory()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var doctor = new FakeViewDoctor(options => new ViewDoctorResult(
+            false,
+            options.PresetName,
+            options,
+            [],
+            null,
+            [new ViewDoctorCheck("decoder", false, "FFmpeg native decoder is not ready.")]));
+        var factory = new FakeViewDoctorFactory(doctor);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            TimeProvider = timeProvider,
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            ViewDoctorFactory = factory
+        });
+
+        var exitCode = await app.RunAsync([
+            "view-doctor",
+            "--device", "192.168.0.134:5555",
+            "--preset", "low-latency"]);
+
+        using var envelope = console.ParseSingleOutputAsJson();
+        Assert.Equal(0, exitCode);
+        Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("view-doctor", envelope.RootElement.GetProperty("command").GetString());
+        Assert.False(envelope.RootElement.GetProperty("data").GetProperty("ready").GetBoolean());
+        Assert.Equal("low-latency", envelope.RootElement.GetProperty("data").GetProperty("preset").GetString());
+        Assert.Same(host, factory.LastDeviceHost);
+        var options = Assert.Single(doctor.Options);
+        Assert.Equal("low-latency", options.PresetName);
+        Assert.Equal(1280, options.MaxSize);
+        Assert.Equal(250, options.StatsIntervalMs);
+    }
+
+
+
+    [Fact]
+    public async Task ViewDoctor_DiagnoseAsync_Reports_Ready_For_Healthy_Ffmpeg_View_Setup()
+    {
+        var fileSystem = new FakeFileSystem();
+        var helperPath = "/tmp/luotsi-view-helper.apk";
+        fileSystem.AddFile(helperPath, "apk");
+        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>
+        {
+            ["DEVICE_E2E_VIEW_HELPER_JAR"] = helperPath
+        });
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        host.ConnectedDevices.Add(new DeviceInfo("192.168.0.134:5555", "device", "Pixel 9"));
+        var binder = new FakeLibavNativeLibraryBinder();
+        binder.SucceedFor(null);
+        var doctor = new ViewDoctor(
+            host,
+            new AndroidViewHelperPackageLocator(environment, fileSystem),
+            new DefaultViewRecorderFactory(fileSystem, new FakeProcessRunner(), environment),
+            environment,
+            binder);
+
+        var result = await doctor.DiagnoseAsync(new ViewOptions(
+            "192.168.0.134:5555",
+            "adb",
+            "h264",
+            "ffmpeg",
+            true,
+            null,
+            1280,
+            30,
+            "4M",
+            false,
+            false,
+            1000,
+            250,
+            "safe"));
+
+        Assert.True(result.Ready);
+        Assert.Equal("safe", result.Preset);
+        Assert.Equal(5, result.Checks.Count);
+        Assert.All(result.Checks, static check => Assert.True(check.Ok, check.Summary));
+        Assert.Equal("Pixel 9", Assert.Single(result.ConnectedDevices).Details);
+        var preflight = result.Preflight;
+        Assert.NotNull(preflight);
+        Assert.Equal("Model", preflight.Model);
+    }
+
+    [Fact]
+    public async Task ViewDoctor_DiagnoseAsync_Flags_Unauthorized_Device_With_Recommendation()
+    {
+        var fileSystem = new FakeFileSystem();
+        var helperPath = "/tmp/luotsi-view-helper.apk";
+        fileSystem.AddFile(helperPath, "apk");
+        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>
+        {
+            ["DEVICE_E2E_VIEW_HELPER_JAR"] = helperPath
+        });
+        var host = new FakeDeviceHost(CreateScreenState(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind), "Sign in"));
+        host.ConnectedDevices.Add(new DeviceInfo("usb-device", "unauthorized", "Pixel 9"));
+        var binder = new FakeLibavNativeLibraryBinder();
+        binder.SucceedFor(null);
+        var doctor = new ViewDoctor(
+            host,
+            new AndroidViewHelperPackageLocator(environment, fileSystem),
+            new DefaultViewRecorderFactory(fileSystem, new FakeProcessRunner(), environment),
+            environment,
+            binder);
+
+        var result = await doctor.DiagnoseAsync(new ViewOptions("usb-device", "adb", "h264", "ffmpeg", true, null, 1280, 30, "4M", false, false));
+
+        Assert.False(result.Ready);
+        var deviceCheck = Assert.Single(result.Checks, check => check.Name == "device_visibility");
+        Assert.False(deviceCheck.Ok);
+        Assert.Contains("unauthorized", deviceCheck.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("USB debugging", deviceCheck.Recommendation, StringComparison.OrdinalIgnoreCase);
+    }
+
+
+}

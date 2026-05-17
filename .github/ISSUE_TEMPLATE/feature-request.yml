@@ -1,0 +1,38 @@
+name: Feature request
+description: Propose a focused improvement to the CLI, live view runtime, or developer workflow.
+title: "[feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the problem first, then the smallest useful change that would solve it.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What is hard, missing, or unnecessarily manual today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Describe the behavior, command surface, or workflow you want.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Include workarounds or other designs if you have them.
+
+  - type: textarea
+    id: validation
+    attributes:
+      label: Definition of done
+      description: What would prove the feature is complete and useful?
