@@ -221,6 +221,7 @@ public sealed class AndroidViewBootstrap(
                     request.VideoBitRate
                 ], cancellationToken).ConfigureAwait(false);
                 start.EnsureSuccess("view helper activity start failed");
+                await TryApproveMediaProjectionConsentAsync(adbClient, cancellationToken).ConfigureAwait(false);
             }
             else
             {
@@ -261,6 +262,69 @@ public sealed class AndroidViewBootstrap(
             ViewCaptureBackends.MediaProjection => ViewCaptureBackends.MediaProjection,
             _ => throw new UsageException("The Android view helper supports --capture-backend auto, screenrecord, or mediaprojection.")
         };
+    }
+
+    private static async Task TryApproveMediaProjectionConsentAsync(IAdbClient adbClient, CancellationToken cancellationToken)
+    {
+        const int maxAttempts = 20;
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var dump = await adbClient.RunAsync(["exec-out", "uiautomator", "dump", "/dev/tty"], cancellationToken).ConfigureAwait(false);
+            if (TryFindStartNowButtonCenter(dump.Stdout, out var x, out var y))
+            {
+                var tap = await adbClient.ShellAsync($"input tap {x} {y}", cancellationToken).ConfigureAwait(false);
+                tap.EnsureSuccess("view helper MediaProjection consent tap failed");
+                return;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static bool TryFindStartNowButtonCenter(string uiXml, out int x, out int y)
+    {
+        const string marker = "START NOW";
+        var textIndex = uiXml.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (textIndex < 0)
+        {
+            x = 0;
+            y = 0;
+            return false;
+        }
+
+        var boundsIndex = uiXml.IndexOf("bounds=\"[", textIndex, StringComparison.OrdinalIgnoreCase);
+        if (boundsIndex < 0)
+        {
+            x = 0;
+            y = 0;
+            return false;
+        }
+
+        var start = boundsIndex + "bounds=\"[".Length;
+        var end = uiXml.IndexOf("]\"", start, StringComparison.Ordinal);
+        if (end <= start)
+        {
+            x = 0;
+            y = 0;
+            return false;
+        }
+
+        var parts = uiXml[start..end].Split([',', ']', '['], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length != 4 ||
+            !int.TryParse(parts[0], out var left) ||
+            !int.TryParse(parts[1], out var top) ||
+            !int.TryParse(parts[2], out var right) ||
+            !int.TryParse(parts[3], out var bottom))
+        {
+            x = 0;
+            y = 0;
+            return false;
+        }
+
+        x = (left + right) / 2;
+        y = (top + bottom) / 2;
+        return true;
     }
 
     private static async Task<int> ResolveForwardedLocalPortAsync(

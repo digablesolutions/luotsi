@@ -164,6 +164,13 @@ public sealed class ViewTransportTests
         adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "38543\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "Starting: Intent { cmp=dev.luotsi.view/.ConsentActivity }\n", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, """
+            <?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+            <hierarchy>
+              <node text="START NOW" resource-id="android:id/button1" bounds="[1200,625][1353,706]" />
+            </hierarchy>
+            """, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
         var locator = new FakeAndroidViewHelperPackageLocator(new AndroidViewHelperPackage("C:/tmp/helper.apk", "/data/local/tmp/luotsi-view-server.apk", "dev.luotsi.view.Main", "test-helper"));
         var bootstrap = new AndroidViewBootstrap(new FakeAdbClientFactory(adb), new DefaultProcessRunner(), locator, new FakeUniqueIdGenerator("session123"));
 
@@ -177,7 +184,8 @@ public sealed class ViewTransportTests
         Assert.Equal("start", adb.RunCommands[2][2]);
         Assert.Contains("dev.luotsi.view/.ConsentActivity", adb.RunCommands[2], StringComparer.Ordinal);
         Assert.Contains("luotsi_view_session123", adb.RunCommands[2], StringComparer.Ordinal);
-        Assert.Empty(adb.ShellCommands);
+        Assert.Equal(["exec-out", "uiautomator", "dump", "/dev/tty"], adb.RunCommands[3]);
+        Assert.Equal("input tap 1276 665", adb.ShellCommands[0]);
     }
 
     [Fact]
