@@ -164,7 +164,7 @@ public sealed class ViewTransportTests
         adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "38543\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "Starting: Intent { cmp=dev.luotsi.view/.ConsentActivity }\n", string.Empty));
-        adb.EnqueueRunResult(new ProcessResult(0, """
+        adb.EnqueueShellResult(new ProcessResult(0, """
             <?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
             <hierarchy>
               <node text="START NOW" resource-id="android:id/button1" bounds="[1200,625][1353,706]" />
@@ -184,8 +184,39 @@ public sealed class ViewTransportTests
         Assert.Equal("start", adb.RunCommands[2][2]);
         Assert.Contains("dev.luotsi.view/.ConsentActivity", adb.RunCommands[2], StringComparer.Ordinal);
         Assert.Contains("luotsi_view_session123", adb.RunCommands[2], StringComparer.Ordinal);
-        Assert.Equal(["exec-out", "uiautomator", "dump", "/dev/tty"], adb.RunCommands[3]);
-        Assert.Equal("input tap 1276 665", adb.ShellCommands[0]);
+        Assert.Contains("uiautomator dump /data/local/tmp/luotsi-view-window.xml", adb.ShellCommands[0], StringComparison.Ordinal);
+        Assert.Contains("cat /data/local/tmp/luotsi-view-window.xml", adb.ShellCommands[0], StringComparison.Ordinal);
+        Assert.Equal("input tap 1276 665", adb.ShellCommands[1]);
+    }
+
+    [Fact]
+    public async Task AndroidViewBootstrap_StartAsync_Retries_File_Ui_Dump_For_MediaProjection_Consent()
+    {
+        var adb = new FakeAdbClient();
+        adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "38543\n", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "Starting: Intent { cmp=dev.luotsi.view/.ConsentActivity }\n", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, """
+            <?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+            <hierarchy />
+            """, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, """
+            <?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+            <hierarchy>
+              <node text="START NOW" resource-id="android:id/button1" bounds="[1200,625][1353,706]" />
+            </hierarchy>
+            """, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        var locator = new FakeAndroidViewHelperPackageLocator(new AndroidViewHelperPackage("C:/tmp/helper.apk", "/data/local/tmp/luotsi-view-server.apk", "dev.luotsi.view.Main", "test-helper"));
+        var bootstrap = new AndroidViewBootstrap(new FakeAdbClientFactory(adb), new DefaultProcessRunner(), locator, new FakeUniqueIdGenerator("session123"));
+
+        var connection = await bootstrap.StartAsync(new ViewStartRequest("adb", "device-1", 1280, 30, "8M", "h264", ViewCaptureBackends.MediaProjection));
+
+        Assert.Equal(ViewCaptureBackends.MediaProjection, connection.CaptureBackend);
+        Assert.Contains("uiautomator dump /data/local/tmp/luotsi-view-window.xml", adb.ShellCommands[0], StringComparison.Ordinal);
+        Assert.Contains("cat /data/local/tmp/luotsi-view-window.xml", adb.ShellCommands[0], StringComparison.Ordinal);
+        Assert.Contains("uiautomator dump /data/local/tmp/luotsi-view-window.xml", adb.ShellCommands[1], StringComparison.Ordinal);
+        Assert.Equal("input tap 1276 665", adb.ShellCommands[2]);
     }
 
     [Fact]

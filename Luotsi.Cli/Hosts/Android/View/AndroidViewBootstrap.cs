@@ -270,8 +270,8 @@ public sealed class AndroidViewBootstrap(
         for (var attempt = 0; attempt < maxAttempts; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var dump = await adbClient.RunAsync(["exec-out", "uiautomator", "dump", "/dev/tty"], cancellationToken).ConfigureAwait(false);
-            if (TryFindStartNowButtonCenter(dump.Stdout, out var x, out var y))
+            var uiXml = await DumpUiHierarchyAsync(adbClient, cancellationToken).ConfigureAwait(false);
+            if (TryFindStartNowButtonCenter(uiXml, out var x, out var y))
             {
                 var tap = await adbClient.ShellAsync($"input tap {x} {y}", cancellationToken).ConfigureAwait(false);
                 tap.EnsureSuccess("view helper MediaProjection consent tap failed");
@@ -280,6 +280,13 @@ public sealed class AndroidViewBootstrap(
 
             await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private static async Task<string> DumpUiHierarchyAsync(IAdbClient adbClient, CancellationToken cancellationToken)
+    {
+        const string remotePath = "/data/local/tmp/luotsi-view-window.xml";
+        var dump = await adbClient.ShellAsync($"uiautomator dump {remotePath} >/dev/null && cat {remotePath} && rm -f {remotePath}", cancellationToken).ConfigureAwait(false);
+        return dump.Stdout;
     }
 
     private static bool TryFindStartNowButtonCenter(string uiXml, out int x, out int y)
