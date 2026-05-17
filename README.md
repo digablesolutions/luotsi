@@ -103,8 +103,7 @@ separate shell script: `adb server-status`, `adb version`, `adb features`, and
 `adb mdns check` return structured command records with exit code, stdout,
 stderr, retry metadata, and any recovery actions. `wait-for-device` (also
 available as `device-wait` or `adb wait-for-device`) runs `adb wait-for-device`
-and, when `--device` selects a serial, verifies `adb shell echo ping` before
-returning readiness data. `adb reconnect offline` wraps ADB's offline transport
+and verifies `adb shell echo ping` before returning readiness data. `adb reconnect offline` wraps ADB's offline transport
 reconnect path and is separate from Luotsi's `reconnect` view command. Safe ADB
 reads such as diagnostics, device listing, UI dumps, log snapshots, and
 read-only shell probes get one visible retry after known transient transport

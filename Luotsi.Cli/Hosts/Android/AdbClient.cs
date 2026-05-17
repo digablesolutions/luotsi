@@ -41,7 +41,7 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
             await RunRecoveryActionAsync(BuildFinalArgs(["reconnect", "offline"]), recoveryActions, cancellationToken).ConfigureAwait(false);
         }
 
-        if (_serial is not null && !IsWaitForDeviceCommand(requestedArgs))
+        if (ShouldWaitForDevice(retryReason, requestedArgs))
         {
             await RunRecoveryActionAsync(BuildFinalArgs(["wait-for-device"]), recoveryActions, cancellationToken).ConfigureAwait(false);
         }
@@ -374,6 +374,19 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
         return output.Contains("device offline", StringComparison.OrdinalIgnoreCase) ||
                output.Contains("device still connecting", StringComparison.OrdinalIgnoreCase) ||
                output.Contains("transport is not ready", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ShouldWaitForDevice(string retryReason, IReadOnlyList<string> args)
+    {
+        if (IsWaitForDeviceCommand(args))
+        {
+            return false;
+        }
+
+        return retryReason is "adb device still connecting"
+            or "adb device offline"
+            or "adb device not found"
+            or "adb transport not ready";
     }
 
     private static bool IsSafeToRetry(IReadOnlyList<string> args)

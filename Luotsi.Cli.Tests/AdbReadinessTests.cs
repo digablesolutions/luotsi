@@ -36,9 +36,10 @@ public sealed class AdbReadinessTests
     public async Task RunAsync_DeviceWait_Routes_To_DeviceHost_With_Timeout()
     {
         var host = new FakeDeviceHost();
+        var console = new FakeConsole();
         var app = new App(new AppDependencies
         {
-            Console = new FakeConsole(),
+            Console = console,
             FileSystem = new FakeFileSystem(),
             TimeProvider = DateTimeOffset.Parse("2026-05-15T12:00:00Z").ToTimeProvider(),
             DeviceHostFactory = new FakeDeviceHostFactory(host)
@@ -48,6 +49,10 @@ public sealed class AdbReadinessTests
 
         Assert.Equal(0, exitCode);
         Assert.Equal([22], host.WaitForDeviceRequests);
+        using var output = console.ParseSingleOutputAsJson();
+        Assert.Equal(ResultSchemas.AdbReadiness, output.RootElement.GetProperty("data").GetProperty("schema").GetString());
+        Assert.True(output.RootElement.GetProperty("data").GetProperty("device_selected").GetBoolean());
+        Assert.True(output.RootElement.GetProperty("data").GetProperty("ping_verified").GetBoolean());
     }
 
     [Fact]
@@ -203,6 +208,26 @@ public sealed class AdbReadinessTests
         Assert.Equal(["shell", "echo __LUOTSI_DEVICE_FINGERPRINT_SERIAL__; getprop ro.serialno"], processRunner.Calls[0].Args);
         Assert.Equal(["start-server"], processRunner.Calls[1].Args);
         Assert.Equal(["shell", "echo __LUOTSI_DEVICE_FINGERPRINT_SERIAL__; getprop ro.serialno"], processRunner.Calls[2].Args);
+    }
+
+    [Fact]
+    public async Task AdbClient_Retries_ReadOnly_Composite_Shell_Command_After_Device_Not_Found_By_Waiting_For_Device()
+    {
+        var processRunner = new FakeProcessRunner();
+        processRunner.EnqueueResult(new ProcessResult(1, string.Empty, "error: device not found"));
+        processRunner.EnqueueResult(new ProcessResult(0, string.Empty, string.Empty));
+        processRunner.EnqueueResult(new ProcessResult(0, string.Empty, string.Empty));
+        processRunner.EnqueueResult(new ProcessResult(0, "SER123", string.Empty));
+        var adb = new AdbClient("adb", null, processRunner, TimeSpan.FromSeconds(5));
+
+        var result = await adb.RunAsync(["shell", "echo __LUOTSI_DEVICE_FINGERPRINT_SERIAL__; getprop ro.serialno"]);
+
+        Assert.Equal(2, result.AttemptCount);
+        Assert.Equal("adb device not found", result.Retry?.Reason);
+        Assert.Equal(["shell", "echo __LUOTSI_DEVICE_FINGERPRINT_SERIAL__; getprop ro.serialno"], processRunner.Calls[0].Args);
+        Assert.Equal(["start-server"], processRunner.Calls[1].Args);
+        Assert.Equal(["wait-for-device"], processRunner.Calls[2].Args);
+        Assert.Equal(["shell", "echo __LUOTSI_DEVICE_FINGERPRINT_SERIAL__; getprop ro.serialno"], processRunner.Calls[3].Args);
     }
 
     [Fact]

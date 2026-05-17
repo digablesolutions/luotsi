@@ -455,7 +455,8 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
     {
         WaitForDeviceRequests.Add(timeoutSec);
         var wait = new AdbCommandOutput("adb wait-for-device", ["wait-for-device"], 0, true, string.Empty, string.Empty, 1, null, []);
-        return Task.FromResult(new AdbReadinessResult(ResultSchemas.AdbReadiness, true, null, false, false, timeoutSec, wait, null, null));
+        var ping = new AdbCommandOutput("adb shell \"echo ping\"", ["shell", "echo ping"], 0, true, "ping\n", string.Empty, 1, null, []);
+        return Task.FromResult(new AdbReadinessResult(ResultSchemas.AdbReadiness, true, null, true, true, timeoutSec, wait, ping, "ping"));
     }
 
     public Task<PreflightResult> ReadPreflightAsync(string? packageName)
