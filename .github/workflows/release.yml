@@ -196,7 +196,7 @@ jobs:
       - name: Smoke published binary
         if: matrix.rid == 'win-x64'
         shell: pwsh
-        run: artifacts/publish/win-x64/Luotsi.Cli.exe --help
+        run: artifacts/publish/win-x64/luotsi.exe --help
 
       - name: Archive package
         shell: pwsh

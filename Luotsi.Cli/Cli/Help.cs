@@ -12,6 +12,9 @@ public static class Help
 Luotsi
 
 Usage:
+  luotsi <command> [options]
+
+From source:
   dotnet run --project Luotsi.Cli -- <command> [options]
 
 Commands:

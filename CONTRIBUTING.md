@@ -12,6 +12,10 @@ changes small, explicit, and easy to validate.
 
 ## Validation
 
+Use the pinned .NET SDK from `global.json` (`10.0.300`) for source builds and
+tests. Release archives are self-contained and expose the installed binary as
+`luotsi`, but the commands below are the contributor/source-tree workflow.
+
 Run the normal .NET safety net from the repository root:
 
 ```powershell
