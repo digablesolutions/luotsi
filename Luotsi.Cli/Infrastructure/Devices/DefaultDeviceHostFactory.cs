@@ -40,7 +40,7 @@ public sealed class DefaultDeviceHostFactory(
             throw new UsageException($"Unsupported platform '{configuration.Platform}'. The current build only supports --platform android.");
         }
 
-        var adb = _adbClientFactory.Create(configuration.Executable, configuration.DeviceSerial, _processRunner);
+        var adb = _adbClientFactory.Create(configuration.Executable, configuration.DeviceSerial, _processRunner, configuration.CommandTimeout);
         return new DeviceRunner(adb, artifacts, _timeProvider, _delay, _fileSystem, _idGenerator, _environment);
     }
 }

@@ -24,8 +24,10 @@ internal sealed class AppCommandDispatcher(
 
         return command switch
         {
+            "adb" => await ExecuteAdbCommandAsync(options, RequireAdbCommandHost(runner, command)).ConfigureAwait(false),
             "devices" => await runner.GetDevicesAsync().ConfigureAwait(false),
-            "preflight" => await runner.PreflightAsync(options.Get("package")).ConfigureAwait(false),
+            "device-wait" or "wait-for-device" => await RequireAdbCommandHost(runner, command).WaitForDeviceAsync(options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
+            "preflight" => await RequireAdbCommandHost(runner, command).PreflightAsync(options.Get("package")).ConfigureAwait(false),
             "wireless" => await GetWirelessHost(runner).EnableWirelessAsync(options.Get("host"), options.Int("port", 5555)).ConfigureAwait(false),
             "wireless-scan" => await GetWirelessHost(runner).ScanWirelessServicesAsync().ConfigureAwait(false),
             "wireless-pair" => await GetWirelessHost(runner).PairWirelessAsync(GetWirelessEndpoint(options, "wireless-pair"), options.Get("service"), options.Get("code") ?? options.Get("pairing-code")).ConfigureAwait(false),
@@ -89,5 +91,29 @@ internal sealed class AppCommandDispatcher(
         }
 
         return $"{host}:{port}";
+    }
+
+    private static IAdbCommandHost RequireAdbCommandHost(IDeviceHost runner, string command) =>
+        runner as IAdbCommandHost ?? throw new InvalidOperationException($"Command '{command}' requires a direct adb-backed device host.");
+
+    private static async Task<object> ExecuteAdbCommandAsync(CliOptions options, IAdbCommandHost runner)
+    {
+        var args = options.Arguments;
+        if (args.Count == 0)
+        {
+            throw new UsageException("Missing adb subcommand. Supported forms: adb server-status, adb version, adb features, adb mdns check, adb wait-for-device, adb reconnect [offline|device].");
+        }
+
+        return args[0] switch
+        {
+            "server-status" when args.Count == 1 => await runner.GetAdbServerStatusAsync().ConfigureAwait(false),
+            "version" when args.Count == 1 => await runner.GetAdbVersionAsync().ConfigureAwait(false),
+            "features" when args.Count == 1 => await runner.GetAdbFeaturesAsync().ConfigureAwait(false),
+            "mdns" when args.Count == 2 && string.Equals(args[1], "check", StringComparison.OrdinalIgnoreCase) => await runner.CheckAdbMdnsAsync().ConfigureAwait(false),
+            "wait-for-device" when args.Count == 1 => await runner.WaitForDeviceAsync(options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
+            "device-wait" when args.Count == 1 => await runner.WaitForDeviceAsync(options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
+            "reconnect" when args.Count <= 2 => await runner.ReconnectAdbAsync(args.Count > 1 ? args[1] : options.Get("target") ?? "offline").ConfigureAwait(false),
+            _ => throw new UsageException($"Unknown adb subcommand '{string.Join(" ", args)}'.")
+        };
     }
 }

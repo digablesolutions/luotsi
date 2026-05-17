@@ -7,8 +7,6 @@ internal sealed class UnsupportedDeviceHost : IDeviceHost
 {
     public Task<DeviceListResult> GetDevicesAsync() => Unsupported<DeviceListResult>();
 
-    public Task<PreflightResult> PreflightAsync(string? packageName) => Unsupported<PreflightResult>();
-
     public Task<ScreenState> GetScreenStateAsync() => Unsupported<ScreenState>();
 
     public Task<TapResult> TapAsync(string x, string y) => Unsupported<TapResult>();

@@ -12,6 +12,8 @@ public static class ResultSchemas
     public const string WaitStep = "luotsi-wait-step.v1";
     public const string WaitActionReady = "luotsi-wait-action-ready.v1";
     public const string AssertEvent = "luotsi-assert-event.v1";
+    public const string AdbDiagnostic = "luotsi-adb-diagnostic.v1";
+    public const string AdbReadiness = "luotsi-adb-readiness.v1";
     public const string DeviceFingerprint = "device-fingerprint.v1";
     public const string FailureBundle = "luotsi-failure-bundle.v1";
 }

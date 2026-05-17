@@ -104,6 +104,8 @@ public sealed partial class AppTests
         var preflight = result.Preflight;
         Assert.NotNull(preflight);
         Assert.Equal("Model", preflight.Model);
+        Assert.Equal([null], host.ReadOnlyPreflightRequests);
+        Assert.Empty(host.CommandPreflightRequests);
     }
 
     [Fact]

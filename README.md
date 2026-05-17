@@ -52,6 +52,12 @@ Run from WSL or PowerShell:
 ```bash
 cd <repo-root>
 dotnet run --project Luotsi.Cli -- devices
+dotnet run --project Luotsi.Cli -- adb server-status
+dotnet run --project Luotsi.Cli -- adb version
+dotnet run --project Luotsi.Cli -- adb features --device <serial>
+dotnet run --project Luotsi.Cli -- adb mdns check
+dotnet run --project Luotsi.Cli -- wait-for-device --device <serial> --timeout-sec 30
+dotnet run --project Luotsi.Cli -- adb reconnect offline
 dotnet run --project Luotsi.Cli -- preflight --device <serial> --package dev.luotsi.app
 dotnet run --project Luotsi.Cli -- screen-state --device <serial>
 dotnet run --project Luotsi.Cli -- view --device <serial> --preset safe --decoder ffmpeg --record capture.mp4 --stats-interval-ms 1000
@@ -88,7 +94,23 @@ Then send one JSON command per line:
 ```
 
 If WSL cannot see `adb`, pass a path with `--adb` or expose Android platform
-tools on WSL's `PATH`.
+tools on WSL's `PATH`. Bounded ADB commands use a default 120-second timeout;
+set `--adb-timeout-sec <seconds>` or `LUOTSI_ADB_TIMEOUT_SEC` to tune it, and
+use `0` to disable the command timeout for a run.
+
+The `adb` command family exposes host-side diagnostics without requiring a
+separate shell script: `adb server-status`, `adb version`, `adb features`, and
+`adb mdns check` return structured command records with exit code, stdout,
+stderr, retry metadata, and any recovery actions. `wait-for-device` (also
+available as `device-wait` or `adb wait-for-device`) runs `adb wait-for-device`
+and, when `--device` selects a serial, verifies `adb shell echo ping` before
+returning readiness data. `adb reconnect offline` wraps ADB's offline transport
+reconnect path and is separate from Luotsi's `reconnect` view command. Safe ADB
+reads such as diagnostics, device listing, UI dumps, log snapshots, and
+read-only shell probes get one visible retry after known transient transport
+errors such as protocol faults, missing devices, offline devices, or devices
+still connecting. Mutating commands such as install, push, tap, text entry, and
+key events are not retried by default.
 
 The `view` command is also a long-lived JSONL session. Alongside `view_started`,
 `view_error`, and `view_ended`, it can emit throttled `view_stats` events so

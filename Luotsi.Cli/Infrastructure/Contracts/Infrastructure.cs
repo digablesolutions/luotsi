@@ -38,7 +38,36 @@ public interface IAdbClient
 
 public interface IAdbClientFactory
 {
-    IAdbClient Create(string executable, string? serial, IProcessRunner processRunner);
+    IAdbClient Create(string executable, string? serial, IProcessRunner processRunner, TimeSpan? commandTimeout = null);
+}
+
+public interface IAdbCommandHost
+{
+    Task<AdbDiagnosticResult> GetAdbServerStatusAsync();
+
+    Task<AdbDiagnosticResult> GetAdbVersionAsync();
+
+    Task<AdbDiagnosticResult> GetAdbFeaturesAsync();
+
+    Task<AdbDiagnosticResult> CheckAdbMdnsAsync();
+
+    Task<AdbDiagnosticResult> ReconnectAdbAsync(string target);
+
+    Task<AdbReadinessResult> WaitForDeviceAsync(int timeoutSec);
+
+    /// <summary>
+    /// Reads device and application readiness without writing command artifacts.
+    /// </summary>
+    /// <param name="packageName">Optional foreground package to require.</param>
+    /// <returns>Preflight data.</returns>
+    Task<PreflightResult> ReadPreflightAsync(string? packageName);
+
+    /// <summary>
+    /// Checks whether the target device and app are ready.
+    /// </summary>
+    /// <param name="packageName">Optional foreground package to require.</param>
+    /// <returns>Preflight data.</returns>
+    Task<PreflightResult> PreflightAsync(string? packageName);
 }
 
 /// <summary>
@@ -51,13 +80,6 @@ public interface IDeviceHost : IScenarioActionHost
     /// </summary>
     /// <returns>Device list data.</returns>
     Task<DeviceListResult> GetDevicesAsync();
-
-    /// <summary>
-    /// Checks whether the target device and app are ready.
-    /// </summary>
-    /// <param name="packageName">Optional foreground package to require.</param>
-    /// <returns>Preflight data.</returns>
-    Task<PreflightResult> PreflightAsync(string? packageName);
 
     /// <summary>
     /// Captures the current normalized screen state.
@@ -148,7 +170,8 @@ public interface IWirelessDebugHost
 /// <param name="Platform">Target host platform name.</param>
 /// <param name="Executable">Transport executable path.</param>
 /// <param name="DeviceSerial">Optional device identifier.</param>
-public sealed record DeviceHostConfiguration(string Platform, string Executable, string? DeviceSerial);
+/// <param name="CommandTimeout">Optional bounded ADB command timeout.</param>
+public sealed record DeviceHostConfiguration(string Platform, string Executable, string? DeviceSerial, TimeSpan? CommandTimeout = null);
 
 /// <summary>
 /// Creates a concrete device host for a requested platform.
@@ -181,13 +204,15 @@ public interface IUniqueIdGenerator
     string NewId();
 }
 
-public sealed record AdbCommandResult(string Executable, string? Serial, IReadOnlyList<string> Args, ProcessResult Process)
+public sealed record AdbCommandResult(string Executable, string? Serial, IReadOnlyList<string> Args, ProcessResult Process, AdbRetryInfo? Retry = null)
 {
-    private int ExitCode => Process.ExitCode;
+    public int ExitCode => Process.ExitCode;
 
     public string Stdout => Process.Stdout;
 
-    private string Stderr => Process.Stderr;
+    public string Stderr => Process.Stderr;
+
+    public int AttemptCount => Retry?.AttemptCount ?? 1;
 
     public string Invocation => string.Join(" ", [Executable, .. Args.Select(QuoteArgument)]);
 
@@ -195,7 +220,10 @@ public sealed record AdbCommandResult(string Executable, string? Serial, IReadOn
     {
         if (ExitCode == 0) return;
         var detail = string.IsNullOrWhiteSpace(Stderr) ? Stdout : Stderr;
-        throw new InvalidOperationException($"{message}: `{Invocation}` exited {ExitCode}. {detail}".Trim());
+        var retryDetail = Retry is null
+            ? string.Empty
+            : $" Retried once after {Retry.Reason}; recovery actions: {string.Join(", ", Retry.RecoveryActions.Select(static action => $"{action.Command} => {action.ExitCode}"))}.";
+        throw new InvalidOperationException($"{message}: `{Invocation}` exited {ExitCode}. {detail}{retryDetail}".Trim());
     }
 
     private static string QuoteArgument(string value) =>

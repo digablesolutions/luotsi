@@ -175,12 +175,13 @@ internal sealed class FakeFileSystem : IFileSystem
     }
 }
 
-internal sealed class FakeAdbClient : IAdbClient
+internal sealed class FakeAdbClient(string? serial = null) : IAdbClient
 {
     private readonly Queue<ProcessResult> _shellResults = new();
     private readonly Queue<ProcessResult> _runResults = new();
     private readonly Queue<string[]> _logLines = new();
     private readonly Queue<AdbLogStreamResult> _logResults = new();
+    private readonly string? _serial = serial;
 
     public List<string> ShellCommands { get; } = [];
 
@@ -212,14 +213,14 @@ internal sealed class FakeAdbClient : IAdbClient
                             _shellResults.Count > 0
                                 ? _shellResults.Dequeue()
                                 : new ProcessResult(0, string.Empty, string.Empty);
-        return Task.FromResult(new AdbCommandResult("adb", null, finalArgs, result));
+        return Task.FromResult(new AdbCommandResult("adb", _serial, finalArgs, result));
     }
 
     public Task<AdbCommandResult> ShellAsync(string command, CancellationToken cancellationToken = default)
     {
         ShellCommands.Add(command);
         var result = _shellResults.Count > 0 ? _shellResults.Dequeue() : new ProcessResult(0, string.Empty, string.Empty);
-        return Task.FromResult(new AdbCommandResult("adb", null, ["shell", command], result));
+        return Task.FromResult(new AdbCommandResult("adb", _serial, ["shell", command], result));
     }
 
     public Task<IAsyncDisposable> StartShellAsync(string command, CancellationToken cancellationToken = default)
@@ -314,7 +315,13 @@ internal sealed class FakeAdbClientFactory(IAdbClient adbClient) : IAdbClientFac
 {
     private readonly IAdbClient _adbClient = adbClient;
 
-    public IAdbClient Create(string executable, string? serial, IProcessRunner processRunner) => _adbClient;
+    public List<TimeSpan?> CommandTimeouts { get; } = [];
+
+    public IAdbClient Create(string executable, string? serial, IProcessRunner processRunner, TimeSpan? commandTimeout = null)
+    {
+        CommandTimeouts.Add(commandTimeout);
+        return _adbClient;
+    }
 }
 
 internal sealed class FakeEnvironmentVariables(Dictionary<string, string> variables) : IEnvironmentVariables
@@ -354,7 +361,7 @@ internal sealed class FakeDeviceHostFactory(IDeviceHost deviceHost) : IDeviceHos
     }
 }
 
-internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDeviceHost, IWirelessDebugHost
+internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDeviceHost, IAdbCommandHost, IWirelessDebugHost
 {
     private readonly Queue<ScreenState> _screenStates = new(screenStates);
 
@@ -386,6 +393,16 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public List<string> InstallPackageRequests { get; } = [];
 
+    public List<string> AdbDiagnostics { get; } = [];
+
+    public List<string> AdbReconnectTargets { get; } = [];
+
+    public List<int> WaitForDeviceRequests { get; } = [];
+
+    public List<string?> ReadOnlyPreflightRequests { get; } = [];
+
+    public List<string?> CommandPreflightRequests { get; } = [];
+
     public List<DeviceInfo> ConnectedDevices { get; } = [];
 
     public PreflightResult PreflightTemplate { get; set; } = new("Model", "16", "36", "focus", null, null, "fingerprint", "arm64-v8a", "SER");
@@ -404,8 +421,57 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
         return Task.FromResult(new DeviceListResult(ConnectedDevices));
     }
 
+    public Task<AdbDiagnosticResult> GetAdbServerStatusAsync()
+    {
+        AdbDiagnostics.Add("server-status");
+        return Task.FromResult(CreateAdbDiagnostic("server-status", ["server-status"]));
+    }
+
+    public Task<AdbDiagnosticResult> GetAdbVersionAsync()
+    {
+        AdbDiagnostics.Add("version");
+        return Task.FromResult(CreateAdbDiagnostic("version", ["version"]));
+    }
+
+    public Task<AdbDiagnosticResult> GetAdbFeaturesAsync()
+    {
+        AdbDiagnostics.Add("features");
+        return Task.FromResult(CreateAdbDiagnostic("features", ["features"]));
+    }
+
+    public Task<AdbDiagnosticResult> CheckAdbMdnsAsync()
+    {
+        AdbDiagnostics.Add("mdns check");
+        return Task.FromResult(CreateAdbDiagnostic("mdns check", ["mdns", "check"]));
+    }
+
+    public Task<AdbDiagnosticResult> ReconnectAdbAsync(string target)
+    {
+        AdbReconnectTargets.Add(target);
+        return Task.FromResult(CreateAdbDiagnostic($"reconnect {target}", ["reconnect", target]));
+    }
+
+    public Task<AdbReadinessResult> WaitForDeviceAsync(int timeoutSec)
+    {
+        WaitForDeviceRequests.Add(timeoutSec);
+        var wait = new AdbCommandOutput("adb wait-for-device", ["wait-for-device"], 0, true, string.Empty, string.Empty, 1, null, []);
+        return Task.FromResult(new AdbReadinessResult(ResultSchemas.AdbReadiness, true, null, false, false, timeoutSec, wait, null, null));
+    }
+
+    public Task<PreflightResult> ReadPreflightAsync(string? packageName)
+    {
+        ReadOnlyPreflightRequests.Add(packageName);
+        if (PreflightException is not null)
+        {
+            throw PreflightException;
+        }
+
+        return Task.FromResult(PreflightTemplate with { Package = packageName });
+    }
+
     public Task<PreflightResult> PreflightAsync(string? packageName)
     {
+        CommandPreflightRequests.Add(packageName);
         if (PreflightException is not null)
         {
             throw PreflightException;
@@ -576,6 +642,21 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
         Task.FromResult(new FailureArtifactBundle(ResultSchemas.FailureBundle, DateTimeOffset.UtcNow, request.Scope, request.Name, request.File, request.StepIndex, request.StepName, request.Action, exception.GetType().FullName ?? exception.GetType().Name, exception.Message, [], []));
 
     public Task<LogcatResult> LogcatAsync(int tail) => Task.FromResult(new LogcatResult([]));
+
+    private static AdbDiagnosticResult CreateAdbDiagnostic(string name, IReadOnlyList<string> args) =>
+        new(
+            ResultSchemas.AdbDiagnostic,
+            name,
+            new AdbCommandOutput(
+                $"adb {string.Join(" ", args)}",
+                args,
+                0,
+                true,
+                string.Empty,
+                string.Empty,
+                1,
+                null,
+                []));
 }
 
 internal sealed class FakeViewSession(int exitCode) : IViewSession

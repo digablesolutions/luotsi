@@ -16,6 +16,13 @@ Usage:
 
 Commands:
   devices
+  adb server-status
+  adb version
+  adb features
+  adb mdns check
+  adb reconnect [offline|device]
+  wait-for-device [--timeout-sec 15]
+  device-wait [--timeout-sec 15]
   preflight --package <app.id>
   screen-state
   inspect
@@ -46,6 +53,7 @@ Common options:
   --device <adb serial>
   --adb <adb executable>
   --platform <android>
+  --adb-timeout-sec <seconds>  (default 120, 0 disables; env LUOTSI_ADB_TIMEOUT_SEC)
   --artifacts <directory>
   --poll-artifacts <final|per-attempt|none>
 

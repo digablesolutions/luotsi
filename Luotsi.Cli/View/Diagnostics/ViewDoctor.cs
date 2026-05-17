@@ -93,6 +93,7 @@ public sealed class ViewDoctor(
     ILibavNativeLibraryBinder? libavBinder = null) : IViewDoctor
 {
     private readonly IDeviceHost _deviceHost = deviceHost ?? throw new ArgumentNullException(nameof(deviceHost));
+    private readonly IAdbCommandHost? _adbCommandHost = deviceHost as IAdbCommandHost;
     private readonly IAndroidViewHelperPackageLocator _helperPackageLocator = helperPackageLocator ?? throw new ArgumentNullException(nameof(helperPackageLocator));
     private readonly IViewRecorderFactory _recorderFactory = recorderFactory ?? throw new ArgumentNullException(nameof(recorderFactory));
     private readonly IEnvironmentVariables _environment = environment ?? throw new ArgumentNullException(nameof(environment));
@@ -323,9 +324,14 @@ public sealed class ViewDoctor(
 
     private async Task<(ViewDoctorCheck Check, PreflightResult? Preflight)> CheckPreflightAsync(CancellationToken cancellationToken)
     {
+        if (_adbCommandHost is null)
+        {
+            return (new ViewDoctorCheck("preflight", false, "Device preflight is unavailable for the current host.", null, "Use a direct adb-backed device host."), null);
+        }
+
         try
         {
-            var result = await _deviceHost.PreflightAsync(null).ConfigureAwait(false);
+            var result = await _adbCommandHost.ReadPreflightAsync(null).ConfigureAwait(false);
             var summary = $"Device preflight passed for {result.Model} (Android {result.AndroidRelease}, SDK {result.Sdk}).";
             return (new ViewDoctorCheck("preflight", true, summary, result.CurrentFocus), result);
         }

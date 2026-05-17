@@ -67,7 +67,7 @@ public sealed class App
             CommandDispatcher = commandDispatcher,
             ViewDoctorFactory = resolvedViewDoctorFactory
         });
-        var deviceHostLauncher = new DeviceHostLauncher(resolvedDeviceHostFactory);
+        var deviceHostLauncher = new DeviceHostLauncher(resolvedDeviceHostFactory, resolvedEnvironment);
         _executionShell = new AppExecutionShell(new AppExecutionShellDependencies
         {
             Console = resolvedConsole,

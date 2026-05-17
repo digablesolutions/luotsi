@@ -11,7 +11,9 @@ public sealed class CliOptions
     private static readonly FrozenSet<string> KnownCommands =
     new[]
     {
+        "adb",
         "devices",
+        "device-wait",
         "preflight",
         "screen-state",
         "inspect",
@@ -26,6 +28,7 @@ public sealed class CliOptions
         "wireless-connect",
         "telemetry-tail",
         "telemetry-watch",
+        "wait-for-device",
         "wait-step",
         "wait-action-ready",
         "tap",
@@ -39,7 +42,22 @@ public sealed class CliOptions
         "run"
     }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
+    private static readonly FrozenSet<string> KnownFlagOptions =
+    new[]
+    {
+        "always-on-top",
+        "defaults",
+        "h",
+        "headless",
+        "help",
+        "last",
+        "overlay-screen-state",
+        "overlay-telemetry",
+        "read-only"
+    }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+
     private readonly Dictionary<string, string?> _values = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<string> _arguments = [];
 
     private CliOptions(string? command)
     {
@@ -52,13 +70,18 @@ public sealed class CliOptions
     public string? Command { get; }
 
     /// <summary>
+    /// Gets positional arguments that follow the command token.
+    /// </summary>
+    public IReadOnlyList<string> Arguments => _arguments;
+
+    /// <summary>
     /// Parses command-line arguments.
     /// </summary>
     /// <param name="args">Command-line arguments.</param>
     /// <returns>Parsed options.</returns>
     public static CliOptions Parse(string[] args)
     {
-        var command = args.FirstOrDefault(static a => KnownCommands.Contains(a));
+        var command = FindCommand(args);
         var parsed = new CliOptions(command);
 
         for (var i = 0; i < args.Length; i++)
@@ -71,12 +94,13 @@ public sealed class CliOptions
 
             if (!token.StartsWith("-", StringComparison.Ordinal))
             {
+                parsed._arguments.Add(token);
                 continue;
             }
 
             var key = token.TrimStart('-');
             var value = "true";
-            if (i + 1 < args.Length && !args[i + 1].StartsWith("-", StringComparison.Ordinal))
+            if (!KnownFlagOptions.Contains(key) && i + 1 < args.Length && !args[i + 1].StartsWith("-", StringComparison.Ordinal))
             {
                 value = args[++i];
             }
@@ -85,6 +109,31 @@ public sealed class CliOptions
         }
 
         return parsed;
+    }
+
+    private static string? FindCommand(string[] args)
+    {
+        for (var i = 0; i < args.Length; i++)
+        {
+            var token = args[i];
+            if (token.StartsWith("-", StringComparison.Ordinal))
+            {
+                var key = token.TrimStart('-');
+                if (!KnownFlagOptions.Contains(key) && i + 1 < args.Length && !args[i + 1].StartsWith("-", StringComparison.Ordinal))
+                {
+                    i++;
+                }
+
+                continue;
+            }
+
+            if (KnownCommands.Contains(token))
+            {
+                return token;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

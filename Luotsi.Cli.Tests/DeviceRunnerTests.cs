@@ -448,6 +448,25 @@ public sealed partial class AppTests
         Assert.True(fileSystem.FileExists(Path.Combine(artifactRoot, "device-fingerprint.json")));
     }
 
+    [Fact]
+    public async Task ReadPreflightAsync_Does_Not_Write_Device_Fingerprint_Artifact()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.EnqueueShellResult(new ProcessResult(0, CreateDeviceFingerprintShellOutput("SER123", "Pixel 9", "16", "36", "google/pixel/device", "arm64-v8a,x86_64", "mCurrentFocus=App"), string.Empty));
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["preflight"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
+
+        var result = await runner.ReadPreflightAsync(null);
+        var json = SerializeToJsonElement(result);
+        var artifactRoot = Path.Combine("/tmp", "luotsi", "20260515-120000-preflight");
+
+        Assert.Equal("Pixel 9", json.GetProperty("model").GetString());
+        Assert.Equal("google/pixel/device", json.GetProperty("fingerprint").GetString());
+        Assert.Single(adb.ShellCommands);
+        Assert.False(fileSystem.FileExists(Path.Combine(artifactRoot, "device-fingerprint.json")));
+    }
+
 
     [Fact]
     public async Task RecordAsync_Normalizes_Device_Path_For_Pull_When_Configured()
