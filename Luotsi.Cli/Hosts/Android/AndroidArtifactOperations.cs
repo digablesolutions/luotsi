@@ -58,17 +58,28 @@ internal sealed class AndroidArtifactOperations(
 
     private async Task CaptureScreenshotAsync(string fileName)
     {
-        if (Path.IsPathRooted(fileName))
+        var destination = ResolveArtifactDestination(fileName);
+        var remote = $"/sdcard/device-e2e-{_idGenerator.NewId()}.png";
+        var capture = await _adb.ShellAsync($"screencap {remote}").ConfigureAwait(false);
+        capture.EnsureSuccess("screencap failed");
+        var pull = await _adb.RunAsync(["pull", NormalizeDevicePathForPull(remote), destination]).ConfigureAwait(false);
+        await _adb.ShellAsync($"rm -f {remote}").ConfigureAwait(false);
+        pull.EnsureSuccess("pull screenshot failed");
+    }
+
+    private string ResolveArtifactDestination(string fileName)
+    {
+        var root = Path.GetFullPath(_artifacts.Root);
+        var rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar)
+            ? root
+            : root + Path.DirectorySeparatorChar;
+        var destination = Path.GetFullPath(fileName, root);
+        if (!destination.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException($"Artifact file name '{fileName}' must be relative.");
         }
 
-        var remote = $"/sdcard/device-e2e-{_idGenerator.NewId()}.png";
-        var capture = await _adb.ShellAsync($"screencap {remote}").ConfigureAwait(false);
-        capture.EnsureSuccess("screencap failed");
-        var pull = await _adb.RunAsync(["pull", NormalizeDevicePathForPull(remote), Path.Combine(_artifacts.Root, fileName)]).ConfigureAwait(false);
-        await _adb.ShellAsync($"rm -f {remote}").ConfigureAwait(false);
-        pull.EnsureSuccess("pull screenshot failed");
+        return destination;
     }
 
     private async Task CaptureLogcatSnapshotAsync(string fileName, int tail)

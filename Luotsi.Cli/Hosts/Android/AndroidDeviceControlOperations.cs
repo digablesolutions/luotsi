@@ -43,6 +43,11 @@ internal sealed class AndroidDeviceControlOperations(
         _fileSystem.CreateDirectory(targetDirectory);
         var remoteFileName = Path.GetFileName(validatedRemotePath.TrimEnd('/'));
         var safeRemoteFileName = Path.GetFileName(remoteFileName);
+        if (string.IsNullOrWhiteSpace(safeRemoteFileName) || Path.IsPathRooted(safeRemoteFileName))
+        {
+            throw new InvalidOperationException($"Remote path '{validatedRemotePath}' does not contain a valid file name.");
+        }
+
         var localPath = Path.Combine(targetDirectory, safeRemoteFileName);
         var result = await _adb.RunAsync(["pull", validatedRemotePath, localPath]).ConfigureAwait(false);
         result.EnsureSuccess("pull file failed");
