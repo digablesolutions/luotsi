@@ -19,18 +19,19 @@ public sealed class ViewHostPathResolver(IEnvironmentVariables environment)
     public IEnumerable<string> GetRepositoryRelativeFileCandidates(string relativePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
+        if (Path.IsPathRooted(relativePath))
+        {
+            throw new ArgumentException("Path must be repository-relative.", nameof(relativePath));
+        }
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var candidate in new[]
                  {
                      Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), relativePath)),
                      Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", relativePath))
-                 })
+                 }.Where(seen.Add))
         {
-            if (seen.Add(candidate))
-            {
-                yield return candidate;
-            }
+            yield return candidate;
         }
     }
 
@@ -50,7 +51,7 @@ public sealed class ViewHostPathResolver(IEnvironmentVariables environment)
                 continue;
             }
 
-            var candidate = Path.GetFullPath(Path.Combine(directory, executableName));
+            var candidate = Path.GetFullPath(Path.Join(directory, executableName));
             if (seen.Add(candidate))
             {
                 yield return candidate;
@@ -92,28 +93,19 @@ public sealed class ViewHostPathResolver(IEnvironmentVariables environment)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var candidate in GetConfiguredFfmpegDirectories())
+        foreach (var candidate in GetConfiguredFfmpegDirectories().Where(seen.Add))
         {
-            if (seen.Add(candidate))
-            {
-                yield return candidate;
-            }
+            yield return candidate;
         }
 
-        foreach (var candidate in GetProcessRelativeDirectoryCandidates(Path.Combine("ffmpeg", "bin")))
+        foreach (var candidate in GetProcessRelativeDirectoryCandidates(Path.Combine("ffmpeg", "bin")).Where(seen.Add))
         {
-            if (seen.Add(candidate))
-            {
-                yield return candidate;
-            }
+            yield return candidate;
         }
 
-        foreach (var candidate in GetProcessRelativeDirectoryCandidates("ffmpeg"))
+        foreach (var candidate in GetProcessRelativeDirectoryCandidates("ffmpeg").Where(seen.Add))
         {
-            if (seen.Add(candidate))
-            {
-                yield return candidate;
-            }
+            yield return candidate;
         }
 
         if (!includePathEntries)
@@ -127,12 +119,9 @@ public sealed class ViewHostPathResolver(IEnvironmentVariables environment)
             yield break;
         }
 
-        foreach (var entry in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        foreach (var entry in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Where(seen.Add))
         {
-            if (seen.Add(entry))
-            {
-                yield return entry;
-            }
+            yield return entry;
         }
     }
 
@@ -155,6 +144,11 @@ public sealed class ViewHostPathResolver(IEnvironmentVariables environment)
 
     private static IEnumerable<string> GetProcessRelativeDirectoryCandidates(string relativePath)
     {
+        if (Path.IsPathRooted(relativePath))
+        {
+            throw new ArgumentException("Path must be process-relative.", nameof(relativePath));
+        }
+
         yield return Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), relativePath));
         yield return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, relativePath));
     }

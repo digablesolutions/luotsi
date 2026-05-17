@@ -44,7 +44,7 @@ public sealed class AndroidViewHelperPackageLocator(IEnvironmentVariables enviro
 {
     private readonly IEnvironmentVariables _environment = environment ?? throw new ArgumentNullException(nameof(environment));
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
-    private readonly ViewHostPathResolver _pathResolver = new(environment ?? throw new ArgumentNullException(nameof(environment)));
+    private readonly ViewHostPathResolver _pathResolver = new(environment);
 
     /// <inheritdoc />
     public AndroidViewHelperPackage Resolve()
