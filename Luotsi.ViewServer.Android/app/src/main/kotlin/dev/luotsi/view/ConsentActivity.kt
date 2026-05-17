@@ -5,18 +5,26 @@ import android.content.Intent
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 
 class ConsentActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.i(TAG, "ConsentActivity onCreate socket=${intent.getStringExtra(CaptureService.EXTRA_SOCKET_NAME)} sdk=${Build.VERSION.SDK_INT}")
 
-        val projectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        startActivityForResult(projectionManager.createScreenCaptureIntent(), REQUEST_MEDIA_PROJECTION)
+        try {
+            val projectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+            startActivityForResult(projectionManager.createScreenCaptureIntent(), REQUEST_MEDIA_PROJECTION)
+        } catch (error: Throwable) {
+            Log.e(TAG, "Failed to start MediaProjection consent", error)
+            finish()
+        }
     }
 
     @Deprecated("onActivityResult is enough for the minSdk used by this helper.")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        Log.i(TAG, "ConsentActivity onActivityResult requestCode=$requestCode resultCode=$resultCode hasData=${data != null}")
 
         if (requestCode == REQUEST_MEDIA_PROJECTION && resultCode == RESULT_OK && data != null) {
             val serviceIntent = Intent(this, CaptureService::class.java)
@@ -33,12 +41,15 @@ class ConsentActivity : Activity() {
             } else {
                 startService(serviceIntent)
             }
+        } else {
+            Log.w(TAG, "MediaProjection consent was not granted")
         }
 
         finish()
     }
 
     private companion object {
+        private const val TAG = "LuotsiView"
         private const val REQUEST_MEDIA_PROJECTION = 1001
     }
 }

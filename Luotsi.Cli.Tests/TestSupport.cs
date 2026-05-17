@@ -14,6 +14,11 @@ using Xunit;
 
 namespace Luotsi.Cli.Tests;
 
+internal sealed class FakeAsyncDisposable : IAsyncDisposable
+{
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
 internal sealed class ManualTimeProvider(DateTimeOffset utcNow) : TimeProvider
 {
     private DateTimeOffset _utcNow = utcNow;
@@ -215,6 +220,21 @@ internal sealed class FakeAdbClient : IAdbClient
         ShellCommands.Add(command);
         var result = _shellResults.Count > 0 ? _shellResults.Dequeue() : new ProcessResult(0, string.Empty, string.Empty);
         return Task.FromResult(new AdbCommandResult("adb", null, ["shell", command], result));
+    }
+
+    public Task<IAsyncDisposable> StartShellAsync(string command, CancellationToken cancellationToken = default)
+    {
+        ShellCommands.Add(command);
+        if (_shellResults.Count > 0)
+        {
+            var result = _shellResults.Dequeue();
+            if (result.ExitCode != 0)
+            {
+                throw new InvalidOperationException($"view helper start failed: {result.Stderr}");
+            }
+        }
+
+        return Task.FromResult<IAsyncDisposable>(new FakeAsyncDisposable());
     }
 
     public Task<AdbLogStreamResult> MonitorLogAsync(string containsText, DateTimeOffset since, int timeoutSec, CancellationToken cancellationToken = default)

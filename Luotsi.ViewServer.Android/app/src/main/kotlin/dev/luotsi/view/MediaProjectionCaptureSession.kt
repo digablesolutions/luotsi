@@ -11,6 +11,7 @@ import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.util.DisplayMetrics
 import android.view.Surface
 import android.view.WindowManager
@@ -34,6 +35,7 @@ internal class MediaProjectionCaptureSession(
     fun run() {
         MediaCodecPacketizer(output).use { packetizer ->
             val captureSize = DisplayCaptureSize.resolve(context, options.maxSize)
+            Log.i(TAG, "MediaProjection session starting ${captureSize.width}x${captureSize.height}@${options.maxFps} bitrate=${options.videoBitRate}")
             packetizer.writeHeader("h264", captureSize.width, captureSize.height)
 
             if (!options.codec.equals("h264", ignoreCase = true)) {
@@ -47,6 +49,7 @@ internal class MediaProjectionCaptureSession(
                 startProjection(captureSize)
                 drainEncoder(packetizer)
             } catch (error: Exception) {
+                Log.e(TAG, "MediaProjection session failed", error)
                 packetizer.writeServerError(error.message ?: error::class.java.simpleName)
             } finally {
                 stop()
@@ -78,6 +81,7 @@ internal class MediaProjectionCaptureSession(
         val projection = projectionManager.getMediaProjection(options.resultCode, options.resultData)
             ?: throw IllegalStateException("MediaProjection consent data was rejected by Android.")
         mediaProjection = projection
+        Log.i(TAG, "MediaProjection object acquired")
 
         projection.registerCallback(object : MediaProjection.Callback() {
             override fun onStop() {
@@ -95,9 +99,11 @@ internal class MediaProjectionCaptureSession(
 
         val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
         encoder = codec
+        Log.i(TAG, "Configuring AVC encoder ${captureSize.width}x${captureSize.height}")
         codec.configure(mediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
         inputSurface = codec.createInputSurface()
         codec.start()
+        Log.i(TAG, "AVC encoder started")
 
         virtualDisplay = projection.createVirtualDisplay(
             "LuotsiMediaProjection",
@@ -109,6 +115,7 @@ internal class MediaProjectionCaptureSession(
             null,
             null,
         )
+        Log.i(TAG, "VirtualDisplay created")
     }
 
     private fun drainEncoder(packetizer: MediaCodecPacketizer) {
@@ -197,6 +204,7 @@ internal class MediaProjectionCaptureSession(
     }
 
     private companion object {
+        private const val TAG = "LuotsiView"
         private fun parseBitRate(value: String): Int {
             val trimmed = value.trim()
             if (trimmed.isEmpty()) {

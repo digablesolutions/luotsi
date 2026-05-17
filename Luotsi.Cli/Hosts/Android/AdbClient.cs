@@ -35,6 +35,26 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
     public Task<AdbCommandResult> ShellAsync(string command, CancellationToken cancellationToken = default) =>
         RunAsync(["shell", command], cancellationToken);
 
+    public Task<IAsyncDisposable> StartShellAsync(string command, CancellationToken cancellationToken = default)
+    {
+        var finalArgs = BuildFinalArgs(["shell", command]);
+        var startInfo = new ProcessStartInfo(_executable)
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        foreach (var arg in finalArgs)
+        {
+            startInfo.ArgumentList.Add(arg);
+        }
+
+        var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Failed to start '{_executable}'.");
+        return Task.FromResult<IAsyncDisposable>(new AdbShellProcess(process));
+    }
+
     public Task<AdbLogStreamResult> MonitorLogAsync(string containsText, DateTimeOffset since, int timeoutSec, CancellationToken cancellationToken = default) =>
         MonitorLogAsyncCore(containsText, since, timeoutSec, line => line.Contains(containsText, StringComparison.OrdinalIgnoreCase), null, cancellationToken);
 
@@ -137,6 +157,28 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
         }
 
         return new LogReaderResult(logBuilder.ToString(), matchedLine, lineCount);
+    }
+
+    private sealed class AdbShellProcess(Process process) : IAsyncDisposable
+    {
+        private readonly Process _process = process;
+
+        public async ValueTask DisposeAsync()
+        {
+            if (!_process.HasExited)
+            {
+                _process.Kill(entireProcessTree: true);
+            }
+
+            try
+            {
+                await _process.WaitForExitAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                _process.Dispose();
+            }
+        }
     }
 
     private List<string> BuildFinalArgs(IEnumerable<string> args)

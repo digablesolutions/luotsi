@@ -153,6 +153,7 @@ public sealed class AndroidViewBootstrap(
     private string? _socketName;
     private int? _localPort;
     private bool _installedAppLaunch;
+    private IAsyncDisposable? _screenrecordShell;
 
     /// <inheritdoc />
     public async Task<ViewConnectionInfo> StartAsync(ViewStartRequest request, CancellationToken cancellationToken = default)
@@ -225,9 +226,8 @@ public sealed class AndroidViewBootstrap(
             }
             else
             {
-                var shellCommand = $"sh -c 'CLASSPATH={package.RemotePath} app_process / {package.MainClass} --socket {socketName} --codec {request.Codec} --max-size {request.MaxSize} --max-fps {request.MaxFps} --video-bit-rate {request.VideoBitRate} >/dev/null 2>&1 &'";
-                var start = await adbClient.ShellAsync(shellCommand, cancellationToken).ConfigureAwait(false);
-                start.EnsureSuccess("view helper start failed");
+                var shellCommand = $"CLASSPATH={package.RemotePath} app_process / {package.MainClass} --socket {socketName} --codec {request.Codec} --max-size {request.MaxSize} --max-fps {request.MaxFps} --video-bit-rate {request.VideoBitRate}";
+                _screenrecordShell = await adbClient.StartShellAsync(shellCommand, cancellationToken).ConfigureAwait(false);
             }
 
             return new ViewConnectionInfo(
@@ -402,6 +402,11 @@ public sealed class AndroidViewBootstrap(
 
         try
         {
+            if (_screenrecordShell is not null)
+            {
+                await _screenrecordShell.DisposeAsync().ConfigureAwait(false);
+            }
+
             if (_localPort.HasValue)
             {
                 await _adbClient.RunAsync(["forward", "--remove", $"tcp:{_localPort.Value}"], cancellationToken).ConfigureAwait(false);
@@ -446,6 +451,7 @@ public sealed class AndroidViewBootstrap(
             _socketName = null;
             _localPort = null;
             _installedAppLaunch = false;
+            _screenrecordShell = null;
         }
     }
 }

@@ -81,7 +81,7 @@ public sealed class ViewTransportTests
         Assert.Equal(38543, connection.LocalPort);
         Assert.Equal(["push", "C:/tmp/helper.apk", "/data/local/tmp/luotsi-view-server.apk"], adb.RunCommands[0]);
         Assert.Equal(["forward", "tcp:0", "localabstract:luotsi_view_session123"], adb.RunCommands[1]);
-        Assert.Contains("sh -c 'CLASSPATH=/data/local/tmp/luotsi-view-server.apk app_process / dev.luotsi.view.Main", adb.ShellCommands[0], StringComparison.Ordinal);
+        Assert.Contains("CLASSPATH=/data/local/tmp/luotsi-view-server.apk app_process / dev.luotsi.view.Main", adb.ShellCommands[0], StringComparison.Ordinal);
         Assert.Contains("--codec h264", adb.ShellCommands[0], StringComparison.Ordinal);
     }
 

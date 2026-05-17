@@ -9,6 +9,7 @@ import android.content.pm.ServiceInfo
 import android.net.LocalServerSocket
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import kotlin.concurrent.thread
 
 class CaptureService : Service() {
@@ -23,10 +24,12 @@ class CaptureService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        Log.i(TAG, "CaptureService onCreate sdk=${Build.VERSION.SDK_INT}")
         ensureNotificationChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.i(TAG, "CaptureService onStartCommand action=${intent?.action} startId=$startId")
         when (intent?.action) {
             ACTION_START -> {
                 startAsForegroundService()
@@ -52,6 +55,7 @@ class CaptureService : Service() {
         val resultData = intent.getParcelableExtra<Intent>(EXTRA_RESULT_DATA)
         val socketName = intent.getStringExtra(EXTRA_SOCKET_NAME)
         if (resultData == null || socketName.isNullOrBlank()) {
+            Log.e(TAG, "Missing capture extras resultData=${resultData != null} socket=$socketName")
             stopSelf()
             return
         }
@@ -63,28 +67,35 @@ class CaptureService : Service() {
         val videoBitRate = intent.getStringExtra(EXTRA_VIDEO_BIT_RATE) ?: "8M"
 
         captureThread = thread(start = true, isDaemon = true, name = "luotsi-mediaprojection-capture") {
+            var server: LocalServerSocket? = null
             try {
-                LocalServerSocket(socketName).use { server ->
-                    serverSocket = server
-                    server.accept().use { client ->
-                        val session = MediaProjectionCaptureSession(
-                            this,
-                            MediaProjectionCaptureSession.Options(
-                                resultCode = resultCode,
-                                resultData = resultData,
-                                socketName = socketName,
-                                codec = codec,
-                                maxSize = maxSize,
-                                maxFps = maxFps,
-                                videoBitRate = videoBitRate,
-                            ),
-                            client.outputStream,
-                        )
-                        activeSession = session
-                        session.run()
-                    }
+                Log.i(TAG, "Opening LocalServerSocket $socketName")
+                server = LocalServerSocket(socketName)
+                serverSocket = server
+                Log.i(TAG, "Waiting for host stream client on $socketName")
+                server.accept().use { client ->
+                    Log.i(TAG, "Host stream client connected on $socketName")
+                    val session = MediaProjectionCaptureSession(
+                        this,
+                        MediaProjectionCaptureSession.Options(
+                            resultCode = resultCode,
+                            resultData = resultData,
+                            socketName = socketName,
+                            codec = codec,
+                            maxSize = maxSize,
+                            maxFps = maxFps,
+                            videoBitRate = videoBitRate,
+                        ),
+                        client.outputStream,
+                    )
+                    activeSession = session
+                    session.run()
                 }
+            } catch (error: Throwable) {
+                Log.e(TAG, "Capture thread failed", error)
             } finally {
+                runCatching { server?.close() }
+                Log.i(TAG, "Capture thread stopping")
                 if (captureThread === Thread.currentThread()) {
                     activeSession = null
                     serverSocket = null
@@ -144,6 +155,7 @@ class CaptureService : Service() {
     }
 
     companion object {
+        private const val TAG = "LuotsiView"
         const val ACTION_START = "dev.luotsi.view.action.START_CAPTURE"
         const val ACTION_STOP = "dev.luotsi.view.action.STOP_CAPTURE"
         const val EXTRA_RESULT_CODE = "dev.luotsi.view.extra.RESULT_CODE"
