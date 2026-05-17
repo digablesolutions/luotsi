@@ -15,10 +15,6 @@ internal sealed class ScenarioCommandDispatcher(
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     private readonly IDelay _delay = delay ?? throw new ArgumentNullException(nameof(delay));
     private readonly IEnvironmentVariables _environment = environment ?? throw new ArgumentNullException(nameof(environment));
-    private readonly ScenarioCatalog _scenarioCatalog = new(
-        fileSystem ?? throw new ArgumentNullException(nameof(fileSystem)),
-        timeProvider ?? throw new ArgumentNullException(nameof(timeProvider)),
-        environment ?? throw new ArgumentNullException(nameof(environment)));
 
     public async Task<ScenarioListResult> ListAsync(CliOptions options)
     {
@@ -105,11 +101,14 @@ internal sealed class ScenarioCommandDispatcher(
 
     private async Task<ScenarioSelection> DiscoverAsync(ScenarioQuery query)
     {
-        var discovered = await _scenarioCatalog.DiscoverAsync(query.Path).ConfigureAwait(false);
+        var discovered = await CreateScenarioCatalog().DiscoverAsync(query.Path).ConfigureAwait(false);
         var matched = ScenarioCatalog.Filter(discovered, query);
         var selected = ScenarioCatalog.SelectShard(matched, query);
         return new ScenarioSelection(discovered.Count, matched, selected);
     }
+
+    private ScenarioCatalog CreateScenarioCatalog() =>
+        new(_fileSystem, _timeProvider, _environment);
 
     private static ScenarioQuery CreateQuery(CliOptions options, bool requirePath)
     {
