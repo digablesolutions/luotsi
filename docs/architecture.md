@@ -62,9 +62,11 @@ runtime commands and scenarios share the same higher-value oracle path.
 ### View layer
 
 `Luotsi.Cli/View/` owns the built-in live mirror. The host bootstraps an
-Android helper over `adb`, reads the private packet stream from a localhost
-tunnel, decodes H.264 through native libav, and presents decoded BGRA frames
-through SDL3.
+Android helper over `adb`, selects the requested capture backend, reads the
+private packet stream from a localhost tunnel, decodes H.264 through native
+libav, and presents decoded BGRA frames through SDL3. With
+`--capture-backend auto`, the host prefers MediaProjection and falls back to
+`screenrecord` if helper startup or consent fails during bring-up.
 
 ## View runtime data path
 
@@ -81,7 +83,7 @@ sequenceDiagram
 
     User->>CLI: view --device <serial> --decoder ffmpeg --codec h264
     CLI->>Bootstrap: StartAsync(...)
-    Bootstrap->>Device: adb push / start helper / forward tunnel
+    Bootstrap->>Device: install helper app or push helper / forward tunnel / start consent or helper process
     Device-->>CLI: startup header (codec, size, session)
     Device-->>Stream: config + frame packets
     CLI->>Backend: RunAsync(packet stream)
@@ -95,10 +97,11 @@ sequenceDiagram
 ## Native dependency story
 
 - The current live decoder is native libav via `FFmpeg.AutoGen`.
-- `DEVICE_E2E_FFMPEG_ROOT` can point at a directory containing native FFmpeg
+- `LUOTSI_FFMPEG_ROOT` can point at a directory containing native FFmpeg
   shared libraries.
-- If the environment variable is absent, the runtime probes `ffmpeg/bin` under
-  the repo root, under the app base directory, and finally the process path.
+- If that environment variable is absent, the runtime probes bundled `ffmpeg`
+  directories relative to the repo or published app, then the app base
+  directory, and finally the process path.
 - `ffmpeg/download-ffmpeg.ps1` is the DX helper for staging host-native shared
   libraries into `ffmpeg/bin`.
 - The SDL3 runtime is already included in current macOS publishes; the FFmpeg

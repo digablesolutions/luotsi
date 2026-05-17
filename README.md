@@ -133,6 +133,12 @@ updates independently; the default is `0`, which forwards every renderer stats
 update. `--preset <name>` seeds the launch defaults without blocking explicit
 overrides. The built-in presets are `low-latency`, `balanced`, `high-quality`,
 and `safe`; `--defaults` is a shorthand for the conservative `safe` preset.
+`--capture-backend auto` is the default host policy: it prefers
+MediaProjection, and if helper startup or consent fails during session bring-up
+Luotsi emits `view_capture_backend_fallback` and retries with `screenrecord`.
+Explicit `--capture-backend screenrecord` keeps the legacy 180-second Android
+session limit, while `--capture-backend mediaprojection` requires the Android
+screen-capture consent flow and currently supports `--codec h264`.
 Use `--save-profile <name>` to persist the resolved connection settings and
 `--profile <name>` to reuse them later. `profile-list` lists saved profiles and
 `profile-delete --name <profile>` removes one. Profiles include the device
@@ -183,8 +189,12 @@ device switching.
 
 `view-doctor` runs the same option resolution as `view` and returns a diagnostic
 report instead of opening a stream. The current checks cover FFmpeg decoder
-readiness, Android helper package availability, adb device visibility, device
-preflight, and optional recording target readiness.
+readiness, Android helper package discovery, capture-backend policy, adb device
+visibility, device preflight, MediaProjection API/encoder/consent readiness
+when `auto` or `mediaprojection` is selected, and optional recording target
+readiness. The helper package check resolves the built APK from the repo layout
+or from `LUOTSI_VIEW_HELPER_APK`, and FFmpeg readiness uses
+`LUOTSI_FFMPEG_ROOT` plus the bundled `ffmpeg/` probe paths.
 
 `wireless` remains the legacy "go wireless" flow. It runs
 `adb shell ip route get 8.8.8.8` to infer the USB-selected device Wi-Fi address
@@ -224,6 +234,7 @@ appear as `<service-name>._adb-tls-connect._tcp` in `adb devices`.
 Interactive `view` sessions can now emit additional JSONL events beyond
 `view_started`, `view_stats`, `view_error`, and `view_ended`, including:
 
+- `view_capture_backend_fallback`
 - `view_recording_started` / `view_recording_stopped`
 - `view_reconnect_requested` / `view_reconnected`
 - `view_device_switch_requested`
