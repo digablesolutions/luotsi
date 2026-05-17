@@ -8,7 +8,7 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIo console,
 {
     private readonly IDeviceHost _deviceHost = deviceHost ?? throw new ArgumentNullException(nameof(deviceHost));
     private readonly InspectSessionProtocol _protocol = new(console ?? throw new ArgumentNullException(nameof(console)));
-    private readonly InspectSessionCommandDispatcher _commandDispatcher = new(deviceHost ?? throw new ArgumentNullException(nameof(deviceHost)));
+    private readonly InspectSessionCommandDispatcher _commandDispatcher = new(deviceHost);
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
 
     public async Task<int> RunAsync()

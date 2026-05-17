@@ -14,9 +14,6 @@ internal sealed class ScenarioCommandDispatcher(
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     private readonly IDelay _delay = delay ?? throw new ArgumentNullException(nameof(delay));
     private readonly IEnvironmentVariables _environment = environment ?? throw new ArgumentNullException(nameof(environment));
-    private readonly IScenarioTemplateResolver _templateResolver = new ScenarioTemplateResolver(
-        timeProvider ?? throw new ArgumentNullException(nameof(timeProvider)),
-        environment ?? throw new ArgumentNullException(nameof(environment)));
 
     public async Task<ScenarioListResult> ListAsync(CliOptions options)
     {
@@ -32,7 +29,7 @@ internal sealed class ScenarioCommandDispatcher(
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(runner);
 
-        var scenarios = new ScenarioExecutor(runner, _fileSystem, _timeProvider, _delay, _templateResolver, _environment);
+        var scenarios = new ScenarioExecutor(runner, _fileSystem, _timeProvider, _delay, CreateTemplateResolver(), _environment);
         if (!UsesCatalogExecution(options))
         {
             if (options.HasFlag("dry-run"))
@@ -78,7 +75,10 @@ internal sealed class ScenarioCommandDispatcher(
     }
 
     private ScenarioCatalog CreateScenarioCatalog() =>
-        new(_fileSystem, _templateResolver);
+        new(_fileSystem, CreateTemplateResolver());
+
+    private IScenarioTemplateResolver CreateTemplateResolver() =>
+        new ScenarioTemplateResolver(_timeProvider, _environment);
 
     private static ScenarioQuery CreateQuery(CliOptions options, bool requirePath)
     {

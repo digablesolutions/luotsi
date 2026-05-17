@@ -75,7 +75,7 @@ internal sealed class AndroidFailureArtifactCapturer(
         {
             captured.Add(new FailureArtifact(name, await action().ConfigureAwait(false)));
         }
-        catch (Exception captureException)
+        catch (Exception captureException) when (captureException is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
         {
             captureFailures.Add(new FailureCaptureError(name, captureException.Message));
         }

@@ -37,12 +37,9 @@ internal sealed record InspectScreenStateDelta(
             }
         }
 
-        foreach (var key in previousMap.Keys)
+        foreach (var key in previousMap.Keys.Where(key => !currentMap.ContainsKey(key)))
         {
-            if (!currentMap.ContainsKey(key))
-            {
-                removed.Add(key);
-            }
+            removed.Add(key);
         }
 
         return new InspectScreenStateDelta(
