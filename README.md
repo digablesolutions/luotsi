@@ -81,6 +81,8 @@ luotsi wireless --device <usb-serial> --host 192.168.0.44
 luotsi wireless-scan
 luotsi wireless-pair --endpoint 192.168.86.38:33861 --code 515109
 luotsi wireless-connect --service adb-14141FDF600081-TnSdi9 --save-profile desk-wifi
+luotsi reverse --device <serial> --remote tcp:8080 --local tcp:3000
+luotsi start-app --device <serial> --package dev.luotsi.app --activity .MainActivity --wait
 luotsi telemetry-tail --device <serial> --tail 200
 luotsi telemetry-watch --device <serial> --timeout-sec 10
 luotsi tap-text --device <serial> --text "Sign in"
@@ -231,6 +233,31 @@ luotsi view --profile desk-wifi
 This relies on adb's mDNS selector convention, where a connected TLS device may
 appear as `<service-name>._adb-tls-connect._tcp` in `adb devices`.
 
+Generic ADB port plumbing is exposed for app-to-host and host-to-device test
+flows:
+
+- `forward-list`, `forward --local <endpoint> --remote <endpoint>`, and
+  `forward-remove --local <endpoint>`
+- `reverse-list`, `reverse --remote <endpoint> --local <endpoint>`, and
+  `reverse-remove --remote <endpoint>`
+
+Endpoints use adb syntax such as `tcp:8080`, `tcp:0`, or
+`localabstract:service`.
+
+Common app lifecycle and package-state controls are available as direct CLI
+commands:
+
+- `start-app --package <app.id> [--activity <activity>] [--wait]`
+- `start-uri --uri <uri> [--package <app.id>] [--activity <activity>] [--action <intent-action>] [--wait]`
+- `force-stop --package <app.id>`
+- `clear --package <app.id>` (alias: `clear-app`)
+- `wait-for-activity --activity <activity-or-pattern>`
+- `wait-for-not-activity --activity <activity-or-pattern>`
+- `is-app-installed --package <app.id>`
+- `list-installed-packages [--third-party]`
+- `grant-permission --package <app.id> --permission <permission>`
+- `revoke-permission --package <app.id> --permission <permission>`
+
 Interactive `view` sessions can now emit additional JSONL events beyond
 `view_started`, `view_stats`, `view_error`, and `view_ended`, including:
 
@@ -342,6 +369,17 @@ Supported actions:
 - `assertBelow`
 - `assertAligned`
 - `assertAppVersion`
+- `startApp`
+- `startUri`
+- `forceStop`
+- `clear`
+- `clearApp`
+- `waitForActivity`
+- `waitForNotActivity`
+- `isAppInstalled`
+- `listInstalledPackages`
+- `grantPermission`
+- `revokePermission`
 - `takeScreenshot`
 - `captureArtifacts`
 - `sleep`

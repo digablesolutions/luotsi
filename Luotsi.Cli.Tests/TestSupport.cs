@@ -388,6 +388,34 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public List<string?> CommandPreflightRequests { get; } = [];
 
+    public List<(string Local, string Remote, bool NoRebind)> ForwardRequests { get; } = [];
+
+    public List<string> ForwardRemoveRequests { get; } = [];
+
+    public List<(string Remote, string Local, bool NoRebind)> ReverseRequests { get; } = [];
+
+    public List<string> ReverseRemoveRequests { get; } = [];
+
+    public List<(string Package, string? Activity, bool Wait)> StartAppRequests { get; } = [];
+
+    public List<(string Uri, string? Package, string? Activity, string? Action, bool Wait)> StartUriRequests { get; } = [];
+
+    public List<string> ForceStopRequests { get; } = [];
+
+    public List<string> ClearAppRequests { get; } = [];
+
+    public List<(string Activity, int TimeoutSec)> WaitForActivityRequests { get; } = [];
+
+    public List<(string Activity, int TimeoutSec)> WaitForNotActivityRequests { get; } = [];
+
+    public List<string> IsAppInstalledRequests { get; } = [];
+
+    public List<bool> ListInstalledPackagesRequests { get; } = [];
+
+    public List<(string Package, string Permission)> GrantPermissionRequests { get; } = [];
+
+    public List<(string Package, string Permission)> RevokePermissionRequests { get; } = [];
+
     public List<DeviceInfo> ConnectedDevices { get; } = [];
 
     public PreflightResult PreflightTemplate { get; set; } = new("Model", "16", "36", "focus", null, null, "fingerprint", "arm64-v8a", "SER");
@@ -617,6 +645,98 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
     {
         InstallPackageRequests.Add(packagePath);
         return Task.FromResult(new InstallPackageResult(packagePath));
+    }
+
+    public Task<PortForwardListResult> ListForwardsAsync() =>
+        Task.FromResult(new PortForwardListResult([]));
+
+    public Task<PortForwardResult> ForwardAsync(string local, string remote, bool noRebind)
+    {
+        ForwardRequests.Add((local, remote, noRebind));
+        return Task.FromResult(new PortForwardResult(local, remote, noRebind));
+    }
+
+    public Task<PortForwardRemoveResult> RemoveForwardAsync(string local)
+    {
+        ForwardRemoveRequests.Add(local);
+        return Task.FromResult(new PortForwardRemoveResult(local));
+    }
+
+    public Task<PortReverseListResult> ListReversesAsync() =>
+        Task.FromResult(new PortReverseListResult([]));
+
+    public Task<PortReverseResult> ReverseAsync(string remote, string local, bool noRebind)
+    {
+        ReverseRequests.Add((remote, local, noRebind));
+        return Task.FromResult(new PortReverseResult(remote, local, noRebind));
+    }
+
+    public Task<PortReverseRemoveResult> RemoveReverseAsync(string remote)
+    {
+        ReverseRemoveRequests.Add(remote);
+        return Task.FromResult(new PortReverseRemoveResult(remote));
+    }
+
+    public Task<StartAppResult> StartAppAsync(string packageName, string? activity, bool wait)
+    {
+        StartAppRequests.Add((packageName, activity, wait));
+        var component = string.IsNullOrWhiteSpace(activity) ? null : $"{packageName}/{activity}";
+        return Task.FromResult(new StartAppResult(packageName, activity, component, wait, string.Empty));
+    }
+
+    public Task<StartUriResult> StartUriAsync(string uri, string? packageName, string? activity, string? action, bool wait)
+    {
+        StartUriRequests.Add((uri, packageName, activity, action, wait));
+        var component = string.IsNullOrWhiteSpace(packageName) || string.IsNullOrWhiteSpace(activity) ? null : $"{packageName}/{activity}";
+        return Task.FromResult(new StartUriResult(uri, packageName, activity, component, action ?? "android.intent.action.VIEW", wait, string.Empty));
+    }
+
+    public Task<AppPackageCommandResult> ForceStopAsync(string packageName)
+    {
+        ForceStopRequests.Add(packageName);
+        return Task.FromResult(new AppPackageCommandResult(packageName));
+    }
+
+    public Task<AppPackageCommandResult> ClearAppAsync(string packageName)
+    {
+        ClearAppRequests.Add(packageName);
+        return Task.FromResult(new AppPackageCommandResult(packageName));
+    }
+
+    public Task<ActivityWaitResult> WaitForActivityAsync(string activity, int timeoutSec)
+    {
+        WaitForActivityRequests.Add((activity, timeoutSec));
+        return Task.FromResult(new ActivityWaitResult(activity, timeoutSec, activity, 1));
+    }
+
+    public Task<ActivityWaitResult> WaitForNotActivityAsync(string activity, int timeoutSec)
+    {
+        WaitForNotActivityRequests.Add((activity, timeoutSec));
+        return Task.FromResult(new ActivityWaitResult(activity, timeoutSec, "other", 1));
+    }
+
+    public Task<AppInstalledResult> IsAppInstalledAsync(string packageName)
+    {
+        IsAppInstalledRequests.Add(packageName);
+        return Task.FromResult(new AppInstalledResult(packageName, true));
+    }
+
+    public Task<InstalledPackageListResult> ListInstalledPackagesAsync(bool thirdPartyOnly)
+    {
+        ListInstalledPackagesRequests.Add(thirdPartyOnly);
+        return Task.FromResult(new InstalledPackageListResult(["dev.luotsi.app"], thirdPartyOnly));
+    }
+
+    public Task<PermissionCommandResult> GrantPermissionAsync(string packageName, string permission)
+    {
+        GrantPermissionRequests.Add((packageName, permission));
+        return Task.FromResult(new PermissionCommandResult(packageName, permission));
+    }
+
+    public Task<PermissionCommandResult> RevokePermissionAsync(string packageName, string permission)
+    {
+        RevokePermissionRequests.Add((packageName, permission));
+        return Task.FromResult(new PermissionCommandResult(packageName, permission));
     }
 
     public Task<WaitLogResult> WaitForLogAsync(string text, int timeoutSec) => Task.FromResult(new WaitLogResult(text, timeoutSec, text, 1));

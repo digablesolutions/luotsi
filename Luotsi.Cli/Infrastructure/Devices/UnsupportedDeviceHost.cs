@@ -7,6 +7,8 @@ internal sealed class UnsupportedDeviceHost : IDeviceHost
 {
     public Task<DeviceListResult> GetDevicesAsync() => Unsupported<DeviceListResult>();
 
+    public Task<PreflightResult> PreflightAsync(string? packageName) => Unsupported<PreflightResult>();
+
     public Task<ScreenState> GetScreenStateAsync() => Unsupported<ScreenState>();
 
     public Task<TapResult> TapAsync(string x, string y) => Unsupported<TapResult>();
@@ -25,7 +27,38 @@ internal sealed class UnsupportedDeviceHost : IDeviceHost
 
     public Task<PullFileResult> PullFileAsync(string remotePath, string? localDirectory = null) => Unsupported<PullFileResult>();
 
+    public Task<PortForwardListResult> ListForwardsAsync() => Unsupported<PortForwardListResult>();
+
+    public Task<PortForwardResult> ForwardAsync(string local, string remote, bool noRebind) => Unsupported<PortForwardResult>();
+
+    public Task<PortForwardRemoveResult> RemoveForwardAsync(string local) => Unsupported<PortForwardRemoveResult>();
+
+    public Task<PortReverseListResult> ListReversesAsync() => Unsupported<PortReverseListResult>();
+
+    public Task<PortReverseResult> ReverseAsync(string remote, string local, bool noRebind) => Unsupported<PortReverseResult>();
+
+    public Task<PortReverseRemoveResult> RemoveReverseAsync(string remote) => Unsupported<PortReverseRemoveResult>();
     public Task<InstallPackageResult> InstallPackageAsync(string packagePath) => Unsupported<InstallPackageResult>();
+
+    public Task<StartAppResult> StartAppAsync(string packageName, string? activity, bool wait) => Unsupported<StartAppResult>();
+
+    public Task<StartUriResult> StartUriAsync(string uri, string? packageName, string? activity, string? action, bool wait) => Unsupported<StartUriResult>();
+
+    public Task<AppPackageCommandResult> ForceStopAsync(string packageName) => Unsupported<AppPackageCommandResult>();
+
+    public Task<AppPackageCommandResult> ClearAppAsync(string packageName) => Unsupported<AppPackageCommandResult>();
+
+    public Task<ActivityWaitResult> WaitForActivityAsync(string activity, int timeoutSec) => Unsupported<ActivityWaitResult>();
+
+    public Task<ActivityWaitResult> WaitForNotActivityAsync(string activity, int timeoutSec) => Unsupported<ActivityWaitResult>();
+
+    public Task<AppInstalledResult> IsAppInstalledAsync(string packageName) => Unsupported<AppInstalledResult>();
+
+    public Task<InstalledPackageListResult> ListInstalledPackagesAsync(bool thirdPartyOnly) => Unsupported<InstalledPackageListResult>();
+
+    public Task<PermissionCommandResult> GrantPermissionAsync(string packageName, string permission) => Unsupported<PermissionCommandResult>();
+
+    public Task<PermissionCommandResult> RevokePermissionAsync(string packageName, string permission) => Unsupported<PermissionCommandResult>();
 
     public Task<ScreenElement> WaitVisibleAsync(string text, int timeoutSec) => Unsupported<ScreenElement>();
 

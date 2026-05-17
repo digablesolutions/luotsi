@@ -10,6 +10,7 @@ namespace Luotsi.Cli.Scenarios;
 
 public interface IScenarioActionHost
 {
+    Task<ScreenState> GetScreenStateAsync();
     Task<ScreenElement> WaitVisibleAsync(string text, int timeoutSec);
     Task<WaitNotVisibleResult> WaitNotVisibleAsync(string text, int timeoutSec);
     Task<TapResult> TapTextAsync(string text, int timeoutSec);
@@ -29,6 +30,16 @@ public interface IScenarioActionHost
     Task<AssertBelowResult> AssertBelowAsync(string text, string referenceText, int maxGapPx);
     Task<AssertAlignedResult> AssertAlignedAsync(string text, string referenceText, int maxDeltaPx);
     Task<AssertAppVersionResult> AssertAppVersionAsync(string? packageName, int maxTopInsetPx, int maxRightInsetPx);
+    Task<StartAppResult> StartAppAsync(string packageName, string? activity, bool wait);
+    Task<StartUriResult> StartUriAsync(string uri, string? packageName, string? activity, string? action, bool wait);
+    Task<AppPackageCommandResult> ForceStopAsync(string packageName);
+    Task<AppPackageCommandResult> ClearAppAsync(string packageName);
+    Task<ActivityWaitResult> WaitForActivityAsync(string activity, int timeoutSec);
+    Task<ActivityWaitResult> WaitForNotActivityAsync(string activity, int timeoutSec);
+    Task<AppInstalledResult> IsAppInstalledAsync(string packageName);
+    Task<InstalledPackageListResult> ListInstalledPackagesAsync(bool thirdPartyOnly);
+    Task<PermissionCommandResult> GrantPermissionAsync(string packageName, string permission);
+    Task<PermissionCommandResult> RevokePermissionAsync(string packageName, string permission);
     Task<DeviceFingerprint> WriteDeviceFingerprintAsync();
     Task<FailureArtifactBundle> CaptureFailureArtifactsAsync(FailureCaptureRequest request, Exception exception);
 }
@@ -36,7 +47,7 @@ public interface IScenarioActionHost
 /// <summary>
 /// Loads and executes JSON scenario files.
 /// </summary>
-public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSystem, TimeProvider timeProvider, IDelay delay, IEnvironmentVariables? environment = null)
+public sealed class ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem fileSystem, TimeProvider timeProvider, IDelay delay, IEnvironmentVariables? environment = null)
 {
     private static readonly HashSet<string> SupportedScenarioActions =
     [
@@ -60,11 +71,22 @@ public sealed class ScenarioExecutor(IDeviceHost actionHost, IFileSystem fileSys
         "assertBelow",
         "assertAligned",
         "assertAppVersion",
+        "startApp",
+        "startUri",
+        "forceStop",
+        "clear",
+        "clearApp",
+        "waitForActivity",
+        "waitForNotActivity",
+        "isAppInstalled",
+        "listInstalledPackages",
+        "grantPermission",
+        "revokePermission",
         "screenState",
         "sleep"
     ];
 
-    private readonly IDeviceHost _actionHost = actionHost ?? throw new ArgumentNullException(nameof(actionHost));
+    private readonly IScenarioActionHost _actionHost = actionHost ?? throw new ArgumentNullException(nameof(actionHost));
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     private readonly IDelay _delay = delay ?? throw new ArgumentNullException(nameof(delay));

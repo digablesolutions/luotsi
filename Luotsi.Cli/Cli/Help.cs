@@ -38,6 +38,22 @@ Commands:
   wireless-scan
   wireless-pair (--endpoint <host:port> | --service <mdns-service>) --code <pairing-code>
   wireless-connect [--endpoint <host:port> | --service <mdns-service>] [--save-profile <name>]
+  forward-list
+  forward --local <adb-endpoint> --remote <adb-endpoint> [--no-rebind]
+  forward-remove --local <adb-endpoint>
+  reverse-list
+  reverse --remote <adb-endpoint> --local <adb-endpoint> [--no-rebind]
+  reverse-remove --remote <adb-endpoint>
+  start-app --package <app.id> [--activity <activity>] [--wait]
+  start-uri --uri <uri> [--package <app.id>] [--activity <activity>] [--action android.intent.action.VIEW] [--wait]
+  force-stop --package <app.id>
+  clear --package <app.id> (alias: clear-app)
+  wait-for-activity --activity <activity-or-pattern> [--timeout-sec 15]
+  wait-for-not-activity --activity <activity-or-pattern> [--timeout-sec 15]
+  is-app-installed --package <app.id>
+  list-installed-packages [--third-party]
+  grant-permission --package <app.id> --permission <permission>
+  revoke-permission --package <app.id> --permission <permission>
   telemetry-tail [--tail 200]
   telemetry-watch [--timeout-sec 15]
   wait-step --step <STEP_NAME> [--timeout-sec 15]
