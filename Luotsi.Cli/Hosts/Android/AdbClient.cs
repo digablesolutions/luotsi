@@ -184,14 +184,9 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
             {
                 await drainTask.ConfigureAwait(false);
             }
-            catch (OperationCanceledException)
+            catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or InvalidOperationException)
             {
-            }
-            catch (ObjectDisposedException)
-            {
-            }
-            catch (InvalidOperationException)
-            {
+                // The process may close or dispose redirected streams while the teardown drain is completing.
             }
         }
     }
