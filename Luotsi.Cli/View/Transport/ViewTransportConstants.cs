@@ -44,4 +44,29 @@ public static class ViewTransportConstants
     /// Codec identifier for H.265 payloads.
     /// </summary>
     public const byte H265CodecId = 2;
+
+    /// <summary>
+    /// Packet type identifier for codec/config bootstrap packets.
+    /// </summary>
+    public const byte ConfigPacketTypeId = 1;
+
+    /// <summary>
+    /// Packet type identifier for video frame packets.
+    /// </summary>
+    public const byte FramePacketTypeId = 2;
+
+    /// <summary>
+    /// Packet type identifier for rotation reset packets.
+    /// </summary>
+    public const byte RotationResetPacketTypeId = 3;
+
+    /// <summary>
+    /// Packet type identifier for end-of-stream packets.
+    /// </summary>
+    public const byte StreamEndPacketTypeId = 4;
+
+    /// <summary>
+    /// Packet type identifier for server-side error packets.
+    /// </summary>
+    public const byte ServerErrorPacketTypeId = 5;
 }

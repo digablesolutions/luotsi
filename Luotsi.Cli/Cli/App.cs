@@ -100,6 +100,8 @@ public sealed class App
         try
         {
             await ApplyProfileDefaultsAsync(options).ConfigureAwait(false);
+            var isViewCommand = string.Equals(options.Command, "view", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(options.Command, "reconnect", StringComparison.OrdinalIgnoreCase);
             var adbExecutable = options.Get("adb") ?? _environment.GetEnvironmentVariable(CliDefaults.AdbExecutableEnvironmentVariable) ?? CliDefaults.DefaultAdbExecutable;
             artifacts = ArtifactSession.Create(options, _fileSystem, _timeProvider);
 
@@ -130,7 +132,7 @@ public sealed class App
                 return await inspectSession.RunAsync().ConfigureAwait(false);
             }
 
-            if (string.Equals(options.Command, "view", StringComparison.OrdinalIgnoreCase))
+            if (isViewCommand)
             {
                 var viewOptions = BuildViewOptions(options, adbExecutable, allowJoinShare: true);
                 await SaveProfileIfRequestedAsync(options, viewOptions).ConfigureAwait(false);
@@ -221,16 +223,23 @@ public sealed class App
 
     private async Task ApplyProfileDefaultsAsync(CliOptions options)
     {
-        var profileName = options.HasFlag("last") ? "last" : options.Get("profile");
+        var profileName = options.Get("profile");
+        if (string.IsNullOrWhiteSpace(profileName) &&
+            (options.HasFlag("last") || string.Equals(options.Command, "reconnect", StringComparison.OrdinalIgnoreCase)))
+        {
+            profileName = "last";
+        }
+
         if (string.IsNullOrWhiteSpace(profileName))
         {
             return;
         }
 
         if (!string.Equals(options.Command, "view", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(options.Command, "reconnect", StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(options.Command, "view-doctor", StringComparison.OrdinalIgnoreCase))
         {
-            throw new UsageException("--profile is only supported for view and view-doctor.");
+            throw new UsageException("--profile is only supported for view, reconnect, and view-doctor.");
         }
 
         var profile = await _viewProfileStore.LoadAsync(profileName).ConfigureAwait(false)

@@ -5,7 +5,21 @@ using System.Threading.Channels;
 
 namespace Luotsi.Cli.View;
 
-internal sealed record ViewShareObserverEvent(string EventType, string? RemoteEndpoint, int ObserverCount, string? Reason = null);
+internal enum ViewShareObserverEventKind
+{
+    Connected,
+    Disconnected
+}
+
+internal static class ViewShareObserverDisconnectReasons
+{
+    public const string SourceReset = "source_reset";
+    public const string ObserverBackpressure = "observer_backpressure";
+    public const string ServerDisposed = "server_disposed";
+    public const string ObserverDisconnected = "observer_disconnected";
+}
+
+internal sealed record ViewShareObserverEvent(ViewShareObserverEventKind Kind, string? RemoteEndpoint, int ObserverCount, string? Reason = null);
 
 internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
 {
@@ -62,7 +76,7 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
 
         _currentHeader = header;
         _bootstrapPackets = [];
-        await DisconnectObserversAsync("source_reset", cancellationToken).ConfigureAwait(false);
+        await DisconnectObserversAsync(ViewShareObserverDisconnectReasons.SourceReset, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task PublishPacketAsync(ViewPacket packet, CancellationToken cancellationToken = default)
@@ -80,7 +94,7 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
         {
             if (!connection.TryQueue(packet))
             {
-                await RemoveConnectionAsync(connection, "observer_backpressure", disposeConnection: true, cancellationToken).ConfigureAwait(false);
+                await RemoveConnectionAsync(connection, ViewShareObserverDisconnectReasons.ObserverBackpressure, disposeConnection: true, cancellationToken).ConfigureAwait(false);
             }
         }
     }
@@ -123,7 +137,7 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
             }
         }
 
-        await DisconnectObserversAsync("server_disposed").ConfigureAwait(false);
+        await DisconnectObserversAsync(ViewShareObserverDisconnectReasons.ServerDisposed).ConfigureAwait(false);
         _acceptCancellation?.Dispose();
     }
 
@@ -158,13 +172,13 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
                 _connections.Add(connection);
             }
 
-            RaiseObserverChanged("connected", connection.RemoteEndpoint, ObserverCount);
+            RaiseObserverChanged(ViewShareObserverEventKind.Connected, connection.RemoteEndpoint, ObserverCount);
             connection.Start();
         }
     }
 
     private Task NotifyConnectionClosedAsync(ObserverConnection connection) =>
-        RemoveConnectionAsync(connection, "observer_disconnected", disposeConnection: false, CancellationToken.None);
+        RemoveConnectionAsync(connection, ViewShareObserverDisconnectReasons.ObserverDisconnected, disposeConnection: false, CancellationToken.None);
 
     private async Task RemoveConnectionAsync(ObserverConnection connection, string reason, bool disposeConnection, CancellationToken cancellationToken)
     {
@@ -184,11 +198,11 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
             await connection.DisposeAsync().ConfigureAwait(false);
         }
 
-        RaiseObserverChanged("disconnected", connection.RemoteEndpoint, ObserverCount, reason);
+        RaiseObserverChanged(ViewShareObserverEventKind.Disconnected, connection.RemoteEndpoint, ObserverCount, reason);
     }
 
-    private void RaiseObserverChanged(string eventType, string? remoteEndpoint, int observerCount, string? reason = null) =>
-        ObserverChanged?.Invoke(new ViewShareObserverEvent(eventType, remoteEndpoint, observerCount, reason));
+    private void RaiseObserverChanged(ViewShareObserverEventKind kind, string? remoteEndpoint, int observerCount, string? reason = null) =>
+        ObserverChanged?.Invoke(new ViewShareObserverEvent(kind, remoteEndpoint, observerCount, reason));
 
     private static IReadOnlyList<ViewPacket> UpdateBootstrapPackets(IReadOnlyList<ViewPacket> currentBootstrapPackets, ViewPacket packet)
     {
@@ -336,11 +350,11 @@ internal sealed class ViewPacketStreamWriter
 
     private static byte EncodePacketType(ViewPacketType packetType) => packetType switch
     {
-        ViewPacketType.Config => 1,
-        ViewPacketType.Frame => 2,
-        ViewPacketType.RotationReset => 3,
-        ViewPacketType.StreamEnd => 4,
-        ViewPacketType.ServerError => 5,
+        ViewPacketType.Config => ViewTransportConstants.ConfigPacketTypeId,
+        ViewPacketType.Frame => ViewTransportConstants.FramePacketTypeId,
+        ViewPacketType.RotationReset => ViewTransportConstants.RotationResetPacketTypeId,
+        ViewPacketType.StreamEnd => ViewTransportConstants.StreamEndPacketTypeId,
+        ViewPacketType.ServerError => ViewTransportConstants.ServerErrorPacketTypeId,
         _ => throw new InvalidOperationException($"Unsupported shared-stream packet type '{packetType}'.")
     };
 }

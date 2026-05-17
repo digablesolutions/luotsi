@@ -35,7 +35,7 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIo console,
         {
             WriteJsonLine(new
             {
-                type = "session_started",
+                type = SessionEventTypes.Inspect.SessionStarted,
                 session_id = sessionId,
                 started_at = _timeProvider.GetUtcNow()
             });
@@ -50,7 +50,7 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIo console,
                 {
                     WriteJsonLine(new
                     {
-                        type = "session_ended",
+                        type = SessionEventTypes.Inspect.SessionEnded,
                         session_id = sessionId,
                         ended_at = _timeProvider.GetUtcNow(),
                         reason = "stdin_closed"
@@ -72,7 +72,7 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIo console,
                 {
                     WriteJsonLine(new
                     {
-                        type = "protocol_error",
+                        type = SessionEventTypes.Inspect.ProtocolError,
                         session_id = sessionId,
                         received_at = _timeProvider.GetUtcNow(),
                         message = ex.Message,
@@ -85,7 +85,7 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIo console,
                 {
                     WriteJsonLine(new
                     {
-                        type = "protocol_error",
+                        type = SessionEventTypes.Inspect.ProtocolError,
                         session_id = sessionId,
                         received_at = _timeProvider.GetUtcNow(),
                         message = "Inspect command must include 'command'.",
@@ -99,7 +99,7 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIo console,
                 {
                     WriteJsonLine(new
                     {
-                        type = "session_ended",
+                        type = SessionEventTypes.Inspect.SessionEnded,
                         session_id = sessionId,
                         id = request.Id,
                         ended_at = _timeProvider.GetUtcNow(),
@@ -115,7 +115,7 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIo console,
                     var data = await ExecuteAsync(request, normalizedCommand).ConfigureAwait(false);
                     WriteJsonLine(new
                     {
-                        type = "command_result",
+                        type = SessionEventTypes.Inspect.CommandResult,
                         session_id = sessionId,
                         id = request.Id,
                         command = normalizedCommand,
@@ -137,7 +137,7 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIo console,
                     var category = ex is UsageException ? "usage_error" : ErrorInfo.Classify(ex.Message);
                     WriteJsonLine(new
                     {
-                        type = "command_result",
+                        type = SessionEventTypes.Inspect.CommandResult,
                         session_id = sessionId,
                         id = request.Id,
                         command = normalizedCommand,
@@ -153,7 +153,7 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIo console,
         {
             WriteJsonLine(new
             {
-                type = "session_error",
+                type = SessionEventTypes.Inspect.SessionError,
                 received_at = _timeProvider.GetUtcNow(),
                 error = ErrorInfo.From(ex, ErrorInfo.Classify(ex.Message))
             });
@@ -201,7 +201,7 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIo console,
     {
         WriteJsonLine(new
         {
-            type = delta is null ? "screen_snapshot" : "screen_delta",
+            type = delta is null ? SessionEventTypes.Inspect.ScreenSnapshot : SessionEventTypes.Inspect.ScreenDelta,
             session_id = sessionId,
             id = requestId,
             captured_at = state.CapturedAt,

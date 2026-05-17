@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "FFmpeg.AutoGen": {
+        "type": "Direct",
+        "requested": "[8.1.0, )",
+        "resolved": "8.1.0",
+        "contentHash": "j7YbmE4QGst6OPk0w1D/EMBv7Ig1CoCnAVtSEYh/88q9MAVEzhu3FjgVFGYqH83jhz2opvaqZe90qG73RLMBWQ=="
+      },
+      "Microsoft.NET.ILLink.Tasks": {
+        "type": "Direct",
+        "requested": "[10.0.8, )",
+        "resolved": "10.0.8",
+        "contentHash": "dVbSXGIFNR5nZcv2tOLoWI+a9T4jtFd77IYjuND+QVe360qWgAF7H0WtoopYhRw/+SgpGUTyrkrh+65+ClNnfw=="
+      },
+      "ppy.SDL3-CS": {
+        "type": "Direct",
+        "requested": "[2025.1115.0, )",
+        "resolved": "2025.1115.0",
+        "contentHash": "5C+eUXr82X8nlD8qNv/cHuusjutZW4wt6jKoYfMb1WNfMmdDuR48smWFmGn1s0jCgUThRmdfVpCH3AmMD/BdcQ=="
+      }
+    },
+    "net10.0/linux-x64": {
+      "ppy.SDL3-CS": {
+        "type": "Direct",
+        "requested": "[2025.1115.0, )",
+        "resolved": "2025.1115.0",
+        "contentHash": "5C+eUXr82X8nlD8qNv/cHuusjutZW4wt6jKoYfMb1WNfMmdDuR48smWFmGn1s0jCgUThRmdfVpCH3AmMD/BdcQ=="
+      }
+    },
+    "net10.0/osx-arm64": {
+      "ppy.SDL3-CS": {
+        "type": "Direct",
+        "requested": "[2025.1115.0, )",
+        "resolved": "2025.1115.0",
+        "contentHash": "5C+eUXr82X8nlD8qNv/cHuusjutZW4wt6jKoYfMb1WNfMmdDuR48smWFmGn1s0jCgUThRmdfVpCH3AmMD/BdcQ=="
+      }
+    },
+    "net10.0/osx-x64": {
+      "ppy.SDL3-CS": {
+        "type": "Direct",
+        "requested": "[2025.1115.0, )",
+        "resolved": "2025.1115.0",
+        "contentHash": "5C+eUXr82X8nlD8qNv/cHuusjutZW4wt6jKoYfMb1WNfMmdDuR48smWFmGn1s0jCgUThRmdfVpCH3AmMD/BdcQ=="
+      }
+    },
+    "net10.0/win-x64": {
+      "ppy.SDL3-CS": {
+        "type": "Direct",
+        "requested": "[2025.1115.0, )",
+        "resolved": "2025.1115.0",
+        "contentHash": "5C+eUXr82X8nlD8qNv/cHuusjutZW4wt6jKoYfMb1WNfMmdDuR48smWFmGn1s0jCgUThRmdfVpCH3AmMD/BdcQ=="
+      }
+    }
+  }
+}

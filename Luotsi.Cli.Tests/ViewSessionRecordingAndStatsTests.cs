@@ -48,15 +48,15 @@ public sealed partial class AppTests
         Assert.NotNull(recorderFactory.LastRecorder);
 
         using var started = JsonDocument.Parse(console.OutputLines[0]);
-        Assert.Equal("view_started", started.RootElement.GetProperty("type").GetString());
+        Assert.Equal(SessionEventTypes.View.Started, started.RootElement.GetProperty("type").GetString());
         Assert.Equal("capture.h264", started.RootElement.GetProperty("record_path").GetString());
 
         using var recordingStarted = JsonDocument.Parse(console.OutputLines[1]);
-        Assert.Equal("view_recording_started", recordingStarted.RootElement.GetProperty("type").GetString());
+        Assert.Equal(SessionEventTypes.View.RecordingStarted, recordingStarted.RootElement.GetProperty("type").GetString());
         Assert.Equal("capture.h264", recordingStarted.RootElement.GetProperty("record_path").GetString());
 
         using var ended = JsonDocument.Parse(console.OutputLines[2]);
-        Assert.Equal("view_ended", ended.RootElement.GetProperty("type").GetString());
+        Assert.Equal(SessionEventTypes.View.Ended, ended.RootElement.GetProperty("type").GetString());
         Assert.Equal("stream_ended", ended.RootElement.GetProperty("reason").GetString());
         Assert.True(recorderFactory.LastRecorder!.Disposed);
     }
@@ -90,15 +90,15 @@ public sealed partial class AppTests
         Assert.Equal(3, console.OutputLines.Count);
 
         using var started = JsonDocument.Parse(console.OutputLines[0]);
-        Assert.Equal("view_started", started.RootElement.GetProperty("type").GetString());
+        Assert.Equal(SessionEventTypes.View.Started, started.RootElement.GetProperty("type").GetString());
 
         using var stats = JsonDocument.Parse(console.OutputLines[1]);
-        Assert.Equal("view_stats", stats.RootElement.GetProperty("type").GetString());
+        Assert.Equal(SessionEventTypes.View.Stats, stats.RootElement.GetProperty("type").GetString());
         Assert.Equal(12, stats.RootElement.GetProperty("stats").GetProperty("decoded_frames").GetInt32());
         Assert.Equal(11, stats.RootElement.GetProperty("stats").GetProperty("presented_frames").GetInt32());
 
         using var ended = JsonDocument.Parse(console.OutputLines[2]);
-        Assert.Equal("view_ended", ended.RootElement.GetProperty("type").GetString());
+        Assert.Equal(SessionEventTypes.View.Ended, ended.RootElement.GetProperty("type").GetString());
         Assert.Equal("stream_ended", ended.RootElement.GetProperty("reason").GetString());
     }
 
@@ -131,19 +131,19 @@ public sealed partial class AppTests
         Assert.Equal(4, console.OutputLines.Count);
 
         using var started = JsonDocument.Parse(console.OutputLines[0]);
-        Assert.Equal("view_started", started.RootElement.GetProperty("type").GetString());
+        Assert.Equal(SessionEventTypes.View.Started, started.RootElement.GetProperty("type").GetString());
 
         using var firstStats = JsonDocument.Parse(console.OutputLines[1]);
-        Assert.Equal("view_stats", firstStats.RootElement.GetProperty("type").GetString());
+        Assert.Equal(SessionEventTypes.View.Stats, firstStats.RootElement.GetProperty("type").GetString());
         Assert.Equal(10, firstStats.RootElement.GetProperty("stats").GetProperty("decoded_frames").GetInt32());
 
         using var finalStats = JsonDocument.Parse(console.OutputLines[2]);
-        Assert.Equal("view_stats", finalStats.RootElement.GetProperty("type").GetString());
+        Assert.Equal(SessionEventTypes.View.Stats, finalStats.RootElement.GetProperty("type").GetString());
         Assert.Equal(12, finalStats.RootElement.GetProperty("stats").GetProperty("decoded_frames").GetInt32());
         Assert.Equal(11, finalStats.RootElement.GetProperty("stats").GetProperty("presented_frames").GetInt32());
 
         using var ended = JsonDocument.Parse(console.OutputLines[3]);
-        Assert.Equal("view_ended", ended.RootElement.GetProperty("type").GetString());
+        Assert.Equal(SessionEventTypes.View.Ended, ended.RootElement.GetProperty("type").GetString());
         Assert.Equal("stream_ended", ended.RootElement.GetProperty("reason").GetString());
     }
 
@@ -176,7 +176,7 @@ public sealed partial class AppTests
         Assert.Equal(5, console.OutputLines.Count);
 
         using var started = JsonDocument.Parse(console.OutputLines[0]);
-        Assert.Equal("view_started", started.RootElement.GetProperty("type").GetString());
+        Assert.Equal(SessionEventTypes.View.Started, started.RootElement.GetProperty("type").GetString());
         Assert.Equal(100, started.RootElement.GetProperty("stats_interval_ms").GetInt32());
 
         using var firstStats = JsonDocument.Parse(console.OutputLines[1]);
@@ -189,7 +189,7 @@ public sealed partial class AppTests
         Assert.Equal(12, thirdStats.RootElement.GetProperty("stats").GetProperty("decoded_frames").GetInt32());
 
         using var ended = JsonDocument.Parse(console.OutputLines[4]);
-        Assert.Equal("view_ended", ended.RootElement.GetProperty("type").GetString());
+        Assert.Equal(SessionEventTypes.View.Ended, ended.RootElement.GetProperty("type").GetString());
     }
 
 
@@ -223,7 +223,7 @@ public sealed partial class AppTests
         Assert.Equal(4, console.OutputLines.Count);
 
         using var started = JsonDocument.Parse(console.OutputLines[0]);
-        Assert.Equal("view_started", started.RootElement.GetProperty("type").GetString());
+        Assert.Equal(SessionEventTypes.View.Started, started.RootElement.GetProperty("type").GetString());
         Assert.Equal(250, started.RootElement.GetProperty("stats_interval_ms").GetInt32());
         Assert.Equal(100, started.RootElement.GetProperty("renderer_stats_interval_ms").GetInt32());
 
@@ -234,7 +234,7 @@ public sealed partial class AppTests
         Assert.Equal(12, finalStats.RootElement.GetProperty("stats").GetProperty("decoded_frames").GetInt32());
 
         using var ended = JsonDocument.Parse(console.OutputLines[3]);
-        Assert.Equal("view_ended", ended.RootElement.GetProperty("type").GetString());
+        Assert.Equal(SessionEventTypes.View.Ended, ended.RootElement.GetProperty("type").GetString());
 
         Assert.Equal([10, 11, 12], renderer.StatsUpdates.Select(static stats => stats.DecodedFrames).ToArray());
     }
@@ -270,11 +270,11 @@ public sealed partial class AppTests
         Assert.Equal(2, console.OutputLines.Count);
 
         using var started = JsonDocument.Parse(console.OutputLines[0]);
-        Assert.Equal("view_started", started.RootElement.GetProperty("type").GetString());
+        Assert.Equal(SessionEventTypes.View.Started, started.RootElement.GetProperty("type").GetString());
         Assert.Equal(0, started.RootElement.GetProperty("stats_interval_ms").GetInt32());
 
         using var ended = JsonDocument.Parse(console.OutputLines[1]);
-        Assert.Equal("view_ended", ended.RootElement.GetProperty("type").GetString());
+        Assert.Equal(SessionEventTypes.View.Ended, ended.RootElement.GetProperty("type").GetString());
         Assert.Equal("stream_ended", ended.RootElement.GetProperty("reason").GetString());
 
         Assert.Equal(new ViewStats(12, 11, 1, 59.9d, 58.7d, 84), renderer.LastStats);
@@ -314,8 +314,8 @@ public sealed partial class AppTests
         Assert.Equal(0, exitCode);
         Assert.NotNull(recorderFactory.LastRecorder);
         Assert.True(recorderFactory.LastRecorder!.Disposed);
-        Assert.Contains(console.OutputLines, line => line.Contains("view_recording_started", StringComparison.Ordinal));
-        Assert.Contains(console.OutputLines, line => line.Contains("view_recording_stopped", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, line => line.Contains(SessionEventTypes.View.RecordingStarted, StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, line => line.Contains(SessionEventTypes.View.RecordingStopped, StringComparison.Ordinal));
     }
 
 

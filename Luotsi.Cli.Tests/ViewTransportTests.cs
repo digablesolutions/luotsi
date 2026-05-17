@@ -686,6 +686,22 @@ public sealed class ViewTransportTests
         Assert.Equal("/sdcard/Pictures/capture.png", adbPath);
     }
 
+    [Fact]
+    public void Sdl3ViewWindowSurface_ResolveInitialWindowSize_FitsWithin_Usable_Display_Bounds()
+    {
+        var size = Sdl3ViewWindowSurface.ResolveInitialWindowSize(1920, 1080, 1920, 1040);
+
+        Assert.Equal((1664, 936), size);
+    }
+
+    [Fact]
+    public void Sdl3ViewWindowSurface_ResolveInitialWindowSize_Preserves_Size_When_Already_Fits()
+    {
+        var size = Sdl3ViewWindowSurface.ResolveInitialWindowSize(1280, 720, 2560, 1440);
+
+        Assert.Equal((1280, 720), size);
+    }
+
     private static async Task<List<ViewPacket>> ReadAllAsync(IAsyncEnumerable<ViewPacket> packets)
     {
         var result = new List<ViewPacket>();

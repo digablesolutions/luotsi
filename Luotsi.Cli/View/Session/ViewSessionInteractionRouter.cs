@@ -62,6 +62,27 @@ internal sealed class ViewSessionInteractionRouter(
 
     public void ResetReconnectSignal() => _reconnectRequested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
+    public bool RequestReconnect(string source, string? reason = null)
+    {
+        if (_reconnectRequested.Task.IsCompleted)
+        {
+            return false;
+        }
+
+        WriteEvent(new
+        {
+            type = SessionEventTypes.View.ReconnectRequested,
+            session_id = _sessionId,
+            occurred_at = _timeProvider.GetUtcNow(),
+            device = ActiveDeviceSelector,
+            source,
+            reason
+        });
+        _reconnectRequested.TrySetResult();
+        _iterationCancellation?.Cancel();
+        return true;
+    }
+
     public async Task StartInitialRecordingIfNeededAsync()
     {
         if (_initialRecordingStarted || string.IsNullOrWhiteSpace(_options.RecordPath))
@@ -74,7 +95,7 @@ internal sealed class ViewSessionInteractionRouter(
         await PublishChromeAsync().ConfigureAwait(false);
         WriteEvent(new
         {
-            type = "view_recording_started",
+            type = SessionEventTypes.View.RecordingStarted,
             session_id = _sessionId,
             occurred_at = _timeProvider.GetUtcNow(),
             record_path = _options.RecordPath,
@@ -94,7 +115,7 @@ internal sealed class ViewSessionInteractionRouter(
         await PublishChromeAsync().ConfigureAwait(false);
         WriteEvent(new
         {
-            type = "view_recording_stopped",
+            type = SessionEventTypes.View.RecordingStopped,
             session_id = _sessionId,
             occurred_at = _timeProvider.GetUtcNow(),
             record_path = recordPath,
@@ -157,7 +178,7 @@ internal sealed class ViewSessionInteractionRouter(
                 await _deviceHost.TypeTextAsync(clipboardPasteRequest.Text).ConfigureAwait(false);
                 WriteEvent(new
                 {
-                    type = "view_clipboard_pasted",
+                    type = SessionEventTypes.View.ClipboardPasted,
                     session_id = _sessionId,
                     occurred_at = _timeProvider.GetUtcNow(),
                     length = clipboardPasteRequest.Text.Length
@@ -189,7 +210,7 @@ internal sealed class ViewSessionInteractionRouter(
             case ViewInteractionFailedRequest failedRequest:
                 WriteEvent(new
                 {
-                    type = "view_interaction_failed",
+                    type = SessionEventTypes.View.InteractionFailed,
                     session_id = _sessionId,
                     occurred_at = _timeProvider.GetUtcNow(),
                     request_type = failedRequest.FailedRequestType,
@@ -217,7 +238,7 @@ internal sealed class ViewSessionInteractionRouter(
 
         WriteEvent(new
         {
-            type = "view_device_switch_requested",
+            type = SessionEventTypes.View.DeviceSwitchRequested,
             session_id = _sessionId,
             occurred_at = _timeProvider.GetUtcNow(),
             from_device = ActiveDeviceSelector,
@@ -245,7 +266,7 @@ internal sealed class ViewSessionInteractionRouter(
                 var result = await _deviceHost.TakeScreenshotAsync(label).ConfigureAwait(false);
                 WriteEvent(new
                 {
-                    type = "view_screenshot_captured",
+                    type = SessionEventTypes.View.ScreenshotCaptured,
                     session_id = _sessionId,
                     occurred_at = _timeProvider.GetUtcNow(),
                     label = result.Label,
@@ -264,15 +285,7 @@ internal sealed class ViewSessionInteractionRouter(
                 break;
 
             case ViewWindowCommand.Reconnect:
-                WriteEvent(new
-                {
-                    type = "view_reconnect_requested",
-                    session_id = _sessionId,
-                    occurred_at = _timeProvider.GetUtcNow(),
-                    device = ActiveDeviceSelector
-                });
-                _reconnectRequested.TrySetResult();
-                _iterationCancellation?.Cancel();
+                RequestReconnect("operator");
                 break;
 
             case ViewWindowCommand.Back:
@@ -291,7 +304,7 @@ internal sealed class ViewSessionInteractionRouter(
                 await _artifactFolderOpener.OpenAsync(_artifacts.Root).ConfigureAwait(false);
                 WriteEvent(new
                 {
-                    type = "view_artifacts_opened",
+                    type = SessionEventTypes.View.ArtifactsOpened,
                     session_id = _sessionId,
                     occurred_at = _timeProvider.GetUtcNow(),
                     artifact_root = _artifacts.Root
@@ -307,7 +320,7 @@ internal sealed class ViewSessionInteractionRouter(
                 _streamPauseUpdater?.Invoke(_streamPaused);
                 WriteEvent(new
                 {
-                    type = _streamPaused ? "view_stream_paused" : "view_stream_resumed",
+                    type = _streamPaused ? SessionEventTypes.View.StreamPaused : SessionEventTypes.View.StreamResumed,
                     session_id = _sessionId,
                     occurred_at = _timeProvider.GetUtcNow(),
                     device = ActiveDeviceSelector
@@ -328,7 +341,7 @@ internal sealed class ViewSessionInteractionRouter(
             await PublishChromeAsync().ConfigureAwait(false);
             WriteEvent(new
             {
-                type = "view_recording_stopped",
+                type = SessionEventTypes.View.RecordingStopped,
                 session_id = _sessionId,
                 occurred_at = _timeProvider.GetUtcNow(),
                 record_path = recordPath,
@@ -342,7 +355,7 @@ internal sealed class ViewSessionInteractionRouter(
         await PublishChromeAsync().ConfigureAwait(false);
         WriteEvent(new
         {
-            type = "view_recording_started",
+            type = SessionEventTypes.View.RecordingStarted,
             session_id = _sessionId,
             occurred_at = _timeProvider.GetUtcNow(),
             record_path = nextPath,
@@ -381,7 +394,7 @@ internal sealed class ViewSessionInteractionRouter(
             var installResult = await _deviceHost.InstallPackageAsync(filePath).ConfigureAwait(false);
             WriteEvent(new
             {
-                type = "view_package_installed",
+                type = SessionEventTypes.View.PackageInstalled,
                 session_id = _sessionId,
                 occurred_at = _timeProvider.GetUtcNow(),
                 package_path = installResult.PackagePath
@@ -392,7 +405,7 @@ internal sealed class ViewSessionInteractionRouter(
         var pushResult = await _deviceHost.PushFileAsync(filePath).ConfigureAwait(false);
         WriteEvent(new
         {
-            type = "view_file_pushed",
+            type = SessionEventTypes.View.FilePushed,
             session_id = _sessionId,
             occurred_at = _timeProvider.GetUtcNow(),
             local_path = pushResult.LocalPath,
@@ -405,7 +418,7 @@ internal sealed class ViewSessionInteractionRouter(
         var pullResult = await _deviceHost.PullFileAsync(request.RemotePath, request.LocalDirectory ?? _artifacts.Root).ConfigureAwait(false);
         WriteEvent(new
         {
-            type = "view_file_pulled",
+            type = SessionEventTypes.View.FilePulled,
             session_id = _sessionId,
             occurred_at = _timeProvider.GetUtcNow(),
             remote_path = pullResult.RemotePath,
@@ -423,7 +436,7 @@ internal sealed class ViewSessionInteractionRouter(
         await _deviceHost.KeyEventAsync(keyCode).ConfigureAwait(false);
         WriteEvent(new
         {
-            type = "view_key_command_sent",
+            type = SessionEventTypes.View.KeyCommandSent,
             session_id = _sessionId,
             occurred_at = _timeProvider.GetUtcNow(),
             command,
@@ -460,7 +473,7 @@ internal sealed class ViewSessionInteractionRouter(
 
             WriteEvent(new
             {
-                type = "view_device_shelf",
+                type = SessionEventTypes.View.DeviceShelf,
                 session_id = _sessionId,
                 observed_at = _timeProvider.GetUtcNow(),
                 active_device = ActiveDeviceSelector,
@@ -519,7 +532,7 @@ internal sealed class ViewSessionInteractionRouter(
 
         WriteEvent(new
         {
-            type = "view_input_blocked",
+            type = SessionEventTypes.View.InputBlocked,
             session_id = _sessionId,
             occurred_at = _timeProvider.GetUtcNow(),
             request_type = requestType,
@@ -537,7 +550,7 @@ internal sealed class ViewSessionInteractionRouter(
 
         WriteEvent(new
         {
-            type = "view_input_blocked",
+            type = SessionEventTypes.View.InputBlocked,
             session_id = _sessionId,
             occurred_at = _timeProvider.GetUtcNow(),
             request_type = requestType,

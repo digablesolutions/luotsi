@@ -278,24 +278,24 @@ public sealed partial class AppTests
         Assert.True(console.OutputLines.Count >= 5);
 
         using var sessionStarted = JsonDocument.Parse(console.OutputLines[0]);
-        Assert.Equal("session_started", sessionStarted.RootElement.GetProperty("type").GetString());
+        Assert.Equal(SessionEventTypes.Inspect.SessionStarted, sessionStarted.RootElement.GetProperty("type").GetString());
 
         using var initialSnapshot = JsonDocument.Parse(console.OutputLines[1]);
-        Assert.Equal("screen_snapshot", initialSnapshot.RootElement.GetProperty("type").GetString());
+        Assert.Equal(SessionEventTypes.Inspect.ScreenSnapshot, initialSnapshot.RootElement.GetProperty("type").GetString());
         Assert.Equal("Sign in", initialSnapshot.RootElement.GetProperty("state").GetProperty("elements")[0].GetProperty("text").GetString());
 
         using var commandResult = JsonDocument.Parse(console.OutputLines[2]);
-        Assert.Equal("command_result", commandResult.RootElement.GetProperty("type").GetString());
+        Assert.Equal(SessionEventTypes.Inspect.CommandResult, commandResult.RootElement.GetProperty("type").GetString());
         Assert.True(commandResult.RootElement.GetProperty("ok").GetBoolean());
         Assert.Equal("tap_text", commandResult.RootElement.GetProperty("command").GetString());
 
         using var delta = JsonDocument.Parse(console.OutputLines[3]);
-        Assert.Equal("screen_delta", delta.RootElement.GetProperty("type").GetString());
+        Assert.Equal(SessionEventTypes.Inspect.ScreenDelta, delta.RootElement.GetProperty("type").GetString());
         Assert.Equal("Welcome", delta.RootElement.GetProperty("state").GetProperty("elements")[0].GetProperty("text").GetString());
         Assert.Equal(1, delta.RootElement.GetProperty("delta").GetProperty("added_count").GetInt32());
 
         using var sessionEnded = JsonDocument.Parse(console.OutputLines[4]);
-        Assert.Equal("session_ended", sessionEnded.RootElement.GetProperty("type").GetString());
+        Assert.Equal(SessionEventTypes.Inspect.SessionEnded, sessionEnded.RootElement.GetProperty("type").GetString());
         Assert.Equal(["Sign in"], host.TapTextRequests);
     }
 

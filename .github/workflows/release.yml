@@ -1,0 +1,313 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag, for example v1.2.3"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  SOLUTION: Luotsi.sln
+  CLI_PROJECT: Luotsi.Cli/Luotsi.Cli.csproj
+  BUILD_CONFIGURATION: Release
+
+jobs:
+  validate-tag:
+    name: Validate release tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="${{ github.ref_name }}"
+          fi
+
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Release tags must look like v1.2.3 or v1.2.3-rc.1; got '$tag'."
+            exit 1
+          fi
+
+          version="${tag#v}"
+          prerelease=false
+          if [[ "$version" == *-* ]]; then
+            prerelease=true
+          fi
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
+      - name: Verify tag is on default branch
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        shell: bash
+        run: |
+          git fetch origin "+refs/heads/$DEFAULT_BRANCH:refs/remotes/origin/$DEFAULT_BRANCH"
+          tag_commit="$(git rev-list -n 1 "$TAG")"
+          if ! git merge-base --is-ancestor "$tag_commit" "origin/$DEFAULT_BRANCH"; then
+            echo "Tag $TAG points at $tag_commit, which is not reachable from origin/$DEFAULT_BRANCH."
+            exit 1
+          fi
+
+  validate:
+    name: Validate source
+    runs-on: windows-latest
+    needs: validate-tag
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate-tag.outputs.tag }}
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: |
+            **/*.csproj
+            **/packages.lock.json
+            global.json
+
+      - name: Restore
+        shell: pwsh
+        run: dotnet restore $env:SOLUTION --locked-mode /bl:artifacts/binlogs/release-restore.binlog
+
+      - name: Build
+        shell: pwsh
+        run: >
+          dotnet build $env:SOLUTION
+          --configuration $env:BUILD_CONFIGURATION
+          --no-restore
+          --warnaserror
+          /p:ContinuousIntegrationBuild=true
+          /p:Version=${{ needs.validate-tag.outputs.version }}
+          /bl:artifacts/binlogs/release-build.binlog
+
+      - name: Test
+        shell: pwsh
+        run: >
+          dotnet test $env:SOLUTION
+          --configuration $env:BUILD_CONFIGURATION
+          --no-build
+          --logger "trx;LogFilePrefix=release-tests"
+          --results-directory artifacts/test-results
+          --collect "XPlat Code Coverage"
+          --blame-hang
+          --blame-hang-timeout 2m
+
+      - name: Upload validation diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-validation-diagnostics
+          path: |
+            artifacts/binlogs
+            artifacts/test-results
+          if-no-files-found: ignore
+
+  package:
+    name: Package ${{ matrix.rid }}
+    runs-on: windows-latest
+    needs:
+      - validate-tag
+      - validate
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            archive_ext: zip
+          - rid: linux-x64
+            archive_ext: tar.gz
+          - rid: osx-x64
+            archive_ext: tar.gz
+          - rid: osx-arm64
+            archive_ext: tar.gz
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate-tag.outputs.tag }}
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: |
+            **/*.csproj
+            **/packages.lock.json
+            global.json
+
+      - name: Verify locked restore
+        shell: pwsh
+        run: dotnet restore $env:SOLUTION --locked-mode /bl:artifacts/binlogs/release-publish-restore-${{ matrix.rid }}.binlog
+
+      - name: Publish
+        shell: pwsh
+        run: >
+          dotnet publish $env:CLI_PROJECT
+          --configuration $env:BUILD_CONFIGURATION
+          -p:PublishRid=${{ matrix.rid }}
+          --no-restore
+          --output artifacts/publish/${{ matrix.rid }}
+          /p:ContinuousIntegrationBuild=true
+          /p:Version=${{ needs.validate-tag.outputs.version }}
+          /bl:artifacts/binlogs/release-publish-${{ matrix.rid }}.binlog
+
+      - name: Smoke published binary
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: artifacts/publish/win-x64/Luotsi.Cli.exe --help
+
+      - name: Archive package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts/packages | Out-Null
+          $rid = '${{ matrix.rid }}'
+          $version = '${{ needs.validate-tag.outputs.version }}'
+          $source = "artifacts/publish/$rid"
+          $baseName = "luotsi-cli-$version-$rid"
+
+          if ('${{ matrix.archive_ext }}' -eq 'zip') {
+            $archive = "artifacts/packages/$baseName.zip"
+            Compress-Archive -Path "$source/*" -DestinationPath $archive -Force
+          } else {
+            $archive = "artifacts/packages/$baseName.tar.gz"
+            tar -czf $archive -C $source .
+          }
+
+          $hash = Get-FileHash $archive -Algorithm SHA256
+          "$($hash.Hash.ToLowerInvariant())  $(Split-Path $archive -Leaf)" | Set-Content "$archive.sha256" -Encoding ascii
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-package-${{ matrix.rid }}
+          path: |
+            artifacts/packages/*
+          if-no-files-found: error
+
+      - name: Upload publish binlog
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-publish-binlog-${{ matrix.rid }}
+          path: |
+            artifacts/binlogs/release-publish-restore-${{ matrix.rid }}.binlog
+            artifacts/binlogs/release-publish-${{ matrix.rid }}.binlog
+          if-no-files-found: ignore
+
+  github-release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    needs:
+      - validate-tag
+      - validate
+      - package
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate-tag.outputs.tag }}
+
+      - name: Download release packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-package-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Build checksum manifest
+        shell: bash
+        run: |
+          cd release-assets
+          find . -maxdepth 1 -type f \( -name "*.zip" -o -name "*.tar.gz" \) -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Attest release assets
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            release-assets/*.zip
+            release-assets/*.tar.gz
+            release-assets/SHA256SUMS
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.validate-tag.outputs.tag }}
+          VERSION: ${{ needs.validate-tag.outputs.version }}
+          PRERELEASE: ${{ needs.validate-tag.outputs.prerelease }}
+        shell: bash
+        run: |
+          args=(
+            "$TAG"
+            release-assets/luotsi-cli-*
+            release-assets/SHA256SUMS
+            --title "Luotsi $VERSION"
+            --verify-tag
+            --generate-notes
+          )
+
+          if [[ "$PRERELEASE" == "true" ]]; then
+            args+=(--prerelease)
+          else
+            args+=(--latest)
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release-assets/luotsi-cli-* release-assets/SHA256SUMS --clobber
+          else
+            gh release create "${args[@]}"
+          fi
+
+      - name: Summarize release
+        shell: bash
+        run: |
+          {
+            echo "## Release ${{ needs.validate-tag.outputs.tag }}"
+            echo
+            echo "Published assets:"
+            find release-assets -maxdepth 1 -type f -printf "- \`%f\`\n" | sort
+          } >> "$GITHUB_STEP_SUMMARY"

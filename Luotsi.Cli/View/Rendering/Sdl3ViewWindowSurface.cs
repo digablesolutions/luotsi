@@ -29,6 +29,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
     private readonly object _frameLock = new();
     private readonly object _statsLock = new();
     private readonly object _chromeLock = new();
+    private readonly IViewWindowIconProvider _iconProvider;
 
     private Thread? _windowThread;
     private string _title = "Luotsi View";
@@ -55,6 +56,16 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
     private unsafe SDL_Texture* _texture;
     private int _textureWidth;
     private int _textureHeight;
+
+    public Sdl3ViewWindowSurface()
+        : this(new LuotsiWindowIconProvider())
+    {
+    }
+
+    internal Sdl3ViewWindowSurface(IViewWindowIconProvider iconProvider)
+    {
+        _iconProvider = iconProvider ?? throw new ArgumentNullException(nameof(iconProvider));
+    }
 
     public async Task InitializeAsync(
         string title,
@@ -177,13 +188,20 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
                 throw new InvalidOperationException($"Failed to initialize SDL3 video subsystem: {SDL_GetError()}");
             }
 
+            var hasUsableBounds = NativeSdlWindow.TryGetPrimaryDisplayUsableBounds(out var usableWidth, out var usableHeight);
+            var (windowWidth, windowHeight) = ResolveInitialWindowSize(
+                displayInfo.Width,
+                displayInfo.Height,
+                hasUsableBounds ? usableWidth : 0,
+                hasUsableBounds ? usableHeight : 0);
+
             var titleBytes = Encoding.UTF8.GetBytes(_title + '\0');
             fixed (byte* title = titleBytes)
             {
                 _window = SDL_CreateWindow(
                     title,
-                    Math.Max(displayInfo.Width, 320),
-                    Math.Max(displayInfo.Height, 240),
+                    windowWidth,
+                    windowHeight,
                     SDL_WindowFlags.SDL_WINDOW_RESIZABLE | SDL_WindowFlags.SDL_WINDOW_HIGH_PIXEL_DENSITY);
             }
 
@@ -191,6 +209,8 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
             {
                 throw new InvalidOperationException($"Failed to create SDL3 view window: {SDL_GetError()}");
             }
+
+            TryApplyWindowIcon();
 
             if (_windowOptions.AlwaysOnTop && !NativeSdlWindow.SetAlwaysOnTop(_window, true))
             {
@@ -643,6 +663,19 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
             return false;
         }
 
+        if (_isFullscreen && keyboardEvent.key == SDL_Keycode.SDLK_ESCAPE)
+        {
+            ToggleFullscreen();
+            return true;
+        }
+
+        if (IsAltPressed(keyboardEvent.mod) &&
+            (keyboardEvent.key == SDL_Keycode.SDLK_RETURN || keyboardEvent.key == SDL_Keycode.SDLK_RETURN2))
+        {
+            ToggleFullscreen();
+            return true;
+        }
+
         if (IsCtrlPressed(keyboardEvent.mod) && keyboardEvent.key == SDL_Keycode.SDLK_V)
         {
             HandleClipboardPaste();
@@ -835,6 +868,30 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
     }
 
     private static bool IsCtrlPressed(SDL_Keymod modifiers) => (modifiers & SDL_Keymod.SDL_KMOD_CTRL) != 0;
+
+    private static bool IsAltPressed(SDL_Keymod modifiers) => (modifiers & SDL_Keymod.SDL_KMOD_ALT) != 0;
+
+    internal static (int Width, int Height) ResolveInitialWindowSize(int contentWidth, int contentHeight, int usableWidth = 0, int usableHeight = 0)
+    {
+        var width = Math.Max(contentWidth, 320);
+        var height = Math.Max(contentHeight, 240);
+        if (usableWidth <= 0 || usableHeight <= 0)
+        {
+            return (width, height);
+        }
+
+        var maxWidth = Math.Max(320, (int)Math.Floor(usableWidth * 0.9d));
+        var maxHeight = Math.Max(240, (int)Math.Floor(usableHeight * 0.9d));
+        if (width <= maxWidth && height <= maxHeight)
+        {
+            return (width, height);
+        }
+
+        var scale = Math.Min((double)maxWidth / width, (double)maxHeight / height);
+        return (
+            Math.Max(320, (int)Math.Floor(width * scale)),
+            Math.Max(240, (int)Math.Floor(height * scale)));
+    }
 
     private unsafe void ToggleFullscreen()
     {
@@ -1389,6 +1446,44 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         _textureHeight = 0;
     }
 
+    private unsafe void TryApplyWindowIcon()
+    {
+        if (_window is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var icon = _iconProvider.GetDefaultIcon();
+            if (icon is null)
+            {
+                return;
+            }
+
+            fixed (byte* pixels = icon.ArgbPixels)
+            {
+                var surface = NativeSdlWindow.CreateArgbSurface(icon.Width, icon.Height, pixels, icon.Pitch);
+                if (surface is null)
+                {
+                    return;
+                }
+
+                try
+                {
+                    NativeSdlWindow.SetWindowIcon(_window, surface);
+                }
+                finally
+                {
+                    NativeSdlWindow.DestroySurface(surface);
+                }
+            }
+        }
+        catch
+        {
+        }
+    }
+
     private sealed record ViewFrameSnapshot(int Width, int Height, int RowStride, byte[] PixelData)
     {
         public static ViewFrameSnapshot From(ViewFrame frame)
@@ -1424,7 +1519,58 @@ internal static unsafe class NativeSdlWindow
     public static bool SetAlwaysOnTop(SDL_Window* window, bool alwaysOnTop) =>
         SDL_SetWindowAlwaysOnTop(window, alwaysOnTop);
 
+    public static bool TryGetPrimaryDisplayUsableBounds(out int width, out int height)
+    {
+        width = 0;
+        height = 0;
+
+        var displayId = SDL_GetPrimaryDisplay();
+        if (displayId == 0)
+        {
+            return false;
+        }
+
+        if (!SDL_GetDisplayUsableBounds(displayId, out var rect) || rect.w <= 0 || rect.h <= 0)
+        {
+            return false;
+        }
+
+        width = rect.w;
+        height = rect.h;
+        return true;
+    }
+
+    public static SDL_Surface* CreateArgbSurface(int width, int height, byte* pixels, int pitch) =>
+        SDL_CreateSurfaceFrom(width, height, SDL_PixelFormat.SDL_PIXELFORMAT_ARGB8888, pixels, pitch);
+
+    public static void SetWindowIcon(SDL_Window* window, SDL_Surface* icon) =>
+        SDL_SetWindowIcon(window, icon);
+
+    public static void DestroySurface(SDL_Surface* surface) =>
+        SDL_DestroySurface(surface);
+
     [DllImport("SDL3", CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     private static extern bool SDL_SetWindowAlwaysOnTop(SDL_Window* window, [MarshalAs(UnmanagedType.I1)] bool onTop);
+
+    [DllImport("SDL3", CallingConvention = CallingConvention.Cdecl)]
+    private static extern uint SDL_GetPrimaryDisplay();
+
+    [DllImport("SDL3", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    private static extern bool SDL_GetDisplayUsableBounds(uint displayId, out SDL_Rect rect);
+
+    [DllImport("SDL3", CallingConvention = CallingConvention.Cdecl)]
+    private static extern SDL_Surface* SDL_CreateSurfaceFrom(
+        int width,
+        int height,
+        SDL_PixelFormat format,
+        void* pixels,
+        int pitch);
+
+    [DllImport("SDL3", CallingConvention = CallingConvention.Cdecl)]
+    private static extern void SDL_SetWindowIcon(SDL_Window* window, SDL_Surface* icon);
+
+    [DllImport("SDL3", CallingConvention = CallingConvention.Cdecl)]
+    private static extern void SDL_DestroySurface(SDL_Surface* surface);
 }

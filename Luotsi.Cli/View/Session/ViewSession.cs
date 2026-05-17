@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Runtime.CompilerServices;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Hosts.Android;
@@ -110,7 +111,8 @@ public sealed class ViewSession(
     IViewPacketStreamReader packetStreamReader,
     IViewRendererFactory? viewRendererFactory = null,
     IViewRecorderFactory? viewRecorderFactory = null,
-    IArtifactFolderOpener? artifactFolderOpener = null) : IViewSession
+    IArtifactFolderOpener? artifactFolderOpener = null,
+    TimeSpan? autoReconnectAfter = null) : IViewSession
 {
     private static readonly JsonSerializerOptions OutputJsonOptions = new()
     {
@@ -121,6 +123,7 @@ public sealed class ViewSession(
 
     private const int InitialStreamAttempts = 20;
     private static readonly TimeSpan InitialStreamRetryDelay = TimeSpan.FromMilliseconds(100);
+    private static readonly TimeSpan DefaultAutoReconnectAfter = TimeSpan.FromSeconds(170);
     private readonly IDeviceHost _deviceHost = deviceHost ?? throw new ArgumentNullException(nameof(deviceHost));
     private readonly ArtifactSession _artifacts = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
     private readonly IConsoleIo _console = console ?? throw new ArgumentNullException(nameof(console));
@@ -131,6 +134,7 @@ public sealed class ViewSession(
     private readonly IViewPacketStreamReader _packetStreamReader = packetStreamReader ?? throw new ArgumentNullException(nameof(packetStreamReader));
     private readonly IViewRendererFactory _viewRendererFactory = viewRendererFactory ?? new NullViewRendererFactory();
     private readonly IViewRecorderFactory _viewRecorderFactory = viewRecorderFactory ?? new NullViewRecorderFactory();
+    private readonly TimeSpan _autoReconnectAfter = autoReconnectAfter ?? DefaultAutoReconnectAfter;
     private readonly object _writeGate = new();
 
     /// <inheritdoc />
@@ -171,7 +175,7 @@ public sealed class ViewSession(
                 {
                     WriteJsonLine(new
                     {
-                        type = "view_stats",
+                        type = SessionEventTypes.View.Stats,
                         session_id = sessionId,
                         observed_at = _timeProvider.GetUtcNow(),
                         stats
@@ -222,7 +226,9 @@ public sealed class ViewSession(
                                 _ = interactionRouter.UpdateShareStateAsync(shareServer.BoundEndpoint, observerEvent.ObserverCount);
                                 WriteJsonLine(new
                                 {
-                                    type = observerEvent.EventType == "connected" ? "view_share_client_connected" : "view_share_client_disconnected",
+                                    type = observerEvent.Kind == ViewShareObserverEventKind.Connected
+                                        ? SessionEventTypes.View.ShareClientConnected
+                                        : SessionEventTypes.View.ShareClientDisconnected,
                                     session_id = sessionId,
                                     occurred_at = _timeProvider.GetUtcNow(),
                                     endpoint = shareServer.BoundEndpoint,
@@ -240,7 +246,7 @@ public sealed class ViewSession(
                         {
                             WriteJsonLine(new
                             {
-                                type = "view_share_started",
+                                type = SessionEventTypes.View.ShareStarted,
                                 session_id = sessionId,
                                 occurred_at = _timeProvider.GetUtcNow(),
                                 endpoint = shareEndpoint,
@@ -257,7 +263,7 @@ public sealed class ViewSession(
                     {
                         WriteJsonLine(new
                         {
-                            type = "view_started",
+                            type = SessionEventTypes.View.Started,
                             session_id = sessionId,
                             started_at = _timeProvider.GetUtcNow(),
                             device = activeDeviceSelector,
@@ -286,7 +292,7 @@ public sealed class ViewSession(
                     {
                         WriteJsonLine(new
                         {
-                            type = "view_reconnected",
+                            type = SessionEventTypes.View.Reconnected,
                             session_id = sessionId,
                             reconnected_at = _timeProvider.GetUtcNow(),
                             device = activeDeviceSelector,
@@ -295,7 +301,11 @@ public sealed class ViewSession(
                         await interactionRouter.EmitDeviceShelfSnapshotIfNeededAsync().ConfigureAwait(false);
                     }
 
-                    var sourcePackets = _packetStreamReader.ReadPacketsAsync(streamConnection.Stream, sessionCancellation.Token);
+                    var sourcePackets = GuardReconnectBudgetAsync(
+                        _packetStreamReader.ReadPacketsAsync(streamConnection.Stream, sessionCancellation.Token),
+                        interactionRouter,
+                        usesSharedTransport ? null : _timeProvider.GetUtcNow().Add(_autoReconnectAfter),
+                        sessionCancellation.Token);
                     var sharedPackets = shareServer is null
                         ? sourcePackets
                         : RelayPacketsAsync(sourcePackets, shareServer, sessionCancellation.Token);
@@ -368,7 +378,7 @@ public sealed class ViewSession(
 
                 WriteJsonLine(new
                 {
-                    type = "view_ended",
+                    type = SessionEventTypes.View.Ended,
                     session_id = sessionId,
                     ended_at = _timeProvider.GetUtcNow(),
                     reason = endReason
@@ -388,7 +398,7 @@ public sealed class ViewSession(
         {
             WriteJsonLine(new
             {
-                type = "view_error",
+                type = SessionEventTypes.View.Error,
                 session_id = sessionId,
                 occurred_at = _timeProvider.GetUtcNow(),
                 error = ErrorInfo.From(ex, ex is UsageException ? "usage_error" : ErrorInfo.Classify(ex.Message))
@@ -396,7 +406,7 @@ public sealed class ViewSession(
 
             WriteJsonLine(new
             {
-                type = "view_ended",
+                type = SessionEventTypes.View.Ended,
                 session_id = sessionId,
                 ended_at = _timeProvider.GetUtcNow(),
                 reason = "error"
@@ -425,6 +435,28 @@ public sealed class ViewSession(
         lock (_writeGate)
         {
             _console.WriteLine(JsonSerializer.Serialize(value, OutputJsonOptions));
+        }
+    }
+
+    private async IAsyncEnumerable<ViewPacket> GuardReconnectBudgetAsync(
+        IAsyncEnumerable<ViewPacket> sourcePackets,
+        ViewSessionInteractionRouter interactionRouter,
+        DateTimeOffset? reconnectAt,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var reconnectRequested = false;
+
+        await foreach (var packet in sourcePackets.WithCancellation(cancellationToken).ConfigureAwait(false))
+        {
+            if (!reconnectRequested &&
+                reconnectAt.HasValue &&
+                packet.PacketType != ViewPacketType.StreamEnd &&
+                _timeProvider.GetUtcNow() >= reconnectAt.Value)
+            {
+                reconnectRequested = interactionRouter.RequestReconnect("stream_duration_guard", "screenrecord_time_limit");
+            }
+
+            yield return packet;
         }
     }
 

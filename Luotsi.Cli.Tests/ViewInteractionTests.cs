@@ -176,7 +176,7 @@ public sealed partial class AppTests
         var exitCode = await session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", false, null, 1600, 60, "8M", false, false));
 
         Assert.Equal(0, exitCode);
-        Assert.Contains(console.OutputLines, line => line.Contains("view_device_shelf", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, line => line.Contains(SessionEventTypes.View.DeviceShelf, StringComparison.Ordinal));
     }
 
 
@@ -213,8 +213,50 @@ public sealed partial class AppTests
 
         Assert.Equal(0, exitCode);
         Assert.True(bootstrap.StartCallCount >= 2);
-        Assert.Contains(console.OutputLines, line => line.Contains("view_reconnect_requested", StringComparison.Ordinal));
-        Assert.Contains(console.OutputLines, line => line.Contains("view_reconnected", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, line => line.Contains(SessionEventTypes.View.ReconnectRequested, StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, line => line.Contains(SessionEventTypes.View.Reconnected, StringComparison.Ordinal));
+    }
+
+
+
+    [Fact]
+    public async Task RunAsync_View_AutoReconnects_Before_Stream_Duration_Limit()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var bootstrap = new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward"));
+        var session = new ViewSession(
+            host,
+            ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
+            console,
+            timeProvider,
+            bootstrap,
+            new FakeViewBackendFactory(new TimeAdvancingViewBackend(timeProvider, TimeSpan.FromSeconds(3))),
+            new FakeViewStreamConnector(
+                new ViewPacketStreamHarness()
+                    .WriteHeader("h264", 1080, 1920)
+                    .WritePacket(ViewPacketType.Config, 1, 0, false, [0x01, 0x02])
+                    .WritePacket(ViewPacketType.Frame, 2, 33_000, false, [0x03, 0x04])
+                    .WritePacket(ViewPacketType.StreamEnd, 3, 66_000, false, [])
+                    .Build(),
+                new ViewPacketStreamHarness()
+                    .WriteHeader("h264", 1080, 1920)
+                    .WritePacket(ViewPacketType.StreamEnd, 1, 0, false, [])
+                    .Build()),
+            new ViewPacketStreamReader(),
+            autoReconnectAfter: TimeSpan.FromSeconds(2));
+
+        var exitCode = await session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", true, null, 1600, 60, "8M", false, false));
+
+        Assert.Equal(0, exitCode);
+        Assert.True(bootstrap.StartCallCount >= 2);
+        var reconnectRequestedLine = Assert.Single(console.OutputLines, line => line.Contains(SessionEventTypes.View.ReconnectRequested, StringComparison.Ordinal));
+        using var reconnectRequested = JsonDocument.Parse(reconnectRequestedLine);
+        Assert.Equal("stream_duration_guard", reconnectRequested.RootElement.GetProperty("source").GetString());
+        Assert.Equal("screenrecord_time_limit", reconnectRequested.RootElement.GetProperty("reason").GetString());
+        Assert.Contains(console.OutputLines, line => line.Contains(SessionEventTypes.View.Reconnected, StringComparison.Ordinal));
     }
 
 
@@ -255,8 +297,8 @@ public sealed partial class AppTests
 
         Assert.Equal(0, exitCode);
         Assert.Equal(["device-a", "device-b"], bootstrap.StartRequests.Select(request => request.DeviceSelector).ToArray());
-        Assert.Contains(console.OutputLines, line => line.Contains("view_device_switch_requested", StringComparison.Ordinal));
-        Assert.Equal(2, console.OutputLines.Count(line => line.Contains("view_device_shelf", StringComparison.Ordinal)));
+        Assert.Contains(console.OutputLines, line => line.Contains(SessionEventTypes.View.DeviceSwitchRequested, StringComparison.Ordinal));
+        Assert.Equal(2, console.OutputLines.Count(line => line.Contains(SessionEventTypes.View.DeviceShelf, StringComparison.Ordinal)));
     }
 
 

@@ -45,7 +45,7 @@ public sealed partial class AppTests
         Assert.Equal(2, console.OutputLines.Count);
 
         using var started = JsonDocument.Parse(console.OutputLines[0]);
-        Assert.Equal("view_started", started.RootElement.GetProperty("type").GetString());
+        Assert.Equal(SessionEventTypes.View.Started, started.RootElement.GetProperty("type").GetString());
         Assert.Equal("192.168.0.134:5555", started.RootElement.GetProperty("device").GetString());
         Assert.Equal("ffmpeg", started.RootElement.GetProperty("decoder").GetString());
         Assert.Equal("h264", started.RootElement.GetProperty("connection").GetProperty("codec").GetString());
@@ -54,7 +54,7 @@ public sealed partial class AppTests
         Assert.True(started.RootElement.GetProperty("overlay_screen_state").GetBoolean());
 
         using var ended = JsonDocument.Parse(console.OutputLines[1]);
-        Assert.Equal("view_ended", ended.RootElement.GetProperty("type").GetString());
+        Assert.Equal(SessionEventTypes.View.Ended, ended.RootElement.GetProperty("type").GetString());
         Assert.Equal("stream_ended", ended.RootElement.GetProperty("reason").GetString());
         Assert.Equal(2, backend.Packets.Count);
     }
@@ -132,7 +132,7 @@ public sealed partial class AppTests
 
         Assert.Equal(0, exitCode);
         Assert.Equal(2, streamConnector.ConnectCallCount);
-        Assert.Contains(console.OutputLines, line => line.Contains("view_started", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, line => line.Contains(SessionEventTypes.View.Started, StringComparison.Ordinal));
     }
 
 
@@ -165,7 +165,7 @@ public sealed partial class AppTests
 
         Assert.Equal(0, exitCode);
         using var ended = JsonDocument.Parse(console.OutputLines[^1]);
-        Assert.Equal("view_ended", ended.RootElement.GetProperty("type").GetString());
+        Assert.Equal(SessionEventTypes.View.Ended, ended.RootElement.GetProperty("type").GetString());
         Assert.Equal("window_closed", ended.RootElement.GetProperty("reason").GetString());
     }
 

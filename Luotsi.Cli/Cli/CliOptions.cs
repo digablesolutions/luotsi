@@ -16,6 +16,7 @@ public sealed class CliOptions
         "screen-state",
         "inspect",
         "view",
+        "reconnect",
         "view-doctor",
         "profile-list",
         "profile-delete",

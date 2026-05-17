@@ -732,6 +732,36 @@ internal sealed class BlockingViewBackend : IViewBackend
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
+internal sealed class TimeAdvancingViewBackend(ManualTimeProvider timeProvider, TimeSpan advanceAfterFirstPacket) : IViewBackend
+{
+    private readonly ManualTimeProvider _timeProvider = timeProvider;
+    private readonly TimeSpan _advanceAfterFirstPacket = advanceAfterFirstPacket;
+    private int _packetCount;
+
+    public string Name => "time-advancing";
+
+    public Task InitializeAsync(ViewConnectionInfo connectionInfo, IViewRenderer? renderer, IViewRecorder? recorder, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    public async Task RunAsync(IAsyncEnumerable<ViewPacket> packets, CancellationToken cancellationToken = default)
+    {
+        await foreach (var packet in packets.WithCancellation(cancellationToken))
+        {
+            if (packet.PacketType == ViewPacketType.StreamEnd)
+            {
+                return;
+            }
+
+            _packetCount++;
+            if (_packetCount == 1)
+            {
+                _timeProvider.Advance(_advanceAfterFirstPacket);
+            }
+        }
+    }
+
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
 internal sealed class ClosingViewRenderer : IViewRenderer
 {
     private readonly TaskCompletionSource _closedSource = new(TaskCreationOptions.RunContinuationsAsynchronously);

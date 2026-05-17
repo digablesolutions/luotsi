@@ -126,11 +126,11 @@ public sealed class ViewPacketStreamReader : IViewPacketStreamReader
 
     private static ViewPacketType DecodePacketType(byte value) => value switch
     {
-        1 => ViewPacketType.Config,
-        2 => ViewPacketType.Frame,
-        3 => ViewPacketType.RotationReset,
-        4 => ViewPacketType.StreamEnd,
-        5 => ViewPacketType.ServerError,
+        ViewTransportConstants.ConfigPacketTypeId => ViewPacketType.Config,
+        ViewTransportConstants.FramePacketTypeId => ViewPacketType.Frame,
+        ViewTransportConstants.RotationResetPacketTypeId => ViewPacketType.RotationReset,
+        ViewTransportConstants.StreamEndPacketTypeId => ViewPacketType.StreamEnd,
+        ViewTransportConstants.ServerErrorPacketTypeId => ViewPacketType.ServerError,
         _ => throw new InvalidOperationException($"Unsupported view packet type '{value}'.")
     };
 }
