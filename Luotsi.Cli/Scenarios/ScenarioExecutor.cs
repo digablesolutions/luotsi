@@ -89,8 +89,6 @@ public sealed class ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem
     private readonly IScenarioActionHost _actionHost = actionHost ?? throw new ArgumentNullException(nameof(actionHost));
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
-    private readonly IDelay _delay = delay ?? throw new ArgumentNullException(nameof(delay));
-    private readonly IEnvironmentVariables _environment = environment ?? new SystemEnvironmentVariables();
     private readonly ScenarioActionDispatcher _actionDispatcher = new(
         actionHost ?? throw new ArgumentNullException(nameof(actionHost)),
         delay ?? throw new ArgumentNullException(nameof(delay)));
