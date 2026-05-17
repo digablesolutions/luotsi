@@ -1,6 +1,4 @@
-using System.Threading;
-
-namespace Luotsi.Cli.Infrastructure;
+namespace Luotsi.Cli.Infrastructure.Time;
 
 /// <summary>
 /// Tracks delay usage within the current async flow for step-level timing attribution.

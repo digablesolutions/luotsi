@@ -1,5 +1,5 @@
 using System.Text;
-using Luotsi.Cli.View;
+using Luotsi.Cli.View.Rendering;
 using Xunit;
 
 namespace Luotsi.Cli.Tests;

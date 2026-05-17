@@ -1,15 +1,12 @@
 using System.Text.Json;
-using Luotsi.Cli;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Hosts.Android;
-using Luotsi.Cli.Hosts.Android.View;
-using Luotsi.Cli.Infrastructure;
+using Luotsi.Cli.Infrastructure.Processes;
+using Luotsi.Cli.Infrastructure.Serialization;
 using Luotsi.Cli.Models;
 using Luotsi.Cli.Scenarios;
-using Luotsi.Cli.Telemetry;
-using Luotsi.Cli.View;
 using Xunit;
 
 namespace Luotsi.Cli.Tests;
@@ -356,7 +353,7 @@ public sealed partial class AppTests
             var scenario = JsonSerializer.Deserialize<ScenarioFile>(text, AppJson.Options);
 
             Assert.NotNull(scenario);
-            Assert.False(string.IsNullOrWhiteSpace(scenario!.Name));
+            Assert.False(string.IsNullOrWhiteSpace(scenario.Name));
             Assert.NotEmpty(scenario.Steps);
         }
     }

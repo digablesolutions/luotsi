@@ -1,11 +1,13 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Xml;
 using System.Xml.Linq;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Errors;
-using Luotsi.Cli.Infrastructure;
+using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.Infrastructure.Ids;
+using Luotsi.Cli.Infrastructure.System;
+using Luotsi.Cli.Infrastructure.Time;
 using Luotsi.Cli.Models;
 using Luotsi.Cli.Telemetry;
 
@@ -22,7 +24,7 @@ public sealed class DeviceRunner(
     IFileSystem? fileSystem = null,
     IUniqueIdGenerator? idGenerator = null,
     IEnvironmentVariables? environment = null,
-    ITelemetryParser? telemetryParser = null) : IDeviceHost, IWirelessDebugHost
+    ITelemetryParser? telemetryParser = null) : IDeviceHost, IAdbCommandHost, IWirelessDebugHost
 {
     private static readonly (string Key, string Command)[] DeviceFingerprintReads =
     [
@@ -80,6 +82,80 @@ public sealed class DeviceRunner(
         return new DeviceListResult(devices);
     }
 
+    public Task<AdbDiagnosticResult> GetAdbServerStatusAsync() =>
+        RunAdbDiagnosticAsync("server-status", ["server-status"]);
+
+    public Task<AdbDiagnosticResult> GetAdbVersionAsync() =>
+        RunAdbDiagnosticAsync("version", ["version"]);
+
+    public Task<AdbDiagnosticResult> GetAdbFeaturesAsync() =>
+        RunAdbDiagnosticAsync("features", ["features"]);
+
+    public Task<AdbDiagnosticResult> CheckAdbMdnsAsync() =>
+        RunAdbDiagnosticAsync("mdns check", ["mdns", "check"]);
+
+    public Task<AdbDiagnosticResult> ReconnectAdbAsync(string target)
+    {
+        var reconnectTarget = string.IsNullOrWhiteSpace(target) ? "offline" : target.Trim();
+        return RunAdbDiagnosticAsync($"reconnect {reconnectTarget}", ["reconnect", reconnectTarget]);
+    }
+
+    public async Task<AdbReadinessResult> WaitForDeviceAsync(int timeoutSec)
+    {
+        var validatedTimeoutSec = RequirePositive(timeoutSec, "wait-for-device requires timeoutSec greater than zero.");
+        using var timeoutSource = new CancellationTokenSource(TimeSpan.FromSeconds(validatedTimeoutSec));
+
+        try
+        {
+            var wait = await _adb.RunAsync(["wait-for-device"], timeoutSource.Token).ConfigureAwait(false);
+            wait.EnsureSuccess("adb wait-for-device failed");
+
+            var ping = await _adb.ShellAsync("echo ping", timeoutSource.Token).ConfigureAwait(false);
+            ping.EnsureSuccess("adb readiness ping failed");
+            var pingOutput = ping.Stdout.Trim();
+            if (!string.Equals(pingOutput, "ping", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException($"adb readiness ping returned '{pingOutput}'.");
+            }
+
+            string? serial = wait.Serial;
+            if (string.IsNullOrWhiteSpace(serial))
+            {
+                var serialProbe = await _adb.ShellAsync("getprop ro.serialno", timeoutSource.Token).ConfigureAwait(false);
+                serialProbe.EnsureSuccess("adb readiness serial probe failed");
+                serial = serialProbe.Stdout.Trim();
+            }
+
+            serial = string.IsNullOrWhiteSpace(serial) ? null : serial;
+
+            return new AdbReadinessResult(
+                ResultSchemas.AdbReadiness,
+                true,
+                serial,
+                serial is not null || ping.ExitCode == 0,
+                ping.ExitCode == 0,
+                validatedTimeoutSec,
+                ToAdbCommandOutput(wait),
+                ToAdbCommandOutput(ping),
+                pingOutput);
+        }
+        catch (OperationCanceledException) when (timeoutSource.IsCancellationRequested)
+        {
+            throw new TimeoutException($"Timed out after {validatedTimeoutSec}s waiting for adb device readiness.");
+        }
+    }
+
+    /// <summary>
+    /// Reads device and application readiness without writing command artifacts.
+    /// </summary>
+    /// <param name="packageName">Optional package name expected to be installed and focused.</param>
+    /// <returns>Preflight data.</returns>
+    public async Task<PreflightResult> ReadPreflightAsync(string? packageName)
+    {
+        var fingerprint = await ReadDeviceFingerprintAsync().ConfigureAwait(false);
+        return await CreatePreflightResultAsync(fingerprint, packageName).ConfigureAwait(false);
+    }
+
     /// <summary>
     /// Checks device and application readiness.
     /// </summary>
@@ -88,6 +164,11 @@ public sealed class DeviceRunner(
     public async Task<PreflightResult> PreflightAsync(string? packageName)
     {
         var fingerprint = await WriteDeviceFingerprintAsync().ConfigureAwait(false);
+        return await CreatePreflightResultAsync(fingerprint, packageName).ConfigureAwait(false);
+    }
+
+    private async Task<PreflightResult> CreatePreflightResultAsync(DeviceFingerprint fingerprint, string? packageName)
+    {
         var focus = fingerprint.CurrentFocus;
         string? packageInfo = null;
 
@@ -343,7 +424,7 @@ public sealed class DeviceRunner(
         var validatedHost = string.IsNullOrWhiteSpace(host)
             ? await DetectWirelessHostAsync().ConfigureAwait(false)
             : host.Trim();
-        var tcpip = await _adb.RunAsync(["tcpip", port.ToString(System.Globalization.CultureInfo.InvariantCulture)]).ConfigureAwait(false);
+        var tcpip = await _adb.RunAsync(["tcpip", port.ToString(CultureInfo.InvariantCulture)]).ConfigureAwait(false);
         tcpip.EnsureSuccess("adb tcpip failed");
         var endpoint = $"{validatedHost}:{port}";
         var connect = await _adb.RunAsync(["connect", endpoint]).ConfigureAwait(false);
@@ -645,10 +726,10 @@ public sealed class DeviceRunner(
         return new RecordResult(targetOutput, clamped);
     }
 
-    public async Task<DeviceFingerprint> WriteDeviceFingerprintAsync()
+    private async Task<DeviceFingerprint> ReadDeviceFingerprintAsync()
     {
         var snapshot = await ReadDeviceFingerprintSnapshotAsync().ConfigureAwait(false);
-        var fingerprint = new DeviceFingerprint(
+        return new DeviceFingerprint(
             ResultSchemas.DeviceFingerprint,
             _timeProvider.GetUtcNow(),
             snapshot.Serial,
@@ -658,6 +739,11 @@ public sealed class DeviceRunner(
             snapshot.Fingerprint,
             snapshot.Abi,
             snapshot.CurrentFocus);
+    }
+
+    public async Task<DeviceFingerprint> WriteDeviceFingerprintAsync()
+    {
+        var fingerprint = await ReadDeviceFingerprintAsync().ConfigureAwait(false);
         await _artifacts.WriteJsonAsync(DeviceArtifactNames.DeviceFingerprintJson, fingerprint).ConfigureAwait(false);
         return fingerprint;
     }
@@ -1130,6 +1216,24 @@ public sealed class DeviceRunner(
         return result.Stdout.Trim();
     }
 
+    private async Task<AdbDiagnosticResult> RunAdbDiagnosticAsync(string name, IReadOnlyList<string> args)
+    {
+        var result = await _adb.RunAsync(args).ConfigureAwait(false);
+        return new AdbDiagnosticResult(ResultSchemas.AdbDiagnostic, name, ToAdbCommandOutput(result));
+    }
+
+    private static AdbCommandOutput ToAdbCommandOutput(AdbCommandResult result) =>
+        new(
+            result.Invocation,
+            result.Args,
+            result.ExitCode,
+            result.ExitCode == 0,
+            result.Stdout,
+            result.Stderr,
+            result.AttemptCount,
+            result.Retry?.Reason,
+            result.Retry?.RecoveryActions ?? []);
+
     private async Task<DeviceFingerprintSnapshot> ReadDeviceFingerprintSnapshotAsync()
     {
         var output = await ShellTextAsync(BuildDeviceFingerprintCommand()).ConfigureAwait(false);
@@ -1203,7 +1307,7 @@ public sealed class DeviceRunner(
 
         if (seenMarkers.Count != DeviceFingerprintReads.Length)
         {
-            snapshot = default!;
+            snapshot = null!;
             return false;
         }
 

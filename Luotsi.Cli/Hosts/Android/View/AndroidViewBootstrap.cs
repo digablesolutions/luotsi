@@ -1,8 +1,8 @@
 using Luotsi.Cli.Errors;
-using Luotsi.Cli.Hosts.Android;
-using Luotsi.Cli.Infrastructure;
-using Luotsi.Cli.Models;
+using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.View;
+using Luotsi.Cli.View.Contracts;
+using Luotsi.Cli.View.Transport;
 
 namespace Luotsi.Cli.Hosts.Android.View;
 
@@ -227,23 +227,7 @@ public sealed class AndroidViewBootstrap(
             else
             {
                 var shellCommand = string.Join(
-                    " ",
-                    [
-                        $"CLASSPATH={ShellQuote(package.RemotePath)}",
-                        "app_process",
-                        "/",
-                        ShellQuote(package.MainClass),
-                        "--socket",
-                        ShellQuote(socketName),
-                        "--codec",
-                        ShellQuote(request.Codec),
-                        "--max-size",
-                        request.MaxSize.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                        "--max-fps",
-                        request.MaxFps.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                        "--video-bit-rate",
-                        ShellQuote(request.VideoBitRate)
-                    ]);
+                    " ", $"CLASSPATH={ShellQuote(package.RemotePath)}", "app_process", "/", ShellQuote(package.MainClass), "--socket", ShellQuote(socketName), "--codec", ShellQuote(request.Codec), "--max-size", request.MaxSize.ToString(System.Globalization.CultureInfo.InvariantCulture), "--max-fps", request.MaxFps.ToString(System.Globalization.CultureInfo.InvariantCulture), "--video-bit-rate", ShellQuote(request.VideoBitRate));
                 _screenrecordShell = await adbClient.StartShellAsync(shellCommand, cancellationToken).ConfigureAwait(false);
             }
 
@@ -433,6 +417,7 @@ public sealed class AndroidViewBootstrap(
         }
         catch
         {
+            // ignored
         }
 
         try

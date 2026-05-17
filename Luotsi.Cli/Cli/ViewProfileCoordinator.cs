@@ -1,5 +1,5 @@
 using Luotsi.Cli.Errors;
-using Luotsi.Cli.View;
+using Luotsi.Cli.View.Contracts;
 
 namespace Luotsi.Cli.Cli;
 

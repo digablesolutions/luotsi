@@ -12,6 +12,10 @@ namespace Luotsi.Cli.Models;
 /// <param name="Stderr">Captured stderr.</param>
 public sealed record ProcessResult(int ExitCode, string Stdout, string Stderr);
 
+public sealed record AdbRecoveryActionResult(string Command, int ExitCode, string Stdout, string Stderr);
+
+public sealed record AdbRetryInfo(string Reason, int AttemptCount, IReadOnlyList<AdbRecoveryActionResult> RecoveryActions);
+
 /// <summary>
 /// Device fingerprint metadata.
 /// </summary>
@@ -369,6 +373,14 @@ public sealed record ErrorInfo(string Type, string Message, string Category)
             message.Contains("device action ready", StringComparison.OrdinalIgnoreCase))
         {
             return "oracle_timeout";
+        }
+
+        if (message.Contains("adb command timed out", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("adb wait-for-device", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("adb readiness", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("adb device readiness", StringComparison.OrdinalIgnoreCase))
+        {
+            return "configuration_error";
         }
 
         if (message.Contains("Timed out", StringComparison.OrdinalIgnoreCase))

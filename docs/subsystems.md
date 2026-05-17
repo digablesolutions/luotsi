@@ -70,9 +70,11 @@ The built-in mirror is now a real subsystem, not just a design sketch.
 ### Transport and bootstrap
 
 - `AndroidViewBootstrap` stages the helper package, configures the ADB tunnel,
-  and starts the helper process.
+  and starts the helper process or MediaProjection consent flow.
 - `LocalhostViewStreamConnector` opens the forwarded localhost socket.
 - `ViewPacketStreamReader` parses the private packet stream.
+- `auto` capture prefers MediaProjection and retries with `screenrecord` if
+  startup or consent fails before the stream header is established.
 
 Relevant code:
 
@@ -103,9 +105,19 @@ Relevant code:
 ### Current constraints
 
 - The built-in live path currently assumes H.264 over the private packet stream.
+- MediaProjection currently requires H.264 and interactive Android consent;
+  `screenrecord` remains the explicit fallback path.
 - The primary validated host path is Windows.
 - macOS and Linux are supported by the chosen SDL3/libav architecture, but they
   still need live validation passes on actual host machines.
+
+### Operational diagnostics
+
+- `view-doctor` uses the same option resolution path as `view`.
+- Current checks cover decoder readiness, helper package discovery,
+  capture-backend policy, adb device visibility, device preflight,
+  MediaProjection readiness when requested, and optional recording output
+  readiness.
 
 ## Suggested next docs to keep current
 

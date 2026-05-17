@@ -1,5 +1,10 @@
-using Luotsi.Cli.Infrastructure;
-using Luotsi.Cli.View;
+using Luotsi.Cli.Infrastructure.Devices;
+using Luotsi.Cli.Infrastructure.Ids;
+using Luotsi.Cli.Infrastructure.Processes;
+using Luotsi.Cli.Infrastructure.System;
+using Luotsi.Cli.Infrastructure.Time;
+using Luotsi.Cli.View.Diagnostics;
+using Luotsi.Cli.View.Session;
 
 namespace Luotsi.Cli.Cli;
 
@@ -16,7 +21,7 @@ public sealed class App
     /// </summary>
     /// <param name="dependencies">Optional dependency overrides for tests or specialized hosting.</param>
     public App()
-        : this((AppDependencies?)null)
+        : this(null)
     {
     }
 
@@ -67,7 +72,7 @@ public sealed class App
             CommandDispatcher = commandDispatcher,
             ViewDoctorFactory = resolvedViewDoctorFactory
         });
-        var deviceHostLauncher = new DeviceHostLauncher(resolvedDeviceHostFactory);
+        var deviceHostLauncher = new DeviceHostLauncher(resolvedDeviceHostFactory, resolvedEnvironment);
         _executionShell = new AppExecutionShell(new AppExecutionShellDependencies
         {
             Console = resolvedConsole,

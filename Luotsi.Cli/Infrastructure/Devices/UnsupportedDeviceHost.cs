@@ -1,13 +1,11 @@
+using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
-using Luotsi.Cli.Scenarios;
 
-namespace Luotsi.Cli.Infrastructure;
+namespace Luotsi.Cli.Infrastructure.Devices;
 
 internal sealed class UnsupportedDeviceHost : IDeviceHost
 {
     public Task<DeviceListResult> GetDevicesAsync() => Unsupported<DeviceListResult>();
-
-    public Task<PreflightResult> PreflightAsync(string? packageName) => Unsupported<PreflightResult>();
 
     public Task<ScreenState> GetScreenStateAsync() => Unsupported<ScreenState>();
 

@@ -1,7 +1,7 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using FFmpeg.AutoGen;
-using Luotsi.Cli.Infrastructure;
+using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.View.Contracts;
 
 namespace Luotsi.Cli.View.Backends.Ffmpeg;
 
@@ -499,8 +499,8 @@ internal sealed unsafe class LibavVideoDecoder : ILibavVideoDecoder
     private void PrepareConvertedFrame()
     {
         var sourcePixelFormat = NormalizeScaleInputPixelFormat((AVPixelFormat)_frame->format);
-        var sourceColorRange = ResolveSourceColorRange((AVPixelFormat)_frame->format, (AVColorRange)_frame->color_range);
-        var sourceColorSpace = ResolveSourceColorSpace((AVColorSpace)_frame->colorspace, _frame->height);
+        var sourceColorRange = ResolveSourceColorRange((AVPixelFormat)_frame->format, _frame->color_range);
+        var sourceColorSpace = ResolveSourceColorSpace(_frame->colorspace, _frame->height);
 
         if (_convertedFrame != null &&
             _convertedFrame->width == _frame->width &&

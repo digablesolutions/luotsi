@@ -1,6 +1,6 @@
 using Luotsi.Cli.Errors;
 
-namespace Luotsi.Cli.View;
+namespace Luotsi.Cli.View.Contracts;
 
 /// <summary>
 /// Launch preset used to seed view session defaults.

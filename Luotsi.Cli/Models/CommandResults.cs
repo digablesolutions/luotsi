@@ -106,6 +106,30 @@ public sealed record WirelessMdnsConnectResult(
     string Message,
     string? Stdout);
 
+public sealed record AdbCommandOutput(
+    string Invocation,
+    IReadOnlyList<string> Args,
+    int ExitCode,
+    bool Succeeded,
+    string Stdout,
+    string Stderr,
+    int AttemptCount,
+    string? RetryReason,
+    IReadOnlyList<AdbRecoveryActionResult> RecoveryActions);
+
+public sealed record AdbDiagnosticResult(string Schema, string Name, AdbCommandOutput Command);
+
+public sealed record AdbReadinessResult(
+    string Schema,
+    bool Ready,
+    string? Serial,
+    bool DeviceSelected,
+    bool PingVerified,
+    int TimeoutSec,
+    AdbCommandOutput Wait,
+    AdbCommandOutput? Ping,
+    string? PingOutput);
+
 public sealed record ViewProfileListResult(IReadOnlyList<string> Profiles);
 
 public sealed record ViewProfileDeleteResult(string Name, bool Deleted);

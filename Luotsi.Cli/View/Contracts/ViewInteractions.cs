@@ -1,4 +1,4 @@
-namespace Luotsi.Cli.View;
+namespace Luotsi.Cli.View.Contracts;
 
 /// <summary>
 /// Session-owned interaction request emitted by the local view surface.

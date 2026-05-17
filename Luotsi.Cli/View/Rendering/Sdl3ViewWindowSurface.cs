@@ -1,9 +1,10 @@
-using System.Text;
 using System.Runtime.InteropServices;
+using System.Text;
+using Luotsi.Cli.View.Contracts;
 using SDL;
 using static SDL.SDL3;
 
-namespace Luotsi.Cli.View;
+namespace Luotsi.Cli.View.Rendering;
 
 /// <summary>
 /// Creates the SDL3-backed window surface used by the built-in renderer.
@@ -26,9 +27,9 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
 
     private readonly TaskCompletionSource _readySource = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _closedSource = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly object _frameLock = new();
-    private readonly object _statsLock = new();
-    private readonly object _chromeLock = new();
+    private readonly Lock _frameLock = new();
+    private readonly Lock _statsLock = new();
+    private readonly Lock _chromeLock = new();
     private readonly IViewWindowIconProvider _iconProvider;
 
     private Thread? _windowThread;
@@ -456,7 +457,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
             if (frame is not null && _texture is not null)
             {
                 var layout = ViewPointerMapper.ComputeLayout(pixelWidth, pixelHeight, frame.Width, frame.Height, _scaleMode);
-                if (layout.Width > 0 && layout.Height > 0)
+                if (layout is {Width: > 0, Height: > 0})
                 {
                     var destinationRect = new SDL_FRect
                     {
@@ -1057,7 +1058,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         }
     }
 
-    private unsafe void DrawToolbarButton(ViewChromeButtonLayout button, float scaleX, float scaleY)
+    private void DrawToolbarButton(ViewChromeButtonLayout button, float scaleX, float scaleY)
     {
         var fill = button.Enabled
             ? button.Active ? (R: (byte)136, G: (byte)20, B: (byte)20, A: (byte)232) : (R: (byte)32, G: (byte)32, B: (byte)32, A: (byte)228)
@@ -1116,9 +1117,9 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         }
     }
 
-    private unsafe void DrawDeviceSlot(ViewChromeDeviceSlotLayout slot, float scaleX, float scaleY)
+    private void DrawDeviceSlot(ViewChromeDeviceSlotLayout slot, float scaleX, float scaleY)
     {
-        var isBlocked = !slot.Enabled && !slot.IsActive;
+        var isBlocked = slot is {Enabled: false, IsActive: false};
         FillRect(slot.Bounds, scaleX, scaleY,
             slot.IsActive ? (byte)26 : isBlocked ? (byte)70 : (byte)24,
             slot.IsActive ? (byte)86 : isBlocked ? (byte)24 : (byte)50,
@@ -1138,7 +1139,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
             1);
     }
 
-    private unsafe void DrawScreenshotIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
+    private void DrawScreenshotIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
     {
         var body = Inset(bounds, 7, 9, 7, 9);
         OutlineRect(body, scaleX, scaleY, r, g, b, a);
@@ -1146,7 +1147,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         FillRect(new ViewChromeRect(body.Left + 4, body.Top - 3, Math.Max(8, body.Width / 3), 4), scaleX, scaleY, r, g, b, a);
     }
 
-    private unsafe void DrawRecordIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a, bool active)
+    private void DrawRecordIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a, bool active)
     {
         var inner = Inset(bounds, 10, 10, 10, 10);
         if (active)
@@ -1159,7 +1160,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         }
     }
 
-    private unsafe void DrawReconnectIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
+    private void DrawReconnectIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
     {
         DrawLine(bounds.Left + 9, bounds.Top + 16, bounds.Right - 10, bounds.Top + 16, scaleX, scaleY, r, g, b, a);
         DrawLine(bounds.Right - 10, bounds.Top + 16, bounds.Right - 15, bounds.Top + 11, scaleX, scaleY, r, g, b, a);
@@ -1169,27 +1170,27 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         DrawLine(bounds.Left + 10, bounds.Bottom - 16, bounds.Left + 15, bounds.Bottom - 21, scaleX, scaleY, r, g, b, a);
     }
 
-    private unsafe void DrawBackIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
+    private void DrawBackIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
     {
         DrawLine(bounds.Left + 12, bounds.Top + bounds.Height / 2, bounds.Right - 10, bounds.Top + bounds.Height / 2, scaleX, scaleY, r, g, b, a);
         DrawLine(bounds.Left + 12, bounds.Top + bounds.Height / 2, bounds.Left + 20, bounds.Top + 12, scaleX, scaleY, r, g, b, a);
         DrawLine(bounds.Left + 12, bounds.Top + bounds.Height / 2, bounds.Left + 20, bounds.Bottom - 12, scaleX, scaleY, r, g, b, a);
     }
 
-    private unsafe void DrawHomeIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
+    private void DrawHomeIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
     {
         DrawLine(bounds.Left + 10, bounds.Top + 21, bounds.Left + bounds.Width / 2, bounds.Top + 10, scaleX, scaleY, r, g, b, a);
         DrawLine(bounds.Left + bounds.Width / 2, bounds.Top + 10, bounds.Right - 10, bounds.Top + 21, scaleX, scaleY, r, g, b, a);
         OutlineRect(new ViewChromeRect(bounds.Left + 14, bounds.Top + 21, bounds.Width - 28, bounds.Height - 31), scaleX, scaleY, r, g, b, a);
     }
 
-    private unsafe void DrawRecentsIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
+    private void DrawRecentsIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
     {
         OutlineRect(new ViewChromeRect(bounds.Left + 12, bounds.Top + 11, bounds.Width - 26, bounds.Height - 26), scaleX, scaleY, r, g, b, a);
         OutlineRect(new ViewChromeRect(bounds.Left + 17, bounds.Top + 17, bounds.Width - 26, bounds.Height - 26), scaleX, scaleY, r, g, b, a);
     }
 
-    private unsafe void DrawRotateIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
+    private void DrawRotateIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
     {
         var centerX = bounds.Left + bounds.Width / 2;
         var centerY = bounds.Top + bounds.Height / 2;
@@ -1201,20 +1202,20 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         DrawLine(centerX - 9, centerY - 7, centerX - 4, centerY - 2, scaleX, scaleY, r, g, b, a);
     }
 
-    private unsafe void DrawPauseIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
+    private void DrawPauseIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
     {
         FillRect(new ViewChromeRect(bounds.Left + 13, bounds.Top + 11, 5, bounds.Height - 22), scaleX, scaleY, r, g, b, a);
         FillRect(new ViewChromeRect(bounds.Right - 18, bounds.Top + 11, 5, bounds.Height - 22), scaleX, scaleY, r, g, b, a);
     }
 
-    private unsafe void DrawFolderIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
+    private void DrawFolderIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
     {
         DrawLine(bounds.Left + 9, bounds.Top + 17, bounds.Left + 18, bounds.Top + 17, scaleX, scaleY, r, g, b, a);
         DrawLine(bounds.Left + 18, bounds.Top + 17, bounds.Left + 22, bounds.Top + 21, scaleX, scaleY, r, g, b, a);
         OutlineRect(new ViewChromeRect(bounds.Left + 9, bounds.Top + 21, bounds.Width - 18, bounds.Height - 31), scaleX, scaleY, r, g, b, a);
     }
 
-    private unsafe void DrawScaleIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
+    private void DrawScaleIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
     {
         var outer = Inset(bounds, 7, 7, 7, 7);
         OutlineRect(outer, scaleX, scaleY, r, g, b, a);
@@ -1224,7 +1225,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         OutlineRect(inner, scaleX, scaleY, r, g, b, a);
     }
 
-    private unsafe void DrawFullscreenIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
+    private void DrawFullscreenIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
     {
         DrawLine(bounds.Left + 9, bounds.Top + 15, bounds.Left + 9, bounds.Top + 9, scaleX, scaleY, r, g, b, a);
         DrawLine(bounds.Left + 9, bounds.Top + 9, bounds.Left + 15, bounds.Top + 9, scaleX, scaleY, r, g, b, a);
@@ -1236,7 +1237,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         DrawLine(bounds.Right - 15, bounds.Bottom - 9, bounds.Right - 9, bounds.Bottom - 9, scaleX, scaleY, r, g, b, a);
     }
 
-    private unsafe void DrawNumber(int value, ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
+    private void DrawNumber(int value, ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
     {
         var text = Math.Max(0, value).ToString(System.Globalization.CultureInfo.InvariantCulture);
         var digitWidth = Math.Max(6f, bounds.Width / (float)Math.Max(2, text.Length * 2));
@@ -1251,7 +1252,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         }
     }
 
-    private unsafe void DrawTinyText(string text, int left, int top, float scaleX, float scaleY, byte r, byte g, byte b, byte a, int pixelSize)
+    private void DrawTinyText(string text, int left, int top, float scaleX, float scaleY, byte r, byte g, byte b, byte a, int pixelSize)
     {
         var cursor = left;
         foreach (var rawCharacter in text.ToUpperInvariant())
@@ -1319,7 +1320,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         _ => null
     };
 
-    private unsafe void DrawDigit(char digit, float left, float top, float width, float height, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
+    private void DrawDigit(char digit, float left, float top, float width, float height, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
     {
         const int segmentA = 1 << 0;
         const int segmentB = 1 << 1;
@@ -1368,7 +1369,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         Segment((mask & segmentG) != 0, left, middleY, width, thickness);
     }
 
-    private unsafe void DrawTooltip(ViewChromeTooltip tooltip, int logicalWidth, int logicalHeight, float scaleX, float scaleY)
+    private void DrawTooltip(ViewChromeTooltip tooltip, int logicalWidth, int logicalHeight, float scaleX, float scaleY)
     {
         var text = tooltip.Text.ToUpperInvariant();
         if (string.IsNullOrWhiteSpace(text))
@@ -1396,7 +1397,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         DrawTooltipText(text, bounds.Left + TooltipPaddingX, bounds.Top + TooltipPaddingY, scaleX, scaleY, 244, 244, 244, 255);
     }
 
-    private unsafe void DrawTooltipText(string text, int left, int top, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
+    private void DrawTooltipText(string text, int left, int top, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
     {
         var glyphWidth = 5 * TooltipGlyphCellSize;
         var cursorLeft = left;
@@ -1407,7 +1408,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         }
     }
 
-    private unsafe void DrawTooltipGlyph(char character, int left, int top, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
+    private void DrawTooltipGlyph(char character, int left, int top, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
     {
         var glyphRows = GetTooltipGlyphRows(character);
         if (glyphRows == 0)

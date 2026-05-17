@@ -1,8 +1,9 @@
 using System.Globalization;
 using Luotsi.Cli.Errors;
-using Luotsi.Cli.Infrastructure;
+using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.View.Contracts;
 
-namespace Luotsi.Cli.View;
+namespace Luotsi.Cli.View.Recording;
 
 /// <summary>
 /// Creates the optional local recorder used by the view session.
@@ -169,30 +170,27 @@ public sealed class AnnexBViewRecorder(IFileSystem fileSystem, string outputPath
 /// <summary>
 /// Records the live stream as raw Annex B H.264 first, then remuxes that capture into a container format with ffmpeg.
 /// </summary>
-public sealed class FfmpegMuxingViewRecorder : IViewRecorder
+public sealed class FfmpegMuxingViewRecorder(
+    IFileSystem fileSystem,
+    IProcessRunner processRunner,
+    string ffmpegExecutable,
+    string outputPath,
+    int inputFrameRate)
+    : IViewRecorder
 {
-    private readonly IFileSystem _fileSystem;
-    private readonly IProcessRunner _processRunner;
-    private readonly string _ffmpegExecutable;
-    private readonly string _outputPath;
-    private readonly int _inputFrameRate;
+    private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+    private readonly IProcessRunner _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
+    private readonly string _ffmpegExecutable = string.IsNullOrWhiteSpace(ffmpegExecutable)
+        ? throw new ArgumentException("An ffmpeg executable path is required.", nameof(ffmpegExecutable))
+        : ffmpegExecutable;
+    private readonly string _outputPath = string.IsNullOrWhiteSpace(outputPath)
+        ? throw new ArgumentException("Recording output path is required.", nameof(outputPath))
+        : Path.GetFullPath(outputPath);
+    private readonly int _inputFrameRate = Math.Max(1, inputFrameRate);
 
     private AnnexBViewRecorder? _rawRecorder;
     private string? _rawCapturePath;
     private bool _keepRawCapture;
-
-    public FfmpegMuxingViewRecorder(IFileSystem fileSystem, IProcessRunner processRunner, string ffmpegExecutable, string outputPath, int inputFrameRate)
-    {
-        _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
-        _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
-        _ffmpegExecutable = string.IsNullOrWhiteSpace(ffmpegExecutable)
-            ? throw new ArgumentException("An ffmpeg executable path is required.", nameof(ffmpegExecutable))
-            : ffmpegExecutable;
-        _outputPath = string.IsNullOrWhiteSpace(outputPath)
-            ? throw new ArgumentException("Recording output path is required.", nameof(outputPath))
-            : Path.GetFullPath(outputPath);
-        _inputFrameRate = Math.Max(1, inputFrameRate);
-    }
 
     /// <inheritdoc />
     public Task InitializeAsync(ViewConnectionInfo connectionInfo, CancellationToken cancellationToken = default)

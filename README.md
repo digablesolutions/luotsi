@@ -45,37 +45,54 @@ agent-driven flows against real devices.
 - `Luotsi.Cli/Errors/` contains typed command and wait exceptions.
 - `Luotsi.Cli/Infrastructure/` contains interfaces plus the default system-backed implementations used by the CLI.
 
+## Install and run
+
+GitHub Releases publish self-contained `luotsi-cli-<version>-<rid>` archives.
+Each archive contains the `luotsi` executable (`luotsi.exe` on Windows), so a
+release install does not require a separate local .NET runtime.
+
+Examples below use `luotsi ...` as the installed-binary form. If you are
+running directly from an extracted release folder, use `./luotsi` on macOS or
+Linux and `./luotsi.exe` from PowerShell on Windows. For source builds and
+contributor workflows, use the pinned .NET SDK from `global.json`
+(`10.0.300`) and run `dotnet run --project Luotsi.Cli -- ...` instead.
+
 ## Current commands
 
-Run from WSL or PowerShell:
+Installed-binary examples:
 
 ```bash
-cd <repo-root>
-dotnet run --project Luotsi.Cli -- devices
-dotnet run --project Luotsi.Cli -- preflight --device <serial> --package dev.luotsi.app
-dotnet run --project Luotsi.Cli -- screen-state --device <serial>
-dotnet run --project Luotsi.Cli -- view --device <serial> --preset safe --decoder ffmpeg --record capture.mp4 --stats-interval-ms 1000
-dotnet run --project Luotsi.Cli -- view --profile desk
-dotnet run --project Luotsi.Cli -- reconnect
-dotnet run --project Luotsi.Cli -- reconnect --profile desk
-dotnet run --project Luotsi.Cli -- view --last
-dotnet run --project Luotsi.Cli -- view-doctor --device <serial> --preset low-latency
-dotnet run --project Luotsi.Cli -- wireless --device <usb-serial> --host 192.168.0.44
-dotnet run --project Luotsi.Cli -- wireless-scan
-dotnet run --project Luotsi.Cli -- wireless-pair --endpoint 192.168.86.38:33861 --code 515109
-dotnet run --project Luotsi.Cli -- wireless-connect --service adb-14141FDF600081-TnSdi9 --save-profile desk-wifi
-dotnet run --project Luotsi.Cli -- telemetry-tail --device <serial> --tail 200
-dotnet run --project Luotsi.Cli -- telemetry-watch --device <serial> --timeout-sec 10
-dotnet run --project Luotsi.Cli -- tap-text --device <serial> --text "Sign in"
-dotnet run --project Luotsi.Cli -- wait-log --device <serial> --contains "DEVICE_READY" --timeout-sec 20
-dotnet run --project Luotsi.Cli -- run --device <serial> --file examples/scenarios/android-home-smoke.json
+luotsi devices
+luotsi adb server-status
+luotsi adb version
+luotsi adb features --device <serial>
+luotsi adb mdns check
+luotsi wait-for-device --device <serial> --timeout-sec 30
+luotsi adb reconnect offline
+luotsi preflight --device <serial> --package dev.luotsi.app
+luotsi screen-state --device <serial>
+luotsi view --device <serial> --preset safe --decoder ffmpeg --record capture.mp4 --stats-interval-ms 1000
+luotsi view --profile desk
+luotsi reconnect
+luotsi reconnect --profile desk
+luotsi view --last
+luotsi view-doctor --device <serial> --preset low-latency
+luotsi wireless --device <usb-serial> --host 192.168.0.44
+luotsi wireless-scan
+luotsi wireless-pair --endpoint 192.168.86.38:33861 --code 515109
+luotsi wireless-connect --service adb-14141FDF600081-TnSdi9 --save-profile desk-wifi
+luotsi telemetry-tail --device <serial> --tail 200
+luotsi telemetry-watch --device <serial> --timeout-sec 10
+luotsi tap-text --device <serial> --text "Sign in"
+luotsi wait-log --device <serial> --contains "DEVICE_READY" --timeout-sec 20
+luotsi run --device <serial> --file examples/scenarios/android-home-smoke.json
 ```
 
 Inspect mode is intentionally different: it is a long-lived JSONL session over
 stdin/stdout rather than a single JSON envelope. Example:
 
 ```powershell
-dotnet run --project Luotsi.Cli -- inspect --device 192.168.0.134:5555
+luotsi inspect --device 192.168.0.134:5555
 ```
 
 Then send one JSON command per line:
@@ -88,7 +105,22 @@ Then send one JSON command per line:
 ```
 
 If WSL cannot see `adb`, pass a path with `--adb` or expose Android platform
-tools on WSL's `PATH`.
+tools on WSL's `PATH`. Bounded ADB commands use a default 120-second timeout;
+set `--adb-timeout-sec <seconds>` or `LUOTSI_ADB_TIMEOUT_SEC` to tune it, and
+use `0` to disable the command timeout for a run.
+
+The `adb` command family exposes host-side diagnostics without requiring a
+separate shell script: `adb server-status`, `adb version`, `adb features`, and
+`adb mdns check` return structured command records with exit code, stdout,
+stderr, retry metadata, and any recovery actions. `wait-for-device` (also
+available as `device-wait` or `adb wait-for-device`) runs `adb wait-for-device`
+and verifies `adb shell echo ping` before returning readiness data. `adb reconnect offline` wraps ADB's offline transport
+reconnect path and is separate from Luotsi's `reconnect` view command. Safe ADB
+reads such as diagnostics, device listing, UI dumps, log snapshots, and
+read-only shell probes get one visible retry after known transient transport
+errors such as protocol faults, missing devices, offline devices, or devices
+still connecting. Mutating commands such as install, push, tap, text entry, and
+key events are not retried by default.
 
 The `view` command is also a long-lived JSONL session. Alongside `view_started`,
 `view_error`, and `view_ended`, it can emit throttled `view_stats` events so
@@ -101,6 +133,12 @@ updates independently; the default is `0`, which forwards every renderer stats
 update. `--preset <name>` seeds the launch defaults without blocking explicit
 overrides. The built-in presets are `low-latency`, `balanced`, `high-quality`,
 and `safe`; `--defaults` is a shorthand for the conservative `safe` preset.
+`--capture-backend auto` is the default host policy: it prefers
+MediaProjection, and if helper startup or consent fails during session bring-up
+Luotsi emits `view_capture_backend_fallback` and retries with `screenrecord`.
+Explicit `--capture-backend screenrecord` keeps the legacy 180-second Android
+session limit, while `--capture-backend mediaprojection` requires the Android
+screen-capture consent flow and currently supports `--codec h264`.
 Use `--save-profile <name>` to persist the resolved connection settings and
 `--profile <name>` to reuse them later. `profile-list` lists saved profiles and
 `profile-delete --name <profile>` removes one. Profiles include the device
@@ -151,8 +189,12 @@ device switching.
 
 `view-doctor` runs the same option resolution as `view` and returns a diagnostic
 report instead of opening a stream. The current checks cover FFmpeg decoder
-readiness, Android helper package availability, adb device visibility, device
-preflight, and optional recording target readiness.
+readiness, Android helper package discovery, capture-backend policy, adb device
+visibility, device preflight, MediaProjection API/encoder/consent readiness
+when `auto` or `mediaprojection` is selected, and optional recording target
+readiness. The helper package check resolves the built APK from the repo layout
+or from `LUOTSI_VIEW_HELPER_APK`, and FFmpeg readiness uses
+`LUOTSI_FFMPEG_ROOT` plus the bundled `ffmpeg/` probe paths.
 
 `wireless` remains the legacy "go wireless" flow. It runs
 `adb shell ip route get 8.8.8.8` to infer the USB-selected device Wi-Fi address
@@ -182,8 +224,8 @@ by modern adb Wi-Fi:
 `view --device <selector>`. It can also save a minimal view profile:
 
 ```powershell
-dotnet run --project Luotsi.Cli -- wireless-connect --service adb-14141FDF600081-TnSdi9 --save-profile desk-wifi
-dotnet run --project Luotsi.Cli -- view --profile desk-wifi
+luotsi wireless-connect --service adb-14141FDF600081-TnSdi9 --save-profile desk-wifi
+luotsi view --profile desk-wifi
 ```
 
 This relies on adb's mDNS selector convention, where a connected TLS device may
@@ -192,6 +234,7 @@ appear as `<service-name>._adb-tls-connect._tcp` in `adb devices`.
 Interactive `view` sessions can now emit additional JSONL events beyond
 `view_started`, `view_stats`, `view_error`, and `view_ended`, including:
 
+- `view_capture_backend_fallback`
 - `view_recording_started` / `view_recording_stopped`
 - `view_reconnect_requested` / `view_reconnected`
 - `view_device_switch_requested`
@@ -357,6 +400,8 @@ Publish outputs land under:
 Luotsi.Cli/bin/Release/net10.0/<rid>/publish/
 ```
 
-The published app is self-contained and single-file by default. If you want a
+The published executable inside that folder is `luotsi` (`luotsi.exe` on
+Windows). GitHub release assets keep the `luotsi-cli-<version>-<rid>` archive
+names and contain the same self-contained executable. If you want a
 framework-dependent or non-single-file build, override the MSBuild properties
 at publish time.

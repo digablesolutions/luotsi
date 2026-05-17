@@ -1,4 +1,6 @@
-namespace Luotsi.Cli.View;
+using Luotsi.Cli.View.Contracts;
+
+namespace Luotsi.Cli.View.Rendering;
 
 /// <summary>
 /// Hit-testing helper for the in-window toolbar and multi-device shelf.
@@ -125,7 +127,7 @@ public static class ViewChromeLayout
         AddButton(ViewChromeButtonKind.Fullscreen, true);
 
         var deviceSlots = new List<ViewChromeDeviceSlotLayout>();
-        if (chrome.CanSwitchDevices && chrome.Devices.Count > 1)
+        if (chrome is {CanSwitchDevices: true, Devices.Count: > 1})
         {
             var shelfTop = Math.Max(Padding, clientHeight - ShelfHeight + Padding / 2);
             var shelfLeft = Padding;

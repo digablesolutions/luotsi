@@ -2,10 +2,13 @@ using System.Buffers.Binary;
 using System.Net.Sockets;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Hosts.Android.View;
-using Luotsi.Cli.Infrastructure;
+using Luotsi.Cli.Infrastructure.Processes;
 using Luotsi.Cli.Models;
-using Luotsi.Cli.View;
 using Luotsi.Cli.View.Backends.Ffmpeg;
+using Luotsi.Cli.View.Contracts;
+using Luotsi.Cli.View.Recording;
+using Luotsi.Cli.View.Rendering;
+using Luotsi.Cli.View.Transport;
 using Xunit;
 
 namespace Luotsi.Cli.Tests;
@@ -939,16 +942,12 @@ internal sealed class ViewPacketStreamHarness
 
 internal sealed class FakeAndroidViewHelperPackageLocator(AndroidViewHelperPackage package) : IAndroidViewHelperPackageLocator
 {
-    private readonly AndroidViewHelperPackage _package = package;
-
-    public AndroidViewHelperPackage Resolve() => _package;
+    public AndroidViewHelperPackage Resolve() => package;
 }
 
 internal sealed class FakeViewWindowSurfaceFactory(FakeViewWindowSurface windowSurface) : IViewWindowSurfaceFactory
 {
-    private readonly FakeViewWindowSurface _windowSurface = windowSurface;
-
-    public IViewWindowSurface Create() => _windowSurface;
+    public IViewWindowSurface Create() => windowSurface;
 }
 
 internal sealed class FakeViewWindowSurface : IViewWindowSurface
@@ -1039,9 +1038,7 @@ internal sealed class FakeLibavNativeLibraryBinder : ILibavNativeLibraryBinder
 
 internal sealed class FakeLibavVideoDecoderFactory(FakeLibavVideoDecoder decoder) : ILibavVideoDecoderFactory
 {
-    private readonly FakeLibavVideoDecoder _decoder = decoder;
-
-    public ILibavVideoDecoder Create(ViewConnectionInfo connectionInfo) => _decoder;
+    public ILibavVideoDecoder Create(ViewConnectionInfo connectionInfo) => decoder;
 }
 
 internal sealed class FakeLibavVideoDecoder : ILibavVideoDecoder
@@ -1062,13 +1059,13 @@ internal sealed class FakeLibavVideoDecoder : ILibavVideoDecoder
     public IReadOnlyList<ViewFrame> Decode(ViewPacket packet)
     {
         DecodedPackets.Add(packet);
-        return _decodedFrames.Count > 0 ? _decodedFrames.Dequeue() : Array.Empty<ViewFrame>();
+        return _decodedFrames.Count > 0 ? _decodedFrames.Dequeue() : [];
     }
 
     public IReadOnlyList<ViewFrame> Flush()
     {
         FlushCount++;
-        return _flushedFrames.Count > 0 ? _flushedFrames.Dequeue() : Array.Empty<ViewFrame>();
+        return _flushedFrames.Count > 0 ? _flushedFrames.Dequeue() : [];
     }
 
     public void Reset() => ResetCount++;

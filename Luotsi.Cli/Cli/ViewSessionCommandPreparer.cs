@@ -1,6 +1,7 @@
 using Luotsi.Cli.Artifacts;
-using Luotsi.Cli.Infrastructure;
-using Luotsi.Cli.View;
+using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.Infrastructure.Devices;
+using Luotsi.Cli.View.Contracts;
 
 namespace Luotsi.Cli.Cli;
 

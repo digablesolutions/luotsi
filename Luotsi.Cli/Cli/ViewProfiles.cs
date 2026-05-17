@@ -2,8 +2,8 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Luotsi.Cli.Errors;
-using Luotsi.Cli.Infrastructure;
-using Luotsi.Cli.View;
+using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.View.Contracts;
 
 namespace Luotsi.Cli.Cli;
 

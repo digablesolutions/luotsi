@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace Luotsi.Cli.Infrastructure;
+namespace Luotsi.Cli.Infrastructure.Serialization;
 
 /// <summary>
 /// Application JSON settings.

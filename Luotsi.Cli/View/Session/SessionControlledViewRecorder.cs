@@ -1,14 +1,6 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using Luotsi.Cli.Artifacts;
-using Luotsi.Cli.Errors;
-using Luotsi.Cli.Hosts.Android;
-using Luotsi.Cli.Hosts.Android.View;
-using Luotsi.Cli.Infrastructure;
-using Luotsi.Cli.Models;
-using Luotsi.Cli.View.Backends.Ffmpeg;
+using Luotsi.Cli.View.Contracts;
 
-namespace Luotsi.Cli.View;
+namespace Luotsi.Cli.View.Session;
 
 internal sealed class SessionControlledViewRecorder(IViewRecorderFactory recorderFactory, ViewOptions baseOptions) : IViewRecorder
 {
@@ -18,11 +10,10 @@ internal sealed class SessionControlledViewRecorder(IViewRecorderFactory recorde
 
     private ViewConnectionInfo? _connectionInfo;
     private IViewRecorder? _activeRecorder;
-    private string? _activeRecordPath;
 
     public bool IsRecording => _activeRecorder is not null;
 
-    public string? ActiveRecordPath => _activeRecordPath;
+    public string? ActiveRecordPath { get; private set; }
 
     public Task InitializeAsync(ViewConnectionInfo connectionInfo, CancellationToken cancellationToken = default)
     {
@@ -63,7 +54,7 @@ internal sealed class SessionControlledViewRecorder(IViewRecorderFactory recorde
                 ?? throw new InvalidOperationException("View recorder factory returned no recorder for the requested record path.");
             await recorder.InitializeAsync(connectionInfo, cancellationToken).ConfigureAwait(false);
             _activeRecorder = recorder;
-            _activeRecordPath = recordPath;
+            ActiveRecordPath = recordPath;
         }
         finally
         {
@@ -84,7 +75,7 @@ internal sealed class SessionControlledViewRecorder(IViewRecorderFactory recorde
             await _activeRecorder.CompleteAsync(cancellationToken).ConfigureAwait(false);
             await _activeRecorder.DisposeAsync().ConfigureAwait(false);
             _activeRecorder = null;
-            _activeRecordPath = null;
+            ActiveRecordPath = null;
         }
         finally
         {

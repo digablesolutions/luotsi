@@ -1,15 +1,9 @@
-using System.Text.Json;
-using Luotsi.Cli;
-using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
-using Luotsi.Cli.Errors;
-using Luotsi.Cli.Hosts.Android;
 using Luotsi.Cli.Hosts.Android.View;
-using Luotsi.Cli.Infrastructure;
 using Luotsi.Cli.Models;
-using Luotsi.Cli.Scenarios;
-using Luotsi.Cli.Telemetry;
-using Luotsi.Cli.View;
+using Luotsi.Cli.View.Contracts;
+using Luotsi.Cli.View.Diagnostics;
+using Luotsi.Cli.View.Recording;
 using Xunit;
 
 namespace Luotsi.Cli.Tests;
@@ -104,6 +98,8 @@ public sealed partial class AppTests
         var preflight = result.Preflight;
         Assert.NotNull(preflight);
         Assert.Equal("Model", preflight.Model);
+        Assert.Equal([null], host.ReadOnlyPreflightRequests);
+        Assert.Empty(host.CommandPreflightRequests);
     }
 
     [Fact]

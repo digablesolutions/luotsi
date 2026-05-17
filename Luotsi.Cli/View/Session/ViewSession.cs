@@ -1,16 +1,19 @@
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Runtime.CompilerServices;
-using System.Diagnostics;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Errors;
-using Luotsi.Cli.Hosts.Android;
 using Luotsi.Cli.Hosts.Android.View;
-using Luotsi.Cli.Infrastructure;
+using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
 using Luotsi.Cli.View.Backends.Ffmpeg;
+using Luotsi.Cli.View.Contracts;
+using Luotsi.Cli.View.Recording;
+using Luotsi.Cli.View.Rendering;
+using Luotsi.Cli.View.Transport;
 
-namespace Luotsi.Cli.View;
+namespace Luotsi.Cli.View.Session;
 
 /// <summary>
 /// Default view session factory.
@@ -136,7 +139,7 @@ public sealed class ViewSession(
     private readonly IViewRendererFactory _viewRendererFactory = viewRendererFactory ?? new NullViewRendererFactory();
     private readonly IViewRecorderFactory _viewRecorderFactory = viewRecorderFactory ?? new NullViewRecorderFactory();
     private readonly TimeSpan _autoReconnectAfter = autoReconnectAfter ?? DefaultAutoReconnectAfter;
-    private readonly object _writeGate = new();
+    private readonly Lock _writeGate = new();
 
     /// <inheritdoc />
     public async Task<int> RunAsync(ViewOptions options, CancellationToken cancellationToken = default)
@@ -185,7 +188,7 @@ public sealed class ViewSession(
                     return Task.CompletedTask;
                 });
                 interactionRouter.AttachStreamPauseUpdater(sessionRenderer.SetPaused);
-                interactionRouter.AttachChromeUpdater(chrome => sessionRenderer.UpdateChromeAsync(chrome));
+                interactionRouter.AttachChromeUpdater(chrome => sessionRenderer.UpdateChromeAsync(chrome, cancellationToken));
                 var firstConnection = true;
 
                 while (true)
@@ -330,20 +333,20 @@ public sealed class ViewSession(
                         var viewTask = viewBackend.RunAsync(sharedPackets, sessionCancellation.Token);
                         var reconnectTask = interactionRouter.WaitForReconnectAsync();
                         var windowCloseTask = renderer is not null
-                            ? renderer.WaitForCloseAsync()
+                            ? renderer.WaitForCloseAsync(sessionCancellation.Token)
                             : Task.Delay(Timeout.Infinite, cancellationToken);
 
                         var completedTask = reconnectTask.IsCompleted
                             ? reconnectTask
                             : await Task.WhenAny(viewTask, windowCloseTask, reconnectTask).ConfigureAwait(false);
-                        if (completedTask == viewTask && reconnectTask.IsCompleted)
+                        if (reconnectTask.IsCompleted)
                         {
                             completedTask = reconnectTask;
                         }
                         if (completedTask == reconnectTask)
                         {
                             await interactionRouter.StopRecordingForReconnectAsync().ConfigureAwait(false);
-                            sessionCancellation.Cancel();
+                            await sessionCancellation.CancelAsync();
                             if (!usesSharedTransport)
                             {
                                 await _transportBootstrap.StopAsync(CancellationToken.None).ConfigureAwait(false);
@@ -370,7 +373,7 @@ public sealed class ViewSession(
                         if (completedTask == windowCloseTask)
                         {
                             endReason = "window_closed";
-                            sessionCancellation.Cancel();
+                            await sessionCancellation.CancelAsync();
                             if (!usesSharedTransport)
                             {
                                 await _transportBootstrap.StopAsync(CancellationToken.None).ConfigureAwait(false);
@@ -494,7 +497,7 @@ public sealed class ViewSession(
     private async IAsyncEnumerable<ViewPacket> RelayPacketsAsync(
         IAsyncEnumerable<ViewPacket> packets,
         TcpViewShareServer shareServer,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         await foreach (var packet in packets.WithCancellation(cancellationToken).ConfigureAwait(false))
         {

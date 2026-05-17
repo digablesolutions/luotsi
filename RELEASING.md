@@ -38,6 +38,9 @@ Each release publishes:
 - `luotsi-cli-<version>-osx-arm64.tar.gz`
 - `SHA256SUMS`
 
+Each runtime archive contains the self-contained `luotsi` executable
+(`luotsi.exe` on Windows) plus any companion files emitted by `dotnet publish`.
+
 Release validation diagnostics and MSBuild binlogs are kept as workflow
 artifacts for debugging failed releases.
 

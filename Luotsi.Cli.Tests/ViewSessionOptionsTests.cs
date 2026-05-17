@@ -1,15 +1,6 @@
-using System.Text.Json;
-using Luotsi.Cli;
-using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
-using Luotsi.Cli.Errors;
-using Luotsi.Cli.Hosts.Android;
-using Luotsi.Cli.Hosts.Android.View;
-using Luotsi.Cli.Infrastructure;
 using Luotsi.Cli.Models;
-using Luotsi.Cli.Scenarios;
-using Luotsi.Cli.Telemetry;
-using Luotsi.Cli.View;
+using Luotsi.Cli.View.Contracts;
 using Xunit;
 
 namespace Luotsi.Cli.Tests;
@@ -247,22 +238,27 @@ public sealed partial class AppTests
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
         var session = new FakeViewSession(23);
         var factory = new FakeViewSessionFactory(session);
-        var profiles = new FakeViewProfileStore();
-        profiles.Profiles["desk"] = new ViewProfile(
-            Device: "profile-device",
-            Decoder: "wmf",
-            Preset: "low-latency",
-            Headless: true,
-            Record: "profile.mkv",
-            MaxSize: 1024,
-            MaxFps: 24,
-            VideoBitRate: "3M",
-            StatsIntervalMs: 500,
-            RendererStatsIntervalMs: 125,
-            OverlayScreenState: true,
-            OverlayTelemetry: true,
-            ScaleMode: "fill",
-            PollArtifacts: "per-attempt");
+        var profiles = new FakeViewProfileStore
+        {
+            Profiles =
+            {
+                ["desk"] = new ViewProfile(
+                    Device: "profile-device",
+                    Decoder: "wmf",
+                    Preset: "low-latency",
+                    Headless: true,
+                    Record: "profile.mkv",
+                    MaxSize: 1024,
+                    MaxFps: 24,
+                    VideoBitRate: "3M",
+                    StatsIntervalMs: 500,
+                    RendererStatsIntervalMs: 125,
+                    OverlayScreenState: true,
+                    OverlayTelemetry: true,
+                    ScaleMode: "fill",
+                    PollArtifacts: "per-attempt")
+            }
+        };
         var app = new App(new AppDependencies
         {
             Console = console,
@@ -300,8 +296,13 @@ public sealed partial class AppTests
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
         var session = new FakeViewSession(23);
         var factory = new FakeViewSessionFactory(session);
-        var profiles = new FakeViewProfileStore();
-        profiles.Profiles["desk"] = new ViewProfile(Device: "profile-device", Decoder: "wmf", MaxSize: 1024);
+        var profiles = new FakeViewProfileStore
+        {
+            Profiles =
+            {
+                ["desk"] = new ViewProfile(Device: "profile-device", Decoder: "wmf", MaxSize: 1024)
+            }
+        };
         var app = new App(new AppDependencies
         {
             Console = console,
@@ -366,16 +367,21 @@ public sealed partial class AppTests
         var console = new FakeConsole();
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
         var session = new FakeViewSession(23);
-        var profiles = new FakeViewProfileStore();
-        profiles.Profiles["physical-live"] = new ViewProfile(
-            Device: "profile-device",
-            Decoder: "wmf",
-            Preset: "high-quality",
-            MaxSize: 2560,
-            MaxFps: 60,
-            VideoBitRate: "12M",
-            StatsIntervalMs: 20,
-            RendererStatsIntervalMs: 20);
+        var profiles = new FakeViewProfileStore
+        {
+            Profiles =
+            {
+                ["physical-live"] = new ViewProfile(
+                    Device: "profile-device",
+                    Decoder: "wmf",
+                    Preset: "high-quality",
+                    MaxSize: 2560,
+                    MaxFps: 60,
+                    VideoBitRate: "12M",
+                    StatsIntervalMs: 20,
+                    RendererStatsIntervalMs: 20)
+            }
+        };
         var app = new App(new AppDependencies
         {
             Console = console,
@@ -405,8 +411,13 @@ public sealed partial class AppTests
         var console = new FakeConsole();
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
         host.ConnectedDevices.Add(new DeviceInfo("profile-device", "device", "usb:1-1 product:test"));
-        var profiles = new FakeViewProfileStore();
-        profiles.Profiles["physical-live"] = new ViewProfile(Device: "profile-device", Preset: "high-quality", MaxSize: 2560, MaxFps: 60);
+        var profiles = new FakeViewProfileStore
+        {
+            Profiles =
+            {
+                ["physical-live"] = new ViewProfile(Device: "profile-device", Preset: "high-quality", MaxSize: 2560, MaxFps: 60)
+            }
+        };
         var app = new App(new AppDependencies
         {
             Console = console,
@@ -453,8 +464,13 @@ public sealed partial class AppTests
         var console = new FakeConsole();
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
         var session = new FakeViewSession(23);
-        var profiles = new FakeViewProfileStore();
-        profiles.Profiles["last"] = new ViewProfile(Device: "last-device", Preset: "safe", AlwaysOnTop: true);
+        var profiles = new FakeViewProfileStore
+        {
+            Profiles =
+            {
+                ["last"] = new ViewProfile(Device: "last-device", Preset: "safe", AlwaysOnTop: true)
+            }
+        };
         var app = new App(new AppDependencies
         {
             Console = console,
@@ -480,8 +496,13 @@ public sealed partial class AppTests
         var console = new FakeConsole();
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
         var session = new FakeViewSession(23);
-        var profiles = new FakeViewProfileStore();
-        profiles.Profiles["last"] = new ViewProfile(Device: "last-device", Preset: "safe", AlwaysOnTop: true);
+        var profiles = new FakeViewProfileStore
+        {
+            Profiles =
+            {
+                ["last"] = new ViewProfile(Device: "last-device", Preset: "safe", AlwaysOnTop: true)
+            }
+        };
         var app = new App(new AppDependencies
         {
             Console = console,
@@ -504,9 +525,14 @@ public sealed partial class AppTests
     public async Task RunAsync_ProfileList_Returns_Profile_Names()
     {
         var console = new FakeConsole();
-        var profiles = new FakeViewProfileStore();
-        profiles.Profiles["desk"] = new ViewProfile(Device: "desk-device");
-        profiles.Profiles["safe"] = new ViewProfile(Device: "safe-device");
+        var profiles = new FakeViewProfileStore
+        {
+            Profiles =
+            {
+                ["desk"] = new ViewProfile(Device: "desk-device"),
+                ["safe"] = new ViewProfile(Device: "safe-device")
+            }
+        };
         var app = new App(new AppDependencies { Console = console, ViewProfileStore = profiles });
 
         var exitCode = await app.RunAsync(["profile-list"]);
@@ -521,8 +547,13 @@ public sealed partial class AppTests
     public async Task RunAsync_ProfileDelete_Removes_Profile()
     {
         var console = new FakeConsole();
-        var profiles = new FakeViewProfileStore();
-        profiles.Profiles["desk"] = new ViewProfile(Device: "desk-device");
+        var profiles = new FakeViewProfileStore
+        {
+            Profiles =
+            {
+                ["desk"] = new ViewProfile(Device: "desk-device")
+            }
+        };
         var app = new App(new AppDependencies { Console = console, ViewProfileStore = profiles });
 
         var exitCode = await app.RunAsync(["profile-delete", "--name", "desk"]);

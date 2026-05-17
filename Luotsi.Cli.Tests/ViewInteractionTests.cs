@@ -1,15 +1,10 @@
 using System.Text.Json;
-using Luotsi.Cli;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
-using Luotsi.Cli.Errors;
-using Luotsi.Cli.Hosts.Android;
-using Luotsi.Cli.Hosts.Android.View;
-using Luotsi.Cli.Infrastructure;
 using Luotsi.Cli.Models;
-using Luotsi.Cli.Scenarios;
-using Luotsi.Cli.Telemetry;
-using Luotsi.Cli.View;
+using Luotsi.Cli.View.Contracts;
+using Luotsi.Cli.View.Session;
+using Luotsi.Cli.View.Transport;
 using Xunit;
 
 namespace Luotsi.Cli.Tests;
@@ -206,7 +201,9 @@ public sealed partial class AppTests
 
         var runTask = session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", false, null, 1600, 60, "8M", false, false));
         var interactionHandler = await ViewTestWaitHelpers.WaitForInteractionHandlerAsync(rendererFactory);
+        await ViewTestWaitHelpers.WaitForOutputLineAsync(console, SessionEventTypes.View.Started);
         await interactionHandler(new ViewWindowCommandRequest(ViewWindowCommand.Reconnect));
+        await ViewTestWaitHelpers.WaitForOutputLineAsync(console, SessionEventTypes.View.ReconnectRequested);
         await ViewTestWaitHelpers.WaitForStartCallsAsync(bootstrap, 2);
         renderer.Close();
         var exitCode = await runTask;

@@ -1,4 +1,6 @@
-namespace Luotsi.Cli.Infrastructure;
+using Luotsi.Cli.Infrastructure.Contracts;
+
+namespace Luotsi.Cli.Infrastructure.System;
 
 public sealed class SystemEnvironmentVariables : IEnvironmentVariables
 {

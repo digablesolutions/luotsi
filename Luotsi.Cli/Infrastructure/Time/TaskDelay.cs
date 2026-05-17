@@ -1,4 +1,6 @@
-namespace Luotsi.Cli.Infrastructure;
+using Luotsi.Cli.Infrastructure.Contracts;
+
+namespace Luotsi.Cli.Infrastructure.Time;
 
 public sealed class TaskDelay(TimeProvider? timeProvider = null) : IDelay
 {
