@@ -11,93 +11,155 @@
 
 # Luotsi
 
-Luotsi is a host-driven CLI for device automation, inspection, and live view.
-It runs on the engineer or CI machine, talks to real devices, and returns
-structured results plus artifacts. Android is the first supported platform.
+Luotsi is a host-driven CLI for Android device automation, inspection, and live view. It runs on the engineer or CI machine, talks to real devices over ADB, and returns structured JSON results plus artifacts. Orchestration, policy, and diagnostics stay on the host; the on-device helper stays thin and purpose-built.
 
-In product terms, Luotsi is the host control plane for:
+## How it works
 
-- direct device commands and bounded waits
-- scenario execution from small JSON playbooks
-- long-lived inspect and live-view sessions
-- artifact capture, semantic telemetry parsing, and reconnectable streaming
+1. **Run a command** — every command returns one JSON envelope with `ok`, `data`, `artifacts`, and `error`. No third-party device server required.
+2. **Run a scenario** — drive multi-step device flows from a small JSON playbook. Steps are validated, templated, and timed; failures produce artifact bundles automatically.
+3. **Inspect mode** — open a JSONL session for agent-driven exploration. Luotsi emits screen snapshots and diffs so an agent can reason about the UI and act without a scenario file.
+4. **Live view** — stream a mirrored device display to a local SDL window with an operator control layer, hotkeys, and JSONL events for agents consuming stream state.
+5. **Telemetry** — parse structured `LUOTSI_DEVICE_TELEMETRY` events from logcat for semantic waits and assertions.
+6. **CI-friendly** — same binary, same output shape for engineers, CI pipelines, and agent-driven flows.
 
-The design is intentionally boring:
+## Install
 
-- normal command mode returns one JSON envelope
-- long-lived sessions use JSONL
-- orchestration, policy, and diagnostics stay on the host
-- platform helpers stay thin and purpose-built
-- Android support is ADB-first rather than server-protocol-first
+Download a self-contained archive from [GitHub Releases](https://github.com/digablesolutions/luotsi/releases). Each archive contains a single `luotsi` executable (`luotsi.exe` on Windows) with no separate .NET runtime required.
 
-Luotsi does not vendor or depend on a third-party device automation server.
-The goal is a typed, scriptable interface that works for engineers, CI, and
-agent-driven flows against real devices.
+```bash
+# macOS / Linux
+./luotsi devices
+
+# Windows (PowerShell)
+./luotsi.exe devices
+```
+
+**Source builds.** The repo is pinned to .NET SDK `10.0.300` (see `global.json`):
+
+```bash
+dotnet run --project Luotsi.Cli -- devices
+```
+
+**Build and test:**
+
+```bash
+dotnet build Luotsi.sln
+dotnet test Luotsi.sln
+```
 
 ## Code layout
 
-- `Luotsi.Cli/Cli/` contains the entrypoint, command dispatch, help text, and inspect-mode session loop.
-- `Luotsi.Cli/Hosts/Android/` contains the Android transport and device interaction runtime.
-- `Luotsi.Cli/Artifacts/` contains artifact session management.
-- `Luotsi.Cli/Models/` contains shared records, envelopes, and screen/scenario data models.
-- `Luotsi.Cli/Scenarios/` contains scenario execution flow and scenario-specific failure plumbing.
-- `Luotsi.Cli/Telemetry/` contains telemetry parsing contracts and the current app telemetry parser.
-- `Luotsi.Cli/Errors/` contains typed command and wait exceptions.
-- `Luotsi.Cli/Infrastructure/` contains interfaces plus the default system-backed implementations used by the CLI.
+| Path | Contents |
+|---|---|
+| `Luotsi.Cli/Cli/` | Entrypoint, command dispatch, help text, inspect-mode session loop |
+| `Luotsi.Cli/Hosts/Android/` | Android transport and device interaction runtime |
+| `Luotsi.Cli/Artifacts/` | Artifact session management |
+| `Luotsi.Cli/Models/` | Shared records, envelopes, screen and scenario data models |
+| `Luotsi.Cli/Scenarios/` | Scenario execution flow and failure plumbing |
+| `Luotsi.Cli/Telemetry/` | Telemetry parsing contracts and logcat parser |
+| `Luotsi.Cli/Errors/` | Typed command and wait exceptions |
+| `Luotsi.Cli/Infrastructure/` | Interfaces and default system-backed implementations |
 
-## Install and run
+## Commands
 
-GitHub Releases publish self-contained `luotsi-cli-<version>-<rid>` archives.
-Each archive contains the `luotsi` executable (`luotsi.exe` on Windows), so a
-release install does not require a separate local .NET runtime.
+Quick reference. See [docs/commands.md](docs/commands.md) for flags, retry behavior, and wireless pairing details.
 
-Examples below use `luotsi ...` as the installed-binary form. If you are
-running directly from an extracted release folder, use `./luotsi` on macOS or
-Linux and `./luotsi.exe` from PowerShell on Windows. For source builds and
-contributor workflows, use the pinned .NET SDK from `global.json`
-(`10.0.300`) and run `dotnet run --project Luotsi.Cli -- ...` instead.
+### Device & ADB
 
-## Current commands
+| Command | Description |
+|---|---|
+| `devices` | List adb-visible devices |
+| `adb server-status` | Host ADB server status |
+| `adb version` | ADB binary version |
+| `adb features --device <serial>` | ADB feature set for a device |
+| `adb mdns check` | mDNS availability check |
+| `wait-for-device --device <serial>` | Wait for device readiness |
+| `adb reconnect offline` | Reconnect an offline ADB transport |
+| `preflight --device <serial> --package <app.id>` | Device preflight check |
+| `screen-state --device <serial>` | Dump current screen state |
 
-Installed-binary examples:
+### View & Profiles
+
+| Command | Description |
+|---|---|
+| `view --device <serial> [options]` | Open live streaming mirror (JSONL session) |
+| `view --profile <name>` | Open view using a saved profile |
+| `view --last` | Reopen the last successful view session |
+| `reconnect` | Reconnect using the last successful profile |
+| `view-doctor --device <serial>` | Diagnostic report without opening a stream |
+| `profile-list` | List saved profiles |
+| `profile-delete --name <name>` | Delete a saved profile |
+
+### Wireless
+
+| Command | Description |
+|---|---|
+| `wireless --device <usb-serial>` | Switch a USB device to TCP/IP mode (Android ≤10) |
+| `wireless-scan` | Discover TLS pairing and connect services via mDNS |
+| `wireless-pair --endpoint <host:port> --code <code>` | Pair a device for wireless debugging (Android 11+) |
+| `wireless-connect --service <name>` | Connect to a paired device and return its selector |
+
+### Port Forwarding
+
+| Command | Description |
+|---|---|
+| `forward --local <endpoint> --remote <endpoint>` | Forward host port → device port |
+| `forward-list` | List active forwards |
+| `forward-remove --local <endpoint>` | Remove a forward |
+| `reverse --remote <endpoint> --local <endpoint>` | Forward device port → host port |
+| `reverse-list` | List active reverses |
+| `reverse-remove --remote <endpoint>` | Remove a reverse |
+
+### App Lifecycle
+
+| Command | Description |
+|---|---|
+| `start-app --package <app.id> [--activity <activity>] [--wait]` | Launch an app |
+| `start-uri --uri <uri> [options]` | Launch a URI intent |
+| `force-stop --package <app.id>` | Force-stop an app |
+| `clear --package <app.id>` | Clear app data |
+| `wait-for-activity --activity <pattern>` | Wait for activity in the foreground |
+| `wait-for-not-activity --activity <pattern>` | Wait for activity to leave the foreground |
+| `is-app-installed --package <app.id>` | Check if a package is installed |
+| `list-installed-packages [--third-party]` | List installed packages |
+| `grant-permission --package <app.id> --permission <permission>` | Grant a runtime permission |
+| `revoke-permission --package <app.id> --permission <permission>` | Revoke a runtime permission |
+
+### Telemetry & Waits
+
+| Command | Description |
+|---|---|
+| `telemetry-tail --device <serial> --tail <n>` | Snapshot recent telemetry from logcat |
+| `telemetry-watch --device <serial> --timeout-sec <n>` | Collect telemetry over a bounded window |
+| `wait-log --device <serial> --contains <text> --timeout-sec <n>` | Wait for a matching logcat line |
+| `tap-text --device <serial> --text <text>` | Tap a UI element by visible text |
+| `wait-step --device <serial> --step <name>` | Wait for a semantic step telemetry event |
+| `wait-action-ready --device <serial> --action <name> [--step <name>]` | Wait for a semantic action-ready telemetry event |
+
+### Scenarios & Inspect
+
+| Command | Description |
+|---|---|
+| `run --device <serial> --file <path>` | Execute a JSON scenario playbook |
+| `inspect --device <serial>` | Open an agent-driven JSONL inspection session |
+
+## View session
+
+`view` is a long-lived JSONL session that mirrors a connected device to a local SDL window. See [docs/view-session.md](docs/view-session.md) for the full reference.
+
+Key flags: `--preset <name>` (low-latency / balanced / high-quality / safe), `--capture-backend <auto|screenrecord|mediaprojection>`, `--save-profile <name>`, `--record <file>`, `--share-bind <host:port>`, `--read-only`.
+
+The SDL window has a clickable toolbar, multi-device shelf, and hotkeys (F1–F12, Ctrl+V, drag-and-drop). Full hotkey and JSONL event tables are in [docs/view-session.md](docs/view-session.md).
+
+## Inspect mode
+
+`inspect` opens a JSONL session for agent-driven exploration without a scenario file. Startup emits `session_started` and an initial `screen_snapshot`; state-affecting commands emit `command_result` followed by a `screen_delta`.
 
 ```bash
-luotsi devices
-luotsi adb server-status
-luotsi adb version
-luotsi adb features --device <serial>
-luotsi adb mdns check
-luotsi wait-for-device --device <serial> --timeout-sec 30
-luotsi adb reconnect offline
-luotsi preflight --device <serial> --package dev.luotsi.app
-luotsi screen-state --device <serial>
-luotsi view --device <serial> --preset safe --decoder ffmpeg --record capture.mp4 --stats-interval-ms 1000
-luotsi view --profile desk
-luotsi reconnect
-luotsi reconnect --profile desk
-luotsi view --last
-luotsi view-doctor --device <serial> --preset low-latency
-luotsi wireless --device <usb-serial> --host 192.168.0.44
-luotsi wireless-scan
-luotsi wireless-pair --endpoint 192.168.86.38:33861 --code 515109
-luotsi wireless-connect --service adb-14141FDF600081-TnSdi9 --save-profile desk-wifi
-luotsi reverse --device <serial> --remote tcp:8080 --local tcp:3000
-luotsi start-app --device <serial> --package dev.luotsi.app --activity .MainActivity --wait
-luotsi telemetry-tail --device <serial> --tail 200
-luotsi telemetry-watch --device <serial> --timeout-sec 10
-luotsi tap-text --device <serial> --text "Sign in"
-luotsi wait-log --device <serial> --contains "DEVICE_READY" --timeout-sec 20
-luotsi run --device <serial> --file examples/scenarios/android-home-smoke.json
-```
-
-Inspect mode is intentionally different: it is a long-lived JSONL session over
-stdin/stdout rather than a single JSON envelope. Example:
-
-```powershell
 luotsi inspect --device 192.168.0.134:5555
 ```
 
-Then send one JSON command per line:
+Send one JSON command per line:
 
 ```json
 {"id":"1","command":"refresh"}
@@ -106,178 +168,30 @@ Then send one JSON command per line:
 {"id":"4","command":"exit"}
 ```
 
-If WSL cannot see `adb`, pass a path with `--adb` or expose Android platform
-tools on WSL's `PATH`. Bounded ADB commands use a default 120-second timeout;
-set `--adb-timeout-sec <seconds>` or `LUOTSI_ADB_TIMEOUT_SEC` to tune it, and
-use `0` to disable the command timeout for a run.
+Available inspect commands: `refresh`, `tap`, `tap_text`, `wait_visible`, `type_text`, `keyevent`, `telemetry_tail`, `telemetry_watch`, `exit`.
 
-The `adb` command family exposes host-side diagnostics without requiring a
-separate shell script: `adb server-status`, `adb version`, `adb features`, and
-`adb mdns check` return structured command records with exit code, stdout,
-stderr, retry metadata, and any recovery actions. `wait-for-device` (also
-available as `device-wait` or `adb wait-for-device`) runs `adb wait-for-device`
-and verifies `adb shell echo ping` before returning readiness data. `adb reconnect offline` wraps ADB's offline transport
-reconnect path and is separate from Luotsi's `reconnect` view command. Safe ADB
-reads such as diagnostics, device listing, UI dumps, log snapshots, and
-read-only shell probes get one visible retry after known transient transport
-errors such as protocol faults, missing devices, offline devices, or devices
-still connecting. Mutating commands such as install, push, tap, text entry, and
-key events are not retried by default.
+## Scenarios
 
-The `view` command is also a long-lived JSONL session. Alongside `view_started`,
-`view_error`, and `view_ended`, it can emit throttled `view_stats` events so
-agents can consume rolling decode/present FPS and latency without scraping the
-SDL window title or flooding stdout on long-lived sessions. Use
-`--stats-interval-ms <ms>` to tune that cadence; the default is `1000`, and
-`0` disables JSONL `view_stats` emission entirely. Use
-`--renderer-stats-interval-ms <ms>` to throttle local renderer/title stats
-updates independently; the default is `0`, which forwards every renderer stats
-update. `--preset <name>` seeds the launch defaults without blocking explicit
-overrides. The built-in presets are `low-latency`, `balanced`, `high-quality`,
-and `safe`; `--defaults` is a shorthand for the conservative `safe` preset.
-`--capture-backend auto` is the default host policy: it prefers
-MediaProjection, and if helper startup or consent fails during session bring-up
-Luotsi emits `view_capture_backend_fallback` and retries with `screenrecord`.
-Explicit `--capture-backend screenrecord` keeps the legacy 180-second Android
-session limit, while `--capture-backend mediaprojection` requires the Android
-screen-capture consent flow and currently supports `--codec h264`.
-Use `--save-profile <name>` to persist the resolved connection settings and
-`--profile <name>` to reuse them later. `profile-list` lists saved profiles and
-`profile-delete --name <profile>` removes one. Profiles include the device
-selector, decoder, size/FPS/bitrate, record target, stats cadences, share
-settings, initial fit/fill scale mode, always-on-top, and artifact policy. By
-default they are stored under the user app-data directory; set
-`LUOTSI_PROFILE_ROOT` to use a repo-local or CI-specific profile directory.
-When `--defaults` is combined with `--profile`, connection identity and artifact
-settings still come from the profile, but preset-driven launch tuning is reset
-to the conservative safe preset.
-Successful `view` launches refresh the special `last` profile. `reconnect`
-reuses that last successful profile and session target by default, so a bare
-`reconnect` is the quickest way back to a known-good stream. `view --last`
-remains available when you want the same behavior through the main `view`
-command surface.
-The built-in SDL window now exposes an operator control layer: `F12` captures a
-device screenshot into the artifact root, `F9` toggles live stream recording,
-`F7` opens the artifact folder, `F6` toggles a stream pause marker, `F5`
-reconnects the mirrored stream, `F4` sends rotate, `F11` or `Alt+Enter`
-toggle local fullscreen, `Esc` exits fullscreen back to windowed mode, and
-`F8` switches between `fit` and `fill` presentation modes. Plain text input,
-common navigation/editing keys, mouse-wheel scrolling, host clipboard paste via
-`Ctrl+V`, and drag/drop helpers are also routed through the same session-owned
-interaction surface. Dropped `.apk` files install on the device; other dropped
-files are pushed to `/sdcard/Download`; dropped `device:/sdcard/...` or
-`adb:/sdcard/...` path tokens pull from the device into the artifact root.
-`F1`, `F2`, and `F3` send Android
-Back, Home, and Recents respectively. The SDL window now also paints a small
-in-window toolbar and multi-device shelf on top of the mirror surface, so
-operators can click screenshot/record/reconnect/navigation/rotate/pause/open-folder/fit/fullscreen controls instead
-of relying only on hotkeys. When multiple adb-visible devices are present, the
-shelf becomes clickable and switches the active mirrored device by reusing the
-same reconnect loop that powers `F5`.
+Scenarios are JSON playbooks. See [docs/scenarios.md](docs/scenarios.md) for the full format, template syntax, and action reference.
 
-Source sessions can expose the live stream to a second client with
-`--share-bind <host:port>`. The host session relays the existing private binary
-packet protocol over TCP and reports the bound share endpoint in JSONL. A
-second client can join that stream with `view --join-share <host:port>`.
-Joined share sessions are forced into read-only observer mode and reconnect to
-the shared TCP source rather than talking to adb directly.
-
-`--read-only` turns the view window into an observer surface. The stream still
-renders, screenshots and reconnect/record controls still work, but tap, typing,
-wheel-scroll, clipboard paste, and drag/drop requests are blocked and surfaced
-as `view_input_blocked` JSONL events. Joined share sessions behave the same way
-by default, but additionally disable device-only actions such as screenshots and
-device switching.
-
-`view-doctor` runs the same option resolution as `view` and returns a diagnostic
-report instead of opening a stream. The current checks cover FFmpeg decoder
-readiness, Android helper package discovery, capture-backend policy, adb device
-visibility, device preflight, MediaProjection API/encoder/consent readiness
-when `auto` or `mediaprojection` is selected, and optional recording target
-readiness. The helper package check resolves the built APK from the repo layout
-or from `LUOTSI_VIEW_HELPER_APK`, and FFmpeg readiness uses
-`LUOTSI_FFMPEG_ROOT` plus the bundled `ffmpeg/` probe paths.
-
-`wireless` remains the legacy "go wireless" flow. It runs
-`adb shell ip route get 8.8.8.8` to infer the USB-selected device Wi-Fi address
-when `--host` is not provided, then runs `adb tcpip <port>` and
-`adb connect <host>:<port>`, returning the TCP/IP endpoint.
-
-For Android 11+ Wireless debugging, Luotsi also exposes the TLS/mDNS flow used
-by modern adb Wi-Fi:
-
-- `wireless-scan` runs `adb mdns services` and returns structured
-  `_adb-tls-pairing._tcp`, `_adb-tls-connect._tcp`, and legacy `_adb._tcp`
-  services with service names, endpoints, and adb selectors.
-- `wireless-pair --endpoint <host:port> --code <code>` runs
-  `adb pair <host:port> <code>`. You can also pass `--service <service-name>`
-  from `wireless-scan`; if no endpoint or service is supplied, Luotsi uses the
-  only discovered `_adb-tls-pairing._tcp` service. Omitting `--code` returns a
-  JSON result explaining that Luotsi command mode cannot safely drive adb's
-  interactive prompt; run `adb pair <host:port>` manually or pass `--code`.
-- `wireless-connect --endpoint <host:port>` runs `adb connect <host:port>`.
-  `wireless-connect --service <service-name>` resolves a discovered
-  `_adb-tls-connect._tcp` service and connects to its published endpoint. The
-  returned `device_selector` stays reusable for later `view --device` calls. If no
-  endpoint or service is supplied, Luotsi connects the only discovered TLS
-  connect service.
-
-`wireless-connect` returns `device_selector`, which can be passed directly to
-`view --device <selector>`. It can also save a minimal view profile:
-
-```powershell
-luotsi wireless-connect --service adb-14141FDF600081-TnSdi9 --save-profile desk-wifi
-luotsi view --profile desk-wifi
+```json
+{
+  "name": "android-home-smoke",
+  "steps": [
+    { "name": "go home",            "action": "keyevent",       "code": "KEYCODE_HOME" },
+    { "name": "let launcher settle","action": "sleep",          "milliseconds": 750 },
+    { "name": "capture screenshot", "action": "takeScreenshot", "label": "android-home-smoke" }
+  ]
+}
 ```
 
-This relies on adb's mDNS selector convention, where a connected TLS device may
-appear as `<service-name>._adb-tls-connect._tcp` in `adb devices`.
+Template syntax: `${env:NAME}`, `${env:NAME|fallback}`, `${var:name}`, `${now:HHmmss}`.
 
-Generic ADB port plumbing is exposed for app-to-host and host-to-device test
-flows:
+Generic examples: [`examples/scenarios/android-home-smoke.json`](examples/scenarios/android-home-smoke.json), [`examples/scenarios/android-navigation-smoke.json`](examples/scenarios/android-navigation-smoke.json).
 
-- `forward-list`, `forward --local <endpoint> --remote <endpoint>`, and
-  `forward-remove --local <endpoint>`
-- `reverse-list`, `reverse --remote <endpoint> --local <endpoint>`, and
-  `reverse-remove --remote <endpoint>`
+## Output format
 
-Endpoints use adb syntax such as `tcp:8080`, `tcp:0`, or
-`localabstract:service`.
-
-Common app lifecycle and package-state controls are available as direct CLI
-commands:
-
-- `start-app --package <app.id> [--activity <activity>] [--wait]`
-- `start-uri --uri <uri> [--package <app.id>] [--activity <activity>] [--action <intent-action>] [--wait]`
-- `force-stop --package <app.id>`
-- `clear --package <app.id>` (alias: `clear-app`)
-- `wait-for-activity --activity <activity-or-pattern>`
-- `wait-for-not-activity --activity <activity-or-pattern>`
-- `is-app-installed --package <app.id>`
-- `list-installed-packages [--third-party]`
-- `grant-permission --package <app.id> --permission <permission>`
-- `revoke-permission --package <app.id> --permission <permission>`
-
-Interactive `view` sessions can now emit additional JSONL events beyond
-`view_started`, `view_stats`, `view_error`, and `view_ended`, including:
-
-- `view_capture_backend_fallback`
-- `view_recording_started` / `view_recording_stopped`
-- `view_reconnect_requested` / `view_reconnected`
-- `view_device_switch_requested`
-- `view_screenshot_captured`
-- `view_clipboard_pasted`
-- `view_file_pushed`
-- `view_package_installed`
-- `view_device_shelf` when multiple adb-visible devices are present
-- `view_share_started`
-- `view_share_client_connected` / `view_share_client_disconnected`
-- `view_input_blocked` when `--read-only` suppresses an interactive request
-
-The implementation currently supports `--platform android`. The host seam is in
-place so an iOS adapter can be added later without rewriting the command layer.
-
-Every command prints a single JSON envelope:
+Every command returns a single JSON envelope:
 
 ```json
 {
@@ -292,8 +206,7 @@ Every command prints a single JSON envelope:
 }
 ```
 
-Scenario `run` commands return the scenario result inside `data`. That payload now
-includes top-level timing for non-step overhead:
+Scenario `run` commands return the scenario result inside `data`, including per-step timing and top-level overhead:
 
 ```json
 {
@@ -309,137 +222,22 @@ includes top-level timing for non-step overhead:
 }
 ```
 
-Runtime commands now also write richer artifacts when they interact with a device:
+## Artifacts
 
-- `device-fingerprint.json` for `preflight` and scenario runs
-- `wait-log.txt` / `wait-log.json` for log streaming waits
-- `telemetry-tail.txt` / `telemetry-tail.json` for semantic telemetry snapshots
-- `telemetry-watch.txt` / `telemetry-watch.json` for bounded telemetry collection
-- automatic failure bundles with screenshot, logcat, screen-state, hierarchy, and metadata when a runtime command fails after reaching the device
+Every command that reaches the device writes artifacts to a dedicated artifact root. Failures produce a bundle automatically:
 
-Inspect sessions stream JSONL events instead of writing a final command envelope.
-They begin with `session_started` and `screen_snapshot`, then emit
-`command_result`, `screen_delta`, and `session_ended` events as the agent drives
-the device.
+- `device-fingerprint.json` — written by `preflight` and scenario runs
+- `wait-log.txt` / `wait-log.json` — log streaming waits
+- `telemetry-tail.txt` / `telemetry-tail.json` — telemetry snapshots
+- `telemetry-watch.txt` / `telemetry-watch.json` — bounded telemetry collection
+- Failure bundles — screenshot, logcat, screen-state, hierarchy, and metadata when a runtime command fails after reaching the device
 
-## Scenario playbook
+## Documentation
 
-The first playbook format is JSON to keep parsing unambiguous across OSes and
-agents. The repo ships generic examples under `examples/scenarios/`:
-
-```json
-{
-  "name": "android-home-smoke",
-  "steps": [
-    { "name": "go home", "action": "keyevent", "code": "KEYCODE_HOME" },
-    { "name": "let launcher settle", "action": "sleep", "milliseconds": 750 },
-    { "name": "capture screenshot", "action": "takeScreenshot", "label": "android-home-smoke" }
-  ]
-}
-```
-
-Scenario strings also support lightweight templating:
-
-- `${env:NAME}` for required environment variables
-- `${env:NAME|fallback}` for optional environment variables with a fallback
-- `${var:name}` for scenario variables from the root `variables` block
-- `${now:HHmmss}` for timestamp fragments used in live test data
-
-Scenario step results also include per-step timing. For actions that include
-harness-authored waits such as `tapPoint`, the step timing reports
-`harness_delay_ms` and `configured_delay_ms` alongside total duration.
-
-Supported actions:
-
-- `waitVisible`
-- `waitNotVisible`
-- `tapText`
-- `tapPoint`
-- `doubleTapHeaderLogo`
-- `typeText`
-- `typePin`
-- `keyevent`
-- `waitLog`
-- `waitStep`
-- `waitActionReady`
-- `resetLog`
-- `assertEvent`
-- `assertTextInputReady`
-- `screenState`
-- `assertBelow`
-- `assertAligned`
-- `assertAppVersion`
-- `startApp`
-- `startUri`
-- `forceStop`
-- `clear`
-- `clearApp`
-- `waitForActivity`
-- `waitForNotActivity`
-- `isAppInstalled`
-- `listInstalledPackages`
-- `grantPermission`
-- `revokePermission`
-- `takeScreenshot`
-- `captureArtifacts`
-- `sleep`
-
-`assertEvent` also supports `observeFromPreviousStep: true` when the log
-observation window should begin at the previous step's start time instead of the
-assert step's own start time.
-
-The repo also includes generic Android smoke examples that avoid app-specific
-selectors or copy:
-
-- `examples/scenarios/android-home-smoke.json`
-- `examples/scenarios/android-navigation-smoke.json`
-
-## Telemetry support
-
-Luotsi currently understands the `LUOTSI_DEVICE_TELEMETRY` logcat marker.
-
-- `telemetry-tail` reads recent logcat lines, parses matching telemetry JSON,
-  and returns both parsed events and malformed telemetry lines.
-- `telemetry-watch` waits for a bounded window, then dumps and parses telemetry
-  emitted during that interval.
-- `wait-step` waits for a semantic step event.
-- `wait-action-ready` waits for a semantic action-ready event, optionally
-  scoped to a step.
-
-## Inspect mode
-
-`inspect` opens a JSONL session intended for agent-driven exploration without a
-scenario file.
-
-- startup emits `session_started` and an initial `screen_snapshot`
-- incoming JSON commands can `refresh`, `tap`, `tap_text`, `wait_visible`,
-  `type_text`, `keyevent`, `telemetry_tail`, `telemetry_watch`, and `exit`
-- state-affecting commands emit a `command_result` followed by a `screen_delta`
-  containing the new snapshot and a diff summary
-
-This is enough to let an agent reason about the current UI, choose the next
-action, and keep iterating without authoring a scenario up front.
-
-## Packaging
-
-The CLI can now be published as a self-contained single-file executable for the
-first supported host targets:
-
-```powershell
-dotnet publish Luotsi.Cli -c Release -r win-x64
-dotnet publish Luotsi.Cli -c Release -r linux-x64
-dotnet publish Luotsi.Cli -c Release -r osx-arm64
-dotnet publish Luotsi.Cli -c Release -r osx-x64
-```
-
-Publish outputs land under:
-
-```text
-Luotsi.Cli/bin/Release/net10.0/<rid>/publish/
-```
-
-The published executable inside that folder is `luotsi` (`luotsi.exe` on
-Windows). GitHub release assets keep the `luotsi-cli-<version>-<rid>` archive
-names and contain the same self-contained executable. If you want a
-framework-dependent or non-single-file build, override the MSBuild properties
-at publish time.
+| Doc | Contents |
+|---|---|
+| [docs/commands.md](docs/commands.md) | Full command reference with flags, retry behavior, wireless pairing |
+| [docs/view-session.md](docs/view-session.md) | Presets, backends, profiles, hotkeys, JSONL events, sharing |
+| [docs/scenarios.md](docs/scenarios.md) | Playbook format, template syntax, all actions |
+| [docs/architecture.md](docs/architecture.md) | System architecture and component flow |
+| [docs/subsystems.md](docs/subsystems.md) | CLI, host automation, scenario, view, and telemetry subsystems |
