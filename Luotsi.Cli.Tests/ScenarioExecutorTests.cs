@@ -360,6 +360,40 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_File_Writes_Consistent_Scenario_Ended_Timestamp_And_Duration()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new SteppingTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind), TimeSpan.FromMilliseconds(1));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "name": "pause", "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new SteppingDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json", "--events-jsonl", "/tmp/events.jsonl"]);
+        var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
+        var startedAt = events.Single(static evt => evt.GetProperty("event").GetString() == "scenario_started").GetProperty("timestamp").GetDateTimeOffset();
+        var endedEvent = events.Single(static evt => evt.GetProperty("event").GetString() == "scenario_ended");
+        var endedAt = endedEvent.GetProperty("timestamp").GetDateTimeOffset();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal((endedAt - startedAt).TotalMilliseconds, endedEvent.GetProperty("duration_ms").GetDouble());
+    }
+
+    [Fact]
     public async Task RunAsync_File_Failure_Writes_Jsonl_Terminal_Result()
     {
         var fileSystem = new FakeFileSystem();
@@ -396,6 +430,8 @@ public sealed partial class AppTests
         Assert.Equal("failed", events[^2].GetProperty("status").GetString());
         Assert.Equal("scenario_run_ended", events[^1].GetProperty("event").GetString());
         Assert.Equal("failed", events[^1].GetProperty("status").GetString());
+        Assert.Equal(0, events[^1].GetProperty("passed_count").GetInt32());
+        Assert.Equal(1, events[^1].GetProperty("failed_count").GetInt32());
     }
 
     [Fact]
@@ -441,6 +477,46 @@ public sealed partial class AppTests
         Assert.Equal("passed", events[^1].GetProperty("status").GetString());
         Assert.Equal(2, events[^1].GetProperty("passed_count").GetInt32());
     }
+
+      [Fact]
+      public async Task RunAsync_Path_Failure_Writes_Run_Plan_Metadata_In_Terminal_Event()
+      {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenarios/a.json", """
+        {
+          "name": "a",
+          "steps": [
+          { "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var host = new FakeDeviceHost
+        {
+          DeviceFingerprintException = new UsageException("preflight fingerprint failed")
+        };
+        var app = new App(new AppDependencies
+        {
+          TimeProvider = timeProvider,
+          FileSystem = fileSystem,
+          ProcessRunner = new DefaultProcessRunner(),
+          Delay = new FakeDelay(timeProvider),
+          DeviceHostFactory = new FakeDeviceHostFactory(host),
+          Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--path", "/tmp/scenarios", "--events-jsonl", "/tmp/events.jsonl"]);
+        var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("scenario_run_ended", events[^1].GetProperty("event").GetString());
+        Assert.Equal("failed", events[^1].GetProperty("status").GetString());
+        Assert.Equal(1, events[^1].GetProperty("total_count").GetInt32());
+        Assert.Equal(1, events[^1].GetProperty("matched_count").GetInt32());
+        Assert.Equal(1, events[^1].GetProperty("selected_count").GetInt32());
+        Assert.Equal(0, events[^1].GetProperty("sharded_out_count").GetInt32());
+      }
 
 
     [Fact]

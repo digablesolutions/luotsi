@@ -100,7 +100,7 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
                 Path: file,
                 PassedCount: result.Status == "passed" ? 1 : 0,
                 FailedCount: result.Status == "passed" ? 0 : 1),
-            ex => CreateFailedRunEndedEvent(file, ex)).ConfigureAwait(false);
+            ex => CreateFailedRunEndedEvent(file, ex, passedCount: 0, failedCount: 1)).ConfigureAwait(false);
     }
 
     public async Task<ScenarioRunBatchResult> RunBatchAsync(ScenarioRunPlan plan, Func<IScenarioEventSink, Task<ScenarioRunBatchResult>> runAsync)
@@ -133,7 +133,15 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
                 ShardedOutCount: result.ShardedOutCount,
                 ShardCount: result.ShardCount,
                 ShardIndex: result.ShardIndex),
-            ex => CreateFailedRunEndedEvent(plan.Query.Path, ex)).ConfigureAwait(false);
+            ex => CreateFailedRunEndedEvent(
+                plan.Query.Path,
+                ex,
+                totalCount: plan.TotalCount,
+                matchedCount: plan.MatchedCount,
+                selectedCount: plan.SelectedCount,
+                shardedOutCount: plan.ShardedOutCount,
+                shardCount: plan.Query.ShardCount,
+                shardIndex: plan.Query.ShardIndex)).ConfigureAwait(false);
     }
 
     public ValueTask DisposeAsync() => _eventSink.DisposeAsync();
@@ -158,12 +166,30 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
         }
     }
 
-    private ScenarioEvent CreateFailedRunEndedEvent(string path, Exception exception) =>
+    private ScenarioEvent CreateFailedRunEndedEvent(
+        string path,
+        Exception exception,
+        int? totalCount = null,
+        int? matchedCount = null,
+        int? selectedCount = null,
+        int? passedCount = null,
+        int? failedCount = null,
+        int? shardedOutCount = null,
+        int? shardCount = null,
+        int? shardIndex = null) =>
         new(
             "scenario_run_ended",
             _timeProvider.GetUtcNow(),
             "failed",
             Path: path,
+            TotalCount: totalCount,
+            MatchedCount: matchedCount,
+            SelectedCount: selectedCount,
+            PassedCount: passedCount,
+            FailedCount: failedCount,
+            ShardedOutCount: shardedOutCount,
+            ShardCount: shardCount,
+            ShardIndex: shardIndex,
             Error: ScenarioErrorInfo.From(exception));
 }
 

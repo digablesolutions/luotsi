@@ -50,7 +50,7 @@ internal sealed class AppCommandHost(AppCommandHostDependencies dependencies)
 
         var data = await _dependencies.CommandDispatcher.ExecuteAsync(options.Command!, options, adbExecutable, runner).ConfigureAwait(false);
         _dependencies.EnvelopeWriter.WriteSuccess(options.Command!, started, data, artifacts.ToData());
-        return AppCommandExitCodeResolver.Resolve(data);
+        return _dependencies.ExitCodeResolver.Resolve(data);
     }
 }
 

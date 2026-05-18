@@ -28,7 +28,35 @@ internal sealed class ManualTimeProvider(DateTimeOffset utcNow) : TimeProvider
     public void Advance(TimeSpan duration) => _utcNow = _utcNow.Add(duration);
 }
 
+internal sealed class SteppingTimeProvider(DateTimeOffset utcNow, TimeSpan step) : TimeProvider
+{
+    private DateTimeOffset _utcNow = utcNow;
+    private readonly TimeSpan _step = step;
+
+    public override DateTimeOffset GetUtcNow()
+    {
+        var current = _utcNow;
+        _utcNow = _utcNow.Add(_step);
+        return current;
+    }
+
+    public void Advance(TimeSpan duration) => _utcNow = _utcNow.Add(duration);
+}
+
 internal sealed class FakeDelay(ManualTimeProvider timeProvider) : IDelay
+{
+    public List<int> Calls { get; } = [];
+
+    public Task DelayAsync(int milliseconds, CancellationToken cancellationToken = default)
+    {
+        Calls.Add(milliseconds);
+        DelayMetrics.RecordDelay(milliseconds);
+        timeProvider.Advance(TimeSpan.FromMilliseconds(milliseconds));
+        return Task.CompletedTask;
+    }
+}
+
+internal sealed class SteppingDelay(SteppingTimeProvider timeProvider) : IDelay
 {
     public List<int> Calls { get; } = [];
 
@@ -475,6 +503,8 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public Exception? PreflightException { get; set; }
 
+    public Exception? DeviceFingerprintException { get; set; }
+
     public Exception? WaitVisibleException { get; set; }
 
     public Task<DeviceListResult> GetDevicesAsync()
@@ -801,8 +831,15 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public Task<WaitLogResult> WaitForLogAsync(string text, int timeoutSec) => Task.FromResult(new WaitLogResult(text, timeoutSec, text, 1));
 
-    public Task<DeviceFingerprint> WriteDeviceFingerprintAsync() =>
-        Task.FromResult(new DeviceFingerprint(ResultSchemas.DeviceFingerprint, DateTimeOffset.UtcNow, "SER", "Model", "16", "36", "fingerprint", "arm64-v8a", "focus"));
+    public Task<DeviceFingerprint> WriteDeviceFingerprintAsync()
+    {
+        if (DeviceFingerprintException is not null)
+        {
+            throw DeviceFingerprintException;
+        }
+
+        return Task.FromResult(new DeviceFingerprint(ResultSchemas.DeviceFingerprint, DateTimeOffset.UtcNow, "SER", "Model", "16", "36", "fingerprint", "arm64-v8a", "focus"));
+    }
 
     public Task<FailureArtifactBundle> CaptureFailureArtifactsAsync(FailureCaptureRequest request, Exception exception) =>
         Task.FromResult(new FailureArtifactBundle(ResultSchemas.FailureBundle, DateTimeOffset.UtcNow, request.Scope, request.Name, request.File, request.StepIndex, request.StepName, request.Action, exception.GetType().FullName ?? exception.GetType().Name, exception.Message, [], []));

@@ -55,7 +55,7 @@ public sealed class ArtifactSession
     /// </summary>
     /// <param name="name">File name.</param>
     /// <param name="text">Text content.</param>
-    public Task WriteTextAsync(string name, string text) => _fileSystem.WriteAllTextAsync(Path.Combine(Root, name), text, Encoding.UTF8);
+    public Task WriteTextAsync(string name, string text) => _fileSystem.WriteAllTextAsync(GetArtifactPath(name), text, Encoding.UTF8);
 
     /// <summary>
     /// Writes a JSON artifact.
@@ -64,9 +64,9 @@ public sealed class ArtifactSession
     /// <param name="value">Value to serialize.</param>
     public async Task WriteJsonAsync(string name, object value)
     {
-        var path = Path.Combine(Root, name);
+        var path = GetArtifactPath(name);
         await using var stream = _fileSystem.OpenWrite(path);
-        await JsonSerializer.SerializeAsync(stream, value, value?.GetType() ?? typeof(object), AppJson.Options).ConfigureAwait(false);
+        await JsonSerializer.SerializeAsync(stream, value, value.GetType(), AppJson.Options).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -74,6 +74,21 @@ public sealed class ArtifactSession
     /// </summary>
     /// <returns>Artifact metadata.</returns>
     public ArtifactData ToData() => new(Root, ToOptionValue(UiPollArtifactPolicy));
+
+    private string GetArtifactPath(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new UsageException("Artifact name must be a non-empty file name.");
+        }
+
+        if (Path.IsPathRooted(name) || !string.Equals(Path.GetFileName(name), name, StringComparison.Ordinal))
+        {
+            throw new UsageException("Artifact name must be a file name without directory segments.");
+        }
+
+        return Path.Combine(Root, name);
+    }
 
     private static UiPollArtifactPolicy ParseUiPollArtifactPolicy(string? value)
     {

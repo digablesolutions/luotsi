@@ -156,13 +156,14 @@ public sealed class ScenarioExecutor
         }
         finally
         {
+            var endedAt = _timeProvider.GetUtcNow();
             await EmitAsync(new ScenarioEvent(
                 "scenario_ended",
-                _timeProvider.GetUtcNow(),
+                endedAt,
                 status,
                 File: file,
                 Scenario: scenario.Name,
-                DurationMs: (_timeProvider.GetUtcNow() - scenarioStarted).TotalMilliseconds)).ConfigureAwait(false);
+                DurationMs: (endedAt - scenarioStarted).TotalMilliseconds)).ConfigureAwait(false);
         }
     }
 
