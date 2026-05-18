@@ -27,6 +27,7 @@ public sealed record ScenarioRunPlanResult(
     int TotalCount,
     int MatchedCount,
     int SelectedCount,
+    int ShardedOutCount,
     int? ShardCount,
     int? ShardIndex,
     IReadOnlyList<ScenarioCatalogEntry> Scenarios);

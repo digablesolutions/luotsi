@@ -41,26 +41,23 @@ internal sealed class ScenarioCommandDispatcher(
         }
 
         var query = CreateQuery(options, requirePath: false);
-        var selection = await DiscoverAsync(query).ConfigureAwait(false);
+        var plan = await CreatePlanner().CreateAsync(query).ConfigureAwait(false);
 
         if (query.DryRun)
         {
             return new ScenarioRunPlanResult(
                 query.Path,
                 true,
-                selection.TotalCount,
-                selection.Matched.Count,
-                selection.Selected.Count,
+                plan.TotalCount,
+                plan.MatchedCount,
+                plan.SelectedCount,
+                plan.ShardedOutCount,
                 query.ShardCount,
                 query.ShardIndex,
-                selection.Selected);
+                plan.SelectedScenarios);
         }
 
-        return await new ScenarioBatchExecutor(scenarios).RunAsync(new ScenarioBatchExecutionRequest(
-            query,
-            selection.TotalCount,
-            selection.Matched.Count,
-            selection.Selected)).ConfigureAwait(false);
+        return await new ScenarioBatchExecutor(scenarios).RunAsync(plan).ConfigureAwait(false);
     }
 
     private static bool UsesCatalogExecution(CliOptions options) =>
@@ -68,14 +65,15 @@ internal sealed class ScenarioCommandDispatcher(
 
     private async Task<ScenarioSelection> DiscoverAsync(ScenarioQuery query)
     {
-        var discovered = await CreateScenarioCatalog().DiscoverAsync(query.Path).ConfigureAwait(false);
-        var matched = ScenarioCatalog.Filter(discovered, query);
-        var selected = ScenarioCatalog.SelectShard(matched, query);
-        return new ScenarioSelection(discovered.Count, matched, selected);
+        var plan = await CreatePlanner().CreateAsync(query).ConfigureAwait(false);
+        return new ScenarioSelection(plan.TotalCount, plan.MatchedScenarios, plan.SelectedScenarios);
     }
 
     private ScenarioCatalog CreateScenarioCatalog() =>
         new(_fileSystem, CreateTemplateResolver());
+
+    private ScenarioRunPlanner CreatePlanner() =>
+        new(CreateScenarioCatalog());
 
     private IScenarioTemplateResolver CreateTemplateResolver() =>
         new ScenarioTemplateResolver(_timeProvider, _environment);

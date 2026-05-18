@@ -8,15 +8,15 @@ internal sealed class ScenarioBatchExecutor(ScenarioExecutor scenarios)
 {
     private readonly ScenarioExecutor _scenarios = scenarios ?? throw new ArgumentNullException(nameof(scenarios));
 
-    public async Task<ScenarioRunBatchResult> RunAsync(ScenarioBatchExecutionRequest request)
+    public async Task<ScenarioRunBatchResult> RunAsync(ScenarioRunPlan plan)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(plan);
 
-        var results = new List<object>(request.SelectedScenarios.Count);
+        var results = new List<object>(plan.SelectedCount);
         var passedCount = 0;
         var failedCount = 0;
 
-        foreach (var scenario in request.SelectedScenarios)
+        foreach (var scenario in plan.SelectedScenarios)
         {
             try
             {
@@ -31,16 +31,16 @@ internal sealed class ScenarioBatchExecutor(ScenarioExecutor scenarios)
         }
 
         return new ScenarioRunBatchResult(
-            request.Query.Path,
+            plan.Query.Path,
             failedCount == 0 ? "passed" : "failed",
-            request.TotalCount,
-            request.MatchedCount,
-            request.SelectedScenarios.Count,
+            plan.TotalCount,
+            plan.MatchedCount,
+            plan.SelectedCount,
             passedCount,
             failedCount,
-            request.MatchedCount - request.SelectedScenarios.Count,
-            request.Query.ShardCount,
-            request.Query.ShardIndex,
+            plan.ShardedOutCount,
+            plan.Query.ShardCount,
+            plan.Query.ShardIndex,
             results);
     }
 
@@ -57,9 +57,3 @@ internal sealed class ScenarioBatchExecutor(ScenarioExecutor scenarios)
         };
     }
 }
-
-internal sealed record ScenarioBatchExecutionRequest(
-    ScenarioQuery Query,
-    int TotalCount,
-    int MatchedCount,
-    IReadOnlyList<ScenarioCatalogEntry> SelectedScenarios);
