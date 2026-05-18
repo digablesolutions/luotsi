@@ -162,6 +162,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         }
         catch
         {
+            // ignored
         }
     }
 
@@ -655,13 +656,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
             return false;
         }
 
-        if (_isFullscreen && keyboardEvent.key == SDL_Keycode.SDLK_ESCAPE)
-        {
-            ToggleFullscreen();
-            return true;
-        }
-
-        if (IsAltPressed(keyboardEvent.mod) &&
+        if (_isFullscreen && keyboardEvent.key == SDL_Keycode.SDLK_ESCAPE || IsAltPressed(keyboardEvent.mod) &&
             (keyboardEvent.key == SDL_Keycode.SDLK_RETURN || keyboardEvent.key == SDL_Keycode.SDLK_RETURN2))
         {
             ToggleFullscreen();
@@ -998,6 +993,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         }
         catch
         {
+            // ignored
         }
     }
 
@@ -1395,7 +1391,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
 
     private void DrawTooltipText(string text, int left, int top, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
     {
-        var glyphWidth = 5 * TooltipGlyphCellSize;
+        const int glyphWidth = 5 * TooltipGlyphCellSize;
         var cursorLeft = left;
         foreach (var character in text)
         {
@@ -1560,6 +1556,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         }
         catch
         {
+            // ignored
         }
     }
 
@@ -1567,16 +1564,11 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
     {
         public static ViewFrameSnapshot From(ViewFrame frame)
         {
-            var bytesPerPixel = 4;
+            const int bytesPerPixel = 4;
             var tightStride = frame.Width * bytesPerPixel;
             var sourceRowStride = frame.RowStride <= 0 ? tightStride : frame.RowStride;
             var pixelData = frame.PixelData.ToArray();
-            if (pixelData.Length == 0)
-            {
-                return new ViewFrameSnapshot(frame.Width, frame.Height, tightStride, pixelData);
-            }
-
-            if (sourceRowStride == tightStride)
+            if (pixelData.Length == 0 || sourceRowStride == tightStride)
             {
                 return new ViewFrameSnapshot(frame.Width, frame.Height, tightStride, pixelData);
             }
@@ -1593,7 +1585,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
     }
 }
 
-internal static unsafe class NativeSdlWindow
+internal static unsafe partial class NativeSdlWindow
 {
     public static bool SetAlwaysOnTop(SDL_Window* window, bool alwaysOnTop) =>
         SDL_SetWindowAlwaysOnTop(window, alwaysOnTop);
@@ -1609,7 +1601,8 @@ internal static unsafe class NativeSdlWindow
             return false;
         }
 
-        if (!SDL_GetDisplayUsableBounds(displayId, out var rect) || rect.w <= 0 || rect.h <= 0)
+        SDL_Rect rect;
+        if (!SDL_GetDisplayUsableBounds(displayId, &rect) || rect.w <= 0 || rect.h <= 0)
         {
             return false;
         }
@@ -1628,28 +1621,34 @@ internal static unsafe class NativeSdlWindow
     public static void DestroySurface(SDL_Surface* surface) =>
         SDL_DestroySurface(surface);
 
-    [DllImport("SDL3", CallingConvention = CallingConvention.Cdecl)]
+    [LibraryImport("SDL3")]
+    [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     [return: MarshalAs(UnmanagedType.I1)]
-    private static extern bool SDL_SetWindowAlwaysOnTop(SDL_Window* window, [MarshalAs(UnmanagedType.I1)] bool onTop);
+    private static partial bool SDL_SetWindowAlwaysOnTop(SDL_Window* window, [MarshalAs(UnmanagedType.I1)] bool onTop);
 
-    [DllImport("SDL3", CallingConvention = CallingConvention.Cdecl)]
-    private static extern uint SDL_GetPrimaryDisplay();
+    [LibraryImport("SDL3")]
+    [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+    private static partial uint SDL_GetPrimaryDisplay();
 
-    [DllImport("SDL3", CallingConvention = CallingConvention.Cdecl)]
+    [LibraryImport("SDL3")]
+    [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     [return: MarshalAs(UnmanagedType.I1)]
-    private static extern bool SDL_GetDisplayUsableBounds(uint displayId, out SDL_Rect rect);
+    private static partial bool SDL_GetDisplayUsableBounds(uint displayId, SDL_Rect* rect);
 
-    [DllImport("SDL3", CallingConvention = CallingConvention.Cdecl)]
-    private static extern SDL_Surface* SDL_CreateSurfaceFrom(
+    [LibraryImport("SDL3")]
+    [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+    private static partial SDL_Surface* SDL_CreateSurfaceFrom(
         int width,
         int height,
         SDL_PixelFormat format,
         void* pixels,
         int pitch);
 
-    [DllImport("SDL3", CallingConvention = CallingConvention.Cdecl)]
-    private static extern void SDL_SetWindowIcon(SDL_Window* window, SDL_Surface* icon);
+    [LibraryImport("SDL3")]
+    [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+    private static partial void SDL_SetWindowIcon(SDL_Window* window, SDL_Surface* icon);
 
-    [DllImport("SDL3", CallingConvention = CallingConvention.Cdecl)]
-    private static extern void SDL_DestroySurface(SDL_Surface* surface);
+    [LibraryImport("SDL3")]
+    [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+    private static partial void SDL_DestroySurface(SDL_Surface* surface);
 }
