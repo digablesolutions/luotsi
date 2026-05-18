@@ -1,0 +1,55 @@
+namespace Luotsi.Cli.Cli;
+
+internal enum AppCommandFamily
+{
+    ProfileList,
+    ProfileDelete,
+    Inspect,
+    ViewDiagnostics,
+    ViewSession,
+    HostedCommand
+}
+
+internal static class AppCommandFamilyClassifier
+{
+    public static AppCommandFamilyClassification Classify(CliOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        if (string.Equals(options.Command, "profile-list", StringComparison.OrdinalIgnoreCase))
+        {
+            return new AppCommandFamilyClassification(AppCommandFamily.ProfileList);
+        }
+
+        if (string.Equals(options.Command, "profile-delete", StringComparison.OrdinalIgnoreCase))
+        {
+            return new AppCommandFamilyClassification(AppCommandFamily.ProfileDelete);
+        }
+
+        if (string.Equals(options.Command, "inspect", StringComparison.OrdinalIgnoreCase))
+        {
+            return new AppCommandFamilyClassification(AppCommandFamily.Inspect);
+        }
+
+        var viewDiagnostic = ViewDiagnosticInvocation.Resolve(options);
+        if (viewDiagnostic is not null)
+        {
+            return new AppCommandFamilyClassification(AppCommandFamily.ViewDiagnostics, viewDiagnostic);
+        }
+
+        if (IsViewSessionCommand(options.Command))
+        {
+            return new AppCommandFamilyClassification(AppCommandFamily.ViewSession);
+        }
+
+        return new AppCommandFamilyClassification(AppCommandFamily.HostedCommand);
+    }
+
+    private static bool IsViewSessionCommand(string? command) =>
+        string.Equals(command, "view", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(command, "reconnect", StringComparison.OrdinalIgnoreCase);
+}
+
+internal readonly record struct AppCommandFamilyClassification(
+    AppCommandFamily Family,
+    ViewDiagnosticInvocation? ViewDiagnostic = null);

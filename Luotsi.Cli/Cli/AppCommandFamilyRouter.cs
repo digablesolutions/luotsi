@@ -19,49 +19,48 @@ internal sealed class AppCommandFamilyRouter(AppCommandFamilyRouterDependencies 
         var artifacts = ArtifactSession.Create(options, _dependencies.FileSystem, _dependencies.TimeProvider);
         context.Artifacts = artifacts;
 
-        if (string.Equals(options.Command, "profile-list", StringComparison.OrdinalIgnoreCase))
+        var classification = AppCommandFamilyClassifier.Classify(options);
+        switch (classification.Family)
         {
-            return await _dependencies.CommandHost.RunProfileListAsync(options, started, artifacts).ConfigureAwait(false);
-        }
+            case AppCommandFamily.ProfileList:
+                return await _dependencies.CommandHost.RunProfileListAsync(options, started, artifacts).ConfigureAwait(false);
 
-        if (string.Equals(options.Command, "profile-delete", StringComparison.OrdinalIgnoreCase))
-        {
-            return await _dependencies.CommandHost.RunProfileDeleteAsync(options, started, artifacts).ConfigureAwait(false);
-        }
+            case AppCommandFamily.ProfileDelete:
+                return await _dependencies.CommandHost.RunProfileDeleteAsync(options, started, artifacts).ConfigureAwait(false);
 
-        if (string.Equals(options.Command, "inspect", StringComparison.OrdinalIgnoreCase))
-        {
-            return await _dependencies.InspectSessionLauncher.RunAsync(options, adbExecutable, artifacts).ConfigureAwait(false);
-        }
+            case AppCommandFamily.Inspect:
+                return await _dependencies.InspectSessionLauncher.RunAsync(options, adbExecutable, artifacts).ConfigureAwait(false);
 
-        var viewDiagnostic = ViewDiagnosticInvocation.Resolve(options);
-        if (viewDiagnostic is not null)
-        {
-            var preparedViewDiagnostic = _dependencies.ViewDiagnosticsLauncher.Prepare(viewDiagnostic, options, started, adbExecutable, artifacts);
-            context.Runner = preparedViewDiagnostic.Runner;
-            return await preparedViewDiagnostic.ExecuteAsync().ConfigureAwait(false);
-        }
-
-        if (IsViewCommand(options.Command))
-        {
-            var preparedViewSession = await _dependencies.ViewSessionCommandPreparer.PrepareAsync(options, adbExecutable, artifacts).ConfigureAwait(false);
-            context.Runner = preparedViewSession.Runner;
-            var exitCode = await preparedViewSession.Session.RunAsync(preparedViewSession.Options).ConfigureAwait(false);
-            if (exitCode == 0)
+            case AppCommandFamily.ViewDiagnostics:
             {
-                await _dependencies.ViewSessionCommandPreparer.SaveLastAsync(options, preparedViewSession.Options).ConfigureAwait(false);
+                var preparedViewDiagnostic = _dependencies.ViewDiagnosticsLauncher.Prepare(
+                    classification.ViewDiagnostic ?? throw new InvalidOperationException("View diagnostics classification requires an invocation."),
+                    options,
+                    started,
+                    adbExecutable,
+                    artifacts);
+                context.Runner = preparedViewDiagnostic.Runner;
+                return await preparedViewDiagnostic.ExecuteAsync().ConfigureAwait(false);
             }
 
-            return exitCode;
+            case AppCommandFamily.ViewSession:
+            {
+                var preparedViewSession = await _dependencies.ViewSessionCommandPreparer.PrepareAsync(options, adbExecutable, artifacts).ConfigureAwait(false);
+                context.Runner = preparedViewSession.Runner;
+                var exitCode = await preparedViewSession.Session.RunAsync(preparedViewSession.Options).ConfigureAwait(false);
+                if (exitCode == 0)
+                {
+                    await _dependencies.ViewSessionCommandPreparer.SaveLastAsync(options, preparedViewSession.Options).ConfigureAwait(false);
+                }
+
+                return exitCode;
+            }
+
+            default:
+                context.Runner = _dependencies.DeviceHostLauncher.Create(options, adbExecutable, artifacts);
+                return await _dependencies.CommandHost.RunCommandAsync(options, started, adbExecutable, context.Runner, artifacts).ConfigureAwait(false);
         }
-
-        context.Runner = _dependencies.DeviceHostLauncher.Create(options, adbExecutable, artifacts);
-        return await _dependencies.CommandHost.RunCommandAsync(options, started, adbExecutable, context.Runner, artifacts).ConfigureAwait(false);
     }
-
-    private static bool IsViewCommand(string? command) =>
-        string.Equals(command, "view", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(command, "reconnect", StringComparison.OrdinalIgnoreCase);
 }
 
 internal sealed class AppCommandFamilyRouterDependencies
