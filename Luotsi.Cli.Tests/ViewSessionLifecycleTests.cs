@@ -233,6 +233,7 @@ public sealed partial class AppTests
         var bootstrap = new FakeViewTransportBootstrap([
             new InvalidOperationException("Android view helper package was not found. Set LUOTSI_VIEW_HELPER_APK or build the helper APK at Luotsi.ViewServer.Android\\app\\build\\outputs\\apk\\debug\\app-debug.apk")
         ]);
+        using var stream = new MemoryStream();
         var session = new ViewSession(
             host,
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
@@ -240,7 +241,7 @@ public sealed partial class AppTests
             timeProvider,
             bootstrap,
             new FakeViewBackendFactory(backend),
-            new FakeViewStreamConnector(new MemoryStream()),
+            new FakeViewStreamConnector(stream),
             new ViewPacketStreamReader());
 
         var exitCode = await session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", true, null, 1600, 60, "8M", false, false));
