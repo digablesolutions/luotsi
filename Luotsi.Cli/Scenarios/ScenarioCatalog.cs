@@ -2,7 +2,6 @@ using System.Text.Json;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Infrastructure.Serialization;
-using Luotsi.Cli.Infrastructure.System;
 using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Scenarios;
@@ -32,6 +31,71 @@ public sealed record ScenarioRunPlanResult(
     int? ShardIndex,
     IReadOnlyList<ScenarioCatalogEntry> Scenarios);
 
+public sealed record ScenarioRunTiming(
+    double TotalMs,
+    double PrologueMs,
+    double StepsMs,
+    double NonStepMs);
+
+public sealed record ScenarioStepTiming(
+    double TotalMs,
+    int HarnessDelayMs,
+    int? ConfiguredDelayMs,
+    double NonDelayMs);
+
+public sealed record ScenarioStepResult(
+    string Step,
+    string Action,
+    double DurationMs,
+    ScenarioStepTiming Timing,
+    object? Result = null,
+    string? Status = null,
+    ErrorInfo? Error = null);
+
+public sealed record ScenarioFailedStepResult(
+    int Index,
+    string Name,
+    string Action,
+    double DurationMs,
+    ScenarioStepTiming Timing);
+
+public sealed record ScenarioRunResult(
+    string Scenario,
+    string Status,
+    ScenarioRunTiming Timing,
+    IReadOnlyList<ScenarioStepResult> Steps);
+
+public sealed record ScenarioRunFailureData(
+    string Scenario,
+    string File,
+    string Status,
+    ScenarioRunTiming Timing,
+    ScenarioFailedStepResult FailedStep,
+    IReadOnlyList<ScenarioStepResult> Steps,
+    FailureArtifactBundle FailureArtifacts);
+
+public sealed record ScenarioBatchItemResult(
+    string Scenario,
+    string Status,
+    ScenarioRunTiming? Timing = null,
+    IReadOnlyList<ScenarioStepResult>? Steps = null,
+    string? File = null,
+    ScenarioRunFailureData? Data = null,
+    ErrorInfo? Error = null)
+{
+    public static ScenarioBatchItemResult FromSuccess(ScenarioRunResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        return new ScenarioBatchItemResult(result.Scenario, result.Status, result.Timing, result.Steps);
+    }
+
+    public static ScenarioBatchItemResult FromFailure(string scenario, string file, ScenarioRunFailureData? data, ErrorInfo error)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+        return new ScenarioBatchItemResult(scenario, "failed", File: file, Data: data, Error: error);
+    }
+}
+
 public sealed record ScenarioRunBatchResult(
     string Path,
     string Status,
@@ -43,7 +107,7 @@ public sealed record ScenarioRunBatchResult(
     int ShardedOutCount,
     int? ShardCount,
     int? ShardIndex,
-    IReadOnlyList<object> Scenarios);
+    IReadOnlyList<ScenarioBatchItemResult> Scenarios);
 
 public sealed record ScenarioQuery(
     string Path,
@@ -57,21 +121,10 @@ public sealed record ScenarioQuery(
 
 internal sealed class ScenarioCatalog(
     IFileSystem fileSystem,
-    TimeProvider timeProvider,
-    IEnvironmentVariables? environment = null)
+    IScenarioTemplateResolver templateResolver)
 {
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
-
-    private readonly IScenarioTemplateResolver _templateResolver = new ScenarioTemplateResolver(
-        timeProvider ?? throw new ArgumentNullException(nameof(timeProvider)),
-        environment ?? new SystemEnvironmentVariables());
-
-    internal ScenarioCatalog(IFileSystem fileSystem, IScenarioTemplateResolver templateResolver)
-        : this(fileSystem, TimeProvider.System, new SystemEnvironmentVariables())
-    {
-        _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
-        _templateResolver = templateResolver ?? throw new ArgumentNullException(nameof(templateResolver));
-    }
+    private readonly IScenarioTemplateResolver _templateResolver = templateResolver ?? throw new ArgumentNullException(nameof(templateResolver));
 
     public async Task<IReadOnlyList<ScenarioCatalogEntry>> DiscoverAsync(string path)
     {

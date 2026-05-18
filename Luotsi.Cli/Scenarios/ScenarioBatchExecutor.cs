@@ -1,8 +1,7 @@
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Models;
-using Luotsi.Cli.Scenarios;
 
-namespace Luotsi.Cli.Cli;
+namespace Luotsi.Cli.Scenarios;
 
 internal sealed class ScenarioBatchExecutor(ScenarioExecutor scenarios)
 {
@@ -12,7 +11,7 @@ internal sealed class ScenarioBatchExecutor(ScenarioExecutor scenarios)
     {
         ArgumentNullException.ThrowIfNull(plan);
 
-        var results = new List<object>(plan.SelectedCount);
+        var results = new List<ScenarioBatchItemResult>(plan.SelectedCount);
         var passedCount = 0;
         var failedCount = 0;
 
@@ -20,7 +19,7 @@ internal sealed class ScenarioBatchExecutor(ScenarioExecutor scenarios)
         {
             try
             {
-                results.Add(await _scenarios.RunAsync(scenario.File).ConfigureAwait(false));
+                results.Add(ScenarioBatchItemResult.FromSuccess(await _scenarios.RunAsync(scenario.File).ConfigureAwait(false)));
                 passedCount++;
             }
             catch (Exception ex) when (ex is not UsageException)
@@ -44,16 +43,13 @@ internal sealed class ScenarioBatchExecutor(ScenarioExecutor scenarios)
             results);
     }
 
-    private static object CreateFailureResult(ScenarioCatalogEntry scenario, Exception exception)
+    private static ScenarioBatchItemResult CreateFailureResult(ScenarioCatalogEntry scenario, Exception exception)
     {
         var failure = exception as ICommandFailureDetails;
-        return new
-        {
-            scenario = scenario.Name,
-            file = scenario.File,
-            status = "failed",
-            data = failure?.DataPayload,
-            error = ErrorInfo.From(exception, failure?.CategoryOverride ?? ErrorInfo.Classify(exception.Message))
-        };
+        return ScenarioBatchItemResult.FromFailure(
+            scenario.Name,
+            scenario.File,
+            failure?.DataPayload as ScenarioRunFailureData,
+            ErrorInfo.From(exception, failure?.CategoryOverride ?? ErrorInfo.Classify(exception.Message)));
     }
 }

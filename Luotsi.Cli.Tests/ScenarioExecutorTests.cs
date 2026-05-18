@@ -279,7 +279,13 @@ public sealed partial class AppTests
         Assert.Equal(1, data.GetProperty("passed_count").GetInt32());
         Assert.Equal(1, data.GetProperty("failed_count").GetInt32());
         Assert.Equal(0, data.GetProperty("sharded_out_count").GetInt32());
-        Assert.Equal(2, data.GetProperty("scenarios").GetArrayLength());
+        var scenarios = data.GetProperty("scenarios");
+        Assert.Equal(2, scenarios.GetArrayLength());
+        Assert.Equal("fails", scenarios[0].GetProperty("scenario").GetString());
+        Assert.Equal("failed", scenarios[0].GetProperty("status").GetString());
+        Assert.Equal("fails", scenarios[0].GetProperty("data").GetProperty("scenario").GetString());
+        Assert.Equal("passes", scenarios[1].GetProperty("scenario").GetString());
+        Assert.Equal("passed", scenarios[1].GetProperty("status").GetString());
     }
 
 
