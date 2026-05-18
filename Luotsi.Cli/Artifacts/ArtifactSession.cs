@@ -87,7 +87,7 @@ public sealed class ArtifactSession
             throw new UsageException("Artifact name must be a file name without directory segments.");
         }
 
-        return Path.Combine(Root, name);
+        return Path.Join(Root, name);
     }
 
     private static UiPollArtifactPolicy ParseUiPollArtifactPolicy(string? value)
