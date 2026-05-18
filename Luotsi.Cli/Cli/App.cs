@@ -3,6 +3,7 @@ using Luotsi.Cli.Infrastructure.Ids;
 using Luotsi.Cli.Infrastructure.Processes;
 using Luotsi.Cli.Infrastructure.System;
 using Luotsi.Cli.Infrastructure.Time;
+using Luotsi.Cli.Scenarios;
 using Luotsi.Cli.View.Diagnostics;
 using Luotsi.Cli.View.Session;
 
@@ -62,9 +63,14 @@ public sealed class App
             resolvedProcessRunner);
         var resolvedViewProfileStore = dependencies.ViewProfileStore ?? new JsonViewProfileStore(resolvedFileSystem, resolvedEnvironment);
         var profileCoordinator = new ViewProfileCoordinator(resolvedViewProfileStore);
+        var scenarioTemplateResolver = new ScenarioTemplateResolver(resolvedTimeProvider, resolvedEnvironment);
+        var scenarioCatalog = new ScenarioCatalog(resolvedFileSystem, scenarioTemplateResolver);
+        var scenarioRunPlanner = new ScenarioRunPlanner(scenarioCatalog);
+        var scenarioExecutorFactory = new ScenarioExecutorFactory(resolvedFileSystem, resolvedTimeProvider, resolvedDelay, scenarioTemplateResolver);
+        var scenarioBatchExecutorFactory = new ScenarioBatchExecutorFactory(scenarioExecutorFactory);
         var commandDispatcher = new AppCommandDispatcher(
             new AdbSubcommandDispatcher(),
-            new ScenarioCommandDispatcher(resolvedFileSystem, resolvedTimeProvider, resolvedDelay, resolvedEnvironment),
+            new ScenarioCommandDispatcher(scenarioRunPlanner, scenarioExecutorFactory, scenarioBatchExecutorFactory),
             profileCoordinator);
         var commandHost = new AppCommandHost(new AppCommandHostDependencies
         {

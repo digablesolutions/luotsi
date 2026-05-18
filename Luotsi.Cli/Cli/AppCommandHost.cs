@@ -4,6 +4,7 @@ using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
+using Luotsi.Cli.Scenarios;
 using Luotsi.Cli.View.Diagnostics;
 
 namespace Luotsi.Cli.Cli;
@@ -60,7 +61,7 @@ internal sealed class AppCommandHost(AppCommandHostDependencies dependencies)
 
         var data = await _dependencies.CommandDispatcher.ExecuteAsync(options.Command!, options, adbExecutable, runner).ConfigureAwait(false);
         WriteSuccess(options.Command!, started, data, artifacts.ToData());
-        return 0;
+        return data is ScenarioRunBatchResult { FailedCount: > 0 } ? 1 : 0;
     }
 
     public void WriteUsageError(string? command, DateTimeOffset started, ArtifactData artifacts, UsageException exception) =>

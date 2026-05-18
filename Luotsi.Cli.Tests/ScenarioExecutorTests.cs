@@ -148,6 +148,7 @@ public sealed partial class AppTests
         Assert.Equal(3, data.GetProperty("total_count").GetInt32());
         Assert.Equal(3, data.GetProperty("matched_count").GetInt32());
         Assert.Equal(1, data.GetProperty("selected_count").GetInt32());
+        Assert.Equal(2, data.GetProperty("sharded_out_count").GetInt32());
         Assert.Equal("b", data.GetProperty("scenarios")[0].GetProperty("name").GetString());
         Assert.Empty(adb.RunCommands);
         Assert.Empty(adb.ShellCommands);
@@ -271,13 +272,124 @@ public sealed partial class AppTests
         var exitCode = await app.RunAsync(["run", "--path", "/tmp/scenarios"]);
         using var envelope = console.ParseSingleOutputAsJson();
 
-        Assert.Equal(0, exitCode);
+        Assert.Equal(1, exitCode);
+        Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
         var data = envelope.RootElement.GetProperty("data");
         Assert.Equal("failed", data.GetProperty("status").GetString());
         Assert.Equal(1, data.GetProperty("passed_count").GetInt32());
         Assert.Equal(1, data.GetProperty("failed_count").GetInt32());
         Assert.Equal(0, data.GetProperty("sharded_out_count").GetInt32());
-        Assert.Equal(2, data.GetProperty("scenarios").GetArrayLength());
+        var scenarios = data.GetProperty("scenarios");
+        Assert.Equal(2, scenarios.GetArrayLength());
+        Assert.Equal("fails", scenarios[0].GetProperty("scenario").GetString());
+        Assert.Equal("failed", scenarios[0].GetProperty("status").GetString());
+        Assert.Equal("fails", scenarios[0].GetProperty("data").GetProperty("scenario").GetString());
+        Assert.Equal("passes", scenarios[1].GetProperty("scenario").GetString());
+        Assert.Equal("passed", scenarios[1].GetProperty("status").GetString());
+    }
+
+
+    [Fact]
+    public async Task RunAsync_Path_Executes_Deterministic_Shard_Order()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenarios/c.json", """
+        {
+          "name": "c",
+          "steps": [
+            { "action": "typeText", "text": "c" }
+          ]
+        }
+        """);
+        fileSystem.AddFile("/tmp/scenarios/a.json", """
+        {
+          "name": "a",
+          "steps": [
+            { "action": "typeText", "text": "a" }
+          ]
+        }
+        """);
+        fileSystem.AddFile("/tmp/scenarios/b.json", """
+        {
+          "name": "b",
+          "steps": [
+            { "action": "typeText", "text": "b" }
+          ]
+        }
+        """);
+        var host = new FakeDeviceHost();
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--path", "/tmp/scenarios", "--shard-count", "2", "--shard-index", "0"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["a", "c"], host.TypeTextRequests);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("passed", data.GetProperty("status").GetString());
+        Assert.Equal(3, data.GetProperty("matched_count").GetInt32());
+        Assert.Equal(2, data.GetProperty("selected_count").GetInt32());
+        Assert.Equal(1, data.GetProperty("sharded_out_count").GetInt32());
+        Assert.Equal("a", data.GetProperty("scenarios")[0].GetProperty("scenario").GetString());
+        Assert.Equal("c", data.GetProperty("scenarios")[1].GetProperty("scenario").GetString());
+    }
+
+
+    [Theory]
+    [InlineData("0", "0", "--shard-count must be greater than zero.")]
+    [InlineData("2", "2", "--shard-index must be zero or greater and less than --shard-count.")]
+    [InlineData("2", null, "--shard-index is required when --shard-count is supplied.")]
+    [InlineData(null, "0", "--shard-count is required when --shard-index is supplied.")]
+    public async Task RunAsync_Path_Invalid_Shards_Return_Usage_Error(string? shardCount, string? shardIndex, string expectedMessage)
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenarios/a.json", """
+        {
+          "name": "a",
+          "steps": [
+            { "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var args = new List<string> { "run", "--path", "/tmp/scenarios", "--dry-run" };
+        if (shardCount is not null)
+        {
+            args.AddRange(["--shard-count", shardCount]);
+        }
+
+        if (shardIndex is not null)
+        {
+            args.AddRange(["--shard-index", shardIndex]);
+        }
+
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(args.ToArray());
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains(expectedMessage, envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
 

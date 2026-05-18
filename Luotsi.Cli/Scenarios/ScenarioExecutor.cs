@@ -47,7 +47,7 @@ public interface IScenarioActionHost
 /// <summary>
 /// Loads and executes JSON scenario files.
 /// </summary>
-public sealed class ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem fileSystem, TimeProvider timeProvider, IDelay delay, IEnvironmentVariables? environment = null)
+public sealed class ScenarioExecutor
 {
     internal static readonly HashSet<string> SupportedScenarioActions =
     [
@@ -86,25 +86,44 @@ public sealed class ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem
         "sleep"
     ];
 
-    private readonly IScenarioActionHost _actionHost = actionHost ?? throw new ArgumentNullException(nameof(actionHost));
-    private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
-    private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
-    private readonly ScenarioActionDispatcher _actionDispatcher = new(
-        actionHost ?? throw new ArgumentNullException(nameof(actionHost)),
-        delay ?? throw new ArgumentNullException(nameof(delay)));
-    private readonly IScenarioTemplateResolver _templateResolver = new ScenarioTemplateResolver(
-        timeProvider ?? throw new ArgumentNullException(nameof(timeProvider)),
-        environment ?? new SystemEnvironmentVariables());
+    private readonly IScenarioActionHost _actionHost;
+    private readonly IFileSystem _fileSystem;
+    private readonly TimeProvider _timeProvider;
+    private readonly ScenarioActionDispatcher _actionDispatcher;
+    private readonly IScenarioTemplateResolver _templateResolver;
 
-    internal ScenarioExecutor(
-        IScenarioActionHost actionHost,
-        IFileSystem fileSystem,
-        TimeProvider timeProvider,
-        IDelay delay,
-        IScenarioTemplateResolver templateResolver,
-        IEnvironmentVariables? environment = null)
-        : this(actionHost, fileSystem, timeProvider, delay, environment)
+    public ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem fileSystem, TimeProvider timeProvider, IDelay delay)
+        : this(
+            actionHost,
+            fileSystem,
+            timeProvider,
+            delay,
+            new ScenarioTemplateResolver(
+                timeProvider ?? throw new ArgumentNullException(nameof(timeProvider)),
+                new SystemEnvironmentVariables()))
     {
+    }
+
+    public ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem fileSystem, TimeProvider timeProvider, IDelay delay, IEnvironmentVariables environment)
+        : this(
+            actionHost,
+            fileSystem,
+            timeProvider,
+            delay,
+            new ScenarioTemplateResolver(
+                timeProvider ?? throw new ArgumentNullException(nameof(timeProvider)),
+                environment ?? throw new ArgumentNullException(nameof(environment))))
+    {
+    }
+
+    internal ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem fileSystem, TimeProvider timeProvider, IDelay delay, IScenarioTemplateResolver templateResolver)
+    {
+        _actionHost = actionHost ?? throw new ArgumentNullException(nameof(actionHost));
+        _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+        _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+        _actionDispatcher = new ScenarioActionDispatcher(
+            actionHost,
+            delay ?? throw new ArgumentNullException(nameof(delay)));
         _templateResolver = templateResolver ?? throw new ArgumentNullException(nameof(templateResolver));
     }
 
@@ -113,7 +132,7 @@ public sealed class ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem
     /// </summary>
     /// <param name="file">Scenario file path.</param>
     /// <returns>Scenario result.</returns>
-    public async Task<object> RunAsync(string file)
+    public async Task<ScenarioRunResult> RunAsync(string file)
     {
         var scenarioStarted = _timeProvider.GetUtcNow();
         var scenario = await LoadValidatedScenarioAsync(file).ConfigureAwait(false);
@@ -121,13 +140,11 @@ public sealed class ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem
         var prologueMs = (_timeProvider.GetUtcNow() - scenarioStarted).TotalMilliseconds;
         var execution = await ExecuteStepsAsync(scenario, file, scenarioStarted, prologueMs).ConfigureAwait(false);
 
-        return new
-        {
-            scenario = scenario.Name,
-            status = "passed",
-            timing = CreateScenarioRunTiming((_timeProvider.GetUtcNow() - scenarioStarted).TotalMilliseconds, prologueMs, execution.ExecutedStepMs),
-            steps = execution.Steps
-        };
+        return new ScenarioRunResult(
+            scenario.Name,
+            "passed",
+            CreateScenarioRunTiming((_timeProvider.GetUtcNow() - scenarioStarted).TotalMilliseconds, prologueMs, execution.ExecutedStepMs),
+            execution.Steps);
     }
 
     private async Task<ScenarioFile> LoadValidatedScenarioAsync(string file) =>
@@ -138,7 +155,7 @@ public sealed class ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem
 
     private async Task<ScenarioExecution> ExecuteStepsAsync(ScenarioFile scenario, string file, DateTimeOffset scenarioStarted, double prologueMs)
     {
-        var steps = new List<object>(scenario.Steps.Count);
+        var steps = new List<ScenarioStepResult>(scenario.Steps.Count);
         var executedStepMs = 0d;
         DateTimeOffset? previousStepStartedAt = null;
 
@@ -155,14 +172,12 @@ public sealed class ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem
                 executedStepMs += durationMs;
                 previousStepStartedAt = started;
 
-                steps.Add(new
-                {
-                    step = step.Name ?? step.Action,
-                    action = step.Action,
-                    duration_ms = durationMs,
-                    timing = CreateTimingData(step, durationMs, delayScope.TotalMilliseconds),
-                    result
-                });
+                steps.Add(new ScenarioStepResult(
+                    step.Name ?? step.Action,
+                    step.Action,
+                    durationMs,
+                    CreateTimingData(step, durationMs, delayScope.TotalMilliseconds),
+                    Result: result));
             }
             catch (Exception ex) when (step.ContinueOnError is true && ex is not UsageException)
             {
@@ -170,15 +185,13 @@ public sealed class ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem
                 var durationMs = (_timeProvider.GetUtcNow() - started).TotalMilliseconds;
                 executedStepMs += durationMs;
                 previousStepStartedAt = started;
-                steps.Add(new
-                {
-                    step = step.Name ?? step.Action,
-                    action = step.Action,
-                    status = "continued_on_error",
-                    duration_ms = durationMs,
-                    timing = CreateTimingData(step, durationMs, delayScope.TotalMilliseconds),
-                    error = ErrorInfo.From(ex, category)
-                });
+                steps.Add(new ScenarioStepResult(
+                    step.Name ?? step.Action,
+                    step.Action,
+                    durationMs,
+                    CreateTimingData(step, durationMs, delayScope.TotalMilliseconds),
+                    Status: "continued_on_error",
+                    Error: ErrorInfo.From(ex, category)));
             }
             catch (UsageException)
             {
@@ -195,23 +208,19 @@ public sealed class ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem
                 throw new ScenarioStepFailureException(
                     $"Scenario '{scenario.Name}' failed at step {index + 1} ({step.Name ?? step.Action}).",
                     category,
-                    new
-                    {
-                        scenario = scenario.Name,
+                    new ScenarioRunFailureData(
+                        scenario.Name,
                         file,
-                        status = "failed",
-                        timing = CreateScenarioRunTiming((_timeProvider.GetUtcNow() - scenarioStarted).TotalMilliseconds, prologueMs, executedStepMs),
-                        failed_step = new
-                        {
-                            index = index + 1,
-                            name = step.Name ?? step.Action,
-                            action = step.Action,
-                            duration_ms = durationMs,
-                            timing = CreateTimingData(step, durationMs, delayScope.TotalMilliseconds)
-                        },
+                        "failed",
+                        CreateScenarioRunTiming((_timeProvider.GetUtcNow() - scenarioStarted).TotalMilliseconds, prologueMs, executedStepMs),
+                        new ScenarioFailedStepResult(
+                            index + 1,
+                            step.Name ?? step.Action,
+                            step.Action,
+                            durationMs,
+                            CreateTimingData(step, durationMs, delayScope.TotalMilliseconds)),
                         steps,
-                        failure_artifacts = failureArtifacts
-                    },
+                        failureArtifacts),
                     ex);
             }
         }
@@ -249,25 +258,18 @@ public sealed class ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem
     private static ScenarioFile ValidateScenario(ScenarioFile scenario, string file) =>
         ScenarioValidator.ValidateScenario(scenario, file, SupportedScenarioActions);
 
-    private static object CreateTimingData(ScenarioStep step, double durationMs, int harnessDelayMs)
+    private static ScenarioStepTiming CreateTimingData(ScenarioStep step, double durationMs, int harnessDelayMs)
     {
         var configuredDelayMs = GetConfiguredDelayMs(step);
-        return new
-        {
-            total_ms = durationMs,
-            harness_delay_ms = harnessDelayMs,
-            configured_delay_ms = configuredDelayMs,
-            non_delay_ms = Math.Max(0, durationMs - harnessDelayMs)
-        };
+        return new ScenarioStepTiming(
+            durationMs,
+            harnessDelayMs,
+            configuredDelayMs,
+            Math.Max(0, durationMs - harnessDelayMs));
     }
 
-    private static object CreateScenarioRunTiming(double totalMs, double prologueMs, double executedStepMs) => new
-    {
-        total_ms = totalMs,
-        prologue_ms = prologueMs,
-        steps_ms = executedStepMs,
-        non_step_ms = Math.Max(0, totalMs - executedStepMs)
-    };
+    private static ScenarioRunTiming CreateScenarioRunTiming(double totalMs, double prologueMs, double executedStepMs) =>
+        new(totalMs, prologueMs, executedStepMs, Math.Max(0, totalMs - executedStepMs));
 
     private static int? GetConfiguredDelayMs(ScenarioStep step) => step.Action switch
     {
@@ -277,7 +279,7 @@ public sealed class ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem
         _ => null
     };
 
-    private sealed record ScenarioExecution(double ExecutedStepMs, IReadOnlyList<object> Steps);
+    private sealed record ScenarioExecution(double ExecutedStepMs, IReadOnlyList<ScenarioStepResult> Steps);
 }
 
 public interface ICommandFailureDetails
