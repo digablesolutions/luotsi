@@ -1,6 +1,6 @@
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
-using Luotsi.Cli.Models;
+
 using Luotsi.Cli.Scenarios;
 
 namespace Luotsi.Cli.Cli;

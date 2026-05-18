@@ -69,14 +69,15 @@ public sealed class App
         var scenarioExecutorFactory = new ScenarioExecutorFactory(resolvedFileSystem, resolvedTimeProvider, resolvedDelay, scenarioTemplateResolver);
         var scenarioBatchExecutorFactory = new ScenarioBatchExecutorFactory(scenarioExecutorFactory);
         var scenarioRunEventCoordinatorFactory = new ScenarioRunEventCoordinatorFactory(resolvedFileSystem, resolvedTimeProvider);
+        var envelopeWriter = new AppCommandEnvelopeWriter(resolvedConsole, resolvedTimeProvider);
         var commandDispatcher = new AppCommandDispatcher(
             new AdbSubcommandDispatcher(),
             new ScenarioCommandDispatcher(scenarioRunPlanner, scenarioExecutorFactory, scenarioBatchExecutorFactory, scenarioRunEventCoordinatorFactory),
             profileCoordinator);
         var commandHost = new AppCommandHost(new AppCommandHostDependencies
         {
-            Console = resolvedConsole,
-            TimeProvider = resolvedTimeProvider,
+            EnvelopeWriter = envelopeWriter,
+            ExitCodeResolver = new AppCommandExitCodeResolver(),
             ProfileCoordinator = profileCoordinator,
             CommandDispatcher = commandDispatcher,
             ViewDoctorFactory = resolvedViewDoctorFactory
@@ -86,7 +87,7 @@ public sealed class App
         {
             Console = resolvedConsole,
             TimeProvider = resolvedTimeProvider,
-            CommandHost = commandHost
+            FailureResponder = new AppCommandFailureResponder(envelopeWriter)
         });
         _commandFamilyRouter = new AppCommandFamilyRouter(new AppCommandFamilyRouterDependencies
         {

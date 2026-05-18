@@ -1,5 +1,4 @@
 using Luotsi.Cli.Errors;
-using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Scenarios;
 
