@@ -135,6 +135,7 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
             }
             catch
             {
+                // ignored
             }
         }
 

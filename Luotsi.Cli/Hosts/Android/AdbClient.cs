@@ -82,7 +82,7 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
         }
 
         var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Failed to start '{_executable}'.");
-        return Task.FromResult<IAsyncDisposable>(new AdbShellProcess(process, process.StandardOutput.ReadToEndAsync(), process.StandardError.ReadToEndAsync()));
+        return Task.FromResult<IAsyncDisposable>(new AdbShellProcess(process, process.StandardOutput.ReadToEndAsync(cancellationToken), process.StandardError.ReadToEndAsync(cancellationToken)));
     }
 
     public Task<AdbLogStreamResult> MonitorLogAsync(string containsText, DateTimeOffset since, int timeoutSec, CancellationToken cancellationToken = default) =>
