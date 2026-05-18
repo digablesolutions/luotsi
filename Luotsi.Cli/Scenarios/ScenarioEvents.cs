@@ -32,7 +32,9 @@ internal sealed class JsonlScenarioEventSink : IScenarioEventSink
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
     };
 
-    private readonly StreamWriter _writer;
+    private static readonly byte[] NewLineBytes = Encoding.UTF8.GetBytes(Environment.NewLine);
+
+    private readonly Stream _stream;
 
     public JsonlScenarioEventSink(IFileSystem fileSystem, string path)
     {
@@ -49,18 +51,19 @@ internal sealed class JsonlScenarioEventSink : IScenarioEventSink
             fileSystem.CreateDirectory(directory);
         }
 
-        _writer = new StreamWriter(fileSystem.OpenWrite(path), new UTF8Encoding(false));
+        _stream = fileSystem.OpenWrite(path);
     }
 
     public async Task EmitAsync(ScenarioEvent scenarioEvent)
     {
         ArgumentNullException.ThrowIfNull(scenarioEvent);
 
-        await _writer.WriteLineAsync(JsonSerializer.Serialize(scenarioEvent, JsonOptions)).ConfigureAwait(false);
-        await _writer.FlushAsync().ConfigureAwait(false);
+        await JsonSerializer.SerializeAsync(_stream, scenarioEvent, JsonOptions).ConfigureAwait(false);
+        await _stream.WriteAsync(NewLineBytes).ConfigureAwait(false);
+        await _stream.FlushAsync().ConfigureAwait(false);
     }
 
-    public async ValueTask DisposeAsync() => await _writer.DisposeAsync().ConfigureAwait(false);
+    public async ValueTask DisposeAsync() => await _stream.DisposeAsync().ConfigureAwait(false);
 }
 
 internal sealed class ScenarioRunEventCoordinatorFactory(IFileSystem fileSystem, TimeProvider timeProvider)
