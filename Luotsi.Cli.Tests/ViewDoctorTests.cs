@@ -90,10 +90,12 @@ public sealed partial class AppTests
         var console = new FakeConsole();
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
         var setup = new FakeViewSetup();
+        var fileSystem = new FakeFileSystem();
         var app = new App(new AppDependencies
         {
             Console = console,
             TimeProvider = timeProvider,
+            FileSystem = fileSystem,
             DeviceHostFactory = new FakeDeviceHostFactory(host),
             ViewSetupFactory = new FakeViewSetupFactory(setup)
         });
@@ -101,12 +103,14 @@ public sealed partial class AppTests
         var exitCode = await app.RunAsync([
             "view",
             "setup",
-            "--device", "192.168.0.134:5555"]);
+            "--device", "192.168.0.134:5555",
+            "--artifacts", "/tmp/artifacts"]);
 
         using var envelope = console.ParseSingleOutputAsJson();
         Assert.Equal(0, exitCode);
         Assert.Equal("view-setup", envelope.RootElement.GetProperty("command").GetString());
         Assert.True(Assert.Single(setup.Calls).Fix);
+        Assert.True(fileSystem.DirectoryExists("/tmp/artifacts/20260515-120000-view-setup"));
     }
 
     [Fact]

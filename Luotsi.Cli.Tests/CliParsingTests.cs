@@ -52,4 +52,14 @@ public sealed partial class AppTests
         Assert.Equal("devices", options.Get("package"));
     }
 
+    [Fact]
+    public void Parse_Normalizes_ViewSetup_Alias_Command_And_Removes_Alias_Argument()
+    {
+        var options = CliOptions.Parse(["view", "--device", "abc", "setup", "extra"]);
+
+        Assert.Equal("view-setup", options.Command);
+        Assert.Equal(["extra"], options.Arguments);
+        Assert.Equal("abc", options.Get("device"));
+    }
+
 }

@@ -34,11 +34,12 @@ internal sealed class AppCommandFamilyRouter(AppCommandFamilyRouterDependencies 
             return await _dependencies.InspectSessionLauncher.RunAsync(options, adbExecutable, artifacts).ConfigureAwait(false);
         }
 
-        if (IsViewSetupCommand(options))
+        var viewDiagnostic = ViewDiagnosticInvocation.Resolve(options);
+        if (viewDiagnostic is not null)
         {
-            var preparedViewSetup = _dependencies.ViewDiagnosticsLauncher.PrepareSetup(options, started, adbExecutable, artifacts);
-            context.Runner = preparedViewSetup.Runner;
-            return await preparedViewSetup.ExecuteAsync().ConfigureAwait(false);
+            var preparedViewDiagnostic = _dependencies.ViewDiagnosticsLauncher.Prepare(viewDiagnostic, options, started, adbExecutable, artifacts);
+            context.Runner = preparedViewDiagnostic.Runner;
+            return await preparedViewDiagnostic.ExecuteAsync().ConfigureAwait(false);
         }
 
         if (IsViewCommand(options.Command))
@@ -54,13 +55,6 @@ internal sealed class AppCommandFamilyRouter(AppCommandFamilyRouterDependencies 
             return exitCode;
         }
 
-        if (string.Equals(options.Command, "view-doctor", StringComparison.OrdinalIgnoreCase))
-        {
-            var preparedViewDoctor = _dependencies.ViewDiagnosticsLauncher.PrepareDoctor(options, started, adbExecutable, artifacts);
-            context.Runner = preparedViewDoctor.Runner;
-            return await preparedViewDoctor.ExecuteAsync().ConfigureAwait(false);
-        }
-
         context.Runner = _dependencies.DeviceHostLauncher.Create(options, adbExecutable, artifacts);
         return await _dependencies.CommandHost.RunCommandAsync(options, started, adbExecutable, context.Runner, artifacts).ConfigureAwait(false);
     }
@@ -68,12 +62,6 @@ internal sealed class AppCommandFamilyRouter(AppCommandFamilyRouterDependencies 
     private static bool IsViewCommand(string? command) =>
         string.Equals(command, "view", StringComparison.OrdinalIgnoreCase)
         || string.Equals(command, "reconnect", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsViewSetupCommand(CliOptions options) =>
-        string.Equals(options.Command, "view-setup", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(options.Command, "view", StringComparison.OrdinalIgnoreCase) &&
-        options.Arguments.Count > 0 &&
-        string.Equals(options.Arguments[0], "setup", StringComparison.OrdinalIgnoreCase);
 }
 
 internal sealed class AppCommandFamilyRouterDependencies

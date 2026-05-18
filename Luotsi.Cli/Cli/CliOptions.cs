@@ -8,6 +8,10 @@ namespace Luotsi.Cli.Cli;
 /// </summary>
 public sealed class CliOptions
 {
+    private const string ViewCommand = "view";
+    private const string ViewSetupCommand = "view-setup";
+    private const string ViewSetupAlias = "setup";
+
     private static readonly FrozenSet<string> KnownCommands =
     new[]
     {
@@ -102,13 +106,13 @@ public sealed class CliOptions
     /// <returns>Parsed options.</returns>
     public static CliOptions Parse(string[] args)
     {
-        var command = FindCommand(args);
-        var parsed = new CliOptions(command);
+        var commandMatch = FindCommand(args);
+        var parsed = new CliOptions(commandMatch.Command);
 
         for (var i = 0; i < args.Length; i++)
         {
             var token = args[i];
-            if (string.Equals(token, command, StringComparison.OrdinalIgnoreCase))
+            if (i == commandMatch.CommandIndex || i == commandMatch.NormalizedArgumentIndex)
             {
                 continue;
             }
@@ -132,7 +136,7 @@ public sealed class CliOptions
         return parsed;
     }
 
-    private static string? FindCommand(string[] args)
+    private static CommandMatch FindCommand(string[] args)
     {
         for (var i = 0; i < args.Length; i++)
         {
@@ -150,11 +154,46 @@ public sealed class CliOptions
 
             if (KnownCommands.Contains(token))
             {
-                return token;
+                if (string.Equals(token, ViewCommand, StringComparison.OrdinalIgnoreCase)
+                    && TryFindNormalizedViewArgumentIndex(args, i, out var normalizedArgumentIndex))
+                {
+                    return new CommandMatch(ViewSetupCommand, i, normalizedArgumentIndex);
+                }
+
+                return new CommandMatch(token, i, -1);
             }
         }
 
-        return null;
+        return new CommandMatch(null, -1, -1);
+    }
+
+    private static bool TryFindNormalizedViewArgumentIndex(string[] args, int commandIndex, out int normalizedArgumentIndex)
+    {
+        for (var i = commandIndex + 1; i < args.Length; i++)
+        {
+            var token = args[i];
+            if (token.StartsWith("-", StringComparison.Ordinal))
+            {
+                var key = token.TrimStart('-');
+                if (!KnownFlagOptions.Contains(key) && i + 1 < args.Length && !args[i + 1].StartsWith("-", StringComparison.Ordinal))
+                {
+                    i++;
+                }
+
+                continue;
+            }
+
+            if (string.Equals(token, ViewSetupAlias, StringComparison.OrdinalIgnoreCase))
+            {
+                normalizedArgumentIndex = i;
+                return true;
+            }
+
+            break;
+        }
+
+        normalizedArgumentIndex = -1;
+        return false;
     }
 
     /// <summary>
@@ -206,4 +245,6 @@ public sealed class CliOptions
 
         return int.TryParse(value, out var parsed) ? parsed : throw new UsageException($"Option --{key} must be an integer.");
     }
+
+    private readonly record struct CommandMatch(string? Command, int CommandIndex, int NormalizedArgumentIndex);
 }

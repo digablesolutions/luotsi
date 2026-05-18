@@ -10,26 +10,16 @@ internal sealed class ViewDiagnosticsLauncher(
     private readonly DeviceHostLauncher _deviceHostLauncher = deviceHostLauncher ?? throw new ArgumentNullException(nameof(deviceHostLauncher));
     private readonly ViewDiagnosticCommandHost _commandHost = commandHost ?? throw new ArgumentNullException(nameof(commandHost));
 
-    public PreparedHostedCommand PrepareDoctor(CliOptions options, DateTimeOffset started, string adbExecutable, ArtifactSession artifacts)
+    public PreparedHostedCommand Prepare(ViewDiagnosticInvocation command, CliOptions options, DateTimeOffset started, string adbExecutable, ArtifactSession artifacts)
     {
+        ArgumentNullException.ThrowIfNull(command);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(artifacts);
 
         var runner = _deviceHostLauncher.Create(options, adbExecutable, artifacts);
         return new PreparedHostedCommand(
             runner,
-            () => _commandHost.RunDoctorAsync(options, started, adbExecutable, runner, artifacts));
-    }
-
-    public PreparedHostedCommand PrepareSetup(CliOptions options, DateTimeOffset started, string adbExecutable, ArtifactSession artifacts)
-    {
-        ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(artifacts);
-
-        var runner = _deviceHostLauncher.Create(options, adbExecutable, artifacts);
-        return new PreparedHostedCommand(
-            runner,
-            () => _commandHost.RunSetupAsync(options, started, adbExecutable, runner, artifacts));
+            () => _commandHost.RunAsync(command, options, started, adbExecutable, runner, artifacts));
     }
 }
 
