@@ -276,6 +276,7 @@ public sealed partial class AppTests
         var bootstrap = new FakeViewTransportBootstrap([
             new MediaProjectionConsentException("MediaProjection consent prompt was not approved or could not be detected.")
         ]);
+        using var stream = new MemoryStream();
         var session = new ViewSession(
             host,
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
@@ -283,7 +284,7 @@ public sealed partial class AppTests
             timeProvider,
             bootstrap,
             new FakeViewBackendFactory(backend),
-            new FakeViewStreamConnector(new MemoryStream()),
+            new FakeViewStreamConnector(stream),
             new ViewPacketStreamReader());
 
         var exitCode = await session.RunAsync(new ViewOptions(

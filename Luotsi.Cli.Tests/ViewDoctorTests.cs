@@ -84,6 +84,32 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ViewSetup_Alias_Writes_ViewSetup_Command_Envelope()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var setup = new FakeViewSetup();
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            TimeProvider = timeProvider,
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            ViewSetupFactory = new FakeViewSetupFactory(setup)
+        });
+
+        var exitCode = await app.RunAsync([
+            "view",
+            "setup",
+            "--device", "192.168.0.134:5555"]);
+
+        using var envelope = console.ParseSingleOutputAsJson();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("view-setup", envelope.RootElement.GetProperty("command").GetString());
+        Assert.True(Assert.Single(setup.Calls).Fix);
+    }
+
+    [Fact]
     public async Task RunAsync_ViewDoctor_Fix_Runs_Setup()
     {
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));

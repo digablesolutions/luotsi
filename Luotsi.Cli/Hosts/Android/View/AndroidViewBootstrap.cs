@@ -52,7 +52,7 @@ public sealed class AndroidViewBootstrap(
         {
             Report(reportPhase, "helper_resolve", ViewStartupPhaseStatus.Started, "Resolving Android view helper package.");
             var package = _packageLocator.Resolve();
-            Report(reportPhase, "helper_resolve", ViewStartupPhaseStatus.Succeeded, "Resolved Android view helper package.", $"path={package.LocalPath}; source={package.ResolutionSource}; sha256={package.LocalSha256 ?? "unknown"}");
+            Report(reportPhase, "helper_resolve", ViewStartupPhaseStatus.Succeeded, "Resolved Android view helper package.", AndroidViewServerInstaller.PackageDetail(package));
             _installedPackage = package;
 
             if (string.Equals(activeBackend, ViewCaptureBackends.MediaProjection, StringComparison.Ordinal))

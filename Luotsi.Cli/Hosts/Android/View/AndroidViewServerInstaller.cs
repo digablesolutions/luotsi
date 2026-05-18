@@ -120,7 +120,7 @@ public sealed class AndroidViewServerInstaller(
     private void Report(string phase, string status, string summary, string? detail = null, string? recommendation = null) =>
         _reportPhase?.Invoke(new ViewStartupPhase(phase, status, summary, string.IsNullOrWhiteSpace(detail) ? null : detail, recommendation));
 
-    private static string PackageDetail(AndroidViewHelperPackage package) =>
+    internal static string PackageDetail(AndroidViewHelperPackage package) =>
         $"path={package.LocalPath}; source={package.ResolutionSource}; size={package.LocalSizeBytes?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown"}; sha256={package.LocalSha256 ?? "unknown"}";
 
     private static bool ContainsComponent(string output, string component) =>

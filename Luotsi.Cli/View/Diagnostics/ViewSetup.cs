@@ -1,3 +1,4 @@
+using System.Linq;
 using Luotsi.Cli.Hosts.Android.View;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
@@ -157,7 +158,7 @@ public sealed class ViewSetup(
                 $"path={package.LocalPath}; source={package.ResolutionSource}; size={package.LocalSizeBytes?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown"}; sha256={package.LocalSha256 ?? "unknown"}"));
             return true;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsExpectedSetupException(ex))
         {
             package = null;
             steps.Add(new ViewSetupStep(
@@ -192,28 +193,17 @@ public sealed class ViewSetup(
         {
             await installer.InstallAsync(package, cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsExpectedSetupException(ex))
         {
-            steps.Add(new ViewSetupStep(
-                "helper_install",
-                ViewStartupPhaseStatus.Failed,
-                "Android view helper setup failed.",
-                ex.Message,
-                "Check adb device connectivity, rebuild the helper APK, then rerun view setup --fix."));
+            _ = ex;
+            // The installer already reported the exact helper_install or helper_verify failure phase.
         }
     }
 
     private string? ResolveHelperProjectDirectory()
     {
-        foreach (var candidate in _pathResolver.GetRepositoryRelativeDirectoryCandidates(HelperProjectDirectory))
-        {
-            if (_fileSystem.DirectoryExists(candidate))
-            {
-                return candidate;
-            }
-        }
-
-        return null;
+        var candidates = _pathResolver.GetRepositoryRelativeDirectoryCandidates(HelperProjectDirectory);
+        return candidates.Where(_fileSystem.DirectoryExists).FirstOrDefault();
     }
 
     private string? ResolveGradleWrapper(string projectDirectory)
@@ -226,4 +216,7 @@ public sealed class ViewSetup(
 
     private static string PreferError(ProcessResult result) =>
         string.IsNullOrWhiteSpace(result.Stderr) ? result.Stdout.Trim() : result.Stderr.Trim();
+
+    private static bool IsExpectedSetupException(Exception exception) =>
+        exception is InvalidOperationException or IOException or UnauthorizedAccessException;
 }

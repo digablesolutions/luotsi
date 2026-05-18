@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Security.Cryptography;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.View;
@@ -58,14 +59,10 @@ public sealed class AndroidViewHelperPackageLocator(IEnvironmentVariables enviro
         if (string.IsNullOrWhiteSpace(localPath))
         {
             resolutionSource = "repository_default";
-            foreach (var candidate in _pathResolver.GetRepositoryRelativeFileCandidates(AndroidRuntimeDefaults.DefaultViewHelperRelativePath))
-            {
-                if (_fileSystem.FileExists(candidate))
-                {
-                    localPath = candidate;
-                    break;
-                }
-            }
+            localPath = _pathResolver
+                .GetRepositoryRelativeFileCandidates(AndroidRuntimeDefaults.DefaultViewHelperRelativePath)
+                .Where(_fileSystem.FileExists)
+                .FirstOrDefault();
         }
 
         if (string.IsNullOrWhiteSpace(localPath) || !_fileSystem.FileExists(localPath))

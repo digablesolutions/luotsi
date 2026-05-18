@@ -6,6 +6,7 @@ namespace Luotsi.Cli.Cli;
 
 internal sealed class ViewDiagnosticCommandHost(ViewDiagnosticCommandHostDependencies dependencies)
 {
+    private const string ViewSetupCommand = "view-setup";
     private readonly ViewDiagnosticCommandHostDependencies _dependencies = dependencies ?? throw new ArgumentNullException(nameof(dependencies));
 
     public async Task<int> RunDoctorAsync(CliOptions options, DateTimeOffset started, string adbExecutable, IDeviceHost runner, ArtifactSession artifacts)
@@ -35,7 +36,7 @@ internal sealed class ViewDiagnosticCommandHost(ViewDiagnosticCommandHostDepende
 
         var viewOptions = BuildViewOptions(options, adbExecutable);
         var setup = await _dependencies.ViewSetupFactory.Create(runner).SetupAsync(viewOptions, fix: !options.HasFlag("dry-run")).ConfigureAwait(false);
-        _dependencies.EnvelopeWriter.WriteSuccess(options.Command!, started, setup, artifacts.ToData());
+        _dependencies.EnvelopeWriter.WriteSuccess(ViewSetupCommand, started, setup, artifacts.ToData());
         return setup.Ready ? 0 : 1;
     }
 
