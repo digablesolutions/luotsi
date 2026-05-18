@@ -62,7 +62,12 @@ public sealed class ArtifactSession
     /// </summary>
     /// <param name="name">File name.</param>
     /// <param name="value">Value to serialize.</param>
-    public Task WriteJsonAsync(string name, object value) => WriteTextAsync(name, JsonSerializer.Serialize(value, AppJson.Options));
+    public async Task WriteJsonAsync(string name, object value)
+    {
+        var path = Path.Combine(Root, name);
+        await using var stream = _fileSystem.OpenWrite(path);
+        await JsonSerializer.SerializeAsync(stream, value, value?.GetType() ?? typeof(object), AppJson.Options).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Returns JSON envelope artifact data.

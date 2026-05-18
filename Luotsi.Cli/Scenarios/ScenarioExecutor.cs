@@ -260,8 +260,8 @@ public sealed class ScenarioExecutor
 
         try
         {
-            var text = await _fileSystem.ReadAllTextAsync(file).ConfigureAwait(false);
-            var scenario = JsonSerializer.Deserialize<ScenarioFile>(text, AppJson.Options);
+            await using var stream = _fileSystem.OpenRead(file);
+            var scenario = await JsonSerializer.DeserializeAsync<ScenarioFile>(stream, AppJson.Options).ConfigureAwait(false);
             if (scenario is null)
             {
                 throw new UsageException($"Scenario file '{file}' was empty.");

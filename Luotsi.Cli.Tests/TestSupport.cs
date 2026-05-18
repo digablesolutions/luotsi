@@ -113,6 +113,21 @@ internal sealed class FakeFileSystem : IFileSystem
     public Task<string> ReadAllTextAsync(string path, CancellationToken cancellationToken = default) =>
         Task.FromResult(_files.TryGetValue(path, out var text) ? text : System.Text.Encoding.UTF8.GetString(_binaryFiles[path]));
 
+    public Stream OpenRead(string path)
+    {
+        if (_files.TryGetValue(path, out var text))
+        {
+            return new MemoryStream(System.Text.Encoding.UTF8.GetBytes(text), writable: false);
+        }
+
+        if (_binaryFiles.TryGetValue(path, out var binary))
+        {
+            return new MemoryStream(binary, writable: false);
+        }
+
+        throw new FileNotFoundException($"File '{path}' was not found.", path);
+    }
+
     public Stream OpenWrite(string path, bool overwrite = true)
     {
         if (!overwrite && (_files.ContainsKey(path) || _binaryFiles.ContainsKey(path)))
