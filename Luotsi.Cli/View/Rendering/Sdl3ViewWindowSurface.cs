@@ -605,25 +605,16 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
             clientHeight,
             _scaleMode);
 
-        _ = Task.Run(
-            async () =>
-            {
-                try
-                {
-                    await pointerHandler(pointerEvent).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    await ReportInteractionFailureAsync(
-                        new ViewPointerInteractionRequest(
-                            pointerEvent.ClientX,
-                            pointerEvent.ClientY,
-                            pointerEvent.ClientWidth,
-                            pointerEvent.ClientHeight,
-                            pointerEvent.ScaleMode),
-                        ex).ConfigureAwait(false);
-                }
-            });
+        QueueInteraction(
+            () => pointerHandler(pointerEvent),
+            ex => ReportInteractionFailureAsync(
+                new ViewPointerInteractionRequest(
+                    pointerEvent.ClientX,
+                    pointerEvent.ClientY,
+                    pointerEvent.ClientWidth,
+                    pointerEvent.ClientHeight,
+                    pointerEvent.ScaleMode),
+                ex));
     }
 
     private bool HandleMouseMotion(SDL_MouseMotionEvent mouseMotionEvent)
@@ -971,16 +962,21 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
             return;
         }
 
+        QueueInteraction(() => interactionHandler(request), ex => ReportInteractionFailureAsync(request, ex));
+    }
+
+    private static void QueueInteraction(Func<Task> interactionAsync, Func<Exception, Task> reportFailureAsync)
+    {
         _ = Task.Run(
             async () =>
             {
                 try
                 {
-                    await interactionHandler(request).ConfigureAwait(false);
+                    await interactionAsync().ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
-                    await ReportInteractionFailureAsync(request, ex).ConfigureAwait(false);
+                    await reportFailureAsync(ex).ConfigureAwait(false);
                 }
             });
     }
