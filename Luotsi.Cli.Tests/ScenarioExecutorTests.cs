@@ -154,6 +154,36 @@ public sealed partial class AppTests
         Assert.Empty(adb.ShellCommands);
     }
 
+    [Fact]
+    public async Task RunAsync_Path_DryRun_Does_Not_Write_Jsonl_Events()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenarios/a.json", """
+        {
+          "name": "a",
+          "steps": [
+            { "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--path", "/tmp/scenarios", "--dry-run", "--events-jsonl", "/tmp/events.jsonl"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.False(fileSystem.FileExists("/tmp/events.jsonl"));
+    }
+
 
     [Fact]
     public async Task RunAsync_File_DryRun_Returns_Usage_Error()
@@ -287,6 +317,206 @@ public sealed partial class AppTests
         Assert.Equal("passes", scenarios[1].GetProperty("scenario").GetString());
         Assert.Equal("passed", scenarios[1].GetProperty("status").GetString());
     }
+
+    [Fact]
+    public async Task RunAsync_File_Writes_Jsonl_Events_With_Terminal_Result()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "name": "pause", "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json", "--events-jsonl", "/tmp/events.jsonl"]);
+        var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal([
+            "scenario_run_started",
+            "scenario_started",
+            "scenario_step_started",
+            "scenario_step_passed",
+            "scenario_ended",
+            "scenario_run_ended"
+        ], events.Select(static evt => evt.GetProperty("event").GetString()!).ToArray());
+        Assert.Equal("passed", events[^1].GetProperty("status").GetString());
+        Assert.Equal(1, events[^1].GetProperty("passed_count").GetInt32());
+        Assert.Equal(0, events[^1].GetProperty("failed_count").GetInt32());
+    }
+
+    [Fact]
+    public async Task RunAsync_File_Writes_Consistent_Scenario_Ended_Timestamp_And_Duration()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new SteppingTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind), TimeSpan.FromMilliseconds(1));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "name": "pause", "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new SteppingDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json", "--events-jsonl", "/tmp/events.jsonl"]);
+        var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
+        var startedAt = events.Single(static evt => evt.GetProperty("event").GetString() == "scenario_started").GetProperty("timestamp").GetDateTimeOffset();
+        var endedEvent = events.Single(static evt => evt.GetProperty("event").GetString() == "scenario_ended");
+        var endedAt = endedEvent.GetProperty("timestamp").GetDateTimeOffset();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal((endedAt - startedAt).TotalMilliseconds, endedEvent.GetProperty("duration_ms").GetDouble());
+    }
+
+    [Fact]
+    public async Task RunAsync_File_Failure_Writes_Jsonl_Terminal_Result()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "name": "target", "action": "waitVisible", "text": "Target" }
+          ]
+        }
+        """);
+        var host = new FakeDeviceHost
+        {
+            WaitVisibleException = new InvalidOperationException("not visible")
+        };
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json", "--events-jsonl", "/tmp/events.jsonl"]);
+        var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains(events, static evt => evt.GetProperty("event").GetString() == "scenario_step_failed");
+        Assert.Equal("scenario_ended", events[^2].GetProperty("event").GetString());
+        Assert.Equal("failed", events[^2].GetProperty("status").GetString());
+        Assert.Equal("scenario_run_ended", events[^1].GetProperty("event").GetString());
+        Assert.Equal("failed", events[^1].GetProperty("status").GetString());
+        Assert.Equal(0, events[^1].GetProperty("passed_count").GetInt32());
+        Assert.Equal(1, events[^1].GetProperty("failed_count").GetInt32());
+    }
+
+    [Fact]
+    public async Task RunAsync_Path_Writes_Jsonl_Run_And_Per_Scenario_Events()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenarios/a.json", """
+        {
+          "name": "a",
+          "steps": [
+            { "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        fileSystem.AddFile("/tmp/scenarios/b.json", """
+        {
+          "name": "b",
+          "steps": [
+            { "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--path", "/tmp/scenarios", "--events-jsonl", "/tmp/events.jsonl"]);
+        var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("scenario_run_started", events[0].GetProperty("event").GetString());
+        Assert.Equal(2, events[0].GetProperty("selected_count").GetInt32());
+        Assert.Equal(["a", "b"], events.Where(static evt => evt.GetProperty("event").GetString() == "scenario_started").Select(static evt => evt.GetProperty("scenario").GetString()!).ToArray());
+        Assert.Equal("scenario_run_ended", events[^1].GetProperty("event").GetString());
+        Assert.Equal("passed", events[^1].GetProperty("status").GetString());
+        Assert.Equal(2, events[^1].GetProperty("passed_count").GetInt32());
+    }
+
+      [Fact]
+      public async Task RunAsync_Path_Failure_Writes_Run_Plan_Metadata_In_Terminal_Event()
+      {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenarios/a.json", """
+        {
+          "name": "a",
+          "steps": [
+          { "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var host = new FakeDeviceHost
+        {
+          DeviceFingerprintException = new UsageException("preflight fingerprint failed")
+        };
+        var app = new App(new AppDependencies
+        {
+          TimeProvider = timeProvider,
+          FileSystem = fileSystem,
+          ProcessRunner = new DefaultProcessRunner(),
+          Delay = new FakeDelay(timeProvider),
+          DeviceHostFactory = new FakeDeviceHostFactory(host),
+          Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--path", "/tmp/scenarios", "--events-jsonl", "/tmp/events.jsonl"]);
+        var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("scenario_run_ended", events[^1].GetProperty("event").GetString());
+        Assert.Equal("failed", events[^1].GetProperty("status").GetString());
+        Assert.Equal(1, events[^1].GetProperty("total_count").GetInt32());
+        Assert.Equal(1, events[^1].GetProperty("matched_count").GetInt32());
+        Assert.Equal(1, events[^1].GetProperty("selected_count").GetInt32());
+        Assert.Equal(0, events[^1].GetProperty("sharded_out_count").GetInt32());
+      }
 
 
     [Fact]
@@ -747,5 +977,10 @@ public sealed partial class AppTests
         Assert.True(failureArtifacts.GetProperty("artifacts").GetArrayLength() >= 2);
     }
 
+    private static JsonElement[] ReadJsonlEvents(FakeFileSystem fileSystem, string path) =>
+        fileSystem.ReadAllTextAsync(path).GetAwaiter().GetResult()
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+            .Select(static line => JsonDocument.Parse(line).RootElement.Clone())
+            .ToArray();
 
 }

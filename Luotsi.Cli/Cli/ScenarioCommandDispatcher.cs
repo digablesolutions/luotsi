@@ -1,5 +1,6 @@
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
+
 using Luotsi.Cli.Scenarios;
 
 namespace Luotsi.Cli.Cli;
@@ -7,11 +8,13 @@ namespace Luotsi.Cli.Cli;
 internal sealed class ScenarioCommandDispatcher(
     ScenarioRunPlanner runPlanner,
     ScenarioExecutorFactory scenarioExecutorFactory,
-    ScenarioBatchExecutorFactory scenarioBatchExecutorFactory)
+    ScenarioBatchExecutorFactory scenarioBatchExecutorFactory,
+    ScenarioRunEventCoordinatorFactory scenarioRunEventCoordinatorFactory)
 {
     private readonly ScenarioRunPlanner _runPlanner = runPlanner ?? throw new ArgumentNullException(nameof(runPlanner));
     private readonly ScenarioExecutorFactory _scenarioExecutorFactory = scenarioExecutorFactory ?? throw new ArgumentNullException(nameof(scenarioExecutorFactory));
     private readonly ScenarioBatchExecutorFactory _scenarioBatchExecutorFactory = scenarioBatchExecutorFactory ?? throw new ArgumentNullException(nameof(scenarioBatchExecutorFactory));
+    private readonly ScenarioRunEventCoordinatorFactory _scenarioRunEventCoordinatorFactory = scenarioRunEventCoordinatorFactory ?? throw new ArgumentNullException(nameof(scenarioRunEventCoordinatorFactory));
 
     public async Task<ScenarioListResult> ListAsync(CliOptions options)
     {
@@ -34,7 +37,11 @@ internal sealed class ScenarioCommandDispatcher(
                 throw new UsageException("run --dry-run requires --path. Use run --file <scenario.json> without --dry-run for single-scenario execution.");
             }
 
-            return await _scenarioExecutorFactory.Create(runner).RunAsync(options.Require("file")).ConfigureAwait(false);
+            var file = options.Require("file");
+            await using var singleRunEvents = _scenarioRunEventCoordinatorFactory.Create(options.Get("events-jsonl"));
+            return await singleRunEvents.RunFileAsync(
+                file,
+                sink => _scenarioExecutorFactory.Create(runner, sink).RunAsync(file)).ConfigureAwait(false);
         }
 
         var query = ScenarioQueryFactory.CreateCatalogRunQuery(options);
@@ -54,6 +61,9 @@ internal sealed class ScenarioCommandDispatcher(
                 plan.SelectedScenarios);
         }
 
-        return await _scenarioBatchExecutorFactory.Create(runner).RunAsync(plan).ConfigureAwait(false);
+        await using var batchRunEvents = _scenarioRunEventCoordinatorFactory.Create(options.Get("events-jsonl"));
+        return await batchRunEvents.RunBatchAsync(
+            plan,
+            sink => _scenarioBatchExecutorFactory.Create(runner, sink).RunAsync(plan)).ConfigureAwait(false);
     }
 }

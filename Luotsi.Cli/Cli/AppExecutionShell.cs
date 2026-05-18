@@ -2,7 +2,6 @@ using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
-using Luotsi.Cli.Scenarios;
 
 namespace Luotsi.Cli.Cli;
 
@@ -31,21 +30,11 @@ internal sealed class AppExecutionShell(AppExecutionShellDependencies dependenci
         }
         catch (UsageException ex)
         {
-            _dependencies.CommandHost.WriteUsageError(options.Command, started, context.CreateArtifactData(), ex);
-            return 2;
+            return _dependencies.FailureResponder.WriteUsageError(options.Command, started, context.CreateArtifactData(), ex);
         }
         catch (Exception ex)
         {
-            var failure = ex as ICommandFailureDetails;
-            var failureData = failure?.DataPayload;
-            if (failureData is null && context.Runner is not null)
-            {
-                failureData = await context.Runner.CaptureFailureArtifactsAsync(new FailureCaptureRequest("command", options.Command, null, null, null, options.Command), ex).ConfigureAwait(false);
-            }
-
-            var category = failure?.CategoryOverride ?? ErrorInfo.Classify(ex.Message);
-            _dependencies.CommandHost.WriteFailure(options.Command, started, failureData, context.CreateArtifactData(), ex, category);
-            return 1;
+            return await _dependencies.FailureResponder.WriteFailureAsync(options.Command, started, context, ex).ConfigureAwait(false);
         }
     }
 }
@@ -56,7 +45,7 @@ internal sealed class AppExecutionShellDependencies
 
     public required TimeProvider TimeProvider { get; init; }
 
-    public required AppCommandHost CommandHost { get; init; }
+    public required AppCommandFailureResponder FailureResponder { get; init; }
 }
 
 internal sealed class AppExecutionContext(DateTimeOffset started, CliOptions options)

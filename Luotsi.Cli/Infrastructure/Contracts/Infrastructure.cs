@@ -17,6 +17,7 @@ public interface IFileSystem
     IReadOnlyList<string> GetFiles(string path, string searchPattern, SearchOption searchOption);
     Task WriteAllTextAsync(string path, string text, Encoding encoding, CancellationToken cancellationToken = default);
     Task<string> ReadAllTextAsync(string path, CancellationToken cancellationToken = default);
+    Stream OpenRead(string path);
     Stream OpenWrite(string path, bool overwrite = true);
     void DeleteFile(string path);
     bool FileExists(string path);

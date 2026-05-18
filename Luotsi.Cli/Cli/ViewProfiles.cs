@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Luotsi.Cli.Errors;
@@ -150,22 +149,23 @@ public sealed class JsonViewProfileStore(IFileSystem fileSystem, IEnvironmentVar
             return null;
         }
 
-        var json = await _fileSystem.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
-        return JsonSerializer.Deserialize<ViewProfile>(json, Options);
+        await using var stream = _fileSystem.OpenRead(path);
+        return await JsonSerializer.DeserializeAsync<ViewProfile>(stream, Options, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task SaveAsync(string name, ViewProfile profile, CancellationToken cancellationToken = default)
     {
         var path = GetProfilePath(name);
         _fileSystem.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
-        await _fileSystem.WriteAllTextAsync(path, JsonSerializer.Serialize(profile, Options), Encoding.UTF8, cancellationToken).ConfigureAwait(false);
+        await using var stream = _fileSystem.OpenWrite(path);
+        await JsonSerializer.SerializeAsync(stream, profile, Options, cancellationToken).ConfigureAwait(false);
     }
 
     public Task<IReadOnlyList<string>> ListAsync(CancellationToken cancellationToken = default)
     {
         var root = GetProfileRoot();
-        IReadOnlyList<string> profiles = Directory.Exists(root)
-            ? Directory.GetFiles(root, "*.json")
+        IReadOnlyList<string> profiles = _fileSystem.DirectoryExists(root)
+            ? _fileSystem.GetFiles(root, "*.json", SearchOption.TopDirectoryOnly)
                 .Select(Path.GetFileNameWithoutExtension)
                 .Where(name => !string.IsNullOrWhiteSpace(name))
                 .Select(name => name!)

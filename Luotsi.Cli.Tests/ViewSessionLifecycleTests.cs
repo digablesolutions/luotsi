@@ -222,6 +222,45 @@ public sealed partial class AppTests
         Assert.Equal(ViewCaptureBackends.Screenrecord, started.RootElement.GetProperty("capture_backend").GetString());
     }
 
+    [Fact]
+    public async Task RunAsync_View_AutoCaptureBackend_Does_Not_Fall_Back_When_Helper_Package_Is_Missing()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var backend = new FakeViewBackend();
+        var bootstrap = new FakeViewTransportBootstrap([
+            new InvalidOperationException("Android view helper package was not found. Set LUOTSI_VIEW_HELPER_APK or build the helper APK at Luotsi.ViewServer.Android\\app\\build\\outputs\\apk\\debug\\app-debug.apk")
+        ]);
+        using var stream = new MemoryStream();
+        var session = new ViewSession(
+            host,
+            ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
+            console,
+            timeProvider,
+            bootstrap,
+            new FakeViewBackendFactory(backend),
+            new FakeViewStreamConnector(stream),
+            new ViewPacketStreamReader());
+
+        var exitCode = await session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", true, null, 1600, 60, "8M", false, false));
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal([ViewCaptureBackends.Auto], bootstrap.StartRequests.Select(static request => request.CaptureBackend).ToArray());
+        Assert.Equal(1, bootstrap.StopCallCount);
+        Assert.Equal(2, console.OutputLines.Count);
+
+        using var error = JsonDocument.Parse(console.OutputLines[0]);
+        Assert.Equal(SessionEventTypes.View.Error, error.RootElement.GetProperty("type").GetString());
+        Assert.Equal("configuration_error", error.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("LUOTSI_VIEW_HELPER_APK", error.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+
+        using var ended = JsonDocument.Parse(console.OutputLines[1]);
+        Assert.Equal(SessionEventTypes.View.Ended, ended.RootElement.GetProperty("type").GetString());
+        Assert.Equal("error", ended.RootElement.GetProperty("reason").GetString());
+    }
+
 
 
     [Fact]

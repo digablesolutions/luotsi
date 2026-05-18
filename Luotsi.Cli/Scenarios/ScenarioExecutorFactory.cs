@@ -13,9 +13,9 @@ internal sealed class ScenarioExecutorFactory(
     private readonly IDelay _delay = delay ?? throw new ArgumentNullException(nameof(delay));
     private readonly IScenarioTemplateResolver _templateResolver = templateResolver ?? throw new ArgumentNullException(nameof(templateResolver));
 
-    public ScenarioExecutor Create(IScenarioActionHost actionHost)
+    public ScenarioExecutor Create(IScenarioActionHost actionHost, IScenarioEventSink? eventSink = null)
     {
         ArgumentNullException.ThrowIfNull(actionHost);
-        return new ScenarioExecutor(actionHost, _fileSystem, _timeProvider, _delay, _templateResolver);
+        return new ScenarioExecutor(actionHost, _fileSystem, _timeProvider, _delay, _templateResolver, eventSink);
     }
 }

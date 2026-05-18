@@ -589,7 +589,7 @@ public sealed class ViewSession(
         {
             return await StartTransportWithBackendAndReadHeaderAsync(options, activeDeviceSelector, options.CaptureBackend, cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception ex) when (string.Equals(options.CaptureBackend, ViewCaptureBackends.Auto, StringComparison.OrdinalIgnoreCase))
+        catch (Exception ex) when (ShouldFallbackToScreenrecord(options, ex))
         {
             await _transportBootstrap.StopAsync(CancellationToken.None).ConfigureAwait(false);
             WriteJsonLine(new
@@ -606,6 +606,14 @@ public sealed class ViewSession(
             return await StartTransportWithBackendAndReadHeaderAsync(options, activeDeviceSelector, ViewCaptureBackends.Screenrecord, cancellationToken).ConfigureAwait(false);
         }
     }
+
+    private static bool ShouldFallbackToScreenrecord(ViewOptions options, Exception exception) =>
+        string.Equals(options.CaptureBackend, ViewCaptureBackends.Auto, StringComparison.OrdinalIgnoreCase) &&
+        exception is not UsageException &&
+        !IsMissingViewHelperPackage(exception.Message);
+
+    private static bool IsMissingViewHelperPackage(string message) =>
+        message.Contains("Android view helper package was not found", StringComparison.OrdinalIgnoreCase);
 
     private async Task<(ViewConnectionInfo ConnectionInfo, IViewStreamConnection Connection, ViewStreamHeader Header)> StartTransportWithBackendAndReadHeaderAsync(
         ViewOptions options,

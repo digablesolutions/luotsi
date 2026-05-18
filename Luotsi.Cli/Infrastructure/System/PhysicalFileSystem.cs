@@ -5,12 +5,14 @@ namespace Luotsi.Cli.Infrastructure.System;
 
 public sealed class PhysicalFileSystem : IFileSystem
 {
+    private const int DefaultBufferSize = 16 * 1024;
+
     public void CreateDirectory(string path) => Directory.CreateDirectory(path);
 
     public bool DirectoryExists(string path) => Directory.Exists(path);
 
     public IReadOnlyList<string> GetFiles(string path, string searchPattern, SearchOption searchOption) =>
-        Directory.GetFiles(path, searchPattern, searchOption);
+        Directory.EnumerateFiles(path, searchPattern, searchOption).ToArray();
 
     public Task WriteAllTextAsync(string path, string text, Encoding encoding, CancellationToken cancellationToken = default) =>
         File.WriteAllTextAsync(path, text, encoding, cancellationToken);
@@ -18,8 +20,25 @@ public sealed class PhysicalFileSystem : IFileSystem
     public Task<string> ReadAllTextAsync(string path, CancellationToken cancellationToken = default) =>
         File.ReadAllTextAsync(path, cancellationToken);
 
+    public Stream OpenRead(string path) =>
+        new FileStream(path, new FileStreamOptions
+        {
+            Mode = FileMode.Open,
+            Access = FileAccess.Read,
+            Share = FileShare.Read,
+            BufferSize = DefaultBufferSize,
+            Options = FileOptions.Asynchronous | FileOptions.SequentialScan
+        });
+
     public Stream OpenWrite(string path, bool overwrite = true) =>
-        new FileStream(path, overwrite ? FileMode.Create : FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+        new FileStream(path, new FileStreamOptions
+        {
+            Mode = overwrite ? FileMode.Create : FileMode.CreateNew,
+            Access = FileAccess.Write,
+            Share = FileShare.None,
+            BufferSize = DefaultBufferSize,
+            Options = FileOptions.Asynchronous
+        });
 
     public void DeleteFile(string path)
     {

@@ -400,6 +400,12 @@ public sealed record ErrorInfo(string Type, string Message, string Category)
             return "configuration_error";
         }
 
+        if (message.Contains("Android view helper package was not found", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("LUOTSI_VIEW_HELPER_APK", StringComparison.OrdinalIgnoreCase))
+        {
+            return "configuration_error";
+        }
+
         if (message.Contains("Timed out", StringComparison.OrdinalIgnoreCase))
         {
             return "selector_or_screen_state";

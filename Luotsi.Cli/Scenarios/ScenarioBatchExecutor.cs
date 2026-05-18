@@ -1,5 +1,4 @@
 using Luotsi.Cli.Errors;
-using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Scenarios;
 
@@ -50,6 +49,6 @@ internal sealed class ScenarioBatchExecutor(ScenarioExecutor scenarios)
             scenario.Name,
             scenario.File,
             failure?.DataPayload as ScenarioRunFailureData,
-            ErrorInfo.From(exception, failure?.CategoryOverride ?? ErrorInfo.Classify(exception.Message)));
+            ScenarioErrorInfo.From(exception));
     }
 }
