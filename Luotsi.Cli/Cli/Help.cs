@@ -67,8 +67,8 @@ Commands:
   logcat [--tail 200]
   wait-log --contains <text> [--timeout-sec 15]
   record --output <file.mp4> [--time-limit-sec 30]
-  run --file <scenario.json>
-  run --path <scenario-file-or-directory> [--dry-run] [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>] [--shard-count <n> --shard-index <zero-based>]
+  run --file <scenario.json> [--events-jsonl <file>]
+  run --path <scenario-file-or-directory> [--dry-run] [--events-jsonl <file>] [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>] [--shard-count <n> --shard-index <zero-based>]
 
 Common options:
   --device <adb serial>

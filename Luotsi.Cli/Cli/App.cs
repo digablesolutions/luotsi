@@ -68,9 +68,10 @@ public sealed class App
         var scenarioRunPlanner = new ScenarioRunPlanner(scenarioCatalog);
         var scenarioExecutorFactory = new ScenarioExecutorFactory(resolvedFileSystem, resolvedTimeProvider, resolvedDelay, scenarioTemplateResolver);
         var scenarioBatchExecutorFactory = new ScenarioBatchExecutorFactory(scenarioExecutorFactory);
+        var scenarioRunEventCoordinatorFactory = new ScenarioRunEventCoordinatorFactory(resolvedFileSystem, resolvedTimeProvider);
         var commandDispatcher = new AppCommandDispatcher(
             new AdbSubcommandDispatcher(),
-            new ScenarioCommandDispatcher(scenarioRunPlanner, scenarioExecutorFactory, scenarioBatchExecutorFactory),
+            new ScenarioCommandDispatcher(scenarioRunPlanner, scenarioExecutorFactory, scenarioBatchExecutorFactory, scenarioRunEventCoordinatorFactory),
             profileCoordinator);
         var commandHost = new AppCommandHost(new AppCommandHostDependencies
         {

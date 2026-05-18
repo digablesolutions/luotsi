@@ -6,9 +6,9 @@ internal sealed class ScenarioBatchExecutorFactory(ScenarioExecutorFactory scena
 {
     private readonly ScenarioExecutorFactory _scenarioExecutorFactory = scenarioExecutorFactory ?? throw new ArgumentNullException(nameof(scenarioExecutorFactory));
 
-    public ScenarioBatchExecutor Create(IDeviceHost runner)
+    public ScenarioBatchExecutor Create(IDeviceHost runner, IScenarioEventSink? eventSink = null)
     {
         ArgumentNullException.ThrowIfNull(runner);
-        return new ScenarioBatchExecutor(_scenarioExecutorFactory.Create(runner));
+        return new ScenarioBatchExecutor(_scenarioExecutorFactory.Create(runner, eventSink));
     }
 }
