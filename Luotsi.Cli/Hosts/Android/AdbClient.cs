@@ -111,7 +111,7 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
         var matchSignal = stopWhen is null ? null : new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
         var stdout = process.StandardOutput;
-        var readerTask = Task.Run(() => ReadLogOutputAsync(stdout, stopWhen, observeLine, matchSignal, cancellationToken), cancellationToken);
+        var readerTask = ReadLogOutputAsync(stdout, stopWhen, observeLine, matchSignal, cancellationToken);
 
         var timeoutTask = Task.Delay(TimeSpan.FromSeconds(Math.Max(1, timeoutSec)), cancellationToken);
         Task completedTask;

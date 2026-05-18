@@ -244,7 +244,7 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
 
         public string? RemoteEndpoint { get; } = client.Client.RemoteEndPoint?.ToString();
 
-        public void Start() => _writerTask = Task.Run(WriteLoopAsync);
+        public void Start() => _writerTask = WriteLoopAsync();
 
         public bool TryQueue(ViewPacket packet) => _packets.Writer.TryWrite(packet);
 
