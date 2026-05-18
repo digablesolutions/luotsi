@@ -553,7 +553,7 @@ public sealed class ViewSession(
             reason
         });
 
-        var fallback = await StartTransportWithBackendAndReadHeaderAsync(options, activeDeviceSelector, ViewCaptureBackends.Screenrecord, cancellationToken).ConfigureAwait(false);
+        var fallback = await StartTransportWithBackendAndReadHeaderAsync(options, activeDeviceSelector, ViewCaptureBackends.Screenrecord, sessionId, cancellationToken).ConfigureAwait(false);
         return (fallback.ConnectionInfo, fallback.Connection, fallback.Header, _packetStreamReader.ReadPacketsAsync(fallback.Connection.Stream, cancellationToken));
     }
 
@@ -587,7 +587,11 @@ public sealed class ViewSession(
     {
         try
         {
-            return await StartTransportWithBackendAndReadHeaderAsync(options, activeDeviceSelector, options.CaptureBackend, cancellationToken).ConfigureAwait(false);
+            return await StartTransportWithBackendAndReadHeaderAsync(options, activeDeviceSelector, options.CaptureBackend, sessionId, cancellationToken).ConfigureAwait(false);
+        }
+        catch (MediaProjectionConsentException ex) when (IsExplicitMediaProjectionRequest(options))
+        {
+            throw new UsageException($"{ex.Message} Use --capture-backend auto or --capture-backend screenrecord.");
         }
         catch (Exception ex) when (ShouldFallbackToScreenrecord(options, ex))
         {
@@ -603,9 +607,12 @@ public sealed class ViewSession(
                 reason = ex.Message
             });
 
-            return await StartTransportWithBackendAndReadHeaderAsync(options, activeDeviceSelector, ViewCaptureBackends.Screenrecord, cancellationToken).ConfigureAwait(false);
+            return await StartTransportWithBackendAndReadHeaderAsync(options, activeDeviceSelector, ViewCaptureBackends.Screenrecord, sessionId, cancellationToken).ConfigureAwait(false);
         }
     }
+
+    private static bool IsExplicitMediaProjectionRequest(ViewOptions options) =>
+        string.Equals(options.CaptureBackend, ViewCaptureBackends.MediaProjection, StringComparison.OrdinalIgnoreCase);
 
     private static bool ShouldFallbackToScreenrecord(ViewOptions options, Exception exception) =>
         string.Equals(options.CaptureBackend, ViewCaptureBackends.Auto, StringComparison.OrdinalIgnoreCase) &&
@@ -619,6 +626,7 @@ public sealed class ViewSession(
         ViewOptions options,
         string activeDeviceSelector,
         string captureBackend,
+        string sessionId,
         CancellationToken cancellationToken)
     {
         var connectionInfo = await _transportBootstrap.StartAsync(
@@ -629,10 +637,27 @@ public sealed class ViewSession(
                 options.MaxFps,
                 options.VideoBitRate,
                 options.Codec,
-                captureBackend),
+                captureBackend,
+                options.CommandTimeout),
+            phase => WriteStartupPhase(sessionId, phase),
             cancellationToken).ConfigureAwait(false);
 
         return await ConnectAndReadHeaderAsync(connectionInfo, cancellationToken).ConfigureAwait(false);
+    }
+
+    private void WriteStartupPhase(string sessionId, ViewStartupPhase phase)
+    {
+        WriteJsonLine(new
+        {
+            type = SessionEventTypes.View.StartupPhase,
+            session_id = sessionId,
+            occurred_at = _timeProvider.GetUtcNow(),
+            phase = phase.Phase,
+            status = phase.Status,
+            summary = phase.Summary,
+            detail = phase.Detail,
+            recommendation = phase.Recommendation
+        });
     }
 
     private async Task<(ViewConnectionInfo ConnectionInfo, IViewStreamConnection Connection, ViewStreamHeader Header)> ConnectAndReadHeaderAsync(

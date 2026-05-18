@@ -34,6 +34,12 @@ internal sealed class AppCommandFamilyRouter(AppCommandFamilyRouterDependencies 
             return await _dependencies.InspectSessionLauncher.RunAsync(options, adbExecutable, artifacts).ConfigureAwait(false);
         }
 
+        if (IsViewSetupCommand(options))
+        {
+            context.Runner = _dependencies.DeviceHostLauncher.Create(options, adbExecutable, artifacts);
+            return await _dependencies.CommandHost.RunViewSetupAsync(options, started, adbExecutable, context.Runner, artifacts).ConfigureAwait(false);
+        }
+
         if (IsViewCommand(options.Command))
         {
             var preparedViewSession = await _dependencies.ViewSessionCommandPreparer.PrepareAsync(options, adbExecutable, artifacts).ConfigureAwait(false);
@@ -61,6 +67,12 @@ internal sealed class AppCommandFamilyRouter(AppCommandFamilyRouterDependencies 
     private static bool IsViewCommand(string? command) =>
         string.Equals(command, "view", StringComparison.OrdinalIgnoreCase)
         || string.Equals(command, "reconnect", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsViewSetupCommand(CliOptions options) =>
+        string.Equals(options.Command, "view-setup", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(options.Command, "view", StringComparison.OrdinalIgnoreCase) &&
+        options.Arguments.Count > 0 &&
+        string.Equals(options.Arguments[0], "setup", StringComparison.OrdinalIgnoreCase);
 }
 
 internal sealed class AppCommandFamilyRouterDependencies

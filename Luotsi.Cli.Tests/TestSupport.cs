@@ -943,6 +943,37 @@ internal sealed class FakeViewDoctorFactory(IViewDoctor viewDoctor) : IViewDocto
     }
 }
 
+internal sealed class FakeViewSetup(Func<ViewOptions, bool, ViewSetupResult>? resultFactory = null) : IViewSetup
+{
+    private readonly Func<ViewOptions, bool, ViewSetupResult> _resultFactory = resultFactory ?? ((options, fix) =>
+        new ViewSetupResult(
+            true,
+            fix,
+            options.PresetName,
+            options,
+            [new ViewSetupStep("helper_install", ViewStartupPhaseStatus.Succeeded, "Installed.")],
+            new ViewDoctorResult(true, options.PresetName, options, [], null, [])));
+
+    public List<(ViewOptions Options, bool Fix)> Calls { get; } = [];
+
+    public Task<ViewSetupResult> SetupAsync(ViewOptions options, bool fix, CancellationToken cancellationToken = default)
+    {
+        Calls.Add((options, fix));
+        return Task.FromResult(_resultFactory(options, fix));
+    }
+}
+
+internal sealed class FakeViewSetupFactory(IViewSetup viewSetup) : IViewSetupFactory
+{
+    public IDeviceHost? LastDeviceHost { get; private set; }
+
+    public IViewSetup Create(IDeviceHost deviceHost)
+    {
+        LastDeviceHost = deviceHost;
+        return viewSetup;
+    }
+}
+
 internal sealed class FakeViewRendererFactory(IViewRenderer renderer) : IViewRendererFactory
 {
     public Func<ViewInteractionRequest, Task>? LastInteractionHandler { get; private set; }
@@ -954,9 +985,10 @@ internal sealed class FakeViewRendererFactory(IViewRenderer renderer) : IViewRen
     }
 }
 
-internal sealed class FakeViewTransportBootstrap(IEnumerable<object> outcomes) : IViewTransportBootstrap
+internal sealed class FakeViewTransportBootstrap(IEnumerable<object> outcomes, IEnumerable<ViewStartupPhase>? startupPhases = null) : IViewTransportBootstrap
 {
     private readonly Queue<object> _outcomes = new(outcomes);
+    private readonly ViewStartupPhase[] _startupPhases = startupPhases?.ToArray() ?? [];
 
     public FakeViewTransportBootstrap(ViewConnectionInfo connectionInfo)
         : this([connectionInfo])
@@ -969,10 +1001,15 @@ internal sealed class FakeViewTransportBootstrap(IEnumerable<object> outcomes) :
 
     public List<ViewStartRequest> StartRequests { get; } = [];
 
-    public Task<ViewConnectionInfo> StartAsync(ViewStartRequest request, CancellationToken cancellationToken = default)
+    public Task<ViewConnectionInfo> StartAsync(ViewStartRequest request, Action<ViewStartupPhase>? reportPhase = null, CancellationToken cancellationToken = default)
     {
         StartCallCount++;
         StartRequests.Add(request);
+        foreach (var phase in _startupPhases)
+        {
+            reportPhase?.Invoke(phase);
+        }
+
         var outcome = _outcomes.Count > 1 ? _outcomes.Dequeue() : _outcomes.Peek();
         if (outcome is Exception exception)
         {

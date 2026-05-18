@@ -277,7 +277,8 @@ public sealed class ViewDoctor(
         try
         {
             var package = _helperPackageLocator.Resolve();
-            return new ViewDoctorCheck("helper_package", true, $"Android view helper is ready ({package.Version}).", package.LocalPath);
+            var detail = $"path={package.LocalPath}; source={package.ResolutionSource}; size={package.LocalSizeBytes?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown"}; sha256={package.LocalSha256 ?? "unknown"}";
+            return new ViewDoctorCheck("helper_package", true, $"Android view helper is ready ({package.Version}).", detail);
         }
         catch (Exception ex)
         {

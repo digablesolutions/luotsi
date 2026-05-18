@@ -36,10 +36,32 @@ internal sealed class AppCommandHost(AppCommandHostDependencies dependencies)
         ArgumentNullException.ThrowIfNull(runner);
         ArgumentNullException.ThrowIfNull(artifacts);
 
+        var commandTimeout = AdbCommandTimeoutResolver.Resolve(options, _dependencies.Environment);
+        var viewOptions = ViewCommandOptionsFactory.Build(options, adbExecutable, allowJoinShare: false, commandTimeout);
+        if (options.HasFlag("fix"))
+        {
+            var setup = await _dependencies.ViewSetupFactory.Create(runner).SetupAsync(viewOptions, fix: true).ConfigureAwait(false);
+            _dependencies.EnvelopeWriter.WriteSuccess(options.Command!, started, setup, artifacts.ToData());
+            return setup.Ready ? 0 : 1;
+        }
+
         var viewDoctor = _dependencies.ViewDoctorFactory.Create(runner);
-        var report = await viewDoctor.DiagnoseAsync(ViewCommandOptionsFactory.Build(options, adbExecutable, allowJoinShare: false)).ConfigureAwait(false);
+        var report = await viewDoctor.DiagnoseAsync(viewOptions).ConfigureAwait(false);
         _dependencies.EnvelopeWriter.WriteSuccess(options.Command!, started, report, artifacts.ToData());
         return 0;
+    }
+
+    public async Task<int> RunViewSetupAsync(CliOptions options, DateTimeOffset started, string adbExecutable, IDeviceHost runner, ArtifactSession artifacts)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(runner);
+        ArgumentNullException.ThrowIfNull(artifacts);
+
+        var commandTimeout = AdbCommandTimeoutResolver.Resolve(options, _dependencies.Environment);
+        var viewOptions = ViewCommandOptionsFactory.Build(options, adbExecutable, allowJoinShare: false, commandTimeout);
+        var setup = await _dependencies.ViewSetupFactory.Create(runner).SetupAsync(viewOptions, fix: !options.HasFlag("dry-run")).ConfigureAwait(false);
+        _dependencies.EnvelopeWriter.WriteSuccess(options.Command!, started, setup, artifacts.ToData());
+        return setup.Ready ? 0 : 1;
     }
 
     public async Task<int> RunCommandAsync(CliOptions options, DateTimeOffset started, string adbExecutable, IDeviceHost runner, ArtifactSession artifacts)
@@ -56,6 +78,8 @@ internal sealed class AppCommandHost(AppCommandHostDependencies dependencies)
 
 internal sealed class AppCommandHostDependencies
 {
+    public required IEnvironmentVariables Environment { get; init; }
+
     public required AppCommandEnvelopeWriter EnvelopeWriter { get; init; }
 
     public required AppCommandExitCodeResolver ExitCodeResolver { get; init; }
@@ -65,4 +89,6 @@ internal sealed class AppCommandHostDependencies
     public required AppCommandDispatcher CommandDispatcher { get; init; }
 
     public required IViewDoctorFactory ViewDoctorFactory { get; init; }
+
+    public required IViewSetupFactory ViewSetupFactory { get; init; }
 }

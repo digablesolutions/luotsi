@@ -65,6 +65,11 @@ public sealed class AppDependencies
     public IViewDoctorFactory? ViewDoctorFactory { get; init; }
 
     /// <summary>
+    /// Gets or sets the view setup factory used by the application.
+    /// </summary>
+    public IViewSetupFactory? ViewSetupFactory { get; init; }
+
+    /// <summary>
     /// Gets or sets the profile store used by the application.
     /// </summary>
     public IViewProfileStore? ViewProfileStore { get; init; }

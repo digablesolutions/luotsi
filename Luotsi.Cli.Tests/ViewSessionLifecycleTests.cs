@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
+using Luotsi.Cli.Hosts.Android.View;
 using Luotsi.Cli.Models;
 using Luotsi.Cli.View.Contracts;
 using Luotsi.Cli.View.Session;
@@ -131,6 +132,48 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_View_Streams_Startup_Phases_From_Transport_Bootstrap()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var backend = new FakeViewBackend();
+        var bootstrap = new FakeViewTransportBootstrap(
+            [new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward")],
+            [new ViewStartupPhase("helper_resolve", ViewStartupPhaseStatus.Started, "Resolving Android view helper package.")]);
+        var session = new ViewSession(
+            host,
+            ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
+            console,
+            timeProvider,
+            bootstrap,
+            new FakeViewBackendFactory(backend),
+            new FakeViewStreamConnector(
+                new ViewPacketStreamHarness()
+                    .WriteHeader("h264", 1080, 1920)
+                    .WritePacket(ViewPacketType.StreamEnd, 1, 0, false, [])
+                    .Build()),
+            new ViewPacketStreamReader());
+
+        var exitCode = await session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", true, null, 1600, 60, "8M", false, false));
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(3, console.OutputLines.Count);
+
+        using var phase = JsonDocument.Parse(console.OutputLines[0]);
+        Assert.Equal(SessionEventTypes.View.StartupPhase, phase.RootElement.GetProperty("type").GetString());
+        Assert.Equal("helper_resolve", phase.RootElement.GetProperty("phase").GetString());
+        Assert.Equal(ViewStartupPhaseStatus.Started, phase.RootElement.GetProperty("status").GetString());
+
+        using var started = JsonDocument.Parse(console.OutputLines[1]);
+        Assert.Equal(SessionEventTypes.View.Started, started.RootElement.GetProperty("type").GetString());
+
+        using var ended = JsonDocument.Parse(console.OutputLines[2]);
+        Assert.Equal(SessionEventTypes.View.Ended, ended.RootElement.GetProperty("type").GetString());
+    }
+
+    [Fact]
     public async Task RunAsync_View_AutoCaptureBackend_Falls_Back_To_Screenrecord_When_MediaProjection_Start_Fails()
     {
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
@@ -220,6 +263,50 @@ public sealed partial class AppTests
         using var started = JsonDocument.Parse(console.OutputLines[1]);
         Assert.Equal(SessionEventTypes.View.Started, started.RootElement.GetProperty("type").GetString());
         Assert.Equal(ViewCaptureBackends.Screenrecord, started.RootElement.GetProperty("capture_backend").GetString());
+    }
+
+    [Fact]
+    public async Task RunAsync_View_Explicit_MediaProjection_Consent_Failure_Returns_Usage_Error()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var backend = new FakeViewBackend();
+        var bootstrap = new FakeViewTransportBootstrap([
+            new MediaProjectionConsentException("MediaProjection consent prompt was not approved or could not be detected.")
+        ]);
+        var session = new ViewSession(
+            host,
+            ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
+            console,
+            timeProvider,
+            bootstrap,
+            new FakeViewBackendFactory(backend),
+            new FakeViewStreamConnector(new MemoryStream()),
+            new ViewPacketStreamReader());
+
+        var exitCode = await session.RunAsync(new ViewOptions(
+            "192.168.0.134:5555",
+            "adb",
+            "h264",
+            "ffmpeg",
+            true,
+            null,
+            1600,
+            60,
+            "8M",
+            false,
+            false,
+            CaptureBackend: ViewCaptureBackends.MediaProjection));
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal([ViewCaptureBackends.MediaProjection], bootstrap.StartRequests.Select(static request => request.CaptureBackend).ToArray());
+
+        using var error = JsonDocument.Parse(console.OutputLines[0]);
+        Assert.Equal(SessionEventTypes.View.Error, error.RootElement.GetProperty("type").GetString());
+        Assert.Equal("usage_error", error.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("--capture-backend screenrecord", error.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]

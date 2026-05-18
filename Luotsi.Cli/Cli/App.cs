@@ -61,6 +61,12 @@ public sealed class App
             resolvedEnvironment,
             resolvedFileSystem,
             resolvedProcessRunner);
+        var resolvedViewSetupFactory = dependencies.ViewSetupFactory ?? new DefaultViewSetupFactory(
+            resolvedEnvironment,
+            resolvedFileSystem,
+            resolvedProcessRunner,
+            resolvedAdbClientFactory,
+            resolvedViewDoctorFactory);
         var resolvedViewProfileStore = dependencies.ViewProfileStore ?? new JsonViewProfileStore(resolvedFileSystem, resolvedEnvironment);
         var profileCoordinator = new ViewProfileCoordinator(resolvedViewProfileStore);
         var scenarioTemplateResolver = new ScenarioTemplateResolver(resolvedTimeProvider, resolvedEnvironment);
@@ -76,11 +82,13 @@ public sealed class App
             profileCoordinator);
         var commandHost = new AppCommandHost(new AppCommandHostDependencies
         {
+            Environment = resolvedEnvironment,
             EnvelopeWriter = envelopeWriter,
             ExitCodeResolver = new AppCommandExitCodeResolver(),
             ProfileCoordinator = profileCoordinator,
             CommandDispatcher = commandDispatcher,
-            ViewDoctorFactory = resolvedViewDoctorFactory
+            ViewDoctorFactory = resolvedViewDoctorFactory,
+            ViewSetupFactory = resolvedViewSetupFactory
         });
         var deviceHostLauncher = new DeviceHostLauncher(resolvedDeviceHostFactory, resolvedEnvironment);
         _executionShell = new AppExecutionShell(new AppExecutionShellDependencies
@@ -96,7 +104,7 @@ public sealed class App
             Environment = resolvedEnvironment,
             ProfileCoordinator = profileCoordinator,
             CommandHost = commandHost,
-            ViewSessionCommandPreparer = new ViewSessionCommandPreparer(deviceHostLauncher, resolvedViewSessionFactory, profileCoordinator),
+            ViewSessionCommandPreparer = new ViewSessionCommandPreparer(deviceHostLauncher, resolvedViewSessionFactory, profileCoordinator, resolvedEnvironment),
             InspectSessionLauncher = new InspectSessionLauncher(deviceHostLauncher, resolvedConsole, resolvedTimeProvider),
             ViewDoctorLauncher = new ViewDoctorLauncher(deviceHostLauncher, commandHost),
             DeviceHostLauncher = deviceHostLauncher

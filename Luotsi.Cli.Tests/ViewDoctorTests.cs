@@ -50,6 +50,66 @@ public sealed partial class AppTests
         Assert.Equal(250, options.StatsIntervalMs);
     }
 
+    [Fact]
+    public async Task RunAsync_ViewSetup_Uses_Injected_ViewSetupFactory()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var setup = new FakeViewSetup();
+        var factory = new FakeViewSetupFactory(setup);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            TimeProvider = timeProvider,
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            ViewSetupFactory = factory
+        });
+
+        var exitCode = await app.RunAsync([
+            "view-setup",
+            "--device", "192.168.0.134:5555",
+            "--preset", "safe"]);
+
+        using var envelope = console.ParseSingleOutputAsJson();
+        Assert.Equal(0, exitCode);
+        Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("view-setup", envelope.RootElement.GetProperty("command").GetString());
+        Assert.True(envelope.RootElement.GetProperty("data").GetProperty("fix").GetBoolean());
+        Assert.True(envelope.RootElement.GetProperty("data").GetProperty("ready").GetBoolean());
+        Assert.Same(host, factory.LastDeviceHost);
+        var call = Assert.Single(setup.Calls);
+        Assert.True(call.Fix);
+        Assert.Equal("safe", call.Options.PresetName);
+    }
+
+    [Fact]
+    public async Task RunAsync_ViewDoctor_Fix_Runs_Setup()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var setup = new FakeViewSetup();
+        var factory = new FakeViewSetupFactory(setup);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            TimeProvider = timeProvider,
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            ViewSetupFactory = factory
+        });
+
+        var exitCode = await app.RunAsync([
+            "view-doctor",
+            "--device", "192.168.0.134:5555",
+            "--fix"]);
+
+        using var envelope = console.ParseSingleOutputAsJson();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("view-doctor", envelope.RootElement.GetProperty("command").GetString());
+        Assert.True(envelope.RootElement.GetProperty("data").GetProperty("fix").GetBoolean());
+        Assert.True(Assert.Single(setup.Calls).Fix);
+    }
 
 
     [Fact]

@@ -5,7 +5,7 @@ namespace Luotsi.Cli.Cli;
 
 internal static class ViewCommandOptionsFactory
 {
-    public static ViewOptions Build(CliOptions options, string adbExecutable, bool allowJoinShare)
+    public static ViewOptions Build(CliOptions options, string adbExecutable, bool allowJoinShare, TimeSpan? commandTimeout)
     {
         var joinShareEndpoint = options.Get("join-share");
         if (!allowJoinShare && !string.IsNullOrWhiteSpace(joinShareEndpoint))
@@ -59,7 +59,8 @@ internal static class ViewCommandOptionsFactory
             joinShareEndpoint,
             options.HasFlag("always-on-top"),
             scaleMode,
-            captureBackend);
+            captureBackend,
+            commandTimeout);
     }
 
     private static int GetIntOrDefault(CliOptions options, string key, int defaultValue) =>
