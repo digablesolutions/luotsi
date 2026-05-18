@@ -57,11 +57,12 @@ The top-level scenario result also includes `prologue_ms`, `steps_ms`, and `non_
 
 | Action | Key arguments |
 |---|---|
-| `waitVisible` | `selector`, `timeout_sec` |
-| `waitNotVisible` | `selector`, `timeout_sec` |
-| `tapText` | `text`, `timeout_sec` |
+| `waitVisible` | `text`, `timeoutSec` |
+| `waitNotVisible` | `text`, `timeoutSec` |
+| `tapText` | `text`, `timeoutSec` |
 | `tapPoint` | `x`, `y` |
 | `doubleTapHeaderLogo` | — |
+| `doubleTap` | `headerLogo: true` |
 | `typeText` | `text` |
 | `typePin` | `pin` |
 | `keyevent` | `code` (KEYCODE_* string) |
@@ -70,12 +71,12 @@ The top-level scenario result also includes `prologue_ms`, `steps_ms`, and `non_
 
 | Action | Key arguments |
 |---|---|
-| `waitLog` | `contains`, `timeout_sec` |
-| `waitStep` | `step`, `timeout_sec` |
-| `waitActionReady` | `step` *(optional)*, `timeout_sec` |
+| `waitLog` | `text`, `timeoutSec` |
+| `waitStep` | `step`, `timeoutSec` |
+| `waitActionReady` | `text` *(required)*, `step` *(optional)*, `timeoutSec` |
 | `resetLog` | — |
-| `assertEvent` | `event`, `timeout_sec`; supports `observeFromPreviousStep: true` |
-| `assertTextInputReady` | `timeout_sec` |
+| `assertEvent` | `event`, `timeoutSec`; supports `observeFromPreviousStep: true` |
+| `assertTextInputReady` | `timeoutSec` |
 | `assertBelow` | `above`, `below` selectors |
 | `assertAligned` | `left`, `right` selectors |
 | `assertAppVersion` | `package`, `version` |
@@ -90,8 +91,8 @@ The top-level scenario result also includes `prologue_ms`, `steps_ms`, and `non_
 | `startUri` | `uri`, `package`, `activity`, `action` *(all optional)*, `wait` |
 | `forceStop` | `package` |
 | `clear` / `clearApp` | `package` |
-| `waitForActivity` | `activity` (string or pattern), `timeout_sec` |
-| `waitForNotActivity` | `activity` (string or pattern), `timeout_sec` |
+| `waitForActivity` | `activity` (string or pattern), `timeoutSec` |
+| `waitForNotActivity` | `activity` (string or pattern), `timeoutSec` |
 | `isAppInstalled` | `package` |
 | `listInstalledPackages` | `thirdParty` *(bool)* |
 | `grantPermission` | `package`, `permission` |

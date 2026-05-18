@@ -133,8 +133,8 @@ Quick reference. See [docs/commands.md](docs/commands.md) for flags, retry behav
 | `telemetry-watch --device <serial> --timeout-sec <n>` | Collect telemetry over a bounded window |
 | `wait-log --device <serial> --contains <text> --timeout-sec <n>` | Wait for a matching logcat line |
 | `tap-text --device <serial> --text <text>` | Tap a UI element by visible text |
-| `wait-step --device <serial>` | Wait for a semantic step telemetry event |
-| `wait-action-ready --device <serial>` | Wait for a semantic action-ready telemetry event |
+| `wait-step --device <serial> --step <name>` | Wait for a semantic step telemetry event |
+| `wait-action-ready --device <serial> --action <name> [--step <name>]` | Wait for a semantic action-ready telemetry event |
 
 ### Scenarios & Inspect
 

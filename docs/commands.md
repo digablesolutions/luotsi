@@ -6,7 +6,7 @@ All commands run on the host machine and return a single JSON envelope unless no
 luotsi [--device <serial>] [--platform android] [--adb <path>] [--adb-timeout-sec <n>] <command> [flags]
 ```
 
-**ADB path.** If `adb` is not on `PATH` (common in WSL), pass `--adb /path/to/adb` or set `ANDROID_HOME`. Bounded ADB commands default to a 120-second timeout; override with `--adb-timeout-sec <n>` or `LUOTSI_ADB_TIMEOUT_SEC`. Use `0` to disable.
+**ADB path.** If `adb` is not on `PATH` (common in WSL), pass `--adb /path/to/adb` or set `LUOTSI_ADB`. Bounded ADB commands default to a 120-second timeout; override with `--adb-timeout-sec <n>` or `LUOTSI_ADB_TIMEOUT_SEC`. Use `0` to disable.
 
 **Retry policy.** Safe reads (diagnostics, UI dumps, log snapshots, read-only shell probes) get one visible retry after known transient transport errors (protocol faults, missing/offline/connecting devices). Mutating commands (tap, type, install, push, key events) are not retried.
 
@@ -69,7 +69,7 @@ Three commands cover the modern wireless debugging pairing flow:
 | `wireless-connect --service <service-name>` | Resolve a `_adb-tls-connect._tcp` service and connect |
 | `wireless-connect ... --save-profile <name>` | Connect and save a view profile in one step |
 
-`wireless-scan` must be run before `wireless-pair` or `wireless-connect --service`. If only one service of the required type is discovered, `--endpoint` and `--service` can be omitted.
+`wireless-scan` is useful for inspecting available services. `wireless-pair` and `wireless-connect --service` perform their own mDNS discovery when no explicit endpoint is supplied — `wireless-scan` is not a prerequisite. If only one service of the required type is discovered, `--endpoint` and `--service` can be omitted.
 
 `wireless-pair` without `--code` returns a structured error — `adb pair` requires interactive input that Luotsi cannot safely drive. Run `adb pair <host:port>` manually or always pass `--code`.
 
@@ -124,8 +124,8 @@ Luotsi reads the `LUOTSI_DEVICE_TELEMETRY` logcat marker to parse structured sem
 | `telemetry-watch --device <serial> --timeout-sec <n>` | Collect telemetry over a bounded window |
 | `wait-log --device <serial> --contains <text> --timeout-sec <n>` | Wait for a logcat line matching a substring |
 | `tap-text --device <serial> --text <text>` | Tap a UI element by visible text |
-| `wait-step --device <serial>` | Wait for a `LUOTSI_DEVICE_TELEMETRY` step event |
-| `wait-action-ready --device <serial>` | Wait for a `LUOTSI_DEVICE_TELEMETRY` action-ready event |
+| `wait-step --device <serial> --step <name>` | Wait for a `LUOTSI_DEVICE_TELEMETRY` step event |
+| `wait-action-ready --device <serial> --action <name> [--step <name>]` | Wait for a `LUOTSI_DEVICE_TELEMETRY` action-ready event |
 
 `telemetry-tail` and `telemetry-watch` write both `.txt` and `.json` artifacts alongside parsed events and any malformed telemetry lines.
 

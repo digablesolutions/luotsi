@@ -97,12 +97,18 @@ Plain text input and common navigation/editing keys are forwarded to the device.
 | `view_capture_backend_fallback` | `auto` backend fell back from MediaProjection to screenrecord |
 | `view_recording_started` | Recording began (F9 or API) |
 | `view_recording_stopped` | Recording ended |
+| `view_stream_paused` | Stream pause marker toggled on (F6) |
+| `view_stream_resumed` | Stream pause marker toggled off (F6) |
 | `view_reconnect_requested` | Reconnect triggered (F5 or API) |
 | `view_reconnected` | Reconnect succeeded |
 | `view_device_switch_requested` | Device shelf switch initiated |
 | `view_screenshot_captured` | Screenshot written to artifact root (F12) |
 | `view_clipboard_pasted` | Clipboard paste forwarded to device |
+| `view_interaction_failed` | A tap/swipe/key-forward interaction could not be completed |
+| `view_key_command_sent` | A hotkey action was dispatched |
+| `view_artifacts_opened` | Artifact folder opened (F7) |
 | `view_file_pushed` | File drag-dropped and pushed to device |
+| `view_file_pulled` | File drag-dropped and pulled from device |
 | `view_package_installed` | APK drag-dropped and installed |
 | `view_device_shelf` | Multiple adb-visible devices detected; shelf rendered |
 | `view_share_started` | Share endpoint bound and ready |
