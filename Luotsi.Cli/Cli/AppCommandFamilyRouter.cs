@@ -36,8 +36,9 @@ internal sealed class AppCommandFamilyRouter(AppCommandFamilyRouterDependencies 
 
         if (IsViewSetupCommand(options))
         {
-            context.Runner = _dependencies.DeviceHostLauncher.Create(options, adbExecutable, artifacts);
-            return await _dependencies.CommandHost.RunViewSetupAsync(options, started, adbExecutable, context.Runner, artifacts).ConfigureAwait(false);
+            var preparedViewSetup = _dependencies.ViewDiagnosticsLauncher.PrepareSetup(options, started, adbExecutable, artifacts);
+            context.Runner = preparedViewSetup.Runner;
+            return await preparedViewSetup.ExecuteAsync().ConfigureAwait(false);
         }
 
         if (IsViewCommand(options.Command))
@@ -55,7 +56,7 @@ internal sealed class AppCommandFamilyRouter(AppCommandFamilyRouterDependencies 
 
         if (string.Equals(options.Command, "view-doctor", StringComparison.OrdinalIgnoreCase))
         {
-            var preparedViewDoctor = _dependencies.ViewDoctorLauncher.Prepare(options, started, adbExecutable, artifacts);
+            var preparedViewDoctor = _dependencies.ViewDiagnosticsLauncher.PrepareDoctor(options, started, adbExecutable, artifacts);
             context.Runner = preparedViewDoctor.Runner;
             return await preparedViewDoctor.ExecuteAsync().ConfigureAwait(false);
         }
@@ -91,7 +92,7 @@ internal sealed class AppCommandFamilyRouterDependencies
 
     public required InspectSessionLauncher InspectSessionLauncher { get; init; }
 
-    public required ViewDoctorLauncher ViewDoctorLauncher { get; init; }
+    public required ViewDiagnosticsLauncher ViewDiagnosticsLauncher { get; init; }
 
     public required DeviceHostLauncher DeviceHostLauncher { get; init; }
 }

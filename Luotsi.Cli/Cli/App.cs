@@ -82,11 +82,15 @@ public sealed class App
             profileCoordinator);
         var commandHost = new AppCommandHost(new AppCommandHostDependencies
         {
-            Environment = resolvedEnvironment,
             EnvelopeWriter = envelopeWriter,
             ExitCodeResolver = new AppCommandExitCodeResolver(),
             ProfileCoordinator = profileCoordinator,
-            CommandDispatcher = commandDispatcher,
+            CommandDispatcher = commandDispatcher
+        });
+        var viewDiagnosticCommandHost = new ViewDiagnosticCommandHost(new ViewDiagnosticCommandHostDependencies
+        {
+            Environment = resolvedEnvironment,
+            EnvelopeWriter = envelopeWriter,
             ViewDoctorFactory = resolvedViewDoctorFactory,
             ViewSetupFactory = resolvedViewSetupFactory
         });
@@ -106,7 +110,7 @@ public sealed class App
             CommandHost = commandHost,
             ViewSessionCommandPreparer = new ViewSessionCommandPreparer(deviceHostLauncher, resolvedViewSessionFactory, profileCoordinator, resolvedEnvironment),
             InspectSessionLauncher = new InspectSessionLauncher(deviceHostLauncher, resolvedConsole, resolvedTimeProvider),
-            ViewDoctorLauncher = new ViewDoctorLauncher(deviceHostLauncher, commandHost),
+            ViewDiagnosticsLauncher = new ViewDiagnosticsLauncher(deviceHostLauncher, viewDiagnosticCommandHost),
             DeviceHostLauncher = deviceHostLauncher
         });
     }

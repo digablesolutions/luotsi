@@ -1,0 +1,58 @@
+using Luotsi.Cli.Artifacts;
+using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.View.Diagnostics;
+
+namespace Luotsi.Cli.Cli;
+
+internal sealed class ViewDiagnosticCommandHost(ViewDiagnosticCommandHostDependencies dependencies)
+{
+    private readonly ViewDiagnosticCommandHostDependencies _dependencies = dependencies ?? throw new ArgumentNullException(nameof(dependencies));
+
+    public async Task<int> RunDoctorAsync(CliOptions options, DateTimeOffset started, string adbExecutable, IDeviceHost runner, ArtifactSession artifacts)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(runner);
+        ArgumentNullException.ThrowIfNull(artifacts);
+
+        var viewOptions = BuildViewOptions(options, adbExecutable);
+        if (options.HasFlag("fix"))
+        {
+            var setup = await _dependencies.ViewSetupFactory.Create(runner).SetupAsync(viewOptions, fix: true).ConfigureAwait(false);
+            _dependencies.EnvelopeWriter.WriteSuccess(options.Command!, started, setup, artifacts.ToData());
+            return setup.Ready ? 0 : 1;
+        }
+
+        var report = await _dependencies.ViewDoctorFactory.Create(runner).DiagnoseAsync(viewOptions).ConfigureAwait(false);
+        _dependencies.EnvelopeWriter.WriteSuccess(options.Command!, started, report, artifacts.ToData());
+        return 0;
+    }
+
+    public async Task<int> RunSetupAsync(CliOptions options, DateTimeOffset started, string adbExecutable, IDeviceHost runner, ArtifactSession artifacts)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(runner);
+        ArgumentNullException.ThrowIfNull(artifacts);
+
+        var viewOptions = BuildViewOptions(options, adbExecutable);
+        var setup = await _dependencies.ViewSetupFactory.Create(runner).SetupAsync(viewOptions, fix: !options.HasFlag("dry-run")).ConfigureAwait(false);
+        _dependencies.EnvelopeWriter.WriteSuccess(options.Command!, started, setup, artifacts.ToData());
+        return setup.Ready ? 0 : 1;
+    }
+
+    private View.Contracts.ViewOptions BuildViewOptions(CliOptions options, string adbExecutable)
+    {
+        var commandTimeout = AdbCommandTimeoutResolver.Resolve(options, _dependencies.Environment);
+        return ViewCommandOptionsFactory.Build(options, adbExecutable, allowJoinShare: false, commandTimeout);
+    }
+}
+
+internal sealed class ViewDiagnosticCommandHostDependencies
+{
+    public required IEnvironmentVariables Environment { get; init; }
+
+    public required AppCommandEnvelopeWriter EnvelopeWriter { get; init; }
+
+    public required IViewDoctorFactory ViewDoctorFactory { get; init; }
+
+    public required IViewSetupFactory ViewSetupFactory { get; init; }
+}
