@@ -230,8 +230,9 @@ public sealed partial class AppTests
         var console = new FakeConsole();
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
         var backend = new FakeViewBackend();
-        var bootstrap = new FakeViewTransportBootstrap(
-            new InvalidOperationException("Android view helper package was not found. Set LUOTSI_VIEW_HELPER_APK or build the helper APK at Luotsi.ViewServer.Android\\app\\build\\outputs\\apk\\debug\\app-debug.apk"));
+        var bootstrap = new FakeViewTransportBootstrap([
+            new InvalidOperationException("Android view helper package was not found. Set LUOTSI_VIEW_HELPER_APK or build the helper APK at Luotsi.ViewServer.Android\\app\\build\\outputs\\apk\\debug\\app-debug.apk")
+        ]);
         var session = new ViewSession(
             host,
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
