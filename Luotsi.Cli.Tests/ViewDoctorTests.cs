@@ -1,6 +1,7 @@
 using Luotsi.Cli.Cli;
 using Luotsi.Cli.Hosts.Android.View;
 using Luotsi.Cli.Models;
+using Luotsi.Cli.View;
 using Luotsi.Cli.View.Contracts;
 using Luotsi.Cli.View.Diagnostics;
 using Luotsi.Cli.View.Recording;
@@ -50,6 +51,96 @@ public sealed partial class AppTests
         Assert.Equal(250, options.StatsIntervalMs);
     }
 
+    [Fact]
+    public async Task RunAsync_ViewSetup_Uses_Injected_ViewSetupFactory()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var setup = new FakeViewSetup();
+        var factory = new FakeViewSetupFactory(setup);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            TimeProvider = timeProvider,
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            ViewSetupFactory = factory
+        });
+
+        var exitCode = await app.RunAsync([
+            "view-setup",
+            "--device", "192.168.0.134:5555",
+            "--preset", "safe"]);
+
+        using var envelope = console.ParseSingleOutputAsJson();
+        Assert.Equal(0, exitCode);
+        Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("view-setup", envelope.RootElement.GetProperty("command").GetString());
+        Assert.True(envelope.RootElement.GetProperty("data").GetProperty("fix").GetBoolean());
+        Assert.True(envelope.RootElement.GetProperty("data").GetProperty("ready").GetBoolean());
+        Assert.Same(host, factory.LastDeviceHost);
+        var call = Assert.Single(setup.Calls);
+        Assert.True(call.Fix);
+        Assert.Equal("safe", call.Options.PresetName);
+    }
+
+    [Fact]
+    public async Task RunAsync_ViewSetup_Alias_Writes_ViewSetup_Command_Envelope()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var setup = new FakeViewSetup();
+        var fileSystem = new FakeFileSystem();
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            ViewSetupFactory = new FakeViewSetupFactory(setup)
+        });
+
+        var exitCode = await app.RunAsync([
+            "view",
+            "setup",
+            "--device", "192.168.0.134:5555",
+            "--artifacts", "/tmp/artifacts"]);
+
+        using var envelope = console.ParseSingleOutputAsJson();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("view-setup", envelope.RootElement.GetProperty("command").GetString());
+        Assert.True(Assert.Single(setup.Calls).Fix);
+        Assert.True(fileSystem.DirectoryExists("/tmp/artifacts/20260515-120000-view-setup"));
+    }
+
+    [Fact]
+    public async Task RunAsync_ViewDoctor_Fix_Runs_Setup()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var setup = new FakeViewSetup();
+        var factory = new FakeViewSetupFactory(setup);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            TimeProvider = timeProvider,
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            ViewSetupFactory = factory
+        });
+
+        var exitCode = await app.RunAsync([
+            "view-doctor",
+            "--device", "192.168.0.134:5555",
+            "--fix"]);
+
+        using var envelope = console.ParseSingleOutputAsJson();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("view-doctor", envelope.RootElement.GetProperty("command").GetString());
+        Assert.True(envelope.RootElement.GetProperty("data").GetProperty("fix").GetBoolean());
+        Assert.True(Assert.Single(setup.Calls).Fix);
+    }
 
 
     [Fact]
@@ -173,6 +264,113 @@ public sealed partial class AppTests
         Assert.False(consentCheck.Ok);
         Assert.Contains("cannot be preflighted", consentCheck.Summary, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("fallback=none", consentCheck.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task AndroidViewHelperSetupProvisioner_ResolveOrBuildAsync_Skips_Build_When_Fix_Is_Disabled()
+    {
+        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>());
+        var processRunner = new FakeProcessRunner();
+        var provisioner = new AndroidViewHelperSetupProvisioner(
+            new SequencedAndroidViewHelperPackageLocator(new InvalidOperationException("missing helper")),
+            new ViewHostPathResolver(environment),
+            new FakeFileSystem(),
+            processRunner);
+        var steps = new List<ViewSetupStep>();
+
+        var package = await provisioner.ResolveOrBuildAsync(fix: false, steps.Add);
+
+        Assert.Null(package);
+        Assert.Empty(processRunner.Calls);
+        Assert.Collection(
+            steps,
+            step =>
+            {
+                Assert.Equal("helper_resolve", step.Name);
+                Assert.Equal(ViewStartupPhaseStatus.Failed, step.Status);
+            },
+            step =>
+            {
+                Assert.Equal("helper_build", step.Name);
+                Assert.Equal(ViewStartupPhaseStatus.Skipped, step.Status);
+            });
+    }
+
+    [Fact]
+    public async Task AndroidViewHelperSetupProvisioner_ResolveOrBuildAsync_Builds_And_Reresolves_Helper()
+    {
+        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>());
+        var fileSystem = new FakeFileSystem();
+        var pathResolver = new ViewHostPathResolver(environment);
+        var projectDirectory = pathResolver.GetRepositoryRelativeDirectoryCandidates("Luotsi.ViewServer.Android").First();
+        var wrapperPath = OperatingSystem.IsWindows()
+            ? Path.Join(projectDirectory, "gradlew.bat")
+            : Path.Join(projectDirectory, "gradlew");
+        fileSystem.CreateDirectory(projectDirectory);
+        fileSystem.AddFile(wrapperPath, string.Empty);
+
+        var processRunner = new FakeProcessRunner();
+        processRunner.EnqueueResult(new ProcessResult(0, "BUILD SUCCESSFUL", string.Empty));
+
+        var package = new AndroidViewHelperPackage("C:/tmp/helper.apk", "/data/local/tmp/luotsi-view-server.apk", "dev.luotsi.view.Main", "test-helper");
+        var provisioner = new AndroidViewHelperSetupProvisioner(
+            new SequencedAndroidViewHelperPackageLocator(new InvalidOperationException("missing helper"), package),
+            pathResolver,
+            fileSystem,
+            processRunner);
+        var steps = new List<ViewSetupStep>();
+
+        var resolved = await provisioner.ResolveOrBuildAsync(fix: true, steps.Add);
+
+        Assert.Same(package, resolved);
+        var call = Assert.Single(processRunner.Calls);
+        Assert.Equal(wrapperPath, call.FileName);
+        Assert.Equal(["-p", projectDirectory, ":app:assembleDebug"], call.Args);
+        Assert.Collection(
+            steps,
+            step =>
+            {
+                Assert.Equal("helper_resolve", step.Name);
+                Assert.Equal(ViewStartupPhaseStatus.Failed, step.Status);
+            },
+            step =>
+            {
+                Assert.Equal("helper_build", step.Name);
+                Assert.Equal(ViewStartupPhaseStatus.Started, step.Status);
+                Assert.Equal(projectDirectory, step.Detail);
+            },
+            step =>
+            {
+                Assert.Equal("helper_build", step.Name);
+                Assert.Equal(ViewStartupPhaseStatus.Succeeded, step.Status);
+                Assert.Equal("BUILD SUCCESSFUL", step.Detail);
+            },
+            step =>
+            {
+                Assert.Equal("helper_resolve", step.Name);
+                Assert.Equal(ViewStartupPhaseStatus.Succeeded, step.Status);
+            });
+    }
+
+    private sealed class SequencedAndroidViewHelperPackageLocator(params object[] outcomes) : IAndroidViewHelperPackageLocator
+    {
+        private readonly Queue<object> _outcomes = new(outcomes);
+
+        public AndroidViewHelperPackage Resolve()
+        {
+            if (_outcomes.Count == 0)
+            {
+                throw new InvalidOperationException("No fake helper locator outcomes remain.");
+            }
+
+            var outcome = _outcomes.Count > 1 ? _outcomes.Dequeue() : _outcomes.Peek();
+            return outcome switch
+            {
+                AndroidViewHelperPackage package => package,
+                Exception exception => throw exception,
+                _ => throw new InvalidOperationException($"Unsupported fake helper locator outcome '{outcome.GetType().Name}'.")
+            };
+        }
     }
 
 

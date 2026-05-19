@@ -18,22 +18,17 @@ public sealed class ViewHostPathResolver(IEnvironmentVariables environment)
     /// <returns>Candidate host-local file paths.</returns>
     public IEnumerable<string> GetRepositoryRelativeFileCandidates(string relativePath)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
-        if (Path.IsPathRooted(relativePath))
-        {
-            throw new ArgumentException("Path must be repository-relative.", nameof(relativePath));
-        }
+        return GetRepositoryRelativePathCandidates(relativePath);
+    }
 
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var buildOutputRepositoryRoot = Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "..", "..", "..", ".."));
-        foreach (var candidate in new[]
-                 {
-                     Path.GetFullPath(Path.Join(Directory.GetCurrentDirectory(), relativePath)),
-                     Path.GetFullPath(Path.Join(buildOutputRepositoryRoot, relativePath))
-                 }.Where(seen.Add))
-        {
-            yield return candidate;
-        }
+    /// <summary>
+    /// Enumerates repository-relative directory candidates rooted at the current working directory and test/build output.
+    /// </summary>
+    /// <param name="relativePath">Repository-relative path to probe.</param>
+    /// <returns>Candidate host-local directory paths.</returns>
+    public IEnumerable<string> GetRepositoryRelativeDirectoryCandidates(string relativePath)
+    {
+        return GetRepositoryRelativePathCandidates(relativePath);
     }
 
     /// <summary>
@@ -152,6 +147,26 @@ public sealed class ViewHostPathResolver(IEnvironmentVariables environment)
 
         yield return Path.GetFullPath(Path.Join(Directory.GetCurrentDirectory(), relativePath));
         yield return Path.GetFullPath(Path.Join(AppContext.BaseDirectory, relativePath));
+    }
+
+    private static IEnumerable<string> GetRepositoryRelativePathCandidates(string relativePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
+        if (Path.IsPathRooted(relativePath))
+        {
+            throw new ArgumentException("Path must be repository-relative.", nameof(relativePath));
+        }
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var buildOutputRepositoryRoot = Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        foreach (var candidate in new[]
+                 {
+                     Path.GetFullPath(Path.Join(Directory.GetCurrentDirectory(), relativePath)),
+                     Path.GetFullPath(Path.Join(buildOutputRepositoryRoot, relativePath))
+                 }.Where(seen.Add))
+        {
+            yield return candidate;
+        }
     }
 
     private static bool IsBinDirectory(string path) =>

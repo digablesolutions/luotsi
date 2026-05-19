@@ -23,9 +23,10 @@ internal sealed class ViewProfileCoordinator(IViewProfileStore viewProfileStore)
 
         if (!string.Equals(options.Command, "view", StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(options.Command, "reconnect", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(options.Command, "view-doctor", StringComparison.OrdinalIgnoreCase))
+            !string.Equals(options.Command, "view-doctor", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(options.Command, "view-setup", StringComparison.OrdinalIgnoreCase))
         {
-            throw new UsageException("--profile is only supported for view, reconnect, and view-doctor.");
+            throw new UsageException("--profile is only supported for view, reconnect, view-doctor, and view-setup.");
         }
 
         var profile = await _viewProfileStore.LoadAsync(profileName).ConfigureAwait(false)

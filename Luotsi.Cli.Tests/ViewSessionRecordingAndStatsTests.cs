@@ -20,7 +20,7 @@ public sealed partial class AppTests
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
         var backend = new FakeViewBackend("ffmpeg-native");
         var recorderFactory = new FakeViewRecorderFactory();
-        var session = new ViewSession(
+        var session = CreateViewSession(
             host,
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
             console,
@@ -65,7 +65,7 @@ public sealed partial class AppTests
         var fileSystem = new FakeFileSystem();
         var console = new FakeConsole();
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
-        var session = new ViewSession(
+        var session = CreateViewSession(
             host,
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
             console,
@@ -106,7 +106,7 @@ public sealed partial class AppTests
         var fileSystem = new FakeFileSystem();
         var console = new FakeConsole();
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
-        var session = new ViewSession(
+        var session = CreateViewSession(
             host,
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
             console,
@@ -151,7 +151,7 @@ public sealed partial class AppTests
         var fileSystem = new FakeFileSystem();
         var console = new FakeConsole();
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
-        var session = new ViewSession(
+        var session = CreateViewSession(
             host,
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
             console,
@@ -197,7 +197,7 @@ public sealed partial class AppTests
         var console = new FakeConsole();
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
         var renderer = new StatsCapturingViewRenderer();
-        var session = new ViewSession(
+        var session = CreateViewSession(
             host,
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
             console,
@@ -244,7 +244,7 @@ public sealed partial class AppTests
         var console = new FakeConsole();
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
         var renderer = new StatsCapturingViewRenderer();
-        var session = new ViewSession(
+        var session = CreateViewSession(
             host,
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
             console,
@@ -287,7 +287,7 @@ public sealed partial class AppTests
         var renderer = new ClosingViewRenderer();
         var rendererFactory = new FakeViewRendererFactory(renderer);
         var recorderFactory = new FakeViewRecorderFactory();
-        var session = new ViewSession(
+        var session = CreateViewSession(
             host,
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
             console,

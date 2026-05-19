@@ -86,7 +86,7 @@ public sealed partial class AppTests
         var console = new FakeConsole();
         var backend = new FakeViewBackend();
         var bootstrap = new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward"));
-        var session = new ViewSession(
+        var session = CreateViewSession(
             new UnsupportedDeviceHost(),
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
             console,
@@ -117,7 +117,7 @@ public sealed partial class AppTests
         var console = new FakeConsole();
         var renderer = new ClosingViewRenderer();
         var rendererFactory = new FakeViewRendererFactory(renderer);
-        var session = new ViewSession(
+        var session = CreateViewSession(
             new UnsupportedDeviceHost(),
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
             console,

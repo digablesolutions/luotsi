@@ -1,7 +1,6 @@
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
-using Luotsi.Cli.View.Diagnostics;
 
 namespace Luotsi.Cli.Cli;
 
@@ -30,18 +29,6 @@ internal sealed class AppCommandHost(AppCommandHostDependencies dependencies)
         return 0;
     }
 
-    public async Task<int> RunViewDoctorAsync(CliOptions options, DateTimeOffset started, string adbExecutable, IDeviceHost runner, ArtifactSession artifacts)
-    {
-        ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(runner);
-        ArgumentNullException.ThrowIfNull(artifacts);
-
-        var viewDoctor = _dependencies.ViewDoctorFactory.Create(runner);
-        var report = await viewDoctor.DiagnoseAsync(ViewCommandOptionsFactory.Build(options, adbExecutable, allowJoinShare: false)).ConfigureAwait(false);
-        _dependencies.EnvelopeWriter.WriteSuccess(options.Command!, started, report, artifacts.ToData());
-        return 0;
-    }
-
     public async Task<int> RunCommandAsync(CliOptions options, DateTimeOffset started, string adbExecutable, IDeviceHost runner, ArtifactSession artifacts)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -54,15 +41,8 @@ internal sealed class AppCommandHost(AppCommandHostDependencies dependencies)
     }
 }
 
-internal sealed class AppCommandHostDependencies
-{
-    public required AppCommandEnvelopeWriter EnvelopeWriter { get; init; }
-
-    public required AppCommandExitCodeResolver ExitCodeResolver { get; init; }
-
-    public required ViewProfileCoordinator ProfileCoordinator { get; init; }
-
-    public required AppCommandDispatcher CommandDispatcher { get; init; }
-
-    public required IViewDoctorFactory ViewDoctorFactory { get; init; }
-}
+internal sealed record AppCommandHostDependencies(
+    AppCommandEnvelopeWriter EnvelopeWriter,
+    AppCommandExitCodeResolver ExitCodeResolver,
+    ViewProfileCoordinator ProfileCoordinator,
+    AppCommandDispatcher CommandDispatcher);

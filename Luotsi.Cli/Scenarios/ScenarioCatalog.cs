@@ -143,6 +143,15 @@ internal sealed class ScenarioCatalog(
             .ToArray();
     }
 
+    public async Task<ScenarioFile> LoadValidatedAsync(string file, IReadOnlySet<string> supportedScenarioActions)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(file);
+        ArgumentNullException.ThrowIfNull(supportedScenarioActions);
+
+        var scenario = _templateResolver.ResolveScenario(await LoadAsync(file).ConfigureAwait(false));
+        return ScenarioValidator.ValidateScenario(scenario, file, supportedScenarioActions);
+    }
+
     public static IReadOnlyList<ScenarioCatalogEntry> Filter(IReadOnlyList<ScenarioCatalogEntry> entries,
         ScenarioQuery query)
     {
@@ -238,6 +247,11 @@ internal sealed class ScenarioCatalog(
 
     private async Task<ScenarioFile> LoadAsync(string file)
     {
+        if (!_fileSystem.FileExists(file))
+        {
+            throw new UsageException($"Scenario file '{file}' does not exist.");
+        }
+
         try
         {
             await using var stream = _fileSystem.OpenRead(file);

@@ -4,7 +4,7 @@ namespace Luotsi.Cli.View.Transport;
 
 internal sealed class NullViewTransportBootstrap : IViewTransportBootstrap
 {
-    public Task<ViewConnectionInfo> StartAsync(ViewStartRequest request, CancellationToken cancellationToken = default) =>
+    public Task<ViewConnectionInfo> StartAsync(ViewStartRequest request, Action<ViewStartupPhase>? reportPhase = null, CancellationToken cancellationToken = default) =>
         Task.FromResult(new ViewConnectionInfo(
             Guid.NewGuid().ToString("N"),
             request.Codec,

@@ -149,43 +149,43 @@ public sealed class DeviceRunner(
         => await UiInteractions.ScrollAsync(horizontalTicks, verticalTicks).ConfigureAwait(false);
 
     public async Task<PushFileResult> PushFileAsync(string localPath, string? remoteDirectory = null)
-        => await DeviceControl.PushFileAsync(localPath, remoteDirectory).ConfigureAwait(false);
+        => await FileAndPortControl.PushFileAsync(localPath, remoteDirectory).ConfigureAwait(false);
 
     public async Task<PullFileResult> PullFileAsync(string remotePath, string? localDirectory = null)
-        => await DeviceControl.PullFileAsync(remotePath, localDirectory).ConfigureAwait(false);
+        => await FileAndPortControl.PullFileAsync(remotePath, localDirectory).ConfigureAwait(false);
 
     public async Task<PortForwardListResult> ListForwardsAsync()
-        => await DeviceControl.ListForwardsAsync().ConfigureAwait(false);
+        => await FileAndPortControl.ListForwardsAsync().ConfigureAwait(false);
 
     public async Task<PortForwardResult> ForwardAsync(string local, string remote, bool noRebind)
-        => await DeviceControl.ForwardAsync(local, remote, noRebind).ConfigureAwait(false);
+        => await FileAndPortControl.ForwardAsync(local, remote, noRebind).ConfigureAwait(false);
 
     public async Task<PortForwardRemoveResult> RemoveForwardAsync(string local)
-        => await DeviceControl.RemoveForwardAsync(local).ConfigureAwait(false);
+        => await FileAndPortControl.RemoveForwardAsync(local).ConfigureAwait(false);
 
     public async Task<PortReverseListResult> ListReversesAsync()
-        => await DeviceControl.ListReversesAsync().ConfigureAwait(false);
+        => await FileAndPortControl.ListReversesAsync().ConfigureAwait(false);
 
     public async Task<PortReverseResult> ReverseAsync(string remote, string local, bool noRebind)
-        => await DeviceControl.ReverseAsync(remote, local, noRebind).ConfigureAwait(false);
+        => await FileAndPortControl.ReverseAsync(remote, local, noRebind).ConfigureAwait(false);
 
     public async Task<PortReverseRemoveResult> RemoveReverseAsync(string remote)
-        => await DeviceControl.RemoveReverseAsync(remote).ConfigureAwait(false);
+        => await FileAndPortControl.RemoveReverseAsync(remote).ConfigureAwait(false);
 
     public async Task<WirelessConnectResult> EnableWirelessAsync(string? host, int port)
-        => await DeviceControl.EnableWirelessAsync(host, port).ConfigureAwait(false);
+        => await WirelessDebug.EnableWirelessAsync(host, port).ConfigureAwait(false);
 
     public async Task<WirelessScanResult> ScanWirelessServicesAsync()
-        => await DeviceControl.ScanWirelessServicesAsync().ConfigureAwait(false);
+        => await WirelessDebug.ScanWirelessServicesAsync().ConfigureAwait(false);
 
     public async Task<WirelessPairResult> PairWirelessAsync(string? endpoint, string? service, string? pairingCode)
-        => await DeviceControl.PairWirelessAsync(endpoint, service, pairingCode).ConfigureAwait(false);
+        => await WirelessDebug.PairWirelessAsync(endpoint, service, pairingCode).ConfigureAwait(false);
 
     public async Task<WirelessMdnsConnectResult> ConnectWirelessAsync(string? endpoint, string? service)
-        => await DeviceControl.ConnectWirelessAsync(endpoint, service).ConfigureAwait(false);
+        => await WirelessDebug.ConnectWirelessAsync(endpoint, service).ConfigureAwait(false);
 
     internal static IReadOnlyList<WirelessMdnsService> ParseWirelessMdnsServices(string output) =>
-        AndroidDeviceControlOperations.ParseWirelessMdnsServices(output);
+        WirelessDebugResolver.ParseMdnsServices(output);
 
     public async Task<InstallPackageResult> InstallPackageAsync(string packagePath)
         => await DeviceControl.InstallPackageAsync(packagePath).ConfigureAwait(false);
@@ -221,7 +221,7 @@ public sealed class DeviceRunner(
         => await DeviceControl.RevokePermissionAsync(packageName, permission).ConfigureAwait(false);
 
     public async Task<WaitLogResult> WaitForLogAsync(string text, int timeoutSec)
-        => await LogAndTelemetry.WaitForLogAsync(text, timeoutSec).ConfigureAwait(false);
+        => await LogMonitor.WaitForLogAsync(text, timeoutSec).ConfigureAwait(false);
 
     /// <summary>
     /// Reads logcat.
@@ -229,7 +229,7 @@ public sealed class DeviceRunner(
     /// <param name="tail">Maximum lines to return.</param>
     /// <returns>Logcat lines.</returns>
     public async Task<LogcatResult> LogcatAsync(int tail)
-        => await LogAndTelemetry.LogcatAsync(tail).ConfigureAwait(false);
+        => await LogMonitor.LogcatAsync(tail).ConfigureAwait(false);
 
     /// <summary>
     /// Reads and parses recent semantic telemetry events.
@@ -237,7 +237,7 @@ public sealed class DeviceRunner(
     /// <param name="tail">Maximum logcat lines to inspect.</param>
     /// <returns>Telemetry data.</returns>
     public async Task<TelemetryResult> TelemetryTailAsync(int tail)
-        => await LogAndTelemetry.TelemetryTailAsync(tail).ConfigureAwait(false);
+        => await SemanticTelemetry.TelemetryTailAsync(tail).ConfigureAwait(false);
 
     /// <summary>
     /// Collects semantic telemetry events over a bounded watch window.
@@ -245,7 +245,7 @@ public sealed class DeviceRunner(
     /// <param name="timeoutSec">Duration to watch for telemetry events.</param>
     /// <returns>Telemetry data.</returns>
     public async Task<TelemetryResult> TelemetryWatchAsync(int timeoutSec)
-        => await LogAndTelemetry.TelemetryWatchAsync(timeoutSec).ConfigureAwait(false);
+        => await SemanticTelemetry.TelemetryWatchAsync(timeoutSec).ConfigureAwait(false);
 
     /// <summary>
     /// Waits for a semantic telemetry step event.
@@ -254,7 +254,7 @@ public sealed class DeviceRunner(
     /// <param name="timeoutSec">Timeout in seconds.</param>
     /// <returns>Matched telemetry data.</returns>
     public Task<TelemetryMatchResult> WaitForStepAsync(string step, int timeoutSec) =>
-        LogAndTelemetry.WaitForStepAsync(step, timeoutSec);
+        SemanticTelemetry.WaitForStepAsync(step, timeoutSec);
 
     /// <summary>
     /// Waits for a semantic telemetry action-ready event.
@@ -264,7 +264,7 @@ public sealed class DeviceRunner(
     /// <param name="timeoutSec">Timeout in seconds.</param>
     /// <returns>Matched telemetry data.</returns>
     public Task<TelemetryMatchResult> WaitForActionReadyAsync(string action, string? step, int timeoutSec) =>
-        LogAndTelemetry.WaitForActionReadyAsync(action, step, timeoutSec);
+        SemanticTelemetry.WaitForActionReadyAsync(action, step, timeoutSec);
 
     /// <summary>
     /// Records video with Android screenrecord.
@@ -294,10 +294,10 @@ public sealed class DeviceRunner(
         => await UiInteractions.TypePinAsync(pin, perDigitDelayMs).ConfigureAwait(false);
 
     public async Task<ResetLogResult> ResetLogAsync()
-        => await LogAndTelemetry.ResetLogAsync().ConfigureAwait(false);
+        => await LogMonitor.ResetLogAsync().ConfigureAwait(false);
 
     public async Task<AssertEventResult> AssertEventAsync(string name, IReadOnlyList<string> contains, string? detailsPattern, int timeoutSec, DateTimeOffset? since = null)
-        => await LogAndTelemetry.AssertEventAsync(name, contains, detailsPattern, timeoutSec, since).ConfigureAwait(false);
+        => await LogMonitor.AssertEventAsync(name, contains, detailsPattern, timeoutSec, since).ConfigureAwait(false);
 
     public async Task<TakeScreenshotResult> TakeScreenshotAsync(string label)
         => await ArtifactOperations.TakeScreenshotAsync(label).ConfigureAwait(false);
@@ -322,6 +322,11 @@ public sealed class DeviceRunner(
         ScreenStateReadModel.InvalidateUiReadCaches();
     }
 
+    private AndroidFileAndPortOperations FileAndPortControl =>
+        field ??= new AndroidFileAndPortOperations(
+            _adb,
+            _fileSystem);
+
     private AndroidDeviceControlOperations DeviceControl =>
         field ??= new AndroidDeviceControlOperations(
             _adb,
@@ -329,6 +334,9 @@ public sealed class DeviceRunner(
             _delay,
             _fileSystem,
             InvalidateUiReadCaches);
+
+    private AndroidWirelessDebugOperations WirelessDebug =>
+        field ??= new AndroidWirelessDebugOperations(_adb);
 
     private AndroidDeviceReadinessOperations DeviceReadiness =>
         field ??= new AndroidDeviceReadinessOperations(
@@ -351,11 +359,15 @@ public sealed class DeviceRunner(
             _delay,
             _environment);
 
-    private AndroidLogAndTelemetryOperations LogAndTelemetry =>
-        field ??= new AndroidLogAndTelemetryOperations(
+    private AndroidLogMonitorOperations LogMonitor =>
+        field ??= new AndroidLogMonitorOperations(
             _adb,
             _artifacts,
-            _timeProvider,
+            _timeProvider);
+
+    private AndroidSemanticTelemetryOperations SemanticTelemetry =>
+        field ??= new AndroidSemanticTelemetryOperations(
+            _adb,
             _telemetryMonitor);
 
     private AndroidArtifactOperations ArtifactOperations =>

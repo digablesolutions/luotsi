@@ -75,8 +75,9 @@ public sealed class ViewTransportTests
         adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
         var locator = new FakeAndroidViewHelperPackageLocator(new AndroidViewHelperPackage("C:/tmp/helper.apk", "/data/local/tmp/luotsi-view-server.apk", "dev.luotsi.view.Main", "test-helper"));
         var bootstrap = new AndroidViewBootstrap(new FakeAdbClientFactory(adb), new DefaultProcessRunner(), locator, new FakeUniqueIdGenerator("session123"));
+        var phases = new List<ViewStartupPhase>();
 
-        var connection = await bootstrap.StartAsync(new ViewStartRequest("adb", "device-1", 1280, 30, "8M", "h264", ViewCaptureBackends.Screenrecord));
+        var connection = await bootstrap.StartAsync(new ViewStartRequest("adb", "device-1", 1280, 30, "8M", "h264", ViewCaptureBackends.Screenrecord), phases.Add);
 
         Assert.Equal("session123", connection.SessionId);
         Assert.Equal("h264", connection.Codec);
@@ -86,6 +87,10 @@ public sealed class ViewTransportTests
         Assert.Equal(["forward", "tcp:0", "localabstract:luotsi_view_session123"], adb.RunCommands[1]);
         Assert.Contains("CLASSPATH='/data/local/tmp/luotsi-view-server.apk' app_process / 'dev.luotsi.view.Main'", adb.ShellCommands[0], StringComparison.Ordinal);
         Assert.Contains("--codec 'h264'", adb.ShellCommands[0], StringComparison.Ordinal);
+        Assert.Contains(phases, phase => phase.Phase == "helper_resolve" && phase.Status == ViewStartupPhaseStatus.Succeeded);
+        Assert.Contains(phases, phase => phase.Phase == "helper_push" && phase.Status == ViewStartupPhaseStatus.Succeeded);
+        Assert.Contains(phases, phase => phase.Phase == "adb_forward" && phase.Status == ViewStartupPhaseStatus.Succeeded);
+        Assert.Contains(phases, phase => phase.Phase == "screenrecord_process" && phase.Status == ViewStartupPhaseStatus.Succeeded);
     }
 
     [Fact]
@@ -181,6 +186,8 @@ public sealed class ViewTransportTests
     {
         var adb = new FakeAdbClient();
         adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "dev.luotsi.view/.ConsentActivity\n", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "Service dev.luotsi.view.CaptureService:\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "38543\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "Starting: Intent { cmp=dev.luotsi.view/.ConsentActivity }\n", string.Empty));
         adb.EnqueueShellResult(new ProcessResult(0, """
@@ -197,12 +204,14 @@ public sealed class ViewTransportTests
 
         Assert.Equal(ViewCaptureBackends.MediaProjection, connection.CaptureBackend);
         Assert.Equal(["install", "-r", "C:/tmp/helper.apk"], adb.RunCommands[0]);
-        Assert.Equal(["forward", "tcp:0", "localabstract:luotsi_view_session123"], adb.RunCommands[1]);
-        Assert.Equal("shell", adb.RunCommands[2][0]);
-        Assert.Equal("am", adb.RunCommands[2][1]);
-        Assert.Equal("start", adb.RunCommands[2][2]);
-        Assert.Contains("dev.luotsi.view/.ConsentActivity", adb.RunCommands[2], StringComparer.Ordinal);
-        Assert.Contains("luotsi_view_session123", adb.RunCommands[2], StringComparer.Ordinal);
+        Assert.Equal(["shell", "cmd", "package", "resolve-activity", "--brief", "dev.luotsi.view/.ConsentActivity"], adb.RunCommands[1]);
+        Assert.Equal(["shell", "pm", "dump", "dev.luotsi.view"], adb.RunCommands[2]);
+        Assert.Equal(["forward", "tcp:0", "localabstract:luotsi_view_session123"], adb.RunCommands[3]);
+        Assert.Equal("shell", adb.RunCommands[4][0]);
+        Assert.Equal("am", adb.RunCommands[4][1]);
+        Assert.Equal("start", adb.RunCommands[4][2]);
+        Assert.Contains("dev.luotsi.view/.ConsentActivity", adb.RunCommands[4], StringComparer.Ordinal);
+        Assert.Contains("luotsi_view_session123", adb.RunCommands[4], StringComparer.Ordinal);
         Assert.Contains("uiautomator dump /data/local/tmp/luotsi-view-window.xml", adb.ShellCommands[0], StringComparison.Ordinal);
         Assert.Contains("cat /data/local/tmp/luotsi-view-window.xml", adb.ShellCommands[0], StringComparison.Ordinal);
         Assert.Equal("input tap 1276 665", adb.ShellCommands[1]);
@@ -213,6 +222,8 @@ public sealed class ViewTransportTests
     {
         var adb = new FakeAdbClient();
         adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "dev.luotsi.view/.ConsentActivity\n", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "Service dev.luotsi.view.CaptureService:\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "38543\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "Starting: Intent { cmp=dev.luotsi.view/.ConsentActivity }\n", string.Empty));
         adb.EnqueueShellResult(new ProcessResult(0, """
@@ -236,6 +247,61 @@ public sealed class ViewTransportTests
         Assert.Contains("cat /data/local/tmp/luotsi-view-window.xml", adb.ShellCommands[0], StringComparison.Ordinal);
         Assert.Contains("uiautomator dump /data/local/tmp/luotsi-view-window.xml", adb.ShellCommands[1], StringComparison.Ordinal);
         Assert.Equal("input tap 1276 665", adb.ShellCommands[2]);
+    }
+
+    [Fact]
+    public async Task AndroidViewBootstrap_StartAsync_Auto_Reports_Consent_Error_When_Consent_Is_Not_Detected()
+    {
+        var adb = new FakeAdbClient();
+        adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "dev.luotsi.view/.ConsentActivity\n", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "Service dev.luotsi.view.CaptureService:\n", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "38543\n", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "Starting: Intent { cmp=dev.luotsi.view/.ConsentActivity }\n", string.Empty));
+        for (var i = 0; i < 8; i++)
+        {
+            adb.EnqueueShellResult(new ProcessResult(0, """
+                <?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+                <hierarchy />
+                """, string.Empty));
+        }
+        adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        var locator = new FakeAndroidViewHelperPackageLocator(new AndroidViewHelperPackage("C:/tmp/helper.apk", "/data/local/tmp/luotsi-view-server.apk", "dev.luotsi.view.Main", "test-helper"));
+        var bootstrap = new AndroidViewBootstrap(new FakeAdbClientFactory(adb), new DefaultProcessRunner(), locator, new FakeUniqueIdGenerator("session123"));
+
+        var error = await Assert.ThrowsAsync<MediaProjectionConsentException>(() => bootstrap.StartAsync(new ViewStartRequest("adb", "device-1", 1280, 30, "8M", "h264")));
+
+        Assert.Contains("MediaProjection consent", error.Message, StringComparison.Ordinal);
+        Assert.Equal(8, adb.ShellCommands.Count(command => command.Contains("uiautomator dump", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task AndroidViewBootstrap_StartAsync_Explicit_MediaProjection_Reports_Consent_Error_When_Consent_Is_Not_Detected()
+    {
+        var adb = new FakeAdbClient();
+        adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "dev.luotsi.view/.ConsentActivity\n", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "Service dev.luotsi.view.CaptureService:\n", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "38543\n", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "Starting: Intent { cmp=dev.luotsi.view/.ConsentActivity }\n", string.Empty));
+        for (var i = 0; i < 8; i++)
+        {
+            adb.EnqueueShellResult(new ProcessResult(0, """
+                <?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+                <hierarchy />
+                """, string.Empty));
+        }
+        adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        var locator = new FakeAndroidViewHelperPackageLocator(new AndroidViewHelperPackage("C:/tmp/helper.apk", "/data/local/tmp/luotsi-view-server.apk", "dev.luotsi.view.Main", "test-helper"));
+        var bootstrap = new AndroidViewBootstrap(new FakeAdbClientFactory(adb), new DefaultProcessRunner(), locator, new FakeUniqueIdGenerator("session123"));
+
+        var error = await Assert.ThrowsAsync<MediaProjectionConsentException>(() => bootstrap.StartAsync(new ViewStartRequest("adb", "device-1", 1280, 30, "8M", "h264", ViewCaptureBackends.MediaProjection)));
+
+        Assert.Contains("MediaProjection consent", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]

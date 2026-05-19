@@ -87,10 +87,9 @@ public sealed class ScenarioExecutor
     ];
 
     private readonly IScenarioActionHost _actionHost;
-    private readonly IFileSystem _fileSystem;
     private readonly TimeProvider _timeProvider;
     private readonly ScenarioActionDispatcher _actionDispatcher;
-    private readonly IScenarioTemplateResolver _templateResolver;
+    private readonly ScenarioCatalog _scenarioCatalog;
     private readonly IScenarioEventSink _eventSink;
 
     public ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem fileSystem, TimeProvider timeProvider, IDelay delay)
@@ -120,12 +119,13 @@ public sealed class ScenarioExecutor
     internal ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem fileSystem, TimeProvider timeProvider, IDelay delay, IScenarioTemplateResolver templateResolver, IScenarioEventSink? eventSink = null)
     {
         _actionHost = actionHost ?? throw new ArgumentNullException(nameof(actionHost));
-        _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         _actionDispatcher = new ScenarioActionDispatcher(
             actionHost,
             delay ?? throw new ArgumentNullException(nameof(delay)));
-        _templateResolver = templateResolver ?? throw new ArgumentNullException(nameof(templateResolver));
+        _scenarioCatalog = new ScenarioCatalog(
+            fileSystem ?? throw new ArgumentNullException(nameof(fileSystem)),
+            templateResolver ?? throw new ArgumentNullException(nameof(templateResolver)));
         _eventSink = eventSink ?? NullScenarioEventSink.Instance;
     }
 
@@ -167,8 +167,8 @@ public sealed class ScenarioExecutor
         }
     }
 
-    private async Task<ScenarioFile> LoadValidatedScenarioAsync(string file) =>
-        ValidateScenario(ResolveTemplates(await LoadAsync(file).ConfigureAwait(false)), file);
+    private Task<ScenarioFile> LoadValidatedScenarioAsync(string file) =>
+        _scenarioCatalog.LoadValidatedAsync(file, SupportedScenarioActions);
 
     private async Task<object> ExecuteStepAsync(ScenarioStep step, DateTimeOffset? previousStepStartedAt) =>
         await _actionDispatcher.ExecuteAsync(step, previousStepStartedAt).ConfigureAwait(false);
@@ -251,36 +251,6 @@ public sealed class ScenarioExecutor
 
         return new ScenarioExecution(executedStepMs, steps);
     }
-
-    private async Task<ScenarioFile> LoadAsync(string file)
-    {
-        if (!_fileSystem.FileExists(file))
-        {
-            throw new UsageException($"Scenario file '{file}' does not exist.");
-        }
-
-        try
-        {
-            await using var stream = _fileSystem.OpenRead(file);
-            var scenario = await JsonSerializer.DeserializeAsync<ScenarioFile>(stream, AppJson.Options).ConfigureAwait(false);
-            if (scenario is null)
-            {
-                throw new UsageException($"Scenario file '{file}' was empty.");
-            }
-
-            return scenario;
-        }
-        catch (JsonException ex)
-        {
-            throw new UsageException($"Scenario file '{file}' is not valid JSON: {ex.Message}");
-        }
-    }
-
-    private ScenarioFile ResolveTemplates(ScenarioFile scenario) =>
-        _templateResolver.ResolveScenario(scenario);
-
-    private static ScenarioFile ValidateScenario(ScenarioFile scenario, string file) =>
-        ScenarioValidator.ValidateScenario(scenario, file, SupportedScenarioActions);
 
     private static ScenarioStepTiming CreateTimingData(ScenarioStep step, double durationMs, int harnessDelayMs)
     {

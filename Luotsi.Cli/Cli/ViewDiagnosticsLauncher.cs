@@ -3,22 +3,23 @@ using Luotsi.Cli.Infrastructure.Contracts;
 
 namespace Luotsi.Cli.Cli;
 
-internal sealed class ViewDoctorLauncher(
+internal sealed class ViewDiagnosticsLauncher(
     DeviceHostLauncher deviceHostLauncher,
-    AppCommandHost commandHost)
+    ViewDiagnosticCommandHost commandHost)
 {
     private readonly DeviceHostLauncher _deviceHostLauncher = deviceHostLauncher ?? throw new ArgumentNullException(nameof(deviceHostLauncher));
-    private readonly AppCommandHost _commandHost = commandHost ?? throw new ArgumentNullException(nameof(commandHost));
+    private readonly ViewDiagnosticCommandHost _commandHost = commandHost ?? throw new ArgumentNullException(nameof(commandHost));
 
-    public PreparedHostedCommand Prepare(CliOptions options, DateTimeOffset started, string adbExecutable, ArtifactSession artifacts)
+    public PreparedHostedCommand Prepare(ViewDiagnosticInvocation command, CliOptions options, DateTimeOffset started, string adbExecutable, ArtifactSession artifacts)
     {
+        ArgumentNullException.ThrowIfNull(command);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(artifacts);
 
         var runner = _deviceHostLauncher.Create(options, adbExecutable, artifacts);
         return new PreparedHostedCommand(
             runner,
-            () => _commandHost.RunViewDoctorAsync(options, started, adbExecutable, runner, artifacts));
+            () => _commandHost.RunAsync(command, options, started, adbExecutable, runner, artifacts));
     }
 }
 

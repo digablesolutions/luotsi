@@ -67,7 +67,8 @@ public sealed record ViewOptions(
     string? JoinShareEndpoint = null,
     bool AlwaysOnTop = false,
     string ScaleMode = "fit",
-    string CaptureBackend = ViewCaptureBackends.Auto);
+    string CaptureBackend = ViewCaptureBackends.Auto,
+    TimeSpan? CommandTimeout = null);
 
 /// <summary>
 /// Android view capture backend names.
@@ -80,6 +81,32 @@ public static class ViewCaptureBackends
 }
 
 /// <summary>
+/// Device-side view bootstrap phase status.
+/// </summary>
+public static class ViewStartupPhaseStatus
+{
+    public const string Started = "started";
+    public const string Succeeded = "succeeded";
+    public const string Failed = "failed";
+    public const string Skipped = "skipped";
+}
+
+/// <summary>
+/// Machine-readable bootstrap progress for live view startup.
+/// </summary>
+/// <param name="Phase">Stable phase name.</param>
+/// <param name="Status">Phase status.</param>
+/// <param name="Summary">Short human-readable summary.</param>
+/// <param name="Detail">Optional detail payload.</param>
+/// <param name="Recommendation">Optional fix or fallback.</param>
+public sealed record ViewStartupPhase(
+    string Phase,
+    string Status,
+    string Summary,
+    string? Detail = null,
+    string? Recommendation = null);
+
+/// <summary>
 /// Bootstraps the device-side stream transport.
 /// </summary>
 public interface IViewTransportBootstrap
@@ -88,9 +115,10 @@ public interface IViewTransportBootstrap
     /// Starts the transport and returns connection metadata.
     /// </summary>
     /// <param name="request">Transport start request.</param>
+    /// <param name="reportPhase">Optional bootstrap phase observer.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Connection metadata.</returns>
-    Task<ViewConnectionInfo> StartAsync(ViewStartRequest request, CancellationToken cancellationToken = default);
+    Task<ViewConnectionInfo> StartAsync(ViewStartRequest request, Action<ViewStartupPhase>? reportPhase = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Stops the transport.
@@ -110,6 +138,7 @@ public interface IViewTransportBootstrap
 /// <param name="VideoBitRate">Requested video bit rate.</param>
 /// <param name="Codec">Requested codec.</param>
 /// <param name="CaptureBackend">Requested capture backend.</param>
+/// <param name="CommandTimeout">Optional bounded ADB command timeout.</param>
 public sealed record ViewStartRequest(
     string AdbExecutable,
     string DeviceSelector,
@@ -117,7 +146,8 @@ public sealed record ViewStartRequest(
     int MaxFps,
     string VideoBitRate,
     string Codec,
-    string CaptureBackend = ViewCaptureBackends.Auto);
+    string CaptureBackend = ViewCaptureBackends.Auto,
+    TimeSpan? CommandTimeout = null);
 
 /// <summary>
 /// Connection metadata for a view session.

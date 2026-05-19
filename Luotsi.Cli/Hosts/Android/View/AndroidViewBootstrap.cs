@@ -1,138 +1,9 @@
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
-using Luotsi.Cli.View;
 using Luotsi.Cli.View.Contracts;
 using Luotsi.Cli.View.Transport;
 
 namespace Luotsi.Cli.Hosts.Android.View;
-
-/// <summary>
-/// Locates the packaged Android view helper.
-/// </summary>
-public interface IAndroidViewHelperPackageLocator
-{
-    /// <summary>
-    /// Resolves the helper package to install on the device.
-    /// </summary>
-    /// <returns>Resolved helper package.</returns>
-    AndroidViewHelperPackage Resolve();
-}
-
-/// <summary>
-/// Android helper package metadata.
-/// </summary>
-/// <param name="LocalPath">Host-local package path.</param>
-/// <param name="RemotePath">Remote installation path.</param>
-/// <param name="MainClass">App process entry point.</param>
-/// <param name="Version">Helper version string.</param>
-/// <param name="PackageName">Installed Android package name.</param>
-/// <param name="ConsentActivity">Component name for the MediaProjection consent activity.</param>
-/// <param name="CaptureService">Component name for the MediaProjection capture service.</param>
-public sealed record AndroidViewHelperPackage(
-    string LocalPath,
-    string RemotePath,
-    string MainClass,
-    string Version,
-    string PackageName = AndroidRuntimeDefaults.ViewHelperPackageName,
-    string ConsentActivity = AndroidRuntimeDefaults.ViewHelperConsentActivity,
-    string CaptureService = AndroidRuntimeDefaults.ViewHelperCaptureService);
-
-/// <summary>
-/// Default helper package locator.
-/// </summary>
-public sealed class AndroidViewHelperPackageLocator(IEnvironmentVariables environment, IFileSystem fileSystem) : IAndroidViewHelperPackageLocator
-{
-    private readonly IEnvironmentVariables _environment = environment ?? throw new ArgumentNullException(nameof(environment));
-    private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
-    private readonly ViewHostPathResolver _pathResolver = new(environment);
-
-    /// <inheritdoc />
-    public AndroidViewHelperPackage Resolve()
-    {
-        var localPath = _environment.GetEnvironmentVariable(AndroidRuntimeDefaults.ViewHelperPathEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(localPath))
-        {
-            foreach (var candidate in _pathResolver.GetRepositoryRelativeFileCandidates(AndroidRuntimeDefaults.DefaultViewHelperRelativePath))
-            {
-                if (_fileSystem.FileExists(candidate))
-                {
-                    localPath = candidate;
-                    break;
-                }
-            }
-        }
-
-        if (string.IsNullOrWhiteSpace(localPath) || !_fileSystem.FileExists(localPath))
-        {
-            throw new InvalidOperationException($"Android view helper package was not found. Set {AndroidRuntimeDefaults.ViewHelperPathEnvironmentVariable} or build the helper APK at {AndroidRuntimeDefaults.DefaultViewHelperRelativePath}");
-        }
-
-        return new AndroidViewHelperPackage(localPath, AndroidRuntimeDefaults.ViewHelperRemotePath, AndroidRuntimeDefaults.ViewHelperMainClass, AndroidRuntimeDefaults.ViewHelperVersion);
-    }
-}
-
-/// <summary>
-/// Installs the Android view helper on the device.
-/// </summary>
-public sealed class AndroidViewServerInstaller(IAdbClient adbClient, IAndroidViewHelperPackageLocator packageLocator)
-{
-    private readonly IAdbClient _adbClient = adbClient ?? throw new ArgumentNullException(nameof(adbClient));
-    private readonly IAndroidViewHelperPackageLocator _packageLocator = packageLocator ?? throw new ArgumentNullException(nameof(packageLocator));
-
-    /// <summary>
-    /// Resolves and installs the helper package.
-    /// </summary>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Installed helper metadata.</returns>
-    public async Task<AndroidViewHelperPackage> InstallAsync(CancellationToken cancellationToken = default)
-    {
-        var package = _packageLocator.Resolve();
-        return await InstallAsync(package, cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// Installs a previously resolved helper package.
-    /// </summary>
-    /// <param name="package">Resolved helper package.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Installed helper metadata.</returns>
-    public async Task<AndroidViewHelperPackage> InstallAsync(AndroidViewHelperPackage package, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(package);
-
-        var result = await _adbClient.RunAsync(["install", "-r", package.LocalPath], cancellationToken).ConfigureAwait(false);
-        result.EnsureSuccess("view helper install failed");
-        return package;
-    }
-
-    /// <summary>
-    /// Pushes the helper APK for the legacy app_process screenrecord entry point.
-    /// </summary>
-    public async Task<AndroidViewHelperPackage> PushForAppProcessAsync(AndroidViewHelperPackage package, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(package);
-
-        var result = await _adbClient.RunAsync(["push", package.LocalPath, package.RemotePath], cancellationToken).ConfigureAwait(false);
-        result.EnsureSuccess("view helper push failed");
-        return package;
-    }
-
-    /// <summary>
-    /// Removes the helper package from the device.
-    /// </summary>
-    /// <param name="remotePath">Remote path to remove.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Completion task.</returns>
-    public async Task RemoveAsync(string remotePath, CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(remotePath))
-        {
-            return;
-        }
-
-        await _adbClient.ShellAsync($"rm -f {remotePath}", cancellationToken).ConfigureAwait(false);
-    }
-}
 
 /// <summary>
 /// Android adb-forward transport bootstrap for the built-in mirror.
@@ -156,7 +27,7 @@ public sealed class AndroidViewBootstrap(
     private IAsyncDisposable? _screenrecordShell;
 
     /// <inheritdoc />
-    public async Task<ViewConnectionInfo> StartAsync(ViewStartRequest request, CancellationToken cancellationToken = default)
+    public async Task<ViewConnectionInfo> StartAsync(ViewStartRequest request, Action<ViewStartupPhase>? reportPhase = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -172,14 +43,16 @@ public sealed class AndroidViewBootstrap(
 
         var sessionId = _idGenerator.NewId();
         var socketName = $"{AndroidRuntimeDefaults.ViewSocketPrefix}{sessionId}";
-        var adbClient = _adbClientFactory.Create(request.AdbExecutable, request.DeviceSelector, _processRunner);
-        var installer = new AndroidViewServerInstaller(adbClient, _packageLocator);
+        var adbClient = _adbClientFactory.Create(request.AdbExecutable, request.DeviceSelector, _processRunner, request.CommandTimeout);
+        var installer = new AndroidViewServerInstaller(adbClient, _packageLocator, reportPhase);
         _adbClient = adbClient;
         _socketName = socketName;
 
         try
         {
+            Report(reportPhase, "helper_resolve", ViewStartupPhaseStatus.Started, "Resolving Android view helper package.");
             var package = _packageLocator.Resolve();
+            Report(reportPhase, "helper_resolve", ViewStartupPhaseStatus.Succeeded, "Resolved Android view helper package.", AndroidViewServerInstaller.PackageDetail(package));
             _installedPackage = package;
 
             if (string.Equals(activeBackend, ViewCaptureBackends.MediaProjection, StringComparison.Ordinal))
@@ -192,13 +65,17 @@ public sealed class AndroidViewBootstrap(
                 await installer.PushForAppProcessAsync(package, cancellationToken).ConfigureAwait(false);
             }
 
+            Report(reportPhase, "adb_forward", ViewStartupPhaseStatus.Started, "Creating adb forward for view stream.", $"local=tcp:0; remote=localabstract:{socketName}");
             var forward = await adbClient.RunAsync(["forward", "tcp:0", $"localabstract:{socketName}"], cancellationToken).ConfigureAwait(false);
             forward.EnsureSuccess("view transport forward failed");
             var localPort = await ResolveForwardedLocalPortAsync(adbClient, forward, socketName, cancellationToken).ConfigureAwait(false);
+            Report(reportPhase, "adb_forward", ViewStartupPhaseStatus.Succeeded, "ADB forward is ready.", $"local=tcp:{localPort}; remote=localabstract:{socketName}");
             _localPort = localPort;
 
             if (string.Equals(activeBackend, ViewCaptureBackends.MediaProjection, StringComparison.Ordinal))
             {
+                var consentApprover = new AndroidMediaProjectionConsentApprover(adbClient);
+                Report(reportPhase, "mediaprojection_activity", ViewStartupPhaseStatus.Started, "Starting Android MediaProjection consent activity.", package.ConsentActivity);
                 var start = await adbClient.RunAsync([
                     "shell",
                     "am",
@@ -222,13 +99,25 @@ public sealed class AndroidViewBootstrap(
                     request.VideoBitRate
                 ], cancellationToken).ConfigureAwait(false);
                 start.EnsureSuccess("view helper activity start failed");
-                await TryApproveMediaProjectionConsentAsync(adbClient, cancellationToken).ConfigureAwait(false);
+                Report(reportPhase, "mediaprojection_activity", ViewStartupPhaseStatus.Succeeded, "Android MediaProjection consent activity started.", start.Stdout.Trim());
+                Report(reportPhase, "mediaprojection_consent", ViewStartupPhaseStatus.Started, "Waiting for Android MediaProjection consent prompt.", "uiautomator=start-now");
+                var approved = await consentApprover.TryApproveAsync(cancellationToken).ConfigureAwait(false);
+                if (!approved)
+                {
+                    var message = "MediaProjection consent prompt was not approved or could not be detected.";
+                    Report(reportPhase, "mediaprojection_consent", ViewStartupPhaseStatus.Failed, message, null, "Approve the Android screen-capture prompt on the device, or use --capture-backend auto/screenrecord.");
+                    throw new MediaProjectionConsentException(message);
+                }
+
+                Report(reportPhase, "mediaprojection_consent", ViewStartupPhaseStatus.Succeeded, "Android MediaProjection consent was approved.");
             }
             else
             {
                 var shellCommand = string.Join(
                     " ", $"CLASSPATH={ShellQuote(package.RemotePath)}", "app_process", "/", ShellQuote(package.MainClass), "--socket", ShellQuote(socketName), "--codec", ShellQuote(request.Codec), "--max-size", request.MaxSize.ToString(System.Globalization.CultureInfo.InvariantCulture), "--max-fps", request.MaxFps.ToString(System.Globalization.CultureInfo.InvariantCulture), "--video-bit-rate", ShellQuote(request.VideoBitRate));
+                Report(reportPhase, "screenrecord_process", ViewStartupPhaseStatus.Started, "Starting screenrecord helper process.", package.MainClass);
                 _screenrecordShell = await adbClient.StartShellAsync(shellCommand, cancellationToken).ConfigureAwait(false);
+                Report(reportPhase, "screenrecord_process", ViewStartupPhaseStatus.Succeeded, "Screenrecord helper process started.");
             }
 
             return new ViewConnectionInfo(
@@ -249,6 +138,9 @@ public sealed class AndroidViewBootstrap(
         }
     }
 
+    private static void Report(Action<ViewStartupPhase>? reportPhase, string phase, string status, string summary, string? detail = null, string? recommendation = null) =>
+        reportPhase?.Invoke(new ViewStartupPhase(phase, status, summary, string.IsNullOrWhiteSpace(detail) ? null : detail, recommendation));
+
     private static string NormalizeCaptureBackend(string? captureBackend)
     {
         if (string.IsNullOrWhiteSpace(captureBackend))
@@ -266,76 +158,6 @@ public sealed class AndroidViewBootstrap(
     }
 
     private static string ShellQuote(string value) => "'" + value.Replace("'", "'\\''", StringComparison.Ordinal) + "'";
-
-    private static async Task TryApproveMediaProjectionConsentAsync(IAdbClient adbClient, CancellationToken cancellationToken)
-    {
-        const int maxAttempts = 20;
-        for (var attempt = 0; attempt < maxAttempts; attempt++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var uiXml = await DumpUiHierarchyAsync(adbClient, cancellationToken).ConfigureAwait(false);
-            if (TryFindStartNowButtonCenter(uiXml, out var x, out var y))
-            {
-                var tap = await adbClient.ShellAsync($"input tap {x} {y}", cancellationToken).ConfigureAwait(false);
-                tap.EnsureSuccess("view helper MediaProjection consent tap failed");
-                return;
-            }
-
-            await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken).ConfigureAwait(false);
-        }
-    }
-
-    private static async Task<string> DumpUiHierarchyAsync(IAdbClient adbClient, CancellationToken cancellationToken)
-    {
-        const string remotePath = "/data/local/tmp/luotsi-view-window.xml";
-        var dump = await adbClient.ShellAsync($"uiautomator dump {remotePath} >/dev/null && cat {remotePath} && rm -f {remotePath}", cancellationToken).ConfigureAwait(false);
-        return dump.Stdout;
-    }
-
-    private static bool TryFindStartNowButtonCenter(string uiXml, out int x, out int y)
-    {
-        const string marker = "START NOW";
-        var textIndex = uiXml.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-        if (textIndex < 0)
-        {
-            x = 0;
-            y = 0;
-            return false;
-        }
-
-        var boundsIndex = uiXml.IndexOf("bounds=\"[", textIndex, StringComparison.OrdinalIgnoreCase);
-        if (boundsIndex < 0)
-        {
-            x = 0;
-            y = 0;
-            return false;
-        }
-
-        var start = boundsIndex + "bounds=\"[".Length;
-        var end = uiXml.IndexOf("]\"", start, StringComparison.Ordinal);
-        if (end <= start)
-        {
-            x = 0;
-            y = 0;
-            return false;
-        }
-
-        var parts = uiXml[start..end].Split([',', ']', '['], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (parts.Length != 4 ||
-            !int.TryParse(parts[0], out var left) ||
-            !int.TryParse(parts[1], out var top) ||
-            !int.TryParse(parts[2], out var right) ||
-            !int.TryParse(parts[3], out var bottom))
-        {
-            x = 0;
-            y = 0;
-            return false;
-        }
-
-        x = (left + right) / 2;
-        y = (top + bottom) / 2;
-        return true;
-    }
 
     private static async Task<int> ResolveForwardedLocalPortAsync(
         IAdbClient adbClient,

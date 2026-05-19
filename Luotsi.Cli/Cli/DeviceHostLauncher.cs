@@ -1,5 +1,4 @@
 using Luotsi.Cli.Artifacts;
-using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 
 namespace Luotsi.Cli.Cli;
@@ -19,21 +18,7 @@ internal sealed class DeviceHostLauncher(IDeviceHostFactory deviceHostFactory, I
                 options.Get("platform") ?? CliDefaults.DefaultPlatform,
                 adbExecutable,
                 deviceSelector ?? options.Get("device"),
-                ResolveAdbCommandTimeout(options)),
+                AdbCommandTimeoutResolver.Resolve(options, _environment)),
             artifacts);
-    }
-
-    private TimeSpan? ResolveAdbCommandTimeout(CliOptions options)
-    {
-        var rawValue = options.Get("adb-timeout-sec") ??
-            _environment.GetEnvironmentVariable(CliDefaults.AdbCommandTimeoutEnvironmentVariable) ??
-            CliDefaults.DefaultAdbCommandTimeoutSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
-
-        if (!int.TryParse(rawValue, out var timeoutSec) || timeoutSec < 0)
-        {
-            throw new UsageException("Option --adb-timeout-sec must be a non-negative integer.");
-        }
-
-        return timeoutSec == 0 ? null : TimeSpan.FromSeconds(timeoutSec);
     }
 }
