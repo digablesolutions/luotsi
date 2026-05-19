@@ -157,7 +157,7 @@ public sealed class ViewSession(
             await using var recorder = new SessionControlledViewRecorder(_viewRecorderFactory, options);
             IViewRenderer? renderer = null;
             SessionViewRenderer? sessionRenderer = null;
-            var interactionRouter = new ViewSessionInteractionRouter(
+            var interactionRouter = new ViewSessionInteractionRouter(new ViewSessionInteractionContext(
                 _deviceHost,
                 _artifacts,
                 options,
@@ -165,7 +165,7 @@ public sealed class ViewSession(
                 _timeProvider,
                 sessionId,
                 WriteJsonLine,
-                artifactFolderOpener);
+                artifactFolderOpener ?? new SystemArtifactFolderOpener()));
             string endReason = "stream_ended";
             try
             {

@@ -9,32 +9,26 @@ using Luotsi.Cli.View.Contracts;
 namespace Luotsi.Cli.View.Session;
 
 internal sealed class ViewSessionInteractionRouter(
-    IDeviceHost deviceHost,
-    ArtifactSession artifacts,
-    ViewOptions options,
-    SessionControlledViewRecorder recorder,
-    TimeProvider timeProvider,
-    string sessionId,
-    Action<object> writeJsonLine,
-    IArtifactFolderOpener? artifactFolderOpener = null)
+    ViewSessionInteractionContext context)
 {
-    private readonly IDeviceHost _deviceHost = deviceHost ?? throw new ArgumentNullException(nameof(deviceHost));
-    private readonly ArtifactSession _artifacts = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
-    private readonly ViewOptions _options = options ?? throw new ArgumentNullException(nameof(options));
-    private readonly SessionControlledViewRecorder _recorder = recorder ?? throw new ArgumentNullException(nameof(recorder));
-    private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
-    private readonly string _sessionId = string.IsNullOrWhiteSpace(sessionId) ? throw new ArgumentException("Session id is required.", nameof(sessionId)) : sessionId;
-    private readonly Action<object> _writeJsonLine = writeJsonLine ?? throw new ArgumentNullException(nameof(writeJsonLine));
-    private readonly IArtifactFolderOpener _artifactFolderOpener = artifactFolderOpener ?? new SystemArtifactFolderOpener();
+    private readonly ViewSessionInteractionContext _context = context ?? throw new ArgumentNullException(nameof(context));
+    private readonly IDeviceHost _deviceHost = context.DeviceHost ?? throw new ArgumentNullException(nameof(context.DeviceHost));
+    private readonly ArtifactSession _artifacts = context.Artifacts ?? throw new ArgumentNullException(nameof(context.Artifacts));
+    private readonly ViewOptions _options = context.Options ?? throw new ArgumentNullException(nameof(context.Options));
+    private readonly SessionControlledViewRecorder _recorder = context.Recorder ?? throw new ArgumentNullException(nameof(context.Recorder));
+    private readonly TimeProvider _timeProvider = context.TimeProvider ?? throw new ArgumentNullException(nameof(context.TimeProvider));
+    private readonly string _sessionId = string.IsNullOrWhiteSpace(context.SessionId) ? throw new ArgumentException("Session id is required.", nameof(context.SessionId)) : context.SessionId;
+    private readonly Action<object> _writeJsonLine = context.WriteEvent ?? throw new ArgumentNullException(nameof(context.WriteEvent));
+    private readonly IArtifactFolderOpener _artifactFolderOpener = context.ArtifactFolderOpener ?? throw new ArgumentNullException(nameof(context.ArtifactFolderOpener));
 
     private CancellationTokenSource? _iterationCancellation;
     private TaskCompletionSource _reconnectRequested = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Func<ViewChromeState, Task>? _chromeUpdater;
     private IReadOnlyList<ViewChromeDevice> _devices = [];
-    private string? _shareEndpoint = options.JoinShareEndpoint;
+    private string? _shareEndpoint = context.Options.JoinShareEndpoint;
     private int _observerCount;
 
-    public string ActiveDeviceSelector { get; private set; } = options.DeviceSelector;
+    public string ActiveDeviceSelector { get; private set; } = context.Options.DeviceSelector;
 
     public void BeginIteration(string deviceSelector, CancellationTokenSource iterationCancellation)
     {
@@ -224,17 +218,11 @@ internal sealed class ViewSessionInteractionRouter(
 
     private ViewSessionInputCommandHandler InputCommands =>
         field ??= new ViewSessionInputCommandHandler(
-            _deviceHost,
-            _artifacts,
-            _options,
-            _recorder,
-            _timeProvider,
-            _sessionId,
-            WriteEvent,
-            PublishChromeAsync,
-            () => ActiveDeviceSelector,
-            RequestReconnect,
-            _artifactFolderOpener);
+            _context,
+            new ViewSessionInteractionCallbacks(
+                PublishChromeAsync,
+                () => ActiveDeviceSelector,
+                RequestReconnect));
 
     private void WriteEvent(object value) => _writeJsonLine(value);
 }
