@@ -287,7 +287,7 @@ public sealed class AdbReadinessTests
             },
             artifacts = new
             {
-                artifact_root = Path.Combine("/tmp", "luotsi", "20260515-120000-device-status"),
+                artifact_root = $"/tmp{Path.DirectorySeparatorChar}luotsi{Path.DirectorySeparatorChar}20260515-120000-device-status",
                 poll_artifacts = "final"
             },
             schema = ResultSchemas.CommandEnvelope,
