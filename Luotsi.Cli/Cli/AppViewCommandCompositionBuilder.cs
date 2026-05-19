@@ -30,54 +30,35 @@ internal static class AppViewCommandCompositionBuilder
             dependencies.ProcessRunner,
             dependencies.AdbClientFactory,
             resolvedViewDoctorFactory);
-        var viewDiagnosticCommandHost = new ViewDiagnosticCommandHost(new ViewDiagnosticCommandHostDependencies
-        {
-            Environment = dependencies.Environment,
-            EnvelopeWriter = dependencies.EnvelopeWriter,
-            ViewDoctorFactory = resolvedViewDoctorFactory,
-            ViewSetupFactory = resolvedViewSetupFactory
-        });
+        var viewDiagnosticCommandHost = new ViewDiagnosticCommandHost(new(
+            dependencies.Environment,
+            dependencies.EnvelopeWriter,
+            resolvedViewDoctorFactory,
+            resolvedViewSetupFactory));
 
-        return new AppViewCommandComposition
-        {
-            ViewSessionCommandPreparer = new ViewSessionCommandPreparer(
+        return new(
+            new ViewSessionCommandPreparer(
                 dependencies.DeviceHostLauncher,
                 resolvedViewSessionFactory,
                 dependencies.ProfileCoordinator,
                 dependencies.Environment),
-            ViewDiagnosticsLauncher = new ViewDiagnosticsLauncher(dependencies.DeviceHostLauncher, viewDiagnosticCommandHost)
-        };
+            new ViewDiagnosticsLauncher(dependencies.DeviceHostLauncher, viewDiagnosticCommandHost));
     }
 }
 
-internal sealed class AppViewCommandCompositionBuilderDependencies
-{
-    public required AppDependencies Overrides { get; init; }
+internal sealed record AppViewCommandCompositionBuilderDependencies(
+    AppDependencies Overrides,
+    TimeProvider TimeProvider,
+    IConsoleIo Console,
+    IEnvironmentVariables Environment,
+    IFileSystem FileSystem,
+    IProcessRunner ProcessRunner,
+    IAdbClientFactory AdbClientFactory,
+    IUniqueIdGenerator IdGenerator,
+    AppCommandEnvelopeWriter EnvelopeWriter,
+    ViewProfileCoordinator ProfileCoordinator,
+    DeviceHostLauncher DeviceHostLauncher);
 
-    public required TimeProvider TimeProvider { get; init; }
-
-    public required IConsoleIo Console { get; init; }
-
-    public required IEnvironmentVariables Environment { get; init; }
-
-    public required IFileSystem FileSystem { get; init; }
-
-    public required IProcessRunner ProcessRunner { get; init; }
-
-    public required IAdbClientFactory AdbClientFactory { get; init; }
-
-    public required IUniqueIdGenerator IdGenerator { get; init; }
-
-    public required AppCommandEnvelopeWriter EnvelopeWriter { get; init; }
-
-    public required ViewProfileCoordinator ProfileCoordinator { get; init; }
-
-    public required DeviceHostLauncher DeviceHostLauncher { get; init; }
-}
-
-internal sealed class AppViewCommandComposition
-{
-    public required ViewSessionCommandPreparer ViewSessionCommandPreparer { get; init; }
-
-    public required ViewDiagnosticsLauncher ViewDiagnosticsLauncher { get; init; }
-}
+internal sealed record AppViewCommandComposition(
+    ViewSessionCommandPreparer ViewSessionCommandPreparer,
+    ViewDiagnosticsLauncher ViewDiagnosticsLauncher);

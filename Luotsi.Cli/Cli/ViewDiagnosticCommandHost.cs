@@ -35,13 +35,8 @@ internal sealed class ViewDiagnosticCommandHost(ViewDiagnosticCommandHostDepende
     }
 }
 
-internal sealed class ViewDiagnosticCommandHostDependencies
-{
-    public required IEnvironmentVariables Environment { get; init; }
-
-    public required AppCommandEnvelopeWriter EnvelopeWriter { get; init; }
-
-    public required IViewDoctorFactory ViewDoctorFactory { get; init; }
-
-    public required IViewSetupFactory ViewSetupFactory { get; init; }
-}
+internal sealed record ViewDiagnosticCommandHostDependencies(
+    IEnvironmentVariables Environment,
+    AppCommandEnvelopeWriter EnvelopeWriter,
+    IViewDoctorFactory ViewDoctorFactory,
+    IViewSetupFactory ViewSetupFactory);

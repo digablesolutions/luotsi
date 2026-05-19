@@ -68,20 +68,18 @@ public sealed class App
             CommandDispatcher = commandDispatcher
         });
         var deviceHostLauncher = new DeviceHostLauncher(resolvedDeviceHostFactory, resolvedEnvironment);
-        var viewCommands = AppViewCommandCompositionBuilder.Build(new AppViewCommandCompositionBuilderDependencies
-        {
-            Overrides = dependencies,
-            TimeProvider = resolvedTimeProvider,
-            Console = resolvedConsole,
-            Environment = resolvedEnvironment,
-            FileSystem = resolvedFileSystem,
-            ProcessRunner = resolvedProcessRunner,
-            AdbClientFactory = resolvedAdbClientFactory,
-            IdGenerator = resolvedIdGenerator,
-            EnvelopeWriter = envelopeWriter,
-            ProfileCoordinator = profileCoordinator,
-            DeviceHostLauncher = deviceHostLauncher
-        });
+        var viewCommands = AppViewCommandCompositionBuilder.Build(new(
+            dependencies,
+            resolvedTimeProvider,
+            resolvedConsole,
+            resolvedEnvironment,
+            resolvedFileSystem,
+            resolvedProcessRunner,
+            resolvedAdbClientFactory,
+            resolvedIdGenerator,
+            envelopeWriter,
+            profileCoordinator,
+            deviceHostLauncher));
         _executionShell = new AppExecutionShell(new AppExecutionShellDependencies
         {
             Console = resolvedConsole,
