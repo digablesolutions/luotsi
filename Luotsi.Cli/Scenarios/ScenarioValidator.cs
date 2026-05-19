@@ -18,17 +18,39 @@ internal static class ScenarioValidator
             throw new UsageException($"Scenario file '{file}' must define at least one step.");
         }
 
-        for (var index = 0; index < scenario.Steps.Count; index++)
-        {
-            ValidateStep(scenario, scenario.Steps[index], index + 1, supportedScenarioActions);
-        }
+        var hasPreviousLifecycleStep = false;
+        ValidateSteps(scenario, scenario.Setup ?? [], ScenarioStepPhases.Setup, supportedScenarioActions, ref hasPreviousLifecycleStep);
+        ValidateSteps(scenario, scenario.Steps, ScenarioStepPhases.Main, supportedScenarioActions, ref hasPreviousLifecycleStep);
+        ValidateSteps(scenario, scenario.Teardown ?? [], ScenarioStepPhases.Teardown, supportedScenarioActions, ref hasPreviousLifecycleStep);
 
         return scenario;
     }
 
-    private static void ValidateStep(ScenarioFile scenario, ScenarioStep step, int index, IReadOnlySet<string> supportedScenarioActions)
+    private static void ValidateSteps(
+        ScenarioFile scenario,
+        IReadOnlyList<ScenarioStep> steps,
+        string phase,
+        IReadOnlySet<string> supportedScenarioActions,
+        ref bool hasPreviousLifecycleStep)
     {
-        var stepLabel = $"Scenario '{scenario.Name}' step {index}";
+        for (var index = 0; index < steps.Count; index++)
+        {
+            ValidateStep(scenario, steps[index], phase, index + 1, hasPreviousLifecycleStep, supportedScenarioActions);
+            hasPreviousLifecycleStep = true;
+        }
+    }
+
+    private static void ValidateStep(
+        ScenarioFile scenario,
+        ScenarioStep step,
+        string phase,
+        int index,
+        bool hasPreviousLifecycleStep,
+        IReadOnlySet<string> supportedScenarioActions)
+    {
+        var stepLabel = string.Equals(phase, ScenarioStepPhases.Main, StringComparison.Ordinal)
+            ? $"Scenario '{scenario.Name}' step {index}"
+            : $"Scenario '{scenario.Name}' {phase} step {index}";
         if (string.IsNullOrWhiteSpace(step.Action))
         {
             throw new UsageException($"{stepLabel} must define a non-empty action.");
@@ -200,9 +222,9 @@ internal static class ScenarioValidator
 
         if (string.Equals(action, "assertEvent", StringComparison.OrdinalIgnoreCase) &&
             step.ObserveFromPreviousStep is true &&
-            index == 1)
+            !hasPreviousLifecycleStep)
         {
-            throw new UsageException($"{stepLabel} assertEvent cannot observe from the previous step when it is the first step.");
+            throw new UsageException($"{stepLabel} assertEvent cannot observe from the previous step when no previous lifecycle step has run.");
         }
     }
 

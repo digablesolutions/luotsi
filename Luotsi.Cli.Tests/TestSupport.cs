@@ -496,6 +496,8 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public List<(string Package, string Permission)> RevokePermissionRequests { get; } = [];
 
+    public List<(string Name, DateTimeOffset? Since)> AssertEventRequests { get; } = [];
+
     public List<DeviceInfo> ConnectedDevices { get; } = [];
 
     public PreflightResult PreflightTemplate { get; set; } = new("Model", "16", "36", "focus", null, null, "fingerprint", "arm64-v8a", "SER");
@@ -507,6 +509,8 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
     public Exception? DeviceFingerprintException { get; set; }
 
     public Exception? WaitVisibleException { get; set; }
+
+    public Exception? ForceStopException { get; set; }
 
     public FailureArtifactBundle? FailureArtifacts { get; set; }
 
@@ -609,8 +613,11 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public Task<ResetLogResult> ResetLogAsync() => Task.FromResult(new ResetLogResult(true));
 
-    public Task<AssertEventResult> AssertEventAsync(string name, IReadOnlyList<string> contains, string? detailsPattern, int timeoutSec, DateTimeOffset? since = null) =>
-        Task.FromResult(new AssertEventResult(name, contains, detailsPattern, string.Empty));
+    public Task<AssertEventResult> AssertEventAsync(string name, IReadOnlyList<string> contains, string? detailsPattern, int timeoutSec, DateTimeOffset? since = null)
+    {
+        AssertEventRequests.Add((name, since));
+        return Task.FromResult(new AssertEventResult(name, contains, detailsPattern, string.Empty));
+    }
 
     public Task<TakeScreenshotResult> TakeScreenshotAsync(string label)
     {
@@ -791,6 +798,11 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
     public Task<AppPackageCommandResult> ForceStopAsync(string packageName)
     {
         ForceStopRequests.Add(packageName);
+        if (ForceStopException is not null)
+        {
+            throw ForceStopException;
+        }
+
         return Task.FromResult(new AppPackageCommandResult(packageName));
     }
 

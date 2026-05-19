@@ -257,11 +257,15 @@ public sealed record Bounds(int Left, int Top, int Right, int Bottom);
 /// <param name="Steps">Scenario steps.</param>
 /// <param name="Variables">Optional scenario variables.</param>
 /// <param name="Tags">Optional runner tags used for filtering and reporting.</param>
+/// <param name="Setup">Optional setup steps that run before scenario steps.</param>
+/// <param name="Teardown">Optional teardown steps that run after setup and scenario steps.</param>
 public sealed record ScenarioFile(
     string Name,
     IReadOnlyList<ScenarioStep> Steps,
     IReadOnlyDictionary<string, string>? Variables = null,
-    IReadOnlyList<string>? Tags = null);
+    IReadOnlyList<string>? Tags = null,
+    IReadOnlyList<ScenarioStep>? Setup = null,
+    IReadOnlyList<ScenarioStep>? Teardown = null);
 
 /// <summary>
 /// Scenario playbook step.
