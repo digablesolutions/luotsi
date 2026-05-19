@@ -324,12 +324,21 @@ public sealed class ScenarioExecutor
         {
             return await _actionHost.CaptureFailureArtifactsAsync(request, failure).ConfigureAwait(false);
         }
-        catch (Exception captureException)
+        catch (Exception captureException) when (!IsFatalException(captureException))
         {
             var bundle = CreateEmptyFailureArtifactBundle(request, failure);
             return bundle with { CaptureErrors = [new FailureCaptureError("failure_artifacts", captureException.Message)] };
         }
     }
+
+    private static bool IsFatalException(Exception exception) =>
+        exception is OutOfMemoryException
+            or StackOverflowException
+            or AccessViolationException
+            or AppDomainUnloadedException
+            or BadImageFormatException
+            or CannotUnloadAppDomainException
+            or InvalidProgramException;
 
     private FailureArtifactBundle CreateEmptyFailureArtifactBundle(FailureCaptureRequest request, Exception failure) =>
         new(

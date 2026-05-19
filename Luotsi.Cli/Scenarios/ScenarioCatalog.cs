@@ -144,17 +144,6 @@ public static class ScenarioShardStrategies
     public const string Hash = "hash";
 }
 
-internal enum ScenarioFailureArtifactCapturePolicy
-{
-    Failure,
-    Never
-}
-
-public static class ScenarioIdentity
-{
-    public static string Create(string file, string scenarioName) => $"{file}::{scenarioName}";
-}
-
 internal sealed class ScenarioCatalog(
     IFileSystem fileSystem,
     IScenarioTemplateResolver templateResolver)
@@ -306,12 +295,7 @@ internal sealed class ScenarioCatalog(
         if (normalized.StartsWith("**/", StringComparison.Ordinal))
         {
             root = ".";
-            pattern = Path.GetFileName(normalized[3..]);
-            if (string.IsNullOrWhiteSpace(pattern))
-            {
-                pattern = "*.json";
-            }
-
+            pattern = NormalizeRecursivePattern(path, normalized[3..]);
             return true;
         }
 
@@ -325,13 +309,24 @@ internal sealed class ScenarioCatalog(
 
         root = markerIndex == 0 ? "." : path[..markerIndex];
         var remainder = normalized[(markerIndex + 4)..];
-        pattern = Path.GetFileName(remainder);
-        if (string.IsNullOrWhiteSpace(pattern))
+        pattern = NormalizeRecursivePattern(path, remainder);
+        return true;
+    }
+
+    private static string NormalizeRecursivePattern(string originalPath, string remainder)
+    {
+        if (string.IsNullOrWhiteSpace(remainder))
         {
-            pattern = "*.json";
+            return "*.json";
         }
 
-        return true;
+        if (remainder.Contains('/', StringComparison.Ordinal))
+        {
+            throw new UsageException(
+                $"Scenario path '{originalPath}' only supports recursive globs with a file pattern after '**/' (for example '**/*.json').");
+        }
+
+        return remainder;
     }
 
     private async Task<ScenarioFile> LoadAsync(string file)

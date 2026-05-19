@@ -2,7 +2,6 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Luotsi.Cli.Infrastructure.Contracts;
-using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Scenarios;
 
@@ -231,23 +230,6 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
             ShardIndex: shardIndex,
             ShardStrategy: shardStrategy,
             Error: ScenarioErrorInfo.From(exception));
-}
-
-internal static class ScenarioErrorInfo
-{
-    public static ErrorInfo From(Exception exception)
-    {
-        ArgumentNullException.ThrowIfNull(exception);
-        return ErrorInfo.From(exception, GetCategory(exception));
-    }
-
-    public static string GetCategory(Exception exception)
-    {
-        ArgumentNullException.ThrowIfNull(exception);
-        return exception is ICommandFailureDetails failure
-            ? failure.CategoryOverride
-            : ErrorInfo.Classify(exception.Message);
-    }
 }
 
 internal sealed record ScenarioEvent(

@@ -225,6 +225,37 @@ public sealed partial class AppTests
         Assert.Equal(["nested", "root"], scenarios.EnumerateArray().Select(static scenario => scenario.GetProperty("name").GetString()!).Order(StringComparer.Ordinal).ToArray());
     }
 
+    [Fact]
+    public async Task ScenarioList_RecursiveGlob_With_Directory_Remainder_Returns_Usage_Error()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenarios/nested/b.json", """
+        {
+          "name": "nested",
+          "steps": [
+            { "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["scenario-list", "--path", "/tmp/scenarios/**/nested/*.json"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Contains("only supports recursive globs", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
 
     [Fact]
     public async Task RunAsync_File_DryRun_Returns_Usage_Error()
@@ -632,6 +663,30 @@ public sealed partial class AppTests
         Assert.Equal("/tmp/scenario.json", report.RootElement.GetProperty("scenarios")[0].GetProperty("file").GetString());
         Assert.Equal("sleep", report.RootElement.GetProperty("scenarios")[0].GetProperty("steps")[0].GetProperty("action").GetString());
     }
+
+      [Fact]
+      public async Task RunAsync_File_Report_Uses_Deterministic_ScenarioId_For_Parse_Failure()
+      {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/broken.json", "{");
+        var app = new App(new AppDependencies
+        {
+          TimeProvider = timeProvider,
+          FileSystem = fileSystem,
+          ProcessRunner = new DefaultProcessRunner(),
+          Delay = new FakeDelay(timeProvider),
+          DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+          Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/broken.json", "--report-json", "/tmp/report.json"]);
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("/tmp/broken.json::broken", report.RootElement.GetProperty("scenarios")[0].GetProperty("scenario_id").GetString());
+      }
 
     [Fact]
     public async Task RunAsync_Path_Writes_JUnit_Report_For_Mixed_Result()
