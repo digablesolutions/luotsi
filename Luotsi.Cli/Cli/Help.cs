@@ -58,7 +58,7 @@ Commands:
   list-installed-packages [--third-party]
   grant-permission --package <app.id> --permission <permission>
   revoke-permission --package <app.id> --permission <permission>
-  scenario-list --path <scenario-file-or-directory> [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>]
+  scenario-list --path <scenario-file-or-directory-or-glob> [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>]
   telemetry-tail [--tail 200]
   telemetry-watch [--timeout-sec 15]
   wait-step --step <STEP_NAME> [--timeout-sec 15]
@@ -71,8 +71,8 @@ Commands:
   logcat [--tail 200]
   wait-log --contains <text> [--timeout-sec 15]
   record --output <file.mp4> [--time-limit-sec 30]
-  run --file <scenario.json> [--events-jsonl <file>]
-  run --path <scenario-file-or-directory> [--dry-run] [--events-jsonl <file>] [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>] [--shard-count <n> --shard-index <zero-based>]
+  run --file <scenario.json> [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always]
+  run --path <scenario-file-or-directory-or-glob> [--dry-run] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>] [--shard-count <n> --shard-index <zero-based>] [--shard-strategy index|hash]
 
 Common options:
   --device <adb serial>

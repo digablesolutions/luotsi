@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Xml.Linq;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
 using Luotsi.Cli.Errors;
@@ -182,6 +183,77 @@ public sealed partial class AppTests
 
         Assert.Equal(0, exitCode);
         Assert.False(fileSystem.FileExists("/tmp/events.jsonl"));
+    }
+
+    [Fact]
+    public async Task ScenarioList_RecursiveGlob_Finds_Nested_Scenarios()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenarios/a.json", """
+        {
+          "name": "root",
+          "steps": [
+            { "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        fileSystem.AddFile("/tmp/scenarios/nested/b.json", """
+        {
+          "name": "nested",
+          "steps": [
+            { "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["scenario-list", "--path", "/tmp/scenarios/**/*.json"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var scenarios = envelope.RootElement.GetProperty("data").GetProperty("scenarios");
+        Assert.Equal(["nested", "root"], scenarios.EnumerateArray().Select(static scenario => scenario.GetProperty("name").GetString()!).Order(StringComparer.Ordinal).ToArray());
+    }
+
+    [Fact]
+    public async Task ScenarioList_RecursiveGlob_With_Directory_Remainder_Returns_Usage_Error()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenarios/nested/b.json", """
+        {
+          "name": "nested",
+          "steps": [
+            { "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["scenario-list", "--path", "/tmp/scenarios/**/nested/*.json"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Contains("only supports recursive globs", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
 
@@ -476,6 +548,440 @@ public sealed partial class AppTests
         Assert.Equal("scenario_run_ended", events[^1].GetProperty("event").GetString());
         Assert.Equal("passed", events[^1].GetProperty("status").GetString());
         Assert.Equal(2, events[^1].GetProperty("passed_count").GetInt32());
+        Assert.All(events.Where(static evt => evt.TryGetProperty("scenario", out _)), evt => Assert.Contains("::", evt.GetProperty("scenario_id").GetString(), StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_Path_PlanningFailure_Writes_Terminal_Event_And_Report()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenarios/broken.json", "{");
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync([
+            "run",
+            "--path", "/tmp/scenarios",
+            "--events-jsonl", "/tmp/events.jsonl",
+            "--report-json", "/tmp/report.json"]);
+        var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal(["scenario_run_started", "scenario_run_ended"], events.Select(static evt => evt.GetProperty("event").GetString()!).ToArray());
+        Assert.Equal("failed", events[^1].GetProperty("status").GetString());
+        Assert.Equal("usage_error", events[^1].GetProperty("error").GetProperty("category").GetString());
+        Assert.Equal("failed", report.RootElement.GetProperty("status").GetString());
+        Assert.Equal("usage_error", report.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Equal(1, report.RootElement.GetProperty("failed_count").GetInt32());
+        Assert.Equal("scenario discovery", report.RootElement.GetProperty("scenarios")[0].GetProperty("scenario").GetString());
+    }
+
+    [Fact]
+    public async Task RunAsync_Path_PostPlanUsageFailure_Writes_Batch_Metadata_Report()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenarios/broken.json", """
+        {
+          "name": "broken",
+          "steps": [
+            { "action": "notYetImplemented" }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync([
+            "run",
+            "--path", "/tmp/scenarios",
+            "--events-jsonl", "/tmp/events.jsonl",
+            "--report-json", "/tmp/report.json"]);
+        var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal(1, events[^1].GetProperty("total_count").GetInt32());
+        Assert.Equal(1, events[^1].GetProperty("selected_count").GetInt32());
+        Assert.Equal(1, report.RootElement.GetProperty("total_count").GetInt32());
+        Assert.Equal(1, report.RootElement.GetProperty("selected_count").GetInt32());
+        Assert.Equal(1, report.RootElement.GetProperty("failed_count").GetInt32());
+        Assert.Equal("scenario run", report.RootElement.GetProperty("scenarios")[0].GetProperty("scenario").GetString());
+    }
+
+    [Fact]
+    public async Task RunAsync_File_Writes_Json_Report()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "name": "pause", "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json", "--report-json", "/tmp/report.json"]);
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("luotsi-scenario-run-report.v1", report.RootElement.GetProperty("schema").GetString());
+        Assert.Equal("passed", report.RootElement.GetProperty("status").GetString());
+        Assert.Equal(1, report.RootElement.GetProperty("passed_count").GetInt32());
+        Assert.Equal("single", report.RootElement.GetProperty("scenarios")[0].GetProperty("scenario").GetString());
+        Assert.Equal("/tmp/scenario.json::single", report.RootElement.GetProperty("scenarios")[0].GetProperty("scenario_id").GetString());
+        Assert.Equal("/tmp/scenario.json", report.RootElement.GetProperty("scenarios")[0].GetProperty("file").GetString());
+        Assert.Equal("sleep", report.RootElement.GetProperty("scenarios")[0].GetProperty("steps")[0].GetProperty("action").GetString());
+    }
+
+      [Fact]
+      public async Task RunAsync_File_Report_Uses_Deterministic_ScenarioId_For_Parse_Failure()
+      {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/broken.json", "{");
+        var app = new App(new AppDependencies
+        {
+          TimeProvider = timeProvider,
+          FileSystem = fileSystem,
+          ProcessRunner = new DefaultProcessRunner(),
+          Delay = new FakeDelay(timeProvider),
+          DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+          Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/broken.json", "--report-json", "/tmp/report.json"]);
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("/tmp/broken.json::broken", report.RootElement.GetProperty("scenarios")[0].GetProperty("scenario_id").GetString());
+      }
+
+    [Fact]
+    public async Task RunAsync_Path_Writes_JUnit_Report_For_Mixed_Result()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenarios/fails.json", """
+        {
+          "name": "fails",
+          "steps": [
+            { "action": "waitVisible", "text": "Target" }
+          ]
+        }
+        """);
+        fileSystem.AddFile("/tmp/scenarios/passes.json", """
+        {
+          "name": "passes",
+          "steps": [
+            { "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var host = new FakeDeviceHost
+        {
+            WaitVisibleException = new InvalidOperationException("not visible")
+        };
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--path", "/tmp/scenarios", "--report-junit", "/tmp/junit.xml"]);
+        var report = XDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/junit.xml"));
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal("testsuite", report.Root!.Name.LocalName);
+        Assert.Equal("2", report.Root.Attribute("tests")!.Value);
+        Assert.Equal("1", report.Root.Attribute("failures")!.Value);
+        var failed = report.Root.Elements("testcase").Single(test => test.Attribute("name")!.Value == "fails");
+        Assert.NotNull(failed.Element("failure"));
+        Assert.Equal("/tmp/scenarios/fails.json", failed.Attribute("classname")!.Value);
+        Assert.Equal("/tmp/scenarios/fails.json::fails", failed.Attribute("id")!.Value);
+    }
+
+    [Fact]
+    public async Task RunAsync_File_FailureArtifactCaptureFailure_Still_Emits_Step_Failure()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "action": "waitVisible", "text": "Target" }
+          ]
+        }
+        """);
+        var host = new FakeDeviceHost
+        {
+            WaitVisibleException = new InvalidOperationException("not visible"),
+            FailureArtifactException = new IOException("artifact disk full")
+        };
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync([
+            "run",
+            "--file", "/tmp/scenario.json",
+            "--events-jsonl", "/tmp/events.jsonl",
+            "--report-json", "/tmp/report.json"]);
+        var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+
+        Assert.Equal(1, exitCode);
+        var failedStep = Assert.Single(events, static evt => evt.GetProperty("event").GetString() == "scenario_step_failed");
+        Assert.Equal("not visible", failedStep.GetProperty("error").GetProperty("message").GetString());
+        Assert.DoesNotContain("artifact disk full", report.RootElement.GetProperty("scenarios")[0].GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_File_Failure_Report_Honors_AttachArtifacts_Never()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "action": "waitVisible", "text": "Target" }
+          ]
+        }
+        """);
+        var host = CreateFailingHostWithArtifacts();
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json", "--report-json", "/tmp/report.json", "--attach-artifacts", "never"]);
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal("failed", report.RootElement.GetProperty("status").GetString());
+        Assert.Equal(0, report.RootElement.GetProperty("scenarios")[0].GetProperty("artifacts").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task RunAsync_File_Failure_Report_Attaches_Failure_Artifacts_By_Default()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "action": "waitVisible", "text": "Target" }
+          ]
+        }
+        """);
+        var host = CreateFailingHostWithArtifacts();
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json", "--report-json", "/tmp/report.json"]);
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+        var artifacts = report.RootElement.GetProperty("scenarios")[0].GetProperty("artifacts");
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal(2, artifacts.GetArrayLength());
+        Assert.Equal("screenshot", artifacts[0].GetProperty("kind").GetString());
+        Assert.Equal("failure.png", artifacts[0].GetProperty("file_name").GetString());
+        Assert.Equal("metadata", artifacts[1].GetProperty("kind").GetString());
+    }
+
+    [Fact]
+    public async Task RunAsync_File_JUnit_Report_Attaches_Failure_Artifacts_In_SystemOut()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "action": "waitVisible", "text": "Target" }
+          ]
+        }
+        """);
+        var host = CreateFailingHostWithArtifacts();
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json", "--report-junit", "/tmp/junit.xml"]);
+        var report = XDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/junit.xml"));
+        var systemOut = Assert.Single(report.Root!.Elements("testcase")).Element("system-out")!.Value;
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("screenshot: failure.png", systemOut, StringComparison.Ordinal);
+        Assert.Contains("metadata: failure.json", systemOut, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_File_CaptureOnNever_Skips_Failure_Artifact_Generation()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "action": "waitVisible", "text": "Target" }
+          ]
+        }
+        """);
+        var host = CreateFailingHostWithArtifacts();
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json", "--report-json", "/tmp/report.json", "--capture-on", "never"]);
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+
+        Assert.Equal(1, exitCode);
+        Assert.Empty(host.FailureArtifactRequests);
+        Assert.Equal(0, report.RootElement.GetProperty("scenarios")[0].GetProperty("artifacts").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task RunAsync_File_Report_Attaches_Step_Artifacts_When_Always()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "action": "captureArtifacts", "label": "checkpoint" }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json", "--report-json", "/tmp/report.json", "--attach-artifacts", "always"]);
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+        var artifacts = report.RootElement.GetProperty("scenarios")[0].GetProperty("artifacts");
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(4, artifacts.GetArrayLength());
+        Assert.Contains(artifacts.EnumerateArray(), artifact => artifact.GetProperty("kind").GetString() == "logcat");
+    }
+
+    [Fact]
+    public async Task RunAsync_File_Failure_Report_Attaches_Prior_Step_Artifacts_When_Always()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "action": "captureArtifacts", "label": "checkpoint" },
+            { "action": "waitVisible", "text": "Target" }
+          ]
+        }
+        """);
+        var host = CreateFailingHostWithArtifacts();
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json", "--report-json", "/tmp/report.json", "--attach-artifacts", "always"]);
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+        var artifacts = report.RootElement.GetProperty("scenarios")[0].GetProperty("artifacts");
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains(artifacts.EnumerateArray(), artifact => artifact.GetProperty("file_name").GetString() == "checkpoint.png");
+        Assert.Contains(artifacts.EnumerateArray(), artifact => artifact.GetProperty("file_name").GetString() == "failure.png");
     }
 
       [Fact]
@@ -572,6 +1078,75 @@ public sealed partial class AppTests
         Assert.Equal(1, data.GetProperty("sharded_out_count").GetInt32());
         Assert.Equal("a", data.GetProperty("scenarios")[0].GetProperty("scenario").GetString());
         Assert.Equal("c", data.GetProperty("scenarios")[1].GetProperty("scenario").GetString());
+    }
+
+    [Fact]
+    public async Task RunAsync_Path_DryRun_Can_Use_Hash_Shard_Strategy()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        foreach (var name in new[] { "a", "b", "c" })
+        {
+            fileSystem.AddFile($"/tmp/scenarios/{name}.json", $$"""
+            {
+              "name": "{{name}}",
+              "steps": [
+                { "action": "sleep", "milliseconds": 1 }
+              ]
+            }
+            """);
+        }
+
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--path", "/tmp/scenarios", "--dry-run", "--shard-count", "2", "--shard-index", "0", "--shard-strategy", "hash"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+        var data = envelope.RootElement.GetProperty("data");
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("hash", data.GetProperty("shard_strategy").GetString());
+        Assert.Equal(3, data.GetProperty("matched_count").GetInt32());
+        Assert.Equal(3, data.GetProperty("selected_count").GetInt32() + data.GetProperty("sharded_out_count").GetInt32());
+    }
+
+    [Fact]
+    public async Task RunAsync_Path_InvalidShardStrategy_Returns_Usage_Error()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenarios/a.json", """
+        {
+          "name": "a",
+          "steps": [
+            { "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--path", "/tmp/scenarios", "--dry-run", "--shard-strategy", "round-robin"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Contains("--shard-strategy", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
 
@@ -673,6 +1248,27 @@ public sealed partial class AppTests
         Assert.Contains("Unknown scenario action 'launchApp'", error.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task RunScenarioAsync_Missing_Action_Throws_UsageException()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var runner = new DeviceRunner(new FakeAdbClient(), ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
+        var scenarios = new ScenarioExecutor(runner, fileSystem, timeProvider, new FakeDelay(timeProvider));
+        var scenarioPath = "/tmp/missing-action.json";
+        fileSystem.AddFile(scenarioPath, """
+        {
+          "name": "broken",
+          "steps": [
+            { "name": "missing action" }
+          ]
+        }
+        """);
+
+        var error = await Assert.ThrowsAsync<UsageException>(() => scenarios.RunAsync(scenarioPath));
+
+        Assert.Contains("must define a non-empty action", error.Message, StringComparison.Ordinal);
+    }
 
     [Fact]
     public async Task RunScenarioAsync_Corrupted_NonEmpty_Json_Throws_UsageException()
@@ -982,5 +1578,27 @@ public sealed partial class AppTests
             .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
             .Select(static line => JsonDocument.Parse(line).RootElement.Clone())
             .ToArray();
+
+    private static FakeDeviceHost CreateFailingHostWithArtifacts() =>
+        new()
+        {
+            WaitVisibleException = new InvalidOperationException("not visible"),
+            FailureArtifacts = new FailureArtifactBundle(
+                ResultSchemas.FailureBundle,
+                DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind),
+                "scenario",
+                "single",
+                "/tmp/scenario.json",
+                1,
+                "waitVisible",
+                "waitVisible",
+                typeof(InvalidOperationException).FullName!,
+                "not visible",
+                [new FailureArtifact("screenshot", "failure.png")],
+                [])
+            {
+                MetadataFile = "failure.json"
+            }
+        };
 
 }

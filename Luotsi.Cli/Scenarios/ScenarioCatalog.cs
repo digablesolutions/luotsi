@@ -29,6 +29,7 @@ public sealed record ScenarioRunPlanResult(
     int ShardedOutCount,
     int? ShardCount,
     int? ShardIndex,
+    string ShardStrategy,
     IReadOnlyList<ScenarioCatalogEntry> Scenarios);
 
 public sealed record ScenarioRunTiming(
@@ -63,7 +64,9 @@ public sealed record ScenarioRunResult(
     string Scenario,
     string Status,
     ScenarioRunTiming Timing,
-    IReadOnlyList<ScenarioStepResult> Steps);
+    IReadOnlyList<ScenarioStepResult> Steps,
+    string? ScenarioId = null,
+    string? File = null);
 
 public sealed record ScenarioRunFailureData(
     string Scenario,
@@ -72,7 +75,8 @@ public sealed record ScenarioRunFailureData(
     ScenarioRunTiming Timing,
     ScenarioFailedStepResult FailedStep,
     IReadOnlyList<ScenarioStepResult> Steps,
-    FailureArtifactBundle FailureArtifacts);
+    FailureArtifactBundle FailureArtifacts,
+    string? ScenarioId = null);
 
 public sealed record ScenarioBatchItemResult(
     string Scenario,
@@ -81,18 +85,31 @@ public sealed record ScenarioBatchItemResult(
     IReadOnlyList<ScenarioStepResult>? Steps = null,
     string? File = null,
     ScenarioRunFailureData? Data = null,
-    ErrorInfo? Error = null)
+    ErrorInfo? Error = null,
+    string? ScenarioId = null)
 {
-    public static ScenarioBatchItemResult FromSuccess(ScenarioRunResult result)
+    public static ScenarioBatchItemResult FromSuccess(ScenarioRunResult result, ScenarioCatalogEntry? catalogEntry = null)
     {
         ArgumentNullException.ThrowIfNull(result);
-        return new ScenarioBatchItemResult(result.Scenario, result.Status, result.Timing, result.Steps);
+        return new ScenarioBatchItemResult(
+            result.Scenario,
+            result.Status,
+            result.Timing,
+            result.Steps,
+            result.File ?? catalogEntry?.File,
+            ScenarioId: result.ScenarioId ?? catalogEntry?.Id);
     }
 
-    public static ScenarioBatchItemResult FromFailure(string scenario, string file, ScenarioRunFailureData? data, ErrorInfo error)
+    public static ScenarioBatchItemResult FromFailure(string scenario, string file, ScenarioRunFailureData? data, ErrorInfo error, string? scenarioId = null)
     {
         ArgumentNullException.ThrowIfNull(error);
-        return new ScenarioBatchItemResult(scenario, "failed", File: file, Data: data, Error: error);
+        return new ScenarioBatchItemResult(
+            scenario,
+            "failed",
+            File: file,
+            Data: data,
+            Error: error,
+            ScenarioId: scenarioId ?? data?.ScenarioId ?? ScenarioIdentity.Create(file, scenario));
     }
 }
 
@@ -107,7 +124,8 @@ public sealed record ScenarioRunBatchResult(
     int ShardedOutCount,
     int? ShardCount,
     int? ShardIndex,
-    IReadOnlyList<ScenarioBatchItemResult> Scenarios);
+    IReadOnlyList<ScenarioBatchItemResult> Scenarios,
+    string ShardStrategy = ScenarioShardStrategies.Index);
 
 public sealed record ScenarioQuery(
     string Path,
@@ -117,7 +135,14 @@ public sealed record ScenarioQuery(
     string? Action,
     int? ShardCount,
     int? ShardIndex,
-    bool DryRun);
+    bool DryRun,
+    string ShardStrategy = ScenarioShardStrategies.Index);
+
+public static class ScenarioShardStrategies
+{
+    public const string Index = "index";
+    public const string Hash = "hash";
+}
 
 internal sealed class ScenarioCatalog(
     IFileSystem fileSystem,
@@ -198,11 +223,18 @@ internal sealed class ScenarioCatalog(
             throw new UsageException("--shard-index must be zero or greater and less than --shard-count.");
         }
 
-        return entries
-            .Select((entry, index) => new {entry, index})
-            .Where(item => item.index % shardCount == shardIndex)
-            .Select(static item => item.entry)
-            .ToArray();
+        return query.ShardStrategy.ToLowerInvariant() switch
+        {
+            ScenarioShardStrategies.Index => entries
+                .Select((entry, index) => new {entry, index})
+                .Where(item => item.index % shardCount == shardIndex)
+                .Select(static item => item.entry)
+                .ToArray(),
+            ScenarioShardStrategies.Hash => entries
+                .Where(entry => GetStableShardIndex(entry.Id, shardCount) == shardIndex)
+                .ToArray(),
+            _ => throw new UsageException("--shard-strategy must be one of: index, hash.")
+        };
     }
 
     private string[] ResolveScenarioFiles(string path)
@@ -229,6 +261,18 @@ internal sealed class ScenarioCatalog(
             throw new UsageException($"Scenario path '{path}' does not exist.");
         }
 
+        if (TrySplitRecursiveGlob(path, out var recursiveRoot, out var recursivePattern))
+        {
+            if (!_fileSystem.DirectoryExists(recursiveRoot))
+            {
+                throw new UsageException($"Scenario path '{path}' does not exist.");
+            }
+
+            return _fileSystem.GetFiles(recursiveRoot, recursivePattern, SearchOption.AllDirectories)
+                .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
         var directory = Path.GetDirectoryName(path);
 
         var searchRoot = string.IsNullOrWhiteSpace(directory) ? "." : directory;
@@ -243,6 +287,46 @@ internal sealed class ScenarioCatalog(
         return _fileSystem.GetFiles(searchRoot, pattern, SearchOption.TopDirectoryOnly)
             .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static bool TrySplitRecursiveGlob(string path, out string root, out string pattern)
+    {
+        var normalized = path.Replace('\\', '/');
+        if (normalized.StartsWith("**/", StringComparison.Ordinal))
+        {
+            root = ".";
+            pattern = NormalizeRecursivePattern(path, normalized[3..]);
+            return true;
+        }
+
+        var markerIndex = normalized.IndexOf("/**/", StringComparison.Ordinal);
+        if (markerIndex < 0)
+        {
+            root = string.Empty;
+            pattern = string.Empty;
+            return false;
+        }
+
+        root = markerIndex == 0 ? "." : path[..markerIndex];
+        var remainder = normalized[(markerIndex + 4)..];
+        pattern = NormalizeRecursivePattern(path, remainder);
+        return true;
+    }
+
+    private static string NormalizeRecursivePattern(string originalPath, string remainder)
+    {
+        if (string.IsNullOrWhiteSpace(remainder))
+        {
+            return "*.json";
+        }
+
+        if (remainder.Contains('/', StringComparison.Ordinal))
+        {
+            throw new UsageException(
+                $"Scenario path '{originalPath}' only supports recursive globs with a file pattern after '**/' (for example '**/*.json').");
+        }
+
+        return remainder;
     }
 
     private async Task<ScenarioFile> LoadAsync(string file)
@@ -279,11 +363,28 @@ internal sealed class ScenarioCatalog(
             .ToArray();
 
         return new ScenarioCatalogEntry(
-            $"{file}::{scenario.Name}",
+            ScenarioIdentity.Create(file, scenario.Name),
             scenario.Name,
             file,
             tags,
             scenario.Steps.Count,
             actions);
+    }
+
+    private static int GetStableShardIndex(string value, int shardCount)
+    {
+        unchecked
+        {
+            const uint offsetBasis = 2166136261;
+            const uint prime = 16777619;
+            var hash = offsetBasis;
+            foreach (var character in value)
+            {
+                hash ^= char.ToUpperInvariant(character);
+                hash *= prime;
+            }
+
+            return (int)(hash % (uint)shardCount);
+        }
     }
 }

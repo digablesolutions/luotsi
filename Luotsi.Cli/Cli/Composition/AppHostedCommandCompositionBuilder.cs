@@ -18,10 +18,17 @@ internal static class AppHostedCommandCompositionBuilder
         var scenarioExecutorFactory = new ScenarioExecutorFactory(dependencies.FileSystem, dependencies.TimeProvider, dependencies.Delay, scenarioTemplateResolver);
         var scenarioBatchExecutorFactory = new ScenarioBatchExecutorFactory(scenarioExecutorFactory);
         var scenarioRunEventCoordinatorFactory = new ScenarioRunEventCoordinatorFactory(dependencies.FileSystem, dependencies.TimeProvider);
+        var scenarioRunReportCoordinatorFactory = new ScenarioRunReportCoordinatorFactory(dependencies.FileSystem, dependencies.TimeProvider);
+        var scenarioRunOrchestrator = new ScenarioRunOrchestrator(
+            scenarioRunPlanner,
+            scenarioExecutorFactory,
+            scenarioBatchExecutorFactory,
+            scenarioRunEventCoordinatorFactory,
+            scenarioRunReportCoordinatorFactory);
         var envelopeWriter = new AppCommandEnvelopeWriter(dependencies.Console, dependencies.TimeProvider);
         var commandDispatcher = new AppCommandDispatcher(
             new AdbSubcommandDispatcher(),
-            new ScenarioCommandDispatcher(scenarioRunPlanner, scenarioExecutorFactory, scenarioBatchExecutorFactory, scenarioRunEventCoordinatorFactory),
+            new ScenarioCommandDispatcher(scenarioRunPlanner, scenarioRunOrchestrator),
             dependencies.ProfileCoordinator);
 
         return new(
