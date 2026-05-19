@@ -74,6 +74,7 @@ public sealed class AndroidViewBootstrap(
 
             if (string.Equals(activeBackend, ViewCaptureBackends.MediaProjection, StringComparison.Ordinal))
             {
+                var consentApprover = new AndroidMediaProjectionConsentApprover(adbClient);
                 Report(reportPhase, "mediaprojection_activity", ViewStartupPhaseStatus.Started, "Starting Android MediaProjection consent activity.", package.ConsentActivity);
                 var start = await adbClient.RunAsync([
                     "shell",
@@ -100,7 +101,7 @@ public sealed class AndroidViewBootstrap(
                 start.EnsureSuccess("view helper activity start failed");
                 Report(reportPhase, "mediaprojection_activity", ViewStartupPhaseStatus.Succeeded, "Android MediaProjection consent activity started.", start.Stdout.Trim());
                 Report(reportPhase, "mediaprojection_consent", ViewStartupPhaseStatus.Started, "Waiting for Android MediaProjection consent prompt.", "uiautomator=start-now");
-                var approved = await TryApproveMediaProjectionConsentAsync(adbClient, cancellationToken).ConfigureAwait(false);
+                var approved = await consentApprover.TryApproveAsync(cancellationToken).ConfigureAwait(false);
                 if (!approved)
                 {
                     var message = "MediaProjection consent prompt was not approved or could not be detected.";
@@ -157,93 +158,6 @@ public sealed class AndroidViewBootstrap(
     }
 
     private static string ShellQuote(string value) => "'" + value.Replace("'", "'\\''", StringComparison.Ordinal) + "'";
-
-    private static async Task<bool> TryApproveMediaProjectionConsentAsync(IAdbClient adbClient, CancellationToken cancellationToken)
-    {
-        const int maxAttempts = 8;
-        for (var attempt = 0; attempt < maxAttempts; attempt++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var uiXml = await DumpUiHierarchyAsync(adbClient, cancellationToken).ConfigureAwait(false);
-            if (uiXml is null)
-            {
-                await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken).ConfigureAwait(false);
-                continue;
-            }
-
-            if (TryFindStartNowButtonCenter(uiXml, out var x, out var y))
-            {
-                var tap = await adbClient.ShellAsync($"input tap {x} {y}", cancellationToken).ConfigureAwait(false);
-                tap.EnsureSuccess("view helper MediaProjection consent tap failed");
-                return true;
-            }
-
-            await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken).ConfigureAwait(false);
-        }
-
-        return false;
-    }
-
-    private static async Task<string?> DumpUiHierarchyAsync(IAdbClient adbClient, CancellationToken cancellationToken)
-    {
-        const string remotePath = "/data/local/tmp/luotsi-view-window.xml";
-        using var dumpCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        dumpCancellation.CancelAfter(TimeSpan.FromSeconds(8));
-        try
-        {
-            var dump = await adbClient.ShellAsync($"uiautomator dump {remotePath} >/dev/null && cat {remotePath} && rm -f {remotePath}", dumpCancellation.Token).ConfigureAwait(false);
-            return dump.Stdout;
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            return null;
-        }
-    }
-
-    private static bool TryFindStartNowButtonCenter(string uiXml, out int x, out int y)
-    {
-        const string marker = "START NOW";
-        var textIndex = uiXml.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-        if (textIndex < 0)
-        {
-            x = 0;
-            y = 0;
-            return false;
-        }
-
-        var boundsIndex = uiXml.IndexOf("bounds=\"[", textIndex, StringComparison.OrdinalIgnoreCase);
-        if (boundsIndex < 0)
-        {
-            x = 0;
-            y = 0;
-            return false;
-        }
-
-        var start = boundsIndex + "bounds=\"[".Length;
-        var end = uiXml.IndexOf("]\"", start, StringComparison.Ordinal);
-        if (end <= start)
-        {
-            x = 0;
-            y = 0;
-            return false;
-        }
-
-        var parts = uiXml[start..end].Split([',', ']', '['], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (parts.Length != 4 ||
-            !int.TryParse(parts[0], out var left) ||
-            !int.TryParse(parts[1], out var top) ||
-            !int.TryParse(parts[2], out var right) ||
-            !int.TryParse(parts[3], out var bottom))
-        {
-            x = 0;
-            y = 0;
-            return false;
-        }
-
-        x = (left + right) / 2;
-        y = (top + bottom) / 2;
-        return true;
-    }
 
     private static async Task<int> ResolveForwardedLocalPortAsync(
         IAdbClient adbClient,

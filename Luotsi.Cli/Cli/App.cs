@@ -1,9 +1,3 @@
-using Luotsi.Cli.Infrastructure.Devices;
-using Luotsi.Cli.Infrastructure.Ids;
-using Luotsi.Cli.Infrastructure.Processes;
-using Luotsi.Cli.Infrastructure.System;
-using Luotsi.Cli.Infrastructure.Time;
-
 namespace Luotsi.Cli.Cli;
 
 /// <summary>
@@ -30,61 +24,43 @@ public sealed class App
     {
         dependencies ??= new AppDependencies();
 
-        var resolvedTimeProvider = dependencies.TimeProvider ?? TimeProvider.System;
-        var resolvedFileSystem = dependencies.FileSystem ?? new PhysicalFileSystem();
-        var resolvedProcessRunner = dependencies.ProcessRunner ?? new DefaultProcessRunner();
-        var resolvedDelay = dependencies.Delay ?? new TaskDelay(resolvedTimeProvider);
-        var resolvedConsole = dependencies.Console ?? new SystemConsoleIo();
-        var resolvedEnvironment = dependencies.Environment ?? new SystemEnvironmentVariables();
-        var resolvedIdGenerator = dependencies.IdGenerator ?? new GuidUniqueIdGenerator();
-        var resolvedAdbClientFactory = dependencies.AdbClientFactory ?? new DefaultAdbClientFactory();
-        var resolvedDeviceHostFactory = dependencies.DeviceHostFactory ?? new DefaultDeviceHostFactory(
-            resolvedAdbClientFactory,
-            resolvedProcessRunner,
-            resolvedDelay,
-            resolvedFileSystem,
-            resolvedTimeProvider,
-            resolvedEnvironment,
-            resolvedIdGenerator);
-        var resolvedViewProfileStore = dependencies.ViewProfileStore ?? new JsonViewProfileStore(resolvedFileSystem, resolvedEnvironment);
-        var profileCoordinator = new ViewProfileCoordinator(resolvedViewProfileStore);
+        var infrastructure = AppInfrastructureCompositionBuilder.Build(dependencies);
         var hostedCommands = AppHostedCommandCompositionBuilder.Build(new(
-            resolvedTimeProvider,
-            resolvedConsole,
-            resolvedFileSystem,
-            resolvedEnvironment,
-            resolvedDelay,
-            profileCoordinator));
-        var deviceHostLauncher = new DeviceHostLauncher(resolvedDeviceHostFactory, resolvedEnvironment);
+            infrastructure.TimeProvider,
+            infrastructure.Console,
+            infrastructure.FileSystem,
+            infrastructure.Environment,
+            infrastructure.Delay,
+            infrastructure.ProfileCoordinator));
         var viewCommands = AppViewCommandCompositionBuilder.Build(new(
             dependencies,
-            resolvedTimeProvider,
-            resolvedConsole,
-            resolvedEnvironment,
-            resolvedFileSystem,
-            resolvedProcessRunner,
-            resolvedAdbClientFactory,
-            resolvedIdGenerator,
+            infrastructure.TimeProvider,
+            infrastructure.Console,
+            infrastructure.Environment,
+            infrastructure.FileSystem,
+            infrastructure.ProcessRunner,
+            infrastructure.AdbClientFactory,
+            infrastructure.IdGenerator,
             hostedCommands.EnvelopeWriter,
-            profileCoordinator,
-            deviceHostLauncher));
+            infrastructure.ProfileCoordinator,
+            infrastructure.DeviceHostLauncher));
         _executionShell = new AppExecutionShell(new AppExecutionShellDependencies
         {
-            Console = resolvedConsole,
-            TimeProvider = resolvedTimeProvider,
+            Console = infrastructure.Console,
+            TimeProvider = infrastructure.TimeProvider,
             FailureResponder = new AppCommandFailureResponder(hostedCommands.EnvelopeWriter)
         });
         _commandFamilyRouter = new AppCommandFamilyRouter(new AppCommandFamilyRouterDependencies
         {
-            TimeProvider = resolvedTimeProvider,
-            FileSystem = resolvedFileSystem,
-            Environment = resolvedEnvironment,
-            ProfileCoordinator = profileCoordinator,
+            TimeProvider = infrastructure.TimeProvider,
+            FileSystem = infrastructure.FileSystem,
+            Environment = infrastructure.Environment,
+            ProfileCoordinator = infrastructure.ProfileCoordinator,
             CommandHost = hostedCommands.CommandHost,
             ViewSessionCommandPreparer = viewCommands.ViewSessionCommandPreparer,
-            InspectSessionLauncher = new InspectSessionLauncher(deviceHostLauncher, resolvedConsole, resolvedTimeProvider),
+            InspectSessionLauncher = new InspectSessionLauncher(infrastructure.DeviceHostLauncher, infrastructure.Console, infrastructure.TimeProvider),
             ViewDiagnosticsLauncher = viewCommands.ViewDiagnosticsLauncher,
-            DeviceHostLauncher = deviceHostLauncher
+            DeviceHostLauncher = infrastructure.DeviceHostLauncher
         });
     }
 
