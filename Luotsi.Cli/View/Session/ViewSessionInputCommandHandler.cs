@@ -288,7 +288,8 @@ internal sealed class ViewSessionInputCommandHandler(
         var fileBaseName = string.IsNullOrWhiteSpace(preferredPath)
             ? "view-window-record"
             : Path.GetFileNameWithoutExtension(preferredPath);
-        return Path.Combine(directory, $"{fileBaseName}-{sequence:000}{extension}");
+        var safeFileName = Path.GetFileName($"{fileBaseName}-{sequence:000}{extension}");
+        return Path.Combine(directory, safeFileName);
     }
 
     private async Task HandleFileDropAsync(string filePath)

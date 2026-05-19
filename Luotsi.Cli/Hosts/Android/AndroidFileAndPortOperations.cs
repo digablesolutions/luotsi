@@ -40,7 +40,10 @@ internal sealed class AndroidFileAndPortOperations(
             throw new InvalidOperationException($"Remote path '{validatedRemotePath}' does not contain a valid file name.");
         }
 
-        var localPath = Path.Combine(targetDirectory, safeRemoteFileName);
+        var normalizedTargetDirectory = targetDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var localPath = string.IsNullOrEmpty(normalizedTargetDirectory)
+            ? safeRemoteFileName
+            : normalizedTargetDirectory + Path.DirectorySeparatorChar + safeRemoteFileName;
         var result = await _adb.RunAsync(["pull", validatedRemotePath, localPath]).ConfigureAwait(false);
         result.EnsureSuccess("pull file failed");
         return new PullFileResult(validatedRemotePath, localPath);

@@ -59,25 +59,37 @@ public sealed class DefaultViewSetupFactory(
     }
 }
 
-public sealed class ViewSetup(
-    IDeviceHost deviceHost,
-    IAndroidViewHelperPackageLocator helperPackageLocator,
-    ViewHostPathResolver pathResolver,
-    IViewDoctorFactory viewDoctorFactory,
-    IFileSystem fileSystem,
-    IProcessRunner processRunner,
-    IAdbClientFactory adbClientFactory) : IViewSetup
+public sealed class ViewSetup : IViewSetup
 {
-    private readonly IDeviceHost _deviceHost = deviceHost ?? throw new ArgumentNullException(nameof(deviceHost));
-    private readonly IAndroidViewHelperPackageLocator _helperPackageLocator = helperPackageLocator ?? throw new ArgumentNullException(nameof(helperPackageLocator));
-    private readonly AndroidViewHelperSetupProvisioner _helperProvisioner = new(
-        helperPackageLocator ?? throw new ArgumentNullException(nameof(helperPackageLocator)),
-        pathResolver ?? throw new ArgumentNullException(nameof(pathResolver)),
-        fileSystem ?? throw new ArgumentNullException(nameof(fileSystem)),
-        processRunner ?? throw new ArgumentNullException(nameof(processRunner)));
-    private readonly IViewDoctorFactory _viewDoctorFactory = viewDoctorFactory ?? throw new ArgumentNullException(nameof(viewDoctorFactory));
-    private readonly IProcessRunner _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
-    private readonly IAdbClientFactory _adbClientFactory = adbClientFactory ?? throw new ArgumentNullException(nameof(adbClientFactory));
+    private readonly IDeviceHost _deviceHost;
+    private readonly IAndroidViewHelperPackageLocator _helperPackageLocator;
+    private readonly AndroidViewHelperSetupProvisioner _helperProvisioner;
+    private readonly IViewDoctorFactory _viewDoctorFactory;
+    private readonly IProcessRunner _processRunner;
+    private readonly IAdbClientFactory _adbClientFactory;
+
+    public ViewSetup(
+        IDeviceHost deviceHost,
+        IAndroidViewHelperPackageLocator helperPackageLocator,
+        ViewHostPathResolver pathResolver,
+        IViewDoctorFactory viewDoctorFactory,
+        IFileSystem fileSystem,
+        IProcessRunner processRunner,
+        IAdbClientFactory adbClientFactory)
+    {
+        _deviceHost = deviceHost ?? throw new ArgumentNullException(nameof(deviceHost));
+        _helperPackageLocator = helperPackageLocator ?? throw new ArgumentNullException(nameof(helperPackageLocator));
+        ArgumentNullException.ThrowIfNull(pathResolver);
+        ArgumentNullException.ThrowIfNull(fileSystem);
+        _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
+        _viewDoctorFactory = viewDoctorFactory ?? throw new ArgumentNullException(nameof(viewDoctorFactory));
+        _adbClientFactory = adbClientFactory ?? throw new ArgumentNullException(nameof(adbClientFactory));
+        _helperProvisioner = new AndroidViewHelperSetupProvisioner(
+            _helperPackageLocator,
+            pathResolver,
+            fileSystem,
+            _processRunner);
+    }
 
     public async Task<ViewSetupResult> SetupAsync(ViewOptions options, bool fix, CancellationToken cancellationToken = default)
     {
