@@ -4,8 +4,6 @@ using Luotsi.Cli.Infrastructure.Processes;
 using Luotsi.Cli.Infrastructure.System;
 using Luotsi.Cli.Infrastructure.Time;
 using Luotsi.Cli.Scenarios;
-using Luotsi.Cli.View.Diagnostics;
-using Luotsi.Cli.View.Session;
 
 namespace Luotsi.Cli.Cli;
 
@@ -49,24 +47,6 @@ public sealed class App
             resolvedTimeProvider,
             resolvedEnvironment,
             resolvedIdGenerator);
-        var resolvedViewSessionFactory = dependencies.ViewSessionFactory ?? new DefaultViewSessionFactory(
-            resolvedConsole,
-            resolvedTimeProvider,
-            resolvedAdbClientFactory,
-            resolvedProcessRunner,
-            resolvedEnvironment,
-            resolvedFileSystem,
-            resolvedIdGenerator);
-        var resolvedViewDoctorFactory = dependencies.ViewDoctorFactory ?? new DefaultViewDoctorFactory(
-            resolvedEnvironment,
-            resolvedFileSystem,
-            resolvedProcessRunner);
-        var resolvedViewSetupFactory = dependencies.ViewSetupFactory ?? new DefaultViewSetupFactory(
-            resolvedEnvironment,
-            resolvedFileSystem,
-            resolvedProcessRunner,
-            resolvedAdbClientFactory,
-            resolvedViewDoctorFactory);
         var resolvedViewProfileStore = dependencies.ViewProfileStore ?? new JsonViewProfileStore(resolvedFileSystem, resolvedEnvironment);
         var profileCoordinator = new ViewProfileCoordinator(resolvedViewProfileStore);
         var scenarioTemplateResolver = new ScenarioTemplateResolver(resolvedTimeProvider, resolvedEnvironment);
@@ -87,14 +67,21 @@ public sealed class App
             ProfileCoordinator = profileCoordinator,
             CommandDispatcher = commandDispatcher
         });
-        var viewDiagnosticCommandHost = new ViewDiagnosticCommandHost(new ViewDiagnosticCommandHostDependencies
-        {
-            Environment = resolvedEnvironment,
-            EnvelopeWriter = envelopeWriter,
-            ViewDoctorFactory = resolvedViewDoctorFactory,
-            ViewSetupFactory = resolvedViewSetupFactory
-        });
         var deviceHostLauncher = new DeviceHostLauncher(resolvedDeviceHostFactory, resolvedEnvironment);
+        var viewCommands = AppViewCommandCompositionBuilder.Build(new AppViewCommandCompositionBuilderDependencies
+        {
+            Overrides = dependencies,
+            TimeProvider = resolvedTimeProvider,
+            Console = resolvedConsole,
+            Environment = resolvedEnvironment,
+            FileSystem = resolvedFileSystem,
+            ProcessRunner = resolvedProcessRunner,
+            AdbClientFactory = resolvedAdbClientFactory,
+            IdGenerator = resolvedIdGenerator,
+            EnvelopeWriter = envelopeWriter,
+            ProfileCoordinator = profileCoordinator,
+            DeviceHostLauncher = deviceHostLauncher
+        });
         _executionShell = new AppExecutionShell(new AppExecutionShellDependencies
         {
             Console = resolvedConsole,
@@ -108,9 +95,9 @@ public sealed class App
             Environment = resolvedEnvironment,
             ProfileCoordinator = profileCoordinator,
             CommandHost = commandHost,
-            ViewSessionCommandPreparer = new ViewSessionCommandPreparer(deviceHostLauncher, resolvedViewSessionFactory, profileCoordinator, resolvedEnvironment),
+            ViewSessionCommandPreparer = viewCommands.ViewSessionCommandPreparer,
             InspectSessionLauncher = new InspectSessionLauncher(deviceHostLauncher, resolvedConsole, resolvedTimeProvider),
-            ViewDiagnosticsLauncher = new ViewDiagnosticsLauncher(deviceHostLauncher, viewDiagnosticCommandHost),
+            ViewDiagnosticsLauncher = viewCommands.ViewDiagnosticsLauncher,
             DeviceHostLauncher = deviceHostLauncher
         });
     }
