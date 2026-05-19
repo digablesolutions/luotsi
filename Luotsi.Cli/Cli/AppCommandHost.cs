@@ -41,13 +41,8 @@ internal sealed class AppCommandHost(AppCommandHostDependencies dependencies)
     }
 }
 
-internal sealed class AppCommandHostDependencies
-{
-    public required AppCommandEnvelopeWriter EnvelopeWriter { get; init; }
-
-    public required AppCommandExitCodeResolver ExitCodeResolver { get; init; }
-
-    public required ViewProfileCoordinator ProfileCoordinator { get; init; }
-
-    public required AppCommandDispatcher CommandDispatcher { get; init; }
-}
+internal sealed record AppCommandHostDependencies(
+    AppCommandEnvelopeWriter EnvelopeWriter,
+    AppCommandExitCodeResolver ExitCodeResolver,
+    ViewProfileCoordinator ProfileCoordinator,
+    AppCommandDispatcher CommandDispatcher);

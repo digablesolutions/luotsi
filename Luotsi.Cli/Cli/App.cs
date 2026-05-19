@@ -3,7 +3,6 @@ using Luotsi.Cli.Infrastructure.Ids;
 using Luotsi.Cli.Infrastructure.Processes;
 using Luotsi.Cli.Infrastructure.System;
 using Luotsi.Cli.Infrastructure.Time;
-using Luotsi.Cli.Scenarios;
 
 namespace Luotsi.Cli.Cli;
 
@@ -49,24 +48,13 @@ public sealed class App
             resolvedIdGenerator);
         var resolvedViewProfileStore = dependencies.ViewProfileStore ?? new JsonViewProfileStore(resolvedFileSystem, resolvedEnvironment);
         var profileCoordinator = new ViewProfileCoordinator(resolvedViewProfileStore);
-        var scenarioTemplateResolver = new ScenarioTemplateResolver(resolvedTimeProvider, resolvedEnvironment);
-        var scenarioCatalog = new ScenarioCatalog(resolvedFileSystem, scenarioTemplateResolver);
-        var scenarioRunPlanner = new ScenarioRunPlanner(scenarioCatalog);
-        var scenarioExecutorFactory = new ScenarioExecutorFactory(resolvedFileSystem, resolvedTimeProvider, resolvedDelay, scenarioTemplateResolver);
-        var scenarioBatchExecutorFactory = new ScenarioBatchExecutorFactory(scenarioExecutorFactory);
-        var scenarioRunEventCoordinatorFactory = new ScenarioRunEventCoordinatorFactory(resolvedFileSystem, resolvedTimeProvider);
-        var envelopeWriter = new AppCommandEnvelopeWriter(resolvedConsole, resolvedTimeProvider);
-        var commandDispatcher = new AppCommandDispatcher(
-            new AdbSubcommandDispatcher(),
-            new ScenarioCommandDispatcher(scenarioRunPlanner, scenarioExecutorFactory, scenarioBatchExecutorFactory, scenarioRunEventCoordinatorFactory),
-            profileCoordinator);
-        var commandHost = new AppCommandHost(new AppCommandHostDependencies
-        {
-            EnvelopeWriter = envelopeWriter,
-            ExitCodeResolver = new AppCommandExitCodeResolver(),
-            ProfileCoordinator = profileCoordinator,
-            CommandDispatcher = commandDispatcher
-        });
+        var hostedCommands = AppHostedCommandCompositionBuilder.Build(new(
+            resolvedTimeProvider,
+            resolvedConsole,
+            resolvedFileSystem,
+            resolvedEnvironment,
+            resolvedDelay,
+            profileCoordinator));
         var deviceHostLauncher = new DeviceHostLauncher(resolvedDeviceHostFactory, resolvedEnvironment);
         var viewCommands = AppViewCommandCompositionBuilder.Build(new(
             dependencies,
@@ -77,14 +65,14 @@ public sealed class App
             resolvedProcessRunner,
             resolvedAdbClientFactory,
             resolvedIdGenerator,
-            envelopeWriter,
+            hostedCommands.EnvelopeWriter,
             profileCoordinator,
             deviceHostLauncher));
         _executionShell = new AppExecutionShell(new AppExecutionShellDependencies
         {
             Console = resolvedConsole,
             TimeProvider = resolvedTimeProvider,
-            FailureResponder = new AppCommandFailureResponder(envelopeWriter)
+            FailureResponder = new AppCommandFailureResponder(hostedCommands.EnvelopeWriter)
         });
         _commandFamilyRouter = new AppCommandFamilyRouter(new AppCommandFamilyRouterDependencies
         {
@@ -92,7 +80,7 @@ public sealed class App
             FileSystem = resolvedFileSystem,
             Environment = resolvedEnvironment,
             ProfileCoordinator = profileCoordinator,
-            CommandHost = commandHost,
+            CommandHost = hostedCommands.CommandHost,
             ViewSessionCommandPreparer = viewCommands.ViewSessionCommandPreparer,
             InspectSessionLauncher = new InspectSessionLauncher(deviceHostLauncher, resolvedConsole, resolvedTimeProvider),
             ViewDiagnosticsLauncher = viewCommands.ViewDiagnosticsLauncher,
