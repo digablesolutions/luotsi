@@ -1,4 +1,6 @@
 using Luotsi.Cli.Cli;
+using Luotsi.Cli.Cli.Composition;
+using Luotsi.Cli.Cli.Envelope;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Models;
 using Luotsi.Cli.Scenarios;

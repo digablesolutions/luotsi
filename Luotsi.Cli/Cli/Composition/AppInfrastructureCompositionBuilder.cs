@@ -1,3 +1,5 @@
+using Luotsi.Cli.Cli.Hosting;
+using Luotsi.Cli.Cli.View;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Infrastructure.Devices;
 using Luotsi.Cli.Infrastructure.Ids;
@@ -5,7 +7,7 @@ using Luotsi.Cli.Infrastructure.Processes;
 using Luotsi.Cli.Infrastructure.System;
 using Luotsi.Cli.Infrastructure.Time;
 
-namespace Luotsi.Cli.Cli;
+namespace Luotsi.Cli.Cli.Composition;
 
 internal static class AppInfrastructureCompositionBuilder
 {

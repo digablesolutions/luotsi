@@ -1,8 +1,9 @@
+using Luotsi.Cli.Cli.View;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
 
-namespace Luotsi.Cli.Cli;
+namespace Luotsi.Cli.Cli.Routing;
 
 internal sealed class AppCommandDispatcher(
     AdbSubcommandDispatcher adbSubcommandDispatcher,

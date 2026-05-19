@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
 
-namespace Luotsi.Cli.Cli;
+namespace Luotsi.Cli.Cli.Inspect;
 
 internal sealed class InspectSessionProtocol(IConsoleIo console)
 {

@@ -1,7 +1,7 @@
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Scenarios;
 
-namespace Luotsi.Cli.Cli;
+namespace Luotsi.Cli.Cli.Routing;
 
 internal static class ScenarioQueryFactory
 {

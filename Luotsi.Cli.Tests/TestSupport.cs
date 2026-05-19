@@ -2,6 +2,7 @@ using System.IO.Enumeration;
 using System.Text.Json;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
+using Luotsi.Cli.Cli.View;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Infrastructure.Time;
 using Luotsi.Cli.Models;

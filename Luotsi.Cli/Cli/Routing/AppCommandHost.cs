@@ -1,8 +1,10 @@
 using Luotsi.Cli.Artifacts;
+using Luotsi.Cli.Cli.Envelope;
+using Luotsi.Cli.Cli.View;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
 
-namespace Luotsi.Cli.Cli;
+namespace Luotsi.Cli.Cli.Routing;
 
 internal sealed class AppCommandHost(AppCommandHostDependencies dependencies)
 {

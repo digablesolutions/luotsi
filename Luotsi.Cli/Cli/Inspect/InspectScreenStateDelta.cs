@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Luotsi.Cli.Models;
 
-namespace Luotsi.Cli.Cli;
+namespace Luotsi.Cli.Cli.Inspect;
 
 internal sealed record InspectScreenStateDelta(
     string PreviousHash,

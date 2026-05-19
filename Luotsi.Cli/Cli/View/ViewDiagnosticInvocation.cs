@@ -1,4 +1,4 @@
-namespace Luotsi.Cli.Cli;
+namespace Luotsi.Cli.Cli.View;
 
 internal enum ViewDiagnosticAction
 {

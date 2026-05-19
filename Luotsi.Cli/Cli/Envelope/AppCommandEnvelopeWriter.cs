@@ -4,7 +4,7 @@ using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
 
-namespace Luotsi.Cli.Cli;
+namespace Luotsi.Cli.Cli.Envelope;
 
 internal sealed class AppCommandEnvelopeWriter(IConsoleIo console, TimeProvider timeProvider)
 {

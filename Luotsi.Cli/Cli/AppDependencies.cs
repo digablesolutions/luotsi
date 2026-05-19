@@ -1,3 +1,4 @@
+using Luotsi.Cli.Cli.View;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.View.Contracts;
 using Luotsi.Cli.View.Diagnostics;

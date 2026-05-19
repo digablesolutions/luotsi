@@ -1,4 +1,6 @@
-namespace Luotsi.Cli.Cli;
+using Luotsi.Cli.Cli.View;
+
+namespace Luotsi.Cli.Cli.Routing;
 
 internal enum AppCommandFamily
 {

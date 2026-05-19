@@ -1,7 +1,7 @@
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Infrastructure.Contracts;
 
-namespace Luotsi.Cli.Cli;
+namespace Luotsi.Cli.Cli.Hosting;
 
 internal sealed class DeviceHostLauncher(IDeviceHostFactory deviceHostFactory, IEnvironmentVariables environment)
 {
