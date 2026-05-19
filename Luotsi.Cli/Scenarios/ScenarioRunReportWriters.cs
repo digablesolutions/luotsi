@@ -80,7 +80,7 @@ internal sealed class JUnitScenarioRunReportWriter(IFileSystem fileSystem, strin
             new XAttribute("id", scenario.ScenarioId ?? scenario.Scenario),
             new XAttribute("time", Seconds(scenario.DurationMs ?? 0)));
 
-        if (scenario.Status != "passed")
+        if (string.Equals(scenario.Status, "failed", StringComparison.OrdinalIgnoreCase))
         {
             element.Add(new XElement(
                 "failure",

@@ -186,6 +186,129 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_File_ValidateOnly_Validates_Without_Device_Work()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "validate app flow",
+          "setup": [
+            { "action": "startApp", "package": "dev.luotsi.app", "activity": ".MainActivity", "wait": true }
+          ],
+          "steps": [
+            { "name": "press back", "action": "keyevent", "code": "KEYCODE_BACK" }
+          ],
+          "teardown": [
+            { "action": "forceStop", "package": "dev.luotsi.app" }
+          ]
+        }
+        """);
+        var host = new FakeDeviceHost
+        {
+            DeviceFingerprintException = new InvalidOperationException("device should not be touched")
+        };
+        var deviceHostFactory = new FakeDeviceHostFactory(host);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = deviceHostFactory,
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync([
+            "run",
+            "--file", "/tmp/scenario.json",
+            "--validate-only",
+            "--events-jsonl", "/tmp/events.jsonl",
+            "--report-json", "/tmp/report.json",
+            "--report-junit", "/tmp/junit.xml"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+        var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+        var junit = XDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/junit.xml"));
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("validated", envelope.RootElement.GetProperty("data").GetProperty("status").GetString());
+        Assert.Equal(3, envelope.RootElement.GetProperty("data").GetProperty("steps").GetArrayLength());
+        Assert.All(envelope.RootElement.GetProperty("data").GetProperty("steps").EnumerateArray(), step => Assert.Equal("validated", step.GetProperty("status").GetString()));
+        Assert.Equal("validated", events[^1].GetProperty("status").GetString());
+        Assert.Equal(0, events[^1].GetProperty("failed_count").GetInt32());
+        Assert.Equal("validated", report.RootElement.GetProperty("status").GetString());
+        Assert.Equal(0, report.RootElement.GetProperty("failed_count").GetInt32());
+        Assert.Empty(junit.Root!.Elements("testcase").Single().Elements("failure"));
+        Assert.Empty(host.StartAppRequests);
+        Assert.Empty(host.KeyEventRequests);
+        Assert.Empty(host.ForceStopRequests);
+        Assert.Equal(0, deviceHostFactory.CreateCallCount);
+    }
+
+    [Fact]
+    public async Task RunAsync_Path_ValidateOnly_Uses_Filters_And_Reports_Invalid_Selected_Scenarios()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenarios/a.json", """
+        {
+          "name": "valid smoke",
+          "tags": ["smoke"],
+          "steps": [
+            { "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        fileSystem.AddFile("/tmp/scenarios/b.json", """
+        {
+          "name": "invalid smoke",
+          "tags": ["smoke"],
+          "steps": [
+            { "action": "tapText" }
+          ]
+        }
+        """);
+        fileSystem.AddFile("/tmp/scenarios/c.json", """
+        {
+          "name": "ignored regression",
+          "tags": ["regression"],
+          "steps": [
+            { "action": "tapText" }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync([
+            "run",
+            "--path", "/tmp/scenarios",
+            "--validate-only",
+            "--include-tag", "smoke",
+            "--report-json", "/tmp/report.json"]);
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal("failed", report.RootElement.GetProperty("status").GetString());
+        Assert.Equal(3, report.RootElement.GetProperty("total_count").GetInt32());
+        Assert.Equal(2, report.RootElement.GetProperty("selected_count").GetInt32());
+        Assert.Equal(1, report.RootElement.GetProperty("failed_count").GetInt32());
+        Assert.Equal("validated", report.RootElement.GetProperty("scenarios")[0].GetProperty("status").GetString());
+        Assert.Equal("failed", report.RootElement.GetProperty("scenarios")[1].GetProperty("status").GetString());
+        Assert.Contains("tapText requires text", report.RootElement.GetProperty("scenarios")[1].GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ScenarioList_RecursiveGlob_Finds_Nested_Scenarios()
     {
         var fileSystem = new FakeFileSystem();

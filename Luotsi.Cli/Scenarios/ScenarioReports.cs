@@ -37,60 +37,48 @@ internal sealed class ScenarioRunReportCoordinator(
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     private readonly IScenarioRunReportWriter _writer = writer ?? throw new ArgumentNullException(nameof(writer));
 
-    public async Task<ScenarioRunResult> RunFileAsync(string file, Func<Task<ScenarioRunResult>> runAsync)
+    public ScenarioRunReportScope BeginScope() => new(_timeProvider.GetUtcNow());
+
+    public Task WriteFileAsync(string file, ScenarioRunResult result, ScenarioRunReportScope scope)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(file);
-        ArgumentNullException.ThrowIfNull(runAsync);
+        ArgumentNullException.ThrowIfNull(result);
 
-        var startedAt = _timeProvider.GetUtcNow();
-        try
-        {
-            var result = await runAsync().ConfigureAwait(false);
-            await WriteAsync(ScenarioRunReportFactory.FromSingle(file, result, startedAt, _timeProvider.GetUtcNow(), attachmentPolicy)).ConfigureAwait(false);
-            return result;
-        }
-        catch (Exception ex)
-        {
-            await WriteAsync(ScenarioRunReportFactory.FromSingleFailure(file, ex, startedAt, _timeProvider.GetUtcNow(), attachmentPolicy)).ConfigureAwait(false);
-            throw;
-        }
+        return WriteAsync(ScenarioRunReportFactory.FromSingle(file, result, scope.StartedAt, _timeProvider.GetUtcNow(), attachmentPolicy));
     }
 
-    public async Task<ScenarioRunBatchResult> RunBatchAsync(ScenarioRunPlan plan, Func<Task<ScenarioRunBatchResult>> runAsync)
+    public Task WriteFileFailureAsync(string file, Exception exception, ScenarioRunReportScope scope)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(file);
+        ArgumentNullException.ThrowIfNull(exception);
+
+        return WriteAsync(ScenarioRunReportFactory.FromSingleFailure(file, exception, scope.StartedAt, _timeProvider.GetUtcNow(), attachmentPolicy));
+    }
+
+    public Task WriteBatchAsync(ScenarioRunBatchResult result, ScenarioRunReportScope scope)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+
+        return WriteAsync(ScenarioRunReportFactory.FromBatch(result, scope.StartedAt, _timeProvider.GetUtcNow(), attachmentPolicy));
+    }
+
+    public Task WriteBatchFailureAsync(ScenarioRunPlan plan, Exception exception, ScenarioRunReportScope scope)
     {
         ArgumentNullException.ThrowIfNull(plan);
-        ArgumentNullException.ThrowIfNull(runAsync);
+        ArgumentNullException.ThrowIfNull(exception);
 
-        var startedAt = _timeProvider.GetUtcNow();
-        try
-        {
-            var result = await runAsync().ConfigureAwait(false);
-            await WriteAsync(ScenarioRunReportFactory.FromBatch(result, startedAt, _timeProvider.GetUtcNow(), attachmentPolicy)).ConfigureAwait(false);
-            return result;
-        }
-        catch (Exception ex)
-        {
-            await WriteAsync(ScenarioRunReportFactory.FromBatchFailure(plan, ex, startedAt, _timeProvider.GetUtcNow(), attachmentPolicy)).ConfigureAwait(false);
-            throw;
-        }
+        return WriteAsync(ScenarioRunReportFactory.FromBatchFailure(plan, exception, scope.StartedAt, _timeProvider.GetUtcNow(), attachmentPolicy));
     }
 
-    public async Task<ScenarioRunPlan> PlanPathAsync(ScenarioQuery query, Func<Task<ScenarioRunPlan>> planAsync)
+    public Task WriteQueryFailureAsync(ScenarioQuery query, Exception exception, ScenarioRunReportScope scope)
     {
         ArgumentNullException.ThrowIfNull(query);
-        ArgumentNullException.ThrowIfNull(planAsync);
+        ArgumentNullException.ThrowIfNull(exception);
 
-        var startedAt = _timeProvider.GetUtcNow();
-        try
-        {
-            return await planAsync().ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            await WriteAsync(ScenarioRunReportFactory.FromQueryFailure(query, ex, startedAt, _timeProvider.GetUtcNow())).ConfigureAwait(false);
-            throw;
-        }
+        return WriteAsync(ScenarioRunReportFactory.FromQueryFailure(query, exception, scope.StartedAt, _timeProvider.GetUtcNow()));
     }
 
     private Task WriteAsync(ScenarioRunReport report) => _writer.WriteAsync(report);
 }
+
+internal readonly record struct ScenarioRunReportScope(DateTimeOffset StartedAt);

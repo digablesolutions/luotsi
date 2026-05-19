@@ -35,10 +35,20 @@ internal sealed class ScenarioCommandDispatcher(
             }
 
             var file = options.Require("file");
+            if (configuration.ValidateOnly)
+            {
+                return await _scenarioRunOrchestrator.ValidateFileAsync(file, configuration).ConfigureAwait(false);
+            }
+
             return await _scenarioRunOrchestrator.RunFileAsync(file, runner, configuration).ConfigureAwait(false);
         }
 
         var query = ScenarioQueryFactory.CreateCatalogRunQuery(options);
+        if (configuration.ValidateOnly && query.DryRun)
+        {
+            throw new UsageException("Use either --validate-only or --dry-run, not both.");
+        }
+
         if (query.DryRun)
         {
             var plan = await _runPlanner.CreateAsync(query).ConfigureAwait(false);
@@ -53,6 +63,11 @@ internal sealed class ScenarioCommandDispatcher(
                 query.ShardIndex,
                 query.ShardStrategy,
                 plan.SelectedScenarios);
+        }
+
+        if (configuration.ValidateOnly)
+        {
+            return await _scenarioRunOrchestrator.ValidatePathAsync(query, configuration).ConfigureAwait(false);
         }
 
         return await _scenarioRunOrchestrator.RunPathAsync(query, runner, configuration).ConfigureAwait(false);

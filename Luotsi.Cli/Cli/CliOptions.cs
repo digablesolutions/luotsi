@@ -79,7 +79,8 @@ public sealed class CliOptions
         "last",
         "overlay-screen-state",
         "overlay-telemetry",
-        "read-only"
+        "read-only",
+        "validate-only"
     }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     private readonly Dictionary<string, string?> _values = new(StringComparer.OrdinalIgnoreCase);
