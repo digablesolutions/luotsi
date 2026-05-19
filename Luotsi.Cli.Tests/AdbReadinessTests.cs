@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
 using Luotsi.Cli.Hosts.Android;
@@ -114,6 +115,319 @@ public sealed class AdbReadinessTests
 
         Assert.Equal(0, exitCode);
         Assert.Equal(TimeSpan.FromSeconds(7), Assert.Single(adbFactory.CommandTimeouts));
+    }
+
+    [Fact]
+    public async Task RunAsync_Devices_Reports_Derived_Device_Inventory()
+    {
+        var adb = new FakeAdbClient();
+        adb.EnqueueRunResult(new ProcessResult(0, """
+        List of devices attached
+        USB123 device usb:1 product:oriole model:Pixel_6 device:oriole transport_id:1
+        192.168.0.44:5555 device product:panther model:Pixel_7 device:panther
+        emulator-5554 offline product:sdk_gphone64_x86_64 model:Android_SDK_built_for_x86_64 device:emu64
+        """, string.Empty));
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = new FakeFileSystem(),
+            TimeProvider = DateTimeOffset.Parse("2026-05-15T12:00:00Z").ToTimeProvider(),
+            AdbClientFactory = new FakeAdbClientFactory(adb)
+        });
+
+        var exitCode = await app.RunAsync(["devices"]);
+        using var output = console.ParseSingleOutputAsJson();
+        var devices = output.RootElement.GetProperty("data").GetProperty("devices");
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["devices", "-l"], adb.RunCommands.Single());
+        Assert.Equal("online", devices[0].GetProperty("state").GetString());
+        Assert.Equal("usb", devices[0].GetProperty("transport").GetString());
+        Assert.Equal("wifi", devices[1].GetProperty("transport").GetString());
+        Assert.Equal("emulator", devices[2].GetProperty("type").GetString());
+        Assert.Equal("unavailable", devices[2].GetProperty("availability").GetString());
+    }
+
+    [Fact]
+    public async Task RunAsync_Devices_Preserves_MultiWord_Device_State()
+    {
+        var adb = new FakeAdbClient();
+        adb.EnqueueRunResult(new ProcessResult(0, """
+        List of devices attached
+        USB123 no permissions usb:1 product:oriole model:Pixel_6 device:oriole transport_id:1
+        """, string.Empty));
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = new FakeFileSystem(),
+            TimeProvider = DateTimeOffset.Parse("2026-05-15T12:00:00Z").ToTimeProvider(),
+            AdbClientFactory = new FakeAdbClientFactory(adb)
+        });
+
+        var exitCode = await app.RunAsync(["devices"]);
+        using var output = console.ParseSingleOutputAsJson();
+        var device = output.RootElement.GetProperty("data").GetProperty("devices")[0];
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("no permissions", device.GetProperty("state").GetString());
+        Assert.Equal("Fix host USB permissions for adb access.", device.GetProperty("recommended_fix").GetString());
+    }
+
+    [Fact]
+    public async Task RunAsync_DeviceStatus_Writes_State_For_Selected_Device()
+    {
+        var host = new FakeDeviceHost
+        {
+            PreflightTemplate = new PreflightResult("Pixel 9", "16", "36", "focus", null, null, "fingerprint", "arm64-v8a", "SER123")
+        };
+        host.ConnectedDevices.Add(new DeviceInfo("SER123", "device", "product:panther model:Pixel_9 device:panther"));
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = new FakeFileSystem(),
+            TimeProvider = DateTimeOffset.Parse("2026-05-15T12:00:00Z").ToTimeProvider(),
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var exitCode = await app.RunAsync(["device-status", "--device", "SER123"]);
+        using var output = console.ParseSingleOutputAsJson();
+        var device = output.RootElement.GetProperty("data").GetProperty("device");
+        var readiness = output.RootElement.GetProperty("data").GetProperty("readiness");
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("SER123", device.GetProperty("serial").GetString());
+        Assert.Equal("online", device.GetProperty("state").GetString());
+        Assert.Equal("physical", device.GetProperty("type").GetString());
+        Assert.Equal("Pixel_9", device.GetProperty("model").GetString());
+        Assert.Equal("16", readiness.GetProperty("android_release").GetString());
+        Assert.Equal("36", readiness.GetProperty("sdk").GetString());
+        Assert.Equal("focus", readiness.GetProperty("current_focus").GetString());
+    }
+
+    [Fact]
+    public async Task RunAsync_DeviceStatus_Reuses_Inventory_Metadata_When_Available()
+    {
+        var host = new FakeDeviceHost
+        {
+            PreflightTemplate = new PreflightResult("Pixel 7", "16", "36", "focus", null, null, "fingerprint", "arm64-v8a", "192.168.0.44:5555")
+        };
+        host.ConnectedDevices.Add(new DeviceInfo("192.168.0.44:5555", "device", "product:panther model:Pixel_7 device:panther"));
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = new FakeFileSystem(),
+            TimeProvider = DateTimeOffset.Parse("2026-05-15T12:00:00Z").ToTimeProvider(),
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var exitCode = await app.RunAsync(["device-status", "--device", "192.168.0.44:5555"]);
+        using var output = console.ParseSingleOutputAsJson();
+        var device = output.RootElement.GetProperty("data").GetProperty("device");
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("wifi", device.GetProperty("transport").GetString());
+        Assert.Equal("panther", device.GetProperty("product").GetString());
+        Assert.Equal("panther", device.GetProperty("device").GetString());
+    }
+
+    [Fact]
+    public async Task RunAsync_DeviceStatus_Writes_Exact_Command_Envelope()
+    {
+        var started = DateTimeOffset.Parse("2026-05-15T12:00:00Z");
+        var host = new FakeDeviceHost
+        {
+            PreflightTemplate = new PreflightResult("Pixel 9", "16", "36", "focus", null, null, "fingerprint", "arm64-v8a", "SER123")
+        };
+        host.ConnectedDevices.Add(new DeviceInfo("SER123", "device", "product:panther model:Pixel_9 device:panther"));
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = new FakeFileSystem(),
+            TimeProvider = started.ToTimeProvider(),
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var exitCode = await app.RunAsync(["device-status", "--device", "SER123"]);
+
+        var expectedJson = JsonSerializer.Serialize(new
+        {
+            ok = true,
+            command = "device-status",
+            started_at = started,
+            ended_at = started,
+            data = new
+            {
+                device = new
+                {
+                    serial = "SER123",
+                    state = "online",
+                    transport = "unknown",
+                    type = "physical",
+                    model = "Pixel_9",
+                    product = "panther",
+                    device = "panther",
+                    details = "product:panther model:Pixel_9 device:panther",
+                    availability = "available"
+                },
+                readiness = new
+                {
+                    model = "Pixel 9",
+                    android_release = "16",
+                    sdk = "36",
+                    current_focus = "focus",
+                    fingerprint = "fingerprint",
+                    abi = "arm64-v8a",
+                    serial = "SER123"
+                }
+            },
+            artifacts = new
+            {
+                artifact_root = $"/tmp{Path.DirectorySeparatorChar}luotsi{Path.DirectorySeparatorChar}20260515-120000-device-status",
+                poll_artifacts = "final"
+            },
+            schema = ResultSchemas.CommandEnvelope,
+            duration_ms = 0
+        });
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(expectedJson, Assert.Single(console.OutputLines));
+    }
+
+    [Fact]
+    public async Task RunAsync_DeviceStatus_Requires_Selected_Device_To_Exist_In_Inventory()
+    {
+        var host = new FakeDeviceHost
+        {
+            PreflightTemplate = new PreflightResult("Pixel 9", "16", "36", "focus", null, null, "fingerprint", "arm64-v8a", "SER123")
+        };
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = new FakeFileSystem(),
+            TimeProvider = DateTimeOffset.Parse("2026-05-15T12:00:00Z").ToTimeProvider(),
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var exitCode = await app.RunAsync(["device-status", "--device", "SER123"]);
+        using var output = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal("configuration_error", output.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("was not present in `adb devices -l` output", output.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_DeviceQuery_Selects_Exactly_One_Device_Before_Command_Host_Creation()
+    {
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("USB123", "device", "product:oriole model:Pixel_6 device:oriole"));
+        host.ConnectedDevices.Add(new DeviceInfo("192.168.0.44:5555", "device", "product:panther model:Pixel_7 device:panther"));
+        var factory = new FakeDeviceHostFactory(host);
+        var app = new App(new AppDependencies
+        {
+            Console = new FakeConsole(),
+            FileSystem = new FakeFileSystem(),
+            TimeProvider = DateTimeOffset.Parse("2026-05-15T12:00:00Z").ToTimeProvider(),
+            DeviceHostFactory = factory
+        });
+
+        var exitCode = await app.RunAsync(["preflight", "--device-query", "transport=wifi,model=Pixel_7"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(2, factory.CreateCallCount);
+        Assert.Null(factory.Configurations[0].DeviceSerial);
+        Assert.Equal("192.168.0.44:5555", factory.Configurations[1].DeviceSerial);
+        Assert.Equal([null], host.CommandPreflightRequests);
+    }
+
+    [Fact]
+    public async Task RunAsync_DeviceQuery_Can_Select_MultiWord_State()
+    {
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("USB123", "no permissions", "product:oriole model:Pixel_6 device:oriole"));
+        var factory = new FakeDeviceHostFactory(host);
+        var app = new App(new AppDependencies
+        {
+            Console = new FakeConsole(),
+            FileSystem = new FakeFileSystem(),
+            TimeProvider = DateTimeOffset.Parse("2026-05-15T12:00:00Z").ToTimeProvider(),
+            DeviceHostFactory = factory
+        });
+
+        var exitCode = await app.RunAsync(["preflight", "--device-query", "state=no permissions"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("USB123", factory.Configurations[1].DeviceSerial);
+    }
+
+    [Fact]
+    public async Task RunAsync_DeviceQuery_Requires_At_Least_One_Clause()
+    {
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("USB123", "device", "product:oriole model:Pixel_6 device:oriole"));
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = new FakeFileSystem(),
+            TimeProvider = DateTimeOffset.Parse("2026-05-15T12:00:00Z").ToTimeProvider(),
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var exitCode = await app.RunAsync(["preflight", "--device-query", ",,,"]);
+        using var output = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Contains("at least one key=value clause", output.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_DeviceQuery_Multiple_Matches_Returns_Usage_Error()
+    {
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("USB123", "device", "product:oriole model:Pixel_6 device:oriole"));
+        host.ConnectedDevices.Add(new DeviceInfo("USB456", "device", "product:panther model:Pixel_7 device:panther"));
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = new FakeFileSystem(),
+            TimeProvider = DateTimeOffset.Parse("2026-05-15T12:00:00Z").ToTimeProvider(),
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var exitCode = await app.RunAsync(["preflight", "--device-query", "type=physical"]);
+        using var output = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Contains("matched multiple devices", output.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_Devices_With_DeviceQuery_Returns_Usage_Error()
+    {
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("USB123", "device", "product:oriole model:Pixel_6 device:oriole"));
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = new FakeFileSystem(),
+            TimeProvider = DateTimeOffset.Parse("2026-05-15T12:00:00Z").ToTimeProvider(),
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var exitCode = await app.RunAsync(["devices", "--device-query", "model=Pixel_6"]);
+        using var output = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Contains("not supported with `devices`", output.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]

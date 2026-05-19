@@ -1,6 +1,7 @@
 using Luotsi.Cli.Cli.View;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.Infrastructure.Devices;
 using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Cli.Routing;
@@ -22,7 +23,8 @@ internal sealed class AppCommandDispatcher(
         return command switch
         {
             "adb" => await _adbSubcommandDispatcher.ExecuteAsync(options, RequireAdbCommandHost(runner, command)).ConfigureAwait(false),
-            "devices" => await runner.GetDevicesAsync().ConfigureAwait(false),
+            "devices" => DeviceInventory.FromDeviceList(await runner.GetDevicesAsync().ConfigureAwait(false)),
+            "device-status" => await DeviceStatusResolver.ReadAsync(runner, RequireAdbCommandHost(runner, command)).ConfigureAwait(false),
             "device-wait" or "wait-for-device" => await RequireAdbCommandHost(runner, command).WaitForDeviceAsync(options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
             "preflight" => await RequireAdbCommandHost(runner, command).PreflightAsync(options.Get("package")).ConfigureAwait(false),
             "wireless" => await GetWirelessHost(runner).EnableWirelessAsync(options.Get("host"), options.Int("port", 5555)).ConfigureAwait(false),

@@ -61,7 +61,8 @@ internal sealed class AppCommandFamilyRouter(AppCommandFamilyRouterDependencies 
             }
 
             default:
-                context.Runner = _dependencies.DeviceHostLauncher.Create(options, adbExecutable, artifacts);
+                var deviceSelector = await DeviceSelectorResolver.ResolveAsync(options, adbExecutable, artifacts, options.Command, _dependencies.DeviceHostLauncher).ConfigureAwait(false);
+                context.Runner = _dependencies.DeviceHostLauncher.Create(options, adbExecutable, artifacts, deviceSelector);
                 return await _dependencies.CommandHost.RunCommandAsync(options, started, adbExecutable, context.Runner, artifacts).ConfigureAwait(false);
         }
     }

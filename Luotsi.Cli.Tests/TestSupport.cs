@@ -419,9 +419,12 @@ internal sealed class FakeDeviceHostFactory(IDeviceHost deviceHost) : IDeviceHos
 {
     public int CreateCallCount { get; private set; }
 
+    public List<DeviceHostConfiguration> Configurations { get; } = [];
+
     public IDeviceHost Create(DeviceHostConfiguration configuration, ArtifactSession artifacts)
     {
         CreateCallCount++;
+        Configurations.Add(configuration);
         return deviceHost;
     }
 }
