@@ -51,14 +51,16 @@ public sealed record ScenarioStepResult(
     ScenarioStepTiming Timing,
     object? Result = null,
     string? Status = null,
-    ErrorInfo? Error = null);
+    ErrorInfo? Error = null,
+    string Phase = ScenarioStepPhases.Main);
 
 public sealed record ScenarioFailedStepResult(
     int Index,
     string Name,
     string Action,
     double DurationMs,
-    ScenarioStepTiming Timing);
+    ScenarioStepTiming Timing,
+    string Phase = ScenarioStepPhases.Main);
 
 public sealed record ScenarioRunResult(
     string Scenario,
@@ -142,6 +144,13 @@ public static class ScenarioShardStrategies
 {
     public const string Index = "index";
     public const string Hash = "hash";
+}
+
+public static class ScenarioStepPhases
+{
+    public const string Setup = "setup";
+    public const string Main = "main";
+    public const string Teardown = "teardown";
 }
 
 internal sealed class ScenarioCatalog(
@@ -355,7 +364,7 @@ internal sealed class ScenarioCatalog(
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(static tag => tag, StringComparer.OrdinalIgnoreCase)
             .ToArray() ?? [];
-        var actions = scenario.Steps
+        var actions = EnumerateLifecycleSteps(scenario)
             .Select(static step => step.Action)
             .Where(static action => !string.IsNullOrWhiteSpace(action))
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -367,8 +376,28 @@ internal sealed class ScenarioCatalog(
             scenario.Name,
             file,
             tags,
-            scenario.Steps.Count,
+            EnumerateLifecycleSteps(scenario).Count(),
             actions);
+    }
+
+    internal static IEnumerable<ScenarioStep> EnumerateLifecycleSteps(ScenarioFile scenario)
+    {
+        ArgumentNullException.ThrowIfNull(scenario);
+
+        foreach (var step in scenario.Setup ?? [])
+        {
+            yield return step;
+        }
+
+        foreach (var step in scenario.Steps)
+        {
+            yield return step;
+        }
+
+        foreach (var step in scenario.Teardown ?? [])
+        {
+            yield return step;
+        }
     }
 
     private static int GetStableShardIndex(string value, int shardCount)

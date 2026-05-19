@@ -432,6 +432,120 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_File_Runs_Setup_Steps_Teardown_In_Order()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "lifecycle",
+          "setup": [
+            { "name": "launch", "action": "startApp", "package": "dev.luotsi.app", "activity": ".MainActivity", "wait": true }
+          ],
+          "steps": [
+            { "name": "press back", "action": "keyevent", "code": "KEYCODE_BACK" }
+          ],
+          "teardown": [
+            { "name": "stop", "action": "forceStop", "package": "dev.luotsi.app" }
+          ]
+        }
+        """);
+        var host = new FakeDeviceHost();
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json", "--events-jsonl", "/tmp/events.jsonl"]);
+        var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
+        var passedSteps = events
+            .Where(static evt => evt.GetProperty("event").GetString() == "scenario_step_passed")
+            .ToArray();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal([("setup", 1), ("main", 2), ("teardown", 3)], passedSteps
+            .Select(static evt => (evt.GetProperty("phase").GetString()!, evt.GetProperty("step_index").GetInt32()))
+            .ToArray());
+        Assert.Equal("dev.luotsi.app", host.StartAppRequests.Single().Package);
+        Assert.Equal("KEYCODE_BACK", host.KeyEventRequests.Single());
+        Assert.Equal("dev.luotsi.app", host.ForceStopRequests.Single());
+    }
+
+    [Fact]
+    public async Task RunAsync_File_First_Setup_Step_Cannot_Observe_Previous_Step()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "invalid lifecycle",
+          "setup": [
+            { "name": "event", "action": "assertEvent", "event": "ready", "observeFromPreviousStep": true }
+          ],
+          "steps": [
+            { "name": "pause", "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Contains("no previous lifecycle step", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_File_First_Main_Step_Can_Observe_Setup_Step()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new SteppingTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind), TimeSpan.FromMilliseconds(10));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "observe setup",
+          "setup": [
+            { "name": "pause", "action": "sleep", "milliseconds": 25 }
+          ],
+          "steps": [
+            { "name": "event", "action": "assertEvent", "event": "ready", "observeFromPreviousStep": true }
+          ]
+        }
+        """);
+        var host = new FakeDeviceHost();
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new SteppingDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(host.AssertEventRequests.Single().Since);
+    }
+
+    [Fact]
     public async Task RunAsync_File_Writes_Consistent_Scenario_Ended_Timestamp_And_Duration()
     {
         var fileSystem = new FakeFileSystem();
@@ -504,6 +618,110 @@ public sealed partial class AppTests
         Assert.Equal("failed", events[^1].GetProperty("status").GetString());
         Assert.Equal(0, events[^1].GetProperty("passed_count").GetInt32());
         Assert.Equal(1, events[^1].GetProperty("failed_count").GetInt32());
+    }
+
+    [Fact]
+    public async Task RunAsync_File_Runs_Teardown_After_Main_Failure_And_Reports_Phases()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "failing lifecycle",
+          "setup": [
+            { "name": "launch", "action": "startApp", "package": "dev.luotsi.app" }
+          ],
+          "steps": [
+            { "name": "target", "action": "waitVisible", "text": "Target" }
+          ],
+          "teardown": [
+            { "name": "stop", "action": "forceStop", "package": "dev.luotsi.app" }
+          ]
+        }
+        """);
+        var host = new FakeDeviceHost
+        {
+            WaitVisibleException = new InvalidOperationException("not visible")
+        };
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync([
+            "run",
+            "--file", "/tmp/scenario.json",
+            "--events-jsonl", "/tmp/events.jsonl",
+            "--report-json", "/tmp/report.json"]);
+        var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+        var scenario = report.RootElement.GetProperty("scenarios")[0];
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal("dev.luotsi.app", host.ForceStopRequests.Single());
+        Assert.Contains(events, static evt =>
+            evt.GetProperty("event").GetString() == "scenario_step_passed" &&
+            evt.GetProperty("phase").GetString() == "teardown");
+        Assert.Equal("main", scenario.GetProperty("failed_step").GetProperty("phase").GetString());
+        Assert.Contains(scenario.GetProperty("steps").EnumerateArray(), static step =>
+            step.GetProperty("phase").GetString() == "teardown" &&
+            step.GetProperty("action").GetString() == "forceStop");
+    }
+
+    [Fact]
+    public async Task RunAsync_File_Teardown_Failure_Does_Not_Mask_Main_Failure()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "double failure lifecycle",
+          "steps": [
+            { "name": "target", "action": "waitVisible", "text": "Target" }
+          ],
+          "teardown": [
+            { "name": "stop", "action": "forceStop", "package": "dev.luotsi.app" }
+          ]
+        }
+        """);
+        var host = new FakeDeviceHost
+        {
+            WaitVisibleException = new InvalidOperationException("not visible"),
+            ForceStopException = new InvalidOperationException("cleanup failed")
+        };
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync([
+            "run",
+            "--file", "/tmp/scenario.json",
+            "--events-jsonl", "/tmp/events.jsonl",
+            "--report-json", "/tmp/report.json"]);
+        var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("main step", report.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("cleanup failed", report.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Equal("main", report.RootElement.GetProperty("scenarios")[0].GetProperty("failed_step").GetProperty("phase").GetString());
+        Assert.Contains(events, static evt =>
+            evt.GetProperty("event").GetString() == "scenario_step_failed" &&
+            evt.GetProperty("phase").GetString() == "teardown" &&
+            evt.GetProperty("error").GetProperty("message").GetString() == "cleanup failed");
     }
 
     [Fact]

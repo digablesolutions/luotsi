@@ -240,6 +240,7 @@ internal sealed record ScenarioEvent(
     [property: JsonPropertyName("file")] string? File = null,
     [property: JsonPropertyName("scenario_id")] string? ScenarioId = null,
     [property: JsonPropertyName("scenario")] string? Scenario = null,
+    [property: JsonPropertyName("phase")] string? Phase = null,
     [property: JsonPropertyName("step_index")] int? StepIndex = null,
     [property: JsonPropertyName("step")] string? Step = null,
     [property: JsonPropertyName("action")] string? Action = null,
