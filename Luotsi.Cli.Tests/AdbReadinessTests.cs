@@ -150,6 +150,32 @@ public sealed class AdbReadinessTests
     }
 
     [Fact]
+    public async Task RunAsync_Devices_Preserves_MultiWord_Device_State()
+    {
+        var adb = new FakeAdbClient();
+        adb.EnqueueRunResult(new ProcessResult(0, """
+        List of devices attached
+        USB123 no permissions usb:1 product:oriole model:Pixel_6 device:oriole transport_id:1
+        """, string.Empty));
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = new FakeFileSystem(),
+            TimeProvider = DateTimeOffset.Parse("2026-05-15T12:00:00Z").ToTimeProvider(),
+            AdbClientFactory = new FakeAdbClientFactory(adb)
+        });
+
+        var exitCode = await app.RunAsync(["devices"]);
+        using var output = console.ParseSingleOutputAsJson();
+        var device = output.RootElement.GetProperty("data").GetProperty("devices")[0];
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("no permissions", device.GetProperty("state").GetString());
+        Assert.Equal("Fix host USB permissions for adb access.", device.GetProperty("recommended_fix").GetString());
+    }
+
+    [Fact]
     public async Task RunAsync_DeviceStatus_Writes_State_For_Selected_Device()
     {
         var host = new FakeDeviceHost
@@ -261,7 +287,7 @@ public sealed class AdbReadinessTests
             },
             artifacts = new
             {
-                artifact_root = Path.Combine(Path.Combine("/tmp", "luotsi"), "20260515-120000-device-status"),
+                artifact_root = Path.Combine("/tmp", "luotsi", "20260515-120000-device-status"),
                 poll_artifacts = "final"
             },
             schema = ResultSchemas.CommandEnvelope,
@@ -292,6 +318,7 @@ public sealed class AdbReadinessTests
         using var output = console.ParseSingleOutputAsJson();
 
         Assert.Equal(1, exitCode);
+        Assert.Equal("configuration_error", output.RootElement.GetProperty("error").GetProperty("category").GetString());
         Assert.Contains("was not present in `adb devices -l` output", output.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
@@ -317,6 +344,47 @@ public sealed class AdbReadinessTests
         Assert.Null(factory.Configurations[0].DeviceSerial);
         Assert.Equal("192.168.0.44:5555", factory.Configurations[1].DeviceSerial);
         Assert.Equal([null], host.CommandPreflightRequests);
+    }
+
+    [Fact]
+    public async Task RunAsync_DeviceQuery_Can_Select_MultiWord_State()
+    {
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("USB123", "no permissions", "product:oriole model:Pixel_6 device:oriole"));
+        var factory = new FakeDeviceHostFactory(host);
+        var app = new App(new AppDependencies
+        {
+            Console = new FakeConsole(),
+            FileSystem = new FakeFileSystem(),
+            TimeProvider = DateTimeOffset.Parse("2026-05-15T12:00:00Z").ToTimeProvider(),
+            DeviceHostFactory = factory
+        });
+
+        var exitCode = await app.RunAsync(["preflight", "--device-query", "state=no permissions"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("USB123", factory.Configurations[1].DeviceSerial);
+    }
+
+    [Fact]
+    public async Task RunAsync_DeviceQuery_Requires_At_Least_One_Clause()
+    {
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("USB123", "device", "product:oriole model:Pixel_6 device:oriole"));
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = new FakeFileSystem(),
+            TimeProvider = DateTimeOffset.Parse("2026-05-15T12:00:00Z").ToTimeProvider(),
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var exitCode = await app.RunAsync(["preflight", "--device-query", ",,,"]);
+        using var output = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Contains("at least one key=value clause", output.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]

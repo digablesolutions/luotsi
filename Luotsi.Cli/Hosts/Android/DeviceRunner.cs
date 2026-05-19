@@ -55,7 +55,11 @@ public sealed class DeviceRunner(
             .Select(static line =>
             {
                 var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                return new DeviceInfo(parts.ElementAtOrDefault(0), parts.ElementAtOrDefault(1), string.Join(' ', parts.Skip(2)));
+                var detailIndex = Array.FindIndex(parts, 1, static part => part.Contains(':', StringComparison.Ordinal));
+                var statusEndIndex = detailIndex >= 0 ? detailIndex : parts.Length;
+                var status = statusEndIndex > 1 ? string.Join(' ', parts[1..statusEndIndex]) : null;
+                var details = detailIndex >= 0 ? string.Join(' ', parts[detailIndex..]) : string.Empty;
+                return new DeviceInfo(parts.ElementAtOrDefault(0), status, details);
             })
             .ToArray();
         return new DeviceListResult(devices);

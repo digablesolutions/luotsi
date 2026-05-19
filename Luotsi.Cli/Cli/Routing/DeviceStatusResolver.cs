@@ -1,3 +1,4 @@
+using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Infrastructure.Devices;
 using Luotsi.Cli.Models;
@@ -17,7 +18,7 @@ internal static class DeviceStatusResolver
 
         if (matchedDevice is null)
         {
-            throw new InvalidOperationException($"Selected device '{readiness.Serial}' was not present in `adb devices -l` output.");
+            throw new DeviceInventorySelectionException(readiness.Serial);
         }
 
         return new DeviceStatusResult(matchedDevice, readiness);

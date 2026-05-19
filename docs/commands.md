@@ -3,7 +3,7 @@
 All commands run on the host machine and return a single JSON envelope unless noted as a JSONL session.
 
 ```
-luotsi [--device <serial>] [--platform android] [--adb <path>] [--adb-timeout-sec <n>] <command> [flags]
+luotsi [--device <serial> | --device-query <query>] [--platform android] [--adb <path>] [--adb-timeout-sec <n>] <command> [flags]
 ```
 
 **ADB path.** If `adb` is not on `PATH` (common in WSL), pass `--adb /path/to/adb` or set `LUOTSI_ADB`. Bounded ADB commands default to a 120-second timeout; override with `--adb-timeout-sec <n>` or `LUOTSI_ADB_TIMEOUT_SEC`. Use `0` to disable.

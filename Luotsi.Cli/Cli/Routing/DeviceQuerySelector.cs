@@ -22,10 +22,17 @@ internal sealed class DeviceQuery(string rawQuery)
             throw new UsageException("--device-query must be non-empty.");
         }
 
-        return rawQuery
+        var clauses = rawQuery
             .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
             .Select(DeviceQueryClause.Parse)
             .ToArray();
+
+        if (clauses.Length == 0)
+        {
+            throw new UsageException("--device-query must include at least one key=value clause.");
+        }
+
+        return clauses;
     }
 }
 
