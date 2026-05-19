@@ -49,6 +49,7 @@ public sealed record ScenarioStepResult(
     string Action,
     double DurationMs,
     ScenarioStepTiming Timing,
+    IReadOnlyDictionary<string, double> Metrics,
     object? Result = null,
     string? Status = null,
     ErrorInfo? Error = null,
@@ -66,6 +67,7 @@ public sealed record ScenarioRunResult(
     string Scenario,
     string Status,
     ScenarioRunTiming Timing,
+    IReadOnlyDictionary<string, double> Metrics,
     IReadOnlyList<ScenarioStepResult> Steps,
     string? ScenarioId = null,
     string? File = null);
@@ -75,6 +77,7 @@ public sealed record ScenarioRunFailureData(
     string File,
     string Status,
     ScenarioRunTiming Timing,
+    IReadOnlyDictionary<string, double> Metrics,
     ScenarioFailedStepResult FailedStep,
     IReadOnlyList<ScenarioStepResult> Steps,
     FailureArtifactBundle FailureArtifacts,
@@ -84,6 +87,7 @@ public sealed record ScenarioBatchItemResult(
     string Scenario,
     string Status,
     ScenarioRunTiming? Timing = null,
+    IReadOnlyDictionary<string, double>? Metrics = null,
     IReadOnlyList<ScenarioStepResult>? Steps = null,
     string? File = null,
     ScenarioRunFailureData? Data = null,
@@ -97,6 +101,7 @@ public sealed record ScenarioBatchItemResult(
             result.Scenario,
             result.Status,
             result.Timing,
+            result.Metrics,
             result.Steps,
             result.File ?? catalogEntry?.File,
             ScenarioId: result.ScenarioId ?? catalogEntry?.Id);
@@ -108,6 +113,7 @@ public sealed record ScenarioBatchItemResult(
         return new ScenarioBatchItemResult(
             scenario,
             "failed",
+            Metrics: data?.Metrics ?? ScenarioMetrics.Empty,
             File: file,
             Data: data,
             Error: error,
@@ -127,7 +133,8 @@ public sealed record ScenarioRunBatchResult(
     int? ShardCount,
     int? ShardIndex,
     IReadOnlyList<ScenarioBatchItemResult> Scenarios,
-    string ShardStrategy = ScenarioShardStrategies.Index);
+    string ShardStrategy = ScenarioShardStrategies.Index,
+    IReadOnlyDictionary<string, double>? Metrics = null);
 
 public sealed record ScenarioQuery(
     string Path,

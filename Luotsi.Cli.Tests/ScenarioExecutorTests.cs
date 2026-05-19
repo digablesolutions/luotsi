@@ -429,6 +429,9 @@ public sealed partial class AppTests
         Assert.Equal("passed", events[^1].GetProperty("status").GetString());
         Assert.Equal(1, events[^1].GetProperty("passed_count").GetInt32());
         Assert.Equal(0, events[^1].GetProperty("failed_count").GetInt32());
+        Assert.Equal(1, events[^1].GetProperty("metrics").GetProperty("step_count").GetInt32());
+        Assert.Equal(1, events[^1].GetProperty("metrics").GetProperty("action.sleep.count").GetInt32());
+        Assert.Equal(1, Assert.Single(events, static evt => evt.GetProperty("event").GetString() == "scenario_step_passed").GetProperty("metrics").GetProperty("configured_delay_ms").GetInt32());
     }
 
     [Fact]
@@ -614,10 +617,14 @@ public sealed partial class AppTests
         Assert.Contains(events, static evt => evt.GetProperty("event").GetString() == "scenario_step_failed");
         Assert.Equal("scenario_ended", events[^2].GetProperty("event").GetString());
         Assert.Equal("failed", events[^2].GetProperty("status").GetString());
+        Assert.Equal(1, events[^2].GetProperty("metrics").GetProperty("step_count").GetInt32());
+        Assert.Equal(1, events[^2].GetProperty("metrics").GetProperty("failed_step_count").GetInt32());
         Assert.Equal("scenario_run_ended", events[^1].GetProperty("event").GetString());
         Assert.Equal("failed", events[^1].GetProperty("status").GetString());
         Assert.Equal(0, events[^1].GetProperty("passed_count").GetInt32());
         Assert.Equal(1, events[^1].GetProperty("failed_count").GetInt32());
+        Assert.Equal(1, events[^1].GetProperty("metrics").GetProperty("step_count").GetInt32());
+        Assert.Equal(1, events[^1].GetProperty("metrics").GetProperty("action.waitvisible.count").GetInt32());
     }
 
     [Fact]
@@ -669,6 +676,10 @@ public sealed partial class AppTests
             evt.GetProperty("event").GetString() == "scenario_step_passed" &&
             evt.GetProperty("phase").GetString() == "teardown");
         Assert.Equal("main", scenario.GetProperty("failed_step").GetProperty("phase").GetString());
+        Assert.Contains(scenario.GetProperty("steps").EnumerateArray(), static step =>
+          step.GetProperty("action").GetString() == "waitVisible" &&
+          step.TryGetProperty("status", out var status) &&
+          status.GetString() == "failed");
         Assert.Contains(scenario.GetProperty("steps").EnumerateArray(), static step =>
             step.GetProperty("phase").GetString() == "teardown" &&
             step.GetProperty("action").GetString() == "forceStop");
@@ -766,6 +777,9 @@ public sealed partial class AppTests
         Assert.Equal("scenario_run_ended", events[^1].GetProperty("event").GetString());
         Assert.Equal("passed", events[^1].GetProperty("status").GetString());
         Assert.Equal(2, events[^1].GetProperty("passed_count").GetInt32());
+        Assert.Equal(2, events[^1].GetProperty("metrics").GetProperty("step_count").GetInt32());
+        Assert.Equal(2, events[^1].GetProperty("metrics").GetProperty("passed_scenario_count").GetInt32());
+        Assert.Equal(2, events[^1].GetProperty("metrics").GetProperty("action.sleep.count").GetInt32());
         Assert.All(events.Where(static evt => evt.TryGetProperty("scenario", out _)), evt => Assert.Contains("::", evt.GetProperty("scenario_id").GetString(), StringComparison.Ordinal));
     }
 
@@ -880,6 +894,9 @@ public sealed partial class AppTests
         Assert.Equal("/tmp/scenario.json::single", report.RootElement.GetProperty("scenarios")[0].GetProperty("scenario_id").GetString());
         Assert.Equal("/tmp/scenario.json", report.RootElement.GetProperty("scenarios")[0].GetProperty("file").GetString());
         Assert.Equal("sleep", report.RootElement.GetProperty("scenarios")[0].GetProperty("steps")[0].GetProperty("action").GetString());
+        Assert.Equal(1, report.RootElement.GetProperty("metrics").GetProperty("step_count").GetInt32());
+        Assert.Equal(1, report.RootElement.GetProperty("scenarios")[0].GetProperty("metrics").GetProperty("action.sleep.count").GetInt32());
+        Assert.Equal(1, report.RootElement.GetProperty("scenarios")[0].GetProperty("steps")[0].GetProperty("metrics").GetProperty("configured_delay_ms").GetInt32());
     }
 
       [Fact]
@@ -953,6 +970,7 @@ public sealed partial class AppTests
         Assert.NotNull(failed.Element("failure"));
         Assert.Equal("/tmp/scenarios/fails.json", failed.Attribute("classname")!.Value);
         Assert.Equal("/tmp/scenarios/fails.json::fails", failed.Attribute("id")!.Value);
+        Assert.Contains("metric: step_count=", failed.Element("system-out")!.Value, StringComparison.Ordinal);
     }
 
     [Fact]

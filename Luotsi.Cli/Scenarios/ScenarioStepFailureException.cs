@@ -5,5 +5,11 @@ public sealed class ScenarioStepFailureException(string message, string category
 {
     public string CategoryOverride { get; } = categoryOverride;
 
-    public object? DataPayload { get; } = dataPayload;
+    public object? DataPayload { get; private set; } = dataPayload;
+
+    internal void UpdateDataPayload(ScenarioRunFailureData updatedDataPayload)
+    {
+        ArgumentNullException.ThrowIfNull(updatedDataPayload);
+        DataPayload = updatedDataPayload;
+    }
 }

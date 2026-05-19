@@ -28,6 +28,7 @@ internal static class ScenarioRunReportFactory
             null,
             null,
             null,
+            result.Metrics,
             [CreateScenarioFromSuccess(result, file, attachmentPolicy)]);
 
     public static ScenarioRunReport FromSingleFailure(
@@ -38,7 +39,7 @@ internal static class ScenarioRunReportFactory
         ScenarioArtifactAttachmentPolicy attachmentPolicy)
     {
         var error = ScenarioErrorInfo.From(exception);
-        var failureData = (exception as ICommandFailureDetails)?.DataPayload as ScenarioRunFailureData;
+        var failureData = ScenarioFailureDetails.TryGetData(exception);
         var scenario = failureData is null
             ? CreateScenarioFromException(file, exception)
             : CreateScenarioFromFailure(failureData, error, attachmentPolicy);
@@ -58,6 +59,7 @@ internal static class ScenarioRunReportFactory
             null,
             null,
             null,
+            scenario.Metrics,
             [scenario],
             error);
     }
@@ -83,6 +85,7 @@ internal static class ScenarioRunReportFactory
             result.ShardCount,
             result.ShardIndex,
             result.ShardStrategy,
+            result.Metrics ?? ScenarioMetrics.Empty,
             result.Scenarios.Select(scenario => CreateScenarioFromBatchItem(scenario, attachmentPolicy)).ToArray());
 
     public static ScenarioRunReport FromBatchFailure(
@@ -93,7 +96,7 @@ internal static class ScenarioRunReportFactory
         ScenarioArtifactAttachmentPolicy attachmentPolicy)
     {
         var error = ScenarioErrorInfo.From(exception);
-        var failureData = (exception as ICommandFailureDetails)?.DataPayload as ScenarioRunFailureData;
+        var failureData = ScenarioFailureDetails.TryGetData(exception);
         ScenarioReportScenario[] scenarios = failureData is null
             ? [CreateScenarioFromException(plan.Query.Path, exception, "scenario run", $"{plan.Query.Path}::run")]
             : [CreateScenarioFromFailure(failureData, error, attachmentPolicy)];
@@ -113,6 +116,7 @@ internal static class ScenarioRunReportFactory
             plan.Query.ShardCount,
             plan.Query.ShardIndex,
             plan.Query.ShardStrategy,
+            failureData?.Metrics ?? ScenarioMetrics.Empty,
             scenarios,
             error);
     }
@@ -140,6 +144,7 @@ internal static class ScenarioRunReportFactory
             query.ShardCount,
             query.ShardIndex,
             query.ShardStrategy,
+            ScenarioMetrics.Empty,
             [CreateScenarioFromException(query.Path, exception, "scenario discovery", $"{query.Path}::discovery")],
             error);
     }
@@ -155,6 +160,7 @@ internal static class ScenarioRunReportFactory
             result.File ?? file,
             result.Timing.TotalMs,
             result.Timing,
+            result.Metrics,
             result.Steps,
             null,
             ScenarioReportArtifactProjection.FromSteps(result.Steps, attachmentPolicy),
@@ -171,6 +177,7 @@ internal static class ScenarioRunReportFactory
             data.File,
             data.Timing.TotalMs,
             data.Timing,
+            data.Metrics,
             data.Steps,
             data.FailedStep,
             ScenarioReportArtifactProjection.FromFailureAndSteps(data.Steps, data.FailureArtifacts, attachmentPolicy),
@@ -195,6 +202,7 @@ internal static class ScenarioRunReportFactory
             item.File,
             item.Timing?.TotalMs,
             item.Timing,
+            item.Metrics ?? ScenarioMetrics.Empty,
             item.Steps ?? [],
             null,
             item.Steps is null ? [] : ScenarioReportArtifactProjection.FromSteps(item.Steps, attachmentPolicy),
@@ -215,6 +223,7 @@ internal static class ScenarioRunReportFactory
             file,
             null,
             null,
+            ScenarioMetrics.Empty,
             [],
             null,
             [],

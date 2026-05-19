@@ -12,6 +12,8 @@ internal sealed class ScenarioBatchExecutorFactory(ScenarioExecutorFactory scena
         ScenarioFailureArtifactCapturePolicy failureArtifactCapturePolicy = ScenarioFailureArtifactCapturePolicy.Failure)
     {
         ArgumentNullException.ThrowIfNull(runner);
-        return new ScenarioBatchExecutor(_scenarioExecutorFactory.Create(runner, eventSink, failureArtifactCapturePolicy));
+        return new ScenarioBatchExecutor(
+            _scenarioExecutorFactory.Create(runner, eventSink, failureArtifactCapturePolicy),
+            _scenarioExecutorFactory.MetricsCollector);
     }
 }

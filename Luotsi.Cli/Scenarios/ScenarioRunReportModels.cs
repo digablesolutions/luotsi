@@ -18,6 +18,7 @@ internal sealed record ScenarioRunReport(
     int? ShardCount,
     int? ShardIndex,
     string? ShardStrategy,
+    IReadOnlyDictionary<string, double> Metrics,
     IReadOnlyList<ScenarioReportScenario> Scenarios,
     ErrorInfo? Error = null);
 
@@ -28,6 +29,7 @@ internal sealed record ScenarioReportScenario(
     string? File,
     double? DurationMs,
     ScenarioRunTiming? Timing,
+    IReadOnlyDictionary<string, double> Metrics,
     IReadOnlyList<ScenarioStepResult> Steps,
     ScenarioFailedStepResult? FailedStep,
     IReadOnlyList<ScenarioReportArtifact> Artifacts,

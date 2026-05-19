@@ -2,9 +2,12 @@ using Luotsi.Cli.Errors;
 
 namespace Luotsi.Cli.Scenarios;
 
-internal sealed class ScenarioBatchExecutor(ScenarioExecutor scenarios)
+internal sealed class ScenarioBatchExecutor(
+    ScenarioExecutor scenarios,
+    IScenarioMetricsCollector metricsCollector)
 {
     private readonly ScenarioExecutor _scenarios = scenarios ?? throw new ArgumentNullException(nameof(scenarios));
+    private readonly IScenarioMetricsCollector _metricsCollector = metricsCollector ?? throw new ArgumentNullException(nameof(metricsCollector));
 
     public async Task<ScenarioRunBatchResult> RunAsync(ScenarioRunPlan plan)
     {
@@ -28,7 +31,7 @@ internal sealed class ScenarioBatchExecutor(ScenarioExecutor scenarios)
             }
         }
 
-        return new ScenarioRunBatchResult(
+        var result = new ScenarioRunBatchResult(
             plan.Query.Path,
             failedCount == 0 ? "passed" : "failed",
             plan.TotalCount,
@@ -41,15 +44,15 @@ internal sealed class ScenarioBatchExecutor(ScenarioExecutor scenarios)
             plan.Query.ShardIndex,
             results,
             plan.Query.ShardStrategy);
+        return result with { Metrics = _metricsCollector.CollectBatch(new ScenarioBatchMetricContext(result)) };
     }
 
     private static ScenarioBatchItemResult CreateFailureResult(ScenarioCatalogEntry scenario, Exception exception)
     {
-        var failure = exception as ICommandFailureDetails;
         return ScenarioBatchItemResult.FromFailure(
             scenario.Name,
             scenario.File,
-            failure?.DataPayload as ScenarioRunFailureData,
+            ScenarioFailureDetails.TryGetData(exception),
             ScenarioErrorInfo.From(exception),
             scenario.Id);
     }

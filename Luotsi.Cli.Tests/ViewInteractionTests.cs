@@ -3,7 +3,6 @@ using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
 using Luotsi.Cli.Models;
 using Luotsi.Cli.View.Contracts;
-using Luotsi.Cli.View.Session;
 using Luotsi.Cli.View.Transport;
 using Xunit;
 
@@ -172,6 +171,36 @@ public sealed partial class AppTests
 
         Assert.Equal(0, exitCode);
         Assert.Contains(console.OutputLines, line => line.Contains(SessionEventTypes.View.DeviceShelf, StringComparison.Ordinal));
+    }
+
+
+
+    [Fact]
+    public async Task RunAsync_View_Device_Shelf_Probe_Failure_Does_Not_Fail_Session()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"))
+        {
+            GetDevicesException = new InvalidOperationException("adb devices failed")
+        };
+        var session = CreateViewSession(
+            host,
+            ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
+            console,
+            timeProvider,
+            new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward")),
+            new FakeViewBackendFactory(new FakeViewBackend("ffmpeg-native")),
+            new FakeViewStreamConnector(new ViewPacketStreamHarness().WriteHeader("h264", 1080, 1920).WritePacket(ViewPacketType.StreamEnd, 1, 0, false, []).Build()),
+            new ViewPacketStreamReader(),
+            new FakeViewRendererFactory(new StatsCapturingViewRenderer()));
+
+        var exitCode = await session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", false, null, 1600, 60, "8M", false, false));
+
+        Assert.Equal(0, exitCode);
+        Assert.DoesNotContain(console.OutputLines, line => line.Contains(SessionEventTypes.View.DeviceShelf, StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, line => line.Contains(SessionEventTypes.View.Started, StringComparison.Ordinal));
     }
 
 
