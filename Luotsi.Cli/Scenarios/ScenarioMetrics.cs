@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Scenarios;
@@ -27,7 +28,8 @@ internal sealed record ScenarioBatchMetricContext(
 
 internal static class ScenarioMetrics
 {
-    public static readonly IReadOnlyDictionary<string, double> Empty = new Dictionary<string, double>();
+    public static readonly IReadOnlyDictionary<string, double> Empty =
+        new ReadOnlyDictionary<string, double>(new Dictionary<string, double>());
 }
 
 internal sealed class CompositeScenarioMetricsCollector(IReadOnlyList<IScenarioMetricsCollector> collectors) : IScenarioMetricsCollector

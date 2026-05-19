@@ -5,27 +5,45 @@ using Luotsi.Cli.View.Contracts;
 
 namespace Luotsi.Cli.View.Session;
 
-internal sealed class ViewSessionInputCommandHandler(
-    ViewSessionInteractionContext context,
-    ViewSessionInteractionCallbacks callbacks)
+internal sealed class ViewSessionInputCommandHandler
 {
-    private readonly IDeviceHost _deviceHost = (context ?? throw new ArgumentNullException(nameof(context))).DeviceHost ?? throw new ArgumentNullException(nameof(context.DeviceHost));
-    private readonly ArtifactSession _artifacts = context.Artifacts ?? throw new ArgumentNullException(nameof(context.Artifacts));
-    private readonly ViewOptions _options = context.Options ?? throw new ArgumentNullException(nameof(context.Options));
-    private readonly SessionControlledViewRecorder _recorder = context.Recorder ?? throw new ArgumentNullException(nameof(context.Recorder));
-    private readonly TimeProvider _timeProvider = context.TimeProvider ?? throw new ArgumentNullException(nameof(context.TimeProvider));
-    private readonly string _sessionId = string.IsNullOrWhiteSpace(context.SessionId) ? throw new ArgumentException("Session id is required.", nameof(context.SessionId)) : context.SessionId;
-    private readonly Action<object> _writeEvent = context.WriteEvent ?? throw new ArgumentNullException(nameof(context.WriteEvent));
-    private readonly Func<Task> _publishChromeAsync = callbacks.PublishChromeAsync ?? throw new ArgumentNullException(nameof(callbacks.PublishChromeAsync));
-    private readonly Func<string> _activeDeviceSelector = callbacks.ActiveDeviceSelector ?? throw new ArgumentNullException(nameof(callbacks.ActiveDeviceSelector));
-    private readonly Func<string, string?, bool> _requestReconnect = callbacks.RequestReconnect ?? throw new ArgumentNullException(nameof(callbacks.RequestReconnect));
-    private readonly IArtifactFolderOpener _artifactFolderOpener = context.ArtifactFolderOpener ?? throw new ArgumentNullException(nameof(context.ArtifactFolderOpener));
+    private readonly IDeviceHost _deviceHost;
+    private readonly ArtifactSession _artifacts;
+    private readonly ViewOptions _options;
+    private readonly SessionControlledViewRecorder _recorder;
+    private readonly TimeProvider _timeProvider;
+    private readonly string _sessionId;
+    private readonly Action<object> _writeEvent;
+    private readonly Func<Task> _publishChromeAsync;
+    private readonly Func<string> _activeDeviceSelector;
+    private readonly Func<string, string?, bool> _requestReconnect;
+    private readonly IArtifactFolderOpener _artifactFolderOpener;
 
     private bool _initialRecordingStarted;
     private int _screenshotSequence;
     private int _recordingSequence;
     private bool _streamPaused;
     private Action<bool>? _streamPauseUpdater;
+
+    public ViewSessionInputCommandHandler(ViewSessionInteractionContext context, ViewSessionInteractionCallbacks callbacks)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(callbacks);
+
+        _deviceHost = context.DeviceHost ?? throw new ArgumentNullException(nameof(context.DeviceHost));
+        _artifacts = context.Artifacts ?? throw new ArgumentNullException(nameof(context.Artifacts));
+        _options = context.Options ?? throw new ArgumentNullException(nameof(context.Options));
+        _recorder = context.Recorder ?? throw new ArgumentNullException(nameof(context.Recorder));
+        _timeProvider = context.TimeProvider ?? throw new ArgumentNullException(nameof(context.TimeProvider));
+        _sessionId = string.IsNullOrWhiteSpace(context.SessionId)
+            ? throw new ArgumentException("Session id is required.", nameof(context.SessionId))
+            : context.SessionId;
+        _writeEvent = context.WriteEvent ?? throw new ArgumentNullException(nameof(context.WriteEvent));
+        _artifactFolderOpener = context.ArtifactFolderOpener ?? throw new ArgumentNullException(nameof(context.ArtifactFolderOpener));
+        _publishChromeAsync = callbacks.PublishChromeAsync ?? throw new ArgumentNullException(nameof(callbacks.PublishChromeAsync));
+        _activeDeviceSelector = callbacks.ActiveDeviceSelector ?? throw new ArgumentNullException(nameof(callbacks.ActiveDeviceSelector));
+        _requestReconnect = callbacks.RequestReconnect ?? throw new ArgumentNullException(nameof(callbacks.RequestReconnect));
+    }
 
     public void AttachConnection(ViewConnectionInfo connectionInfo) => _ = _recorder.InitializeAsync(connectionInfo);
 
