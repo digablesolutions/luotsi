@@ -40,18 +40,21 @@ public sealed class DefaultViewSessionFactory(
         new ViewSession(
             deviceHost,
             artifacts,
-            _console,
-            _timeProvider,
-            new AndroidViewBootstrap(
-                _adbClientFactory,
-                _processRunner,
-                new AndroidViewHelperPackageLocator(_environment, _fileSystem),
-                _idGenerator),
-            new DefaultViewBackendFactory(_environment),
-            new LocalhostViewStreamConnector(),
-            new ViewPacketStreamReader(),
-            new DefaultViewRendererFactory(),
-            new DefaultViewRecorderFactory(_fileSystem, _processRunner, _environment));
+            new ViewSessionRuntime
+            {
+                Console = _console,
+                TimeProvider = _timeProvider,
+                TransportBootstrap = new AndroidViewBootstrap(
+                    _adbClientFactory,
+                    _processRunner,
+                    new AndroidViewHelperPackageLocator(_environment, _fileSystem),
+                    _idGenerator),
+                ViewBackendFactory = new DefaultViewBackendFactory(_environment),
+                StreamConnector = new LocalhostViewStreamConnector(),
+                PacketStreamReader = new ViewPacketStreamReader(),
+                ViewRendererFactory = new DefaultViewRendererFactory(),
+                ViewRecorderFactory = new DefaultViewRecorderFactory(_fileSystem, _processRunner, _environment)
+            });
 }
 
 /// <summary>
@@ -104,19 +107,7 @@ public sealed class DefaultViewRendererFactory : IViewRendererFactory
 /// <summary>
 /// Built-in device mirror session.
 /// </summary>
-public sealed class ViewSession(
-    IDeviceHost deviceHost,
-    ArtifactSession artifacts,
-    IConsoleIo console,
-    TimeProvider timeProvider,
-    IViewTransportBootstrap transportBootstrap,
-    IViewBackendFactory viewBackendFactory,
-    IViewStreamConnector streamConnector,
-    IViewPacketStreamReader packetStreamReader,
-    IViewRendererFactory? viewRendererFactory = null,
-    IViewRecorderFactory? viewRecorderFactory = null,
-    IArtifactFolderOpener? artifactFolderOpener = null,
-    TimeSpan? autoReconnectAfter = null) : IViewSession
+public sealed class ViewSession : IViewSession
 {
     private static readonly JsonSerializerOptions OutputJsonOptions = new()
     {
@@ -128,18 +119,39 @@ public sealed class ViewSession(
     private const int InitialStreamAttempts = 600;
     private static readonly TimeSpan InitialStreamRetryDelay = TimeSpan.FromMilliseconds(100);
     private static readonly TimeSpan DefaultAutoReconnectAfter = TimeSpan.FromSeconds(170);
-    private readonly IDeviceHost _deviceHost = deviceHost ?? throw new ArgumentNullException(nameof(deviceHost));
-    private readonly ArtifactSession _artifacts = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
-    private readonly IConsoleIo _console = console ?? throw new ArgumentNullException(nameof(console));
-    private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
-    private readonly IViewTransportBootstrap _transportBootstrap = transportBootstrap ?? throw new ArgumentNullException(nameof(transportBootstrap));
-    private readonly IViewBackendFactory _viewBackendFactory = viewBackendFactory ?? throw new ArgumentNullException(nameof(viewBackendFactory));
-    private readonly IViewStreamConnector _streamConnector = streamConnector ?? throw new ArgumentNullException(nameof(streamConnector));
-    private readonly IViewPacketStreamReader _packetStreamReader = packetStreamReader ?? throw new ArgumentNullException(nameof(packetStreamReader));
-    private readonly IViewRendererFactory _viewRendererFactory = viewRendererFactory ?? new NullViewRendererFactory();
-    private readonly IViewRecorderFactory _viewRecorderFactory = viewRecorderFactory ?? new NullViewRecorderFactory();
-    private readonly TimeSpan _autoReconnectAfter = autoReconnectAfter ?? DefaultAutoReconnectAfter;
+    private readonly IDeviceHost _deviceHost;
+    private readonly ArtifactSession _artifacts;
+    private readonly IConsoleIo _console;
+    private readonly TimeProvider _timeProvider;
+    private readonly IViewTransportBootstrap _transportBootstrap;
+    private readonly IViewBackendFactory _viewBackendFactory;
+    private readonly IViewStreamConnector _streamConnector;
+    private readonly IViewPacketStreamReader _packetStreamReader;
+    private readonly IViewRendererFactory _viewRendererFactory;
+    private readonly IViewRecorderFactory _viewRecorderFactory;
+    private readonly IArtifactFolderOpener _artifactFolderOpener;
+    private readonly TimeSpan _autoReconnectAfter;
     private readonly Lock _writeGate = new();
+
+    public ViewSession(IDeviceHost deviceHost, ArtifactSession artifacts, ViewSessionRuntime runtime)
+    {
+        ArgumentNullException.ThrowIfNull(deviceHost);
+        ArgumentNullException.ThrowIfNull(artifacts);
+        ArgumentNullException.ThrowIfNull(runtime);
+
+        _deviceHost = deviceHost;
+        _artifacts = artifacts;
+        _console = runtime.Console ?? throw new ArgumentNullException(nameof(ViewSessionRuntime.Console));
+        _timeProvider = runtime.TimeProvider ?? throw new ArgumentNullException(nameof(ViewSessionRuntime.TimeProvider));
+        _transportBootstrap = runtime.TransportBootstrap ?? throw new ArgumentNullException(nameof(ViewSessionRuntime.TransportBootstrap));
+        _viewBackendFactory = runtime.ViewBackendFactory ?? throw new ArgumentNullException(nameof(ViewSessionRuntime.ViewBackendFactory));
+        _streamConnector = runtime.StreamConnector ?? throw new ArgumentNullException(nameof(ViewSessionRuntime.StreamConnector));
+        _packetStreamReader = runtime.PacketStreamReader ?? throw new ArgumentNullException(nameof(ViewSessionRuntime.PacketStreamReader));
+        _viewRendererFactory = runtime.ViewRendererFactory ?? new NullViewRendererFactory();
+        _viewRecorderFactory = runtime.ViewRecorderFactory ?? new NullViewRecorderFactory();
+        _artifactFolderOpener = runtime.ArtifactFolderOpener ?? new SystemArtifactFolderOpener();
+        _autoReconnectAfter = runtime.AutoReconnectAfter ?? DefaultAutoReconnectAfter;
+    }
 
     /// <inheritdoc />
     public async Task<int> RunAsync(ViewOptions options, CancellationToken cancellationToken = default)
@@ -165,7 +177,7 @@ public sealed class ViewSession(
                 _timeProvider,
                 sessionId,
                 WriteJsonLine,
-                artifactFolderOpener ?? new SystemArtifactFolderOpener()));
+                _artifactFolderOpener));
             string endReason = "stream_ended";
             try
             {

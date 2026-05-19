@@ -21,7 +21,7 @@ public sealed partial class AppTests
         var artifactOpener = new FakeArtifactFolderOpener();
         var renderer = new ClosingViewRenderer();
         var rendererFactory = new FakeViewRendererFactory(renderer);
-        var session = new ViewSession(
+        var session = CreateViewSession(
             host,
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
             console,
@@ -80,7 +80,7 @@ public sealed partial class AppTests
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
         var renderer = new ClosingViewRenderer();
         var rendererFactory = new FakeViewRendererFactory(renderer);
-        var session = new ViewSession(
+        var session = CreateViewSession(
             host,
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
             console,
@@ -123,7 +123,7 @@ public sealed partial class AppTests
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
         var renderer = new ClosingViewRenderer();
         var rendererFactory = new FakeViewRendererFactory(renderer);
-        var session = new ViewSession(
+        var session = CreateViewSession(
             host,
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
             console,
@@ -157,7 +157,7 @@ public sealed partial class AppTests
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
         host.ConnectedDevices.Add(new DeviceInfo("192.168.0.134:5555", "device", "Pixel 9"));
         host.ConnectedDevices.Add(new DeviceInfo("emulator-5554", "device", "Emulator"));
-        var session = new ViewSession(
+        var session = CreateViewSession(
             host,
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
             console,
@@ -186,7 +186,7 @@ public sealed partial class AppTests
         var renderer = new ClosingViewRenderer();
         var rendererFactory = new FakeViewRendererFactory(renderer);
         var bootstrap = new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward"));
-        var session = new ViewSession(
+        var session = CreateViewSession(
             host,
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
             console,
@@ -224,7 +224,7 @@ public sealed partial class AppTests
         var console = new FakeConsole();
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
         var bootstrap = new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward"));
-        var session = new ViewSession(
+        var session = CreateViewSession(
             host,
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
             console,
@@ -271,7 +271,7 @@ public sealed partial class AppTests
         var renderer = new ClosingViewRenderer();
         var rendererFactory = new FakeViewRendererFactory(renderer);
         var bootstrap = new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward"));
-        var session = new ViewSession(
+        var session = CreateViewSession(
             host,
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
             console,

@@ -20,7 +20,7 @@ public sealed partial class AppTests
         var console = new FakeConsole();
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
         var backend = new FakeViewBackend("ffmpeg-native");
-        var session = new ViewSession(
+        var session = CreateViewSession(
             host,
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
             console,
@@ -71,7 +71,7 @@ public sealed partial class AppTests
             ["ffmpeg"] = ffmpegBackend,
             ["wmf"] = wmfBackend
         });
-        var session = new ViewSession(
+        var session = CreateViewSession(
             host,
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
             console,
@@ -114,7 +114,7 @@ public sealed partial class AppTests
                 .WriteHeader("h264", 1080, 1920)
                 .WritePacket(ViewPacketType.StreamEnd, 1, 0, false, [])
                 .Build());
-        var session = new ViewSession(
+        var session = CreateViewSession(
             host,
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
             console,
@@ -142,7 +142,7 @@ public sealed partial class AppTests
         var bootstrap = new FakeViewTransportBootstrap(
             [new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward")],
             [new ViewStartupPhase("helper_resolve", ViewStartupPhaseStatus.Started, "Resolving Android view helper package.")]);
-        var session = new ViewSession(
+        var session = CreateViewSession(
             host,
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
             console,
@@ -185,7 +185,7 @@ public sealed partial class AppTests
             new InvalidOperationException("mediaprojection consent was not granted"),
             new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward", CaptureBackend: ViewCaptureBackends.Screenrecord)
         ]);
-        var session = new ViewSession(
+        var session = CreateViewSession(
             host,
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
             console,
@@ -237,7 +237,7 @@ public sealed partial class AppTests
                 .WriteHeader("h264", 1080, 1920)
                 .WritePacket(ViewPacketType.StreamEnd, 1, 0, false, [])
                 .Build());
-        var session = new ViewSession(
+        var session = CreateViewSession(
             host,
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
             console,
@@ -277,7 +277,7 @@ public sealed partial class AppTests
             new MediaProjectionConsentException("MediaProjection consent prompt was not approved or could not be detected.")
         ]);
         using var stream = new MemoryStream();
-        var session = new ViewSession(
+        var session = CreateViewSession(
             host,
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
             console,
@@ -322,7 +322,7 @@ public sealed partial class AppTests
             new InvalidOperationException("Android view helper package was not found. Set LUOTSI_VIEW_HELPER_APK or build the helper APK at Luotsi.ViewServer.Android\\app\\build\\outputs\\apk\\debug\\app-debug.apk")
         ]);
         using var stream = new MemoryStream();
-        var session = new ViewSession(
+        var session = CreateViewSession(
             host,
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
             console,
@@ -359,7 +359,7 @@ public sealed partial class AppTests
         var console = new FakeConsole();
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
         var renderer = new ClosingViewRenderer();
-        var session = new ViewSession(
+        var session = CreateViewSession(
             host,
             ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
             console,
