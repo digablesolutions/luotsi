@@ -168,7 +168,7 @@ public sealed class ViewSession : IViewSession
         {
             await using var recorder = new SessionControlledViewRecorder(_viewRecorderFactory, options);
             IViewRenderer? renderer = null;
-            SessionViewRenderer? sessionRenderer = null;
+            SessionViewRenderer sessionRenderer;
             var interactionRouter = new ViewSessionInteractionRouter(new ViewSessionInteractionContext(
                 _deviceHost,
                 _artifacts,
@@ -248,9 +248,10 @@ public sealed class ViewSession : IViewSession
                             if (shareServer is null)
                             {
                                 shareServer = new TcpViewShareServer(options.ShareBindEndpoint);
-                                shareServer.ObserverChanged += observerEvent =>
+                                var observerServer = shareServer;
+                                observerServer.ObserverChanged += observerEvent =>
                                 {
-                                    _ = interactionRouter.UpdateShareStateAsync(shareServer.BoundEndpoint, observerEvent.ObserverCount);
+                                    _ = interactionRouter.UpdateShareStateAsync(observerServer.BoundEndpoint, observerEvent.ObserverCount);
                                     WriteJsonLine(new
                                     {
                                         type = observerEvent.Kind == ViewShareObserverEventKind.Connected
@@ -258,7 +259,7 @@ public sealed class ViewSession : IViewSession
                                             : SessionEventTypes.View.ShareClientDisconnected,
                                         session_id = sessionId,
                                         occurred_at = _timeProvider.GetUtcNow(),
-                                        endpoint = shareServer.BoundEndpoint,
+                                        endpoint = observerServer.BoundEndpoint,
                                         remote_endpoint = observerEvent.RemoteEndpoint,
                                         observer_count = observerEvent.ObserverCount,
                                         reason = observerEvent.Reason

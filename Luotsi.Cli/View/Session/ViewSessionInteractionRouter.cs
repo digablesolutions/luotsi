@@ -1,6 +1,3 @@
-using System.Diagnostics;
-using System.Runtime.InteropServices;
-using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
@@ -13,13 +10,11 @@ internal sealed class ViewSessionInteractionRouter(
 {
     private readonly ViewSessionInteractionContext _context = context ?? throw new ArgumentNullException(nameof(context));
     private readonly IDeviceHost _deviceHost = context.DeviceHost ?? throw new ArgumentNullException(nameof(context.DeviceHost));
-    private readonly ArtifactSession _artifacts = context.Artifacts ?? throw new ArgumentNullException(nameof(context.Artifacts));
     private readonly ViewOptions _options = context.Options ?? throw new ArgumentNullException(nameof(context.Options));
     private readonly SessionControlledViewRecorder _recorder = context.Recorder ?? throw new ArgumentNullException(nameof(context.Recorder));
     private readonly TimeProvider _timeProvider = context.TimeProvider ?? throw new ArgumentNullException(nameof(context.TimeProvider));
     private readonly string _sessionId = string.IsNullOrWhiteSpace(context.SessionId) ? throw new ArgumentException("Session id is required.", nameof(context.SessionId)) : context.SessionId;
     private readonly Action<object> _writeJsonLine = context.WriteEvent ?? throw new ArgumentNullException(nameof(context.WriteEvent));
-    private readonly IArtifactFolderOpener _artifactFolderOpener = context.ArtifactFolderOpener ?? throw new ArgumentNullException(nameof(context.ArtifactFolderOpener));
 
     private CancellationTokenSource? _iterationCancellation;
     private TaskCompletionSource _reconnectRequested = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -173,7 +168,7 @@ internal sealed class ViewSessionInteractionRouter(
                 devices = devices.Devices
             });
         }
-        catch
+        catch (Exception ex) when (!IsFatalException(ex))
         {
         }
     }
@@ -225,26 +220,13 @@ internal sealed class ViewSessionInteractionRouter(
                 RequestReconnect));
 
     private void WriteEvent(object value) => _writeJsonLine(value);
-}
 
-public interface IArtifactFolderOpener
-{
-    Task OpenAsync(string path);
-}
-
-internal sealed class SystemArtifactFolderOpener : IArtifactFolderOpener
-{
-    public Task OpenAsync(string path)
-    {
-        var fullPath = Path.GetFullPath(path);
-        var startInfo = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-            ? new ProcessStartInfo("explorer.exe", fullPath)
-            : RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-                ? new ProcessStartInfo("open", fullPath)
-                : new ProcessStartInfo("xdg-open", fullPath);
-
-        startInfo.UseShellExecute = false;
-        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Failed to open artifact folder '{fullPath}'.");
-        return Task.CompletedTask;
-    }
+    private static bool IsFatalException(Exception exception) =>
+        exception is OutOfMemoryException
+            or StackOverflowException
+            or AccessViolationException
+            or AppDomainUnloadedException
+            or BadImageFormatException
+            or CannotUnloadAppDomainException
+            or InvalidProgramException;
 }

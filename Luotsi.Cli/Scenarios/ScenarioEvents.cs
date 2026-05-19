@@ -98,7 +98,8 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
                 result.Status,
                 Path: file,
                 PassedCount: result.Status == "passed" ? 1 : 0,
-                FailedCount: result.Status == "passed" ? 0 : 1),
+                FailedCount: result.Status == "passed" ? 0 : 1,
+                Metrics: result.Metrics),
             ex => CreateFailedRunEndedEvent(file, ex, passedCount: 0, failedCount: 1)).ConfigureAwait(false);
     }
 
@@ -133,7 +134,8 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
                 ShardedOutCount: result.ShardedOutCount,
                 ShardCount: result.ShardCount,
                 ShardIndex: result.ShardIndex,
-                ShardStrategy: result.ShardStrategy),
+                ShardStrategy: result.ShardStrategy,
+                Metrics: result.Metrics),
             ex => CreateFailedRunEndedEvent(
                 plan.Query.Path,
                 ex,
@@ -229,6 +231,7 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
             ShardCount: shardCount,
             ShardIndex: shardIndex,
             ShardStrategy: shardStrategy,
+            Metrics: ScenarioFailureDetails.TryGetMetrics(exception),
             Error: ScenarioErrorInfo.From(exception));
 }
 
@@ -254,4 +257,5 @@ internal sealed record ScenarioEvent(
     [property: JsonPropertyName("shard_count")] int? ShardCount = null,
     [property: JsonPropertyName("shard_index")] int? ShardIndex = null,
     [property: JsonPropertyName("shard_strategy")] string? ShardStrategy = null,
+    [property: JsonPropertyName("metrics")] IReadOnlyDictionary<string, double>? Metrics = null,
     [property: JsonPropertyName("error")] object? Error = null);

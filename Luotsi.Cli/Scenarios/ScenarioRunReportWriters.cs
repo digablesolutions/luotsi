@@ -91,15 +91,18 @@ internal sealed class JUnitScenarioRunReportWriter(IFileSystem fileSystem, strin
                     : $"Step {scenario.FailedStep.Index} ({scenario.FailedStep.Name}) failed during {scenario.FailedStep.Action}. {scenario.Error?.Message}".Trim()));
         }
 
-        if (scenario.Artifacts.Count > 0)
+        if (scenario.Artifacts.Count > 0 || scenario.Metrics.Count > 0)
         {
             element.Add(new XElement(
                 "system-out",
                 string.Join(
                     Environment.NewLine,
-                    scenario.Artifacts.Select(static artifact =>
+                    scenario.Metrics
+                        .OrderBy(static metric => metric.Key, StringComparer.Ordinal)
+                        .Select(static metric => $"metric: {metric.Key}={metric.Value.ToString("0.###", CultureInfo.InvariantCulture)}")
+                        .Concat(scenario.Artifacts.Select(static artifact =>
                         $"{artifact.Kind}: {artifact.FileName}" +
-                        (artifact.StepIndex is null ? string.Empty : $" (step {artifact.StepIndex}: {artifact.StepName})")))));
+                        (artifact.StepIndex is null ? string.Empty : $" (step {artifact.StepIndex}: {artifact.StepName})"))))));
         }
 
         return element;

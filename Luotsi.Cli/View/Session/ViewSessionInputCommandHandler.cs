@@ -9,8 +9,7 @@ internal sealed class ViewSessionInputCommandHandler(
     ViewSessionInteractionContext context,
     ViewSessionInteractionCallbacks callbacks)
 {
-    private readonly ViewSessionInteractionContext _context = context ?? throw new ArgumentNullException(nameof(context));
-    private readonly IDeviceHost _deviceHost = context.DeviceHost ?? throw new ArgumentNullException(nameof(context.DeviceHost));
+    private readonly IDeviceHost _deviceHost = (context ?? throw new ArgumentNullException(nameof(context))).DeviceHost ?? throw new ArgumentNullException(nameof(context.DeviceHost));
     private readonly ArtifactSession _artifacts = context.Artifacts ?? throw new ArgumentNullException(nameof(context.Artifacts));
     private readonly ViewOptions _options = context.Options ?? throw new ArgumentNullException(nameof(context.Options));
     private readonly SessionControlledViewRecorder _recorder = context.Recorder ?? throw new ArgumentNullException(nameof(context.Recorder));

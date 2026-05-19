@@ -13,9 +13,10 @@ internal static class AppHostedCommandCompositionBuilder
         ArgumentNullException.ThrowIfNull(dependencies);
 
         var scenarioTemplateResolver = new ScenarioTemplateResolver(dependencies.TimeProvider, dependencies.Environment);
+        var scenarioMetricsCollector = CompositeScenarioMetricsCollector.CreateDefault();
         var scenarioCatalog = new ScenarioCatalog(dependencies.FileSystem, scenarioTemplateResolver);
         var scenarioRunPlanner = new ScenarioRunPlanner(scenarioCatalog);
-        var scenarioExecutorFactory = new ScenarioExecutorFactory(dependencies.FileSystem, dependencies.TimeProvider, dependencies.Delay, scenarioTemplateResolver);
+        var scenarioExecutorFactory = new ScenarioExecutorFactory(dependencies.FileSystem, dependencies.TimeProvider, dependencies.Delay, scenarioTemplateResolver, scenarioMetricsCollector);
         var scenarioBatchExecutorFactory = new ScenarioBatchExecutorFactory(scenarioExecutorFactory);
         var scenarioRunEventCoordinatorFactory = new ScenarioRunEventCoordinatorFactory(dependencies.FileSystem, dependencies.TimeProvider);
         var scenarioRunReportCoordinatorFactory = new ScenarioRunReportCoordinatorFactory(dependencies.FileSystem, dependencies.TimeProvider);
