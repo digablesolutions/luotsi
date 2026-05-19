@@ -1,4 +1,3 @@
-using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Scenarios;
@@ -24,17 +23,19 @@ internal sealed class ScenarioValidationExecutor(
         await _eventSink.EmitAsync(new ScenarioEvent("scenario_started", started, File: file, ScenarioId: scenarioId, Scenario: scenario.Name, Status: "validating")).ConfigureAwait(false);
 
         var steps = CreateStepResults(scenario).ToArray();
-        var timing = new ScenarioRunTiming(0, 0, 0, 0);
+        var endedAt = _timeProvider.GetUtcNow();
+        var durationMs = Math.Max(0, (endedAt - started).TotalMilliseconds);
+        var timing = new ScenarioRunTiming(durationMs, 0, 0, durationMs);
         var metrics = _metricsCollector.CollectScenario(new ScenarioScenarioMetricContext("validated", timing, steps));
 
         await _eventSink.EmitAsync(new ScenarioEvent(
             "scenario_ended",
-            _timeProvider.GetUtcNow(),
+            endedAt,
             "validated",
             File: file,
             ScenarioId: scenarioId,
             Scenario: scenario.Name,
-            DurationMs: 0,
+            DurationMs: durationMs,
             Metrics: metrics)).ConfigureAwait(false);
 
         return new ScenarioRunResult(
@@ -59,7 +60,7 @@ internal sealed class ScenarioValidationExecutor(
             {
                 results.Add(ScenarioBatchItemResult.FromSuccess(await ValidateFileAsync(scenario.File).ConfigureAwait(false), scenario));
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 failedCount++;
                 results.Add(ScenarioBatchItemResult.FromFailure(

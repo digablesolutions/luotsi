@@ -189,7 +189,7 @@ public sealed partial class AppTests
     public async Task RunAsync_File_ValidateOnly_Validates_Without_Device_Work()
     {
         var fileSystem = new FakeFileSystem();
-        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var timeProvider = new SteppingTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind), TimeSpan.FromMilliseconds(1));
         var console = new FakeConsole();
         fileSystem.AddFile("/tmp/scenario.json", """
         {
@@ -215,7 +215,7 @@ public sealed partial class AppTests
             TimeProvider = timeProvider,
             FileSystem = fileSystem,
             ProcessRunner = new DefaultProcessRunner(),
-            Delay = new FakeDelay(timeProvider),
+          Delay = new SteppingDelay(timeProvider),
             DeviceHostFactory = deviceHostFactory,
             Console = console
         });
@@ -231,6 +231,9 @@ public sealed partial class AppTests
         var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
         using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
         var junit = XDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/junit.xml"));
+        var startedAt = events.Single(static evt => evt.GetProperty("event").GetString() == "scenario_started").GetProperty("timestamp").GetDateTimeOffset();
+        var endedEvent = events.Single(static evt => evt.GetProperty("event").GetString() == "scenario_ended");
+        var durationMs = (endedEvent.GetProperty("timestamp").GetDateTimeOffset() - startedAt).TotalMilliseconds;
 
         Assert.Equal(0, exitCode);
         Assert.Equal("validated", envelope.RootElement.GetProperty("data").GetProperty("status").GetString());
@@ -238,8 +241,12 @@ public sealed partial class AppTests
         Assert.All(envelope.RootElement.GetProperty("data").GetProperty("steps").EnumerateArray(), step => Assert.Equal("validated", step.GetProperty("status").GetString()));
         Assert.Equal("validated", events[^1].GetProperty("status").GetString());
         Assert.Equal(0, events[^1].GetProperty("failed_count").GetInt32());
+        Assert.Equal(durationMs, endedEvent.GetProperty("duration_ms").GetDouble());
+        Assert.Equal(durationMs, envelope.RootElement.GetProperty("data").GetProperty("timing").GetProperty("total_ms").GetDouble());
+        Assert.Equal(durationMs, envelope.RootElement.GetProperty("data").GetProperty("timing").GetProperty("non_step_ms").GetDouble());
         Assert.Equal("validated", report.RootElement.GetProperty("status").GetString());
         Assert.Equal(0, report.RootElement.GetProperty("failed_count").GetInt32());
+        Assert.Equal(durationMs, report.RootElement.GetProperty("scenarios")[0].GetProperty("duration_ms").GetDouble());
         Assert.Empty(junit.Root!.Elements("testcase").Single().Elements("failure"));
         Assert.Empty(host.StartAppRequests);
         Assert.Empty(host.KeyEventRequests);
@@ -307,6 +314,39 @@ public sealed partial class AppTests
         Assert.Equal("failed", report.RootElement.GetProperty("scenarios")[1].GetProperty("status").GetString());
         Assert.Contains("tapText requires text", report.RootElement.GetProperty("scenarios")[1].GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
+
+      [Fact]
+      public async Task ValidatePlanAsync_OperationCanceledException_Propagates()
+      {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        fileSystem.AddFile("/tmp/scenarios/cancel.json", """
+        {
+          "name": "cancel",
+          "steps": [
+          { "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var scenarioCatalog = new ScenarioCatalog(
+          fileSystem,
+          new ScenarioTemplateResolver(
+            timeProvider,
+            new FakeEnvironmentVariables(new Dictionary<string, string>())));
+        var executor = new ScenarioValidationExecutor(
+          scenarioCatalog,
+          timeProvider,
+          new ThrowingScenarioEventSink(new OperationCanceledException("cancelled")));
+        var scenario = new ScenarioCatalogEntry("/tmp/scenarios/cancel.json::cancel", "cancel", "/tmp/scenarios/cancel.json", [], 1, ["sleep"]);
+        var plan = new ScenarioRunPlan(
+          new ScenarioQuery("/tmp/scenarios", [], [], null, null, null, null, false),
+          1,
+          [scenario],
+          [scenario],
+          0);
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => executor.ValidatePlanAsync(plan));
+      }
 
     [Fact]
     public async Task ScenarioList_RecursiveGlob_Finds_Nested_Scenarios()
@@ -1959,5 +1999,12 @@ public sealed partial class AppTests
                 MetadataFile = "failure.json"
             }
         };
+
+          private sealed class ThrowingScenarioEventSink(Exception exception) : IScenarioEventSink
+          {
+            public Task EmitAsync(ScenarioEvent scenarioEvent) => Task.FromException(exception);
+
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+          }
 
 }
