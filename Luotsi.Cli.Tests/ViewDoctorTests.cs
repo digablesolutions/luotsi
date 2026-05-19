@@ -1,6 +1,7 @@
 using Luotsi.Cli.Cli;
 using Luotsi.Cli.Hosts.Android.View;
 using Luotsi.Cli.Models;
+using Luotsi.Cli.View;
 using Luotsi.Cli.View.Contracts;
 using Luotsi.Cli.View.Diagnostics;
 using Luotsi.Cli.View.Recording;
@@ -263,6 +264,113 @@ public sealed partial class AppTests
         Assert.False(consentCheck.Ok);
         Assert.Contains("cannot be preflighted", consentCheck.Summary, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("fallback=none", consentCheck.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task AndroidViewHelperSetupProvisioner_ResolveOrBuildAsync_Skips_Build_When_Fix_Is_Disabled()
+    {
+        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>());
+        var processRunner = new FakeProcessRunner();
+        var provisioner = new AndroidViewHelperSetupProvisioner(
+            new SequencedAndroidViewHelperPackageLocator(new InvalidOperationException("missing helper")),
+            new ViewHostPathResolver(environment),
+            new FakeFileSystem(),
+            processRunner);
+        var steps = new List<ViewSetupStep>();
+
+        var package = await provisioner.ResolveOrBuildAsync(fix: false, steps.Add);
+
+        Assert.Null(package);
+        Assert.Empty(processRunner.Calls);
+        Assert.Collection(
+            steps,
+            step =>
+            {
+                Assert.Equal("helper_resolve", step.Name);
+                Assert.Equal(ViewStartupPhaseStatus.Failed, step.Status);
+            },
+            step =>
+            {
+                Assert.Equal("helper_build", step.Name);
+                Assert.Equal(ViewStartupPhaseStatus.Skipped, step.Status);
+            });
+    }
+
+    [Fact]
+    public async Task AndroidViewHelperSetupProvisioner_ResolveOrBuildAsync_Builds_And_Reresolves_Helper()
+    {
+        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>());
+        var fileSystem = new FakeFileSystem();
+        var pathResolver = new ViewHostPathResolver(environment);
+        var projectDirectory = pathResolver.GetRepositoryRelativeDirectoryCandidates("Luotsi.ViewServer.Android").First();
+        var wrapperPath = OperatingSystem.IsWindows()
+            ? Path.Join(projectDirectory, "gradlew.bat")
+            : Path.Join(projectDirectory, "gradlew");
+        fileSystem.CreateDirectory(projectDirectory);
+        fileSystem.AddFile(wrapperPath, string.Empty);
+
+        var processRunner = new FakeProcessRunner();
+        processRunner.EnqueueResult(new ProcessResult(0, "BUILD SUCCESSFUL", string.Empty));
+
+        var package = new AndroidViewHelperPackage("C:/tmp/helper.apk", "/data/local/tmp/luotsi-view-server.apk", "dev.luotsi.view.Main", "test-helper");
+        var provisioner = new AndroidViewHelperSetupProvisioner(
+            new SequencedAndroidViewHelperPackageLocator(new InvalidOperationException("missing helper"), package),
+            pathResolver,
+            fileSystem,
+            processRunner);
+        var steps = new List<ViewSetupStep>();
+
+        var resolved = await provisioner.ResolveOrBuildAsync(fix: true, steps.Add);
+
+        Assert.Same(package, resolved);
+        var call = Assert.Single(processRunner.Calls);
+        Assert.Equal(wrapperPath, call.FileName);
+        Assert.Equal(["-p", projectDirectory, ":app:assembleDebug"], call.Args);
+        Assert.Collection(
+            steps,
+            step =>
+            {
+                Assert.Equal("helper_resolve", step.Name);
+                Assert.Equal(ViewStartupPhaseStatus.Failed, step.Status);
+            },
+            step =>
+            {
+                Assert.Equal("helper_build", step.Name);
+                Assert.Equal(ViewStartupPhaseStatus.Started, step.Status);
+                Assert.Equal(projectDirectory, step.Detail);
+            },
+            step =>
+            {
+                Assert.Equal("helper_build", step.Name);
+                Assert.Equal(ViewStartupPhaseStatus.Succeeded, step.Status);
+                Assert.Equal("BUILD SUCCESSFUL", step.Detail);
+            },
+            step =>
+            {
+                Assert.Equal("helper_resolve", step.Name);
+                Assert.Equal(ViewStartupPhaseStatus.Succeeded, step.Status);
+            });
+    }
+
+    private sealed class SequencedAndroidViewHelperPackageLocator(params object[] outcomes) : IAndroidViewHelperPackageLocator
+    {
+        private readonly Queue<object> _outcomes = new(outcomes);
+
+        public AndroidViewHelperPackage Resolve()
+        {
+            if (_outcomes.Count == 0)
+            {
+                throw new InvalidOperationException("No fake helper locator outcomes remain.");
+            }
+
+            var outcome = _outcomes.Count > 1 ? _outcomes.Dequeue() : _outcomes.Peek();
+            return outcome switch
+            {
+                AndroidViewHelperPackage package => package,
+                Exception exception => throw exception,
+                _ => throw new InvalidOperationException($"Unsupported fake helper locator outcome '{outcome.GetType().Name}'.")
+            };
+        }
     }
 
 
