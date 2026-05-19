@@ -1,7 +1,8 @@
 using Luotsi.Cli.Artifacts;
+using Luotsi.Cli.Cli.Hosting;
 using Luotsi.Cli.Infrastructure.Contracts;
 
-namespace Luotsi.Cli.Cli;
+namespace Luotsi.Cli.Cli.Inspect;
 
 internal sealed class InspectSessionLauncher(
     DeviceHostLauncher deviceHostLauncher,

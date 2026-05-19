@@ -1,8 +1,9 @@
+using Luotsi.Cli.Cli.Composition;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Models;
 using Luotsi.Cli.Scenarios;
 
-namespace Luotsi.Cli.Cli;
+namespace Luotsi.Cli.Cli.Envelope;
 
 internal sealed class AppCommandFailureResponder(AppCommandEnvelopeWriter envelopeWriter)
 {

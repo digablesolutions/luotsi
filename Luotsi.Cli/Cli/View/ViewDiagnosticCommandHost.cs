@@ -1,8 +1,10 @@
 using Luotsi.Cli.Artifacts;
+using Luotsi.Cli.Cli.Envelope;
+using Luotsi.Cli.Cli.Hosting;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.View.Diagnostics;
 
-namespace Luotsi.Cli.Cli;
+namespace Luotsi.Cli.Cli.View;
 
 internal sealed class ViewDiagnosticCommandHost(ViewDiagnosticCommandHostDependencies dependencies)
 {
@@ -28,7 +30,7 @@ internal sealed class ViewDiagnosticCommandHost(ViewDiagnosticCommandHostDepende
         return 0;
     }
 
-    private View.Contracts.ViewOptions BuildViewOptions(CliOptions options, string adbExecutable)
+    private Luotsi.Cli.View.Contracts.ViewOptions BuildViewOptions(CliOptions options, string adbExecutable)
     {
         var commandTimeout = AdbCommandTimeoutResolver.Resolve(options, _dependencies.Environment);
         return ViewCommandOptionsFactory.Build(options, adbExecutable, allowJoinShare: false, commandTimeout);

@@ -1,7 +1,7 @@
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 
-namespace Luotsi.Cli.Cli;
+namespace Luotsi.Cli.Cli.Inspect;
 
 internal sealed class InspectSessionCommandDispatcher(IDeviceHost deviceHost)
 {

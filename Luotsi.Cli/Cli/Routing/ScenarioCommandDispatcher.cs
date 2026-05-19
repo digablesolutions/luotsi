@@ -1,9 +1,8 @@
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
-
 using Luotsi.Cli.Scenarios;
 
-namespace Luotsi.Cli.Cli;
+namespace Luotsi.Cli.Cli.Routing;
 
 internal sealed class ScenarioCommandDispatcher(
     ScenarioRunPlanner runPlanner,

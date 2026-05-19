@@ -1,9 +1,11 @@
+using Luotsi.Cli.Cli.Envelope;
+using Luotsi.Cli.Cli.Hosting;
+using Luotsi.Cli.Cli.View;
 using Luotsi.Cli.Infrastructure.Contracts;
-using Luotsi.Cli.View.Contracts;
 using Luotsi.Cli.View.Diagnostics;
 using Luotsi.Cli.View.Session;
 
-namespace Luotsi.Cli.Cli;
+namespace Luotsi.Cli.Cli.Composition;
 
 internal static class AppViewCommandCompositionBuilder
 {

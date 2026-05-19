@@ -1,6 +1,6 @@
 using Luotsi.Cli.Scenarios;
 
-namespace Luotsi.Cli.Cli;
+namespace Luotsi.Cli.Cli.Envelope;
 
 internal sealed class AppCommandExitCodeResolver
 {

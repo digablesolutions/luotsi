@@ -4,7 +4,7 @@ using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.View.Contracts;
 
-namespace Luotsi.Cli.Cli;
+namespace Luotsi.Cli.Cli.View;
 
 public sealed record ViewProfile(
     string? Device = null,

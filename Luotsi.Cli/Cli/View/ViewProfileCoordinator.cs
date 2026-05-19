@@ -1,7 +1,7 @@
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.View.Contracts;
 
-namespace Luotsi.Cli.Cli;
+namespace Luotsi.Cli.Cli.View;
 
 internal sealed class ViewProfileCoordinator(IViewProfileStore viewProfileStore)
 {

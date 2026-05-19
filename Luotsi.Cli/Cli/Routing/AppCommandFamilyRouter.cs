@@ -1,7 +1,11 @@
 using Luotsi.Cli.Artifacts;
+using Luotsi.Cli.Cli.Composition;
+using Luotsi.Cli.Cli.Hosting;
+using Luotsi.Cli.Cli.Inspect;
+using Luotsi.Cli.Cli.View;
 using Luotsi.Cli.Infrastructure.Contracts;
 
-namespace Luotsi.Cli.Cli;
+namespace Luotsi.Cli.Cli.Routing;
 
 internal sealed class AppCommandFamilyRouter(AppCommandFamilyRouterDependencies dependencies)
 {

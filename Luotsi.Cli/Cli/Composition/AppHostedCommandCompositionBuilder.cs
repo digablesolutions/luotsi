@@ -1,7 +1,10 @@
+using Luotsi.Cli.Cli.Envelope;
+using Luotsi.Cli.Cli.Routing;
+using Luotsi.Cli.Cli.View;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Scenarios;
 
-namespace Luotsi.Cli.Cli;
+namespace Luotsi.Cli.Cli.Composition;
 
 internal static class AppHostedCommandCompositionBuilder
 {

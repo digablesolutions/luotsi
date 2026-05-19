@@ -1,4 +1,5 @@
 using Luotsi.Cli.Cli;
+using Luotsi.Cli.Cli.View;
 using Luotsi.Cli.Models;
 using Luotsi.Cli.View.Contracts;
 using Xunit;
