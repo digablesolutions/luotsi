@@ -17,6 +17,7 @@ luotsi [--device <serial>] [--platform android] [--adb <path>] [--adb-timeout-se
 | Command | Description |
 |---|---|
 | `devices` | List adb-visible devices |
+| `device-status (--device <serial> | --device-query <query>)` | Read selected device inventory metadata plus current readiness details |
 | `adb server-status` | Host ADB server status |
 | `adb version` | ADB binary version |
 | `adb features --device <serial>` | ADB feature set for a device |

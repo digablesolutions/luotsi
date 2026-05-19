@@ -21,6 +21,7 @@ From source:
 
 Commands:
   devices
+  device-status [--device <adb serial> | --device-query <query>]
   adb server-status
   adb version
   adb features
@@ -76,6 +77,7 @@ Commands:
 
 Common options:
   --device <adb serial>
+  --device-query <query>       exact-match clauses: state=online,type=physical,model=Pixel_9
   --adb <adb executable>
   --platform <android>
   --adb-timeout-sec <seconds>  (default 120, 0 disables; env LUOTSI_ADB_TIMEOUT_SEC)

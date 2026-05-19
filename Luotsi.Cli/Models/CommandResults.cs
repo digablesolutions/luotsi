@@ -8,6 +8,22 @@ public sealed record DeviceInfo(string? Serial, string? Status, string Details);
 
 public sealed record DeviceListResult(IReadOnlyList<DeviceInfo> Devices);
 
+public sealed record DeviceInventoryResult(IReadOnlyList<DeviceState> Devices);
+
+public sealed record DeviceStatusResult(DeviceState Device, PreflightResult Readiness);
+
+public sealed record DeviceState(
+    string? Serial,
+    string State,
+    string Transport,
+    string Type,
+    string? Model,
+    string? Product,
+    string? Device,
+    string Details,
+    string Availability,
+    string? RecommendedFix);
+
 // Preflight
 public sealed record PreflightResult(
     string Model,

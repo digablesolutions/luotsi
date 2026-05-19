@@ -17,6 +17,7 @@ public sealed class CliOptions
     {
         "adb",
         "devices",
+        "device-status",
         "device-wait",
         "preflight",
         "screen-state",
