@@ -29,12 +29,12 @@ internal static class ScenarioValidator
     private static void ValidateStep(ScenarioFile scenario, ScenarioStep step, int index, IReadOnlySet<string> supportedScenarioActions)
     {
         var stepLabel = $"Scenario '{scenario.Name}' step {index}";
-        var action = step.Action.Trim();
-
         if (string.IsNullOrWhiteSpace(step.Action))
         {
             throw new UsageException($"{stepLabel} must define a non-empty action.");
         }
+
+        var action = step.Action.Trim();
 
         if (!supportedScenarioActions.Contains(action) ||
             (string.Equals(action, "doubleTap", StringComparison.OrdinalIgnoreCase) && step.HeaderLogo is not true))

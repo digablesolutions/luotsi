@@ -508,6 +508,12 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public Exception? WaitVisibleException { get; set; }
 
+    public FailureArtifactBundle? FailureArtifacts { get; set; }
+
+    public Exception? FailureArtifactException { get; set; }
+
+    public List<FailureCaptureRequest> FailureArtifactRequests { get; } = [];
+
     public Task<DeviceListResult> GetDevicesAsync()
     {
         if (GetDevicesException is not null)
@@ -842,8 +848,16 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
         return Task.FromResult(new DeviceFingerprint(ResultSchemas.DeviceFingerprint, DateTimeOffset.UtcNow, "SER", "Model", "16", "36", "fingerprint", "arm64-v8a", "focus"));
     }
 
-    public Task<FailureArtifactBundle> CaptureFailureArtifactsAsync(FailureCaptureRequest request, Exception exception) =>
-        Task.FromResult(new FailureArtifactBundle(ResultSchemas.FailureBundle, DateTimeOffset.UtcNow, request.Scope, request.Name, request.File, request.StepIndex, request.StepName, request.Action, exception.GetType().FullName ?? exception.GetType().Name, exception.Message, [], []));
+    public Task<FailureArtifactBundle> CaptureFailureArtifactsAsync(FailureCaptureRequest request, Exception exception)
+    {
+        FailureArtifactRequests.Add(request);
+        if (FailureArtifactException is not null)
+        {
+            throw FailureArtifactException;
+        }
+
+        return Task.FromResult(FailureArtifacts ?? new FailureArtifactBundle(ResultSchemas.FailureBundle, DateTimeOffset.UtcNow, request.Scope, request.Name, request.File, request.StepIndex, request.StepName, request.Action, exception.GetType().FullName ?? exception.GetType().Name, exception.Message, [], []));
+    }
 
     public Task<LogcatResult> LogcatAsync(int tail) => Task.FromResult(new LogcatResult([]));
 

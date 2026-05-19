@@ -18,7 +18,7 @@ internal sealed class ScenarioBatchExecutor(ScenarioExecutor scenarios)
         {
             try
             {
-                results.Add(ScenarioBatchItemResult.FromSuccess(await _scenarios.RunAsync(scenario.File).ConfigureAwait(false)));
+                results.Add(ScenarioBatchItemResult.FromSuccess(await _scenarios.RunAsync(scenario.File).ConfigureAwait(false), scenario));
                 passedCount++;
             }
             catch (Exception ex) when (ex is not UsageException)
@@ -39,7 +39,8 @@ internal sealed class ScenarioBatchExecutor(ScenarioExecutor scenarios)
             plan.ShardedOutCount,
             plan.Query.ShardCount,
             plan.Query.ShardIndex,
-            results);
+            results,
+            plan.Query.ShardStrategy);
     }
 
     private static ScenarioBatchItemResult CreateFailureResult(ScenarioCatalogEntry scenario, Exception exception)
@@ -49,6 +50,7 @@ internal sealed class ScenarioBatchExecutor(ScenarioExecutor scenarios)
             scenario.Name,
             scenario.File,
             failure?.DataPayload as ScenarioRunFailureData,
-            ScenarioErrorInfo.From(exception));
+            ScenarioErrorInfo.From(exception),
+            scenario.Id);
     }
 }

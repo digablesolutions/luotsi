@@ -42,11 +42,27 @@ internal static class ScenarioQueryFactory
             options.Get("action"),
             shardCount,
             shardIndex,
-            options.HasFlag("dry-run"));
+            options.HasFlag("dry-run"),
+            NormalizeShardStrategy(options.Get("shard-strategy")));
     }
 
     private static string[] SplitOption(string? value) =>
         string.IsNullOrWhiteSpace(value)
             ? []
             : value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+    private static string NormalizeShardStrategy(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return ScenarioShardStrategies.Index;
+        }
+
+        return value.Trim().ToLowerInvariant() switch
+        {
+            ScenarioShardStrategies.Index => ScenarioShardStrategies.Index,
+            ScenarioShardStrategies.Hash => ScenarioShardStrategies.Hash,
+            _ => throw new UsageException("--shard-strategy must be one of: index, hash.")
+        };
+    }
 }

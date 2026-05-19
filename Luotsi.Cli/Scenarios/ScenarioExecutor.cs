@@ -91,6 +91,7 @@ public sealed class ScenarioExecutor
     private readonly ScenarioActionDispatcher _actionDispatcher;
     private readonly ScenarioCatalog _scenarioCatalog;
     private readonly IScenarioEventSink _eventSink;
+    private readonly ScenarioFailureArtifactCapturePolicy _failureArtifactCapturePolicy;
 
     public ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem fileSystem, TimeProvider timeProvider, IDelay delay)
         : this(
@@ -116,7 +117,14 @@ public sealed class ScenarioExecutor
     {
     }
 
-    internal ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem fileSystem, TimeProvider timeProvider, IDelay delay, IScenarioTemplateResolver templateResolver, IScenarioEventSink? eventSink = null)
+    internal ScenarioExecutor(
+        IScenarioActionHost actionHost,
+        IFileSystem fileSystem,
+        TimeProvider timeProvider,
+        IDelay delay,
+        IScenarioTemplateResolver templateResolver,
+        IScenarioEventSink? eventSink = null,
+        ScenarioFailureArtifactCapturePolicy failureArtifactCapturePolicy = ScenarioFailureArtifactCapturePolicy.Failure)
     {
         _actionHost = actionHost ?? throw new ArgumentNullException(nameof(actionHost));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
@@ -127,6 +135,7 @@ public sealed class ScenarioExecutor
             fileSystem ?? throw new ArgumentNullException(nameof(fileSystem)),
             templateResolver ?? throw new ArgumentNullException(nameof(templateResolver)));
         _eventSink = eventSink ?? NullScenarioEventSink.Instance;
+        _failureArtifactCapturePolicy = failureArtifactCapturePolicy;
     }
 
     /// <summary>
@@ -138,21 +147,24 @@ public sealed class ScenarioExecutor
     {
         var scenarioStarted = _timeProvider.GetUtcNow();
         var scenario = await LoadValidatedScenarioAsync(file).ConfigureAwait(false);
-        await EmitAsync(new ScenarioEvent("scenario_started", scenarioStarted, File: file, Scenario: scenario.Name)).ConfigureAwait(false);
+        var scenarioId = ScenarioIdentity.Create(file, scenario.Name);
+        await EmitAsync(new ScenarioEvent("scenario_started", scenarioStarted, File: file, ScenarioId: scenarioId, Scenario: scenario.Name)).ConfigureAwait(false);
 
         var status = "failed";
         try
         {
             await _actionHost.WriteDeviceFingerprintAsync().ConfigureAwait(false);
             var prologueMs = (_timeProvider.GetUtcNow() - scenarioStarted).TotalMilliseconds;
-            var execution = await ExecuteStepsAsync(scenario, file, scenarioStarted, prologueMs).ConfigureAwait(false);
+            var execution = await ExecuteStepsAsync(scenario, file, scenarioId, scenarioStarted, prologueMs).ConfigureAwait(false);
             status = "passed";
 
             return new ScenarioRunResult(
                 scenario.Name,
                 status,
                 CreateScenarioRunTiming((_timeProvider.GetUtcNow() - scenarioStarted).TotalMilliseconds, prologueMs, execution.ExecutedStepMs),
-                execution.Steps);
+                execution.Steps,
+                scenarioId,
+                file);
         }
         finally
         {
@@ -162,6 +174,7 @@ public sealed class ScenarioExecutor
                 endedAt,
                 status,
                 File: file,
+                ScenarioId: scenarioId,
                 Scenario: scenario.Name,
                 DurationMs: (endedAt - scenarioStarted).TotalMilliseconds)).ConfigureAwait(false);
         }
@@ -173,7 +186,7 @@ public sealed class ScenarioExecutor
     private async Task<object> ExecuteStepAsync(ScenarioStep step, DateTimeOffset? previousStepStartedAt) =>
         await _actionDispatcher.ExecuteAsync(step, previousStepStartedAt).ConfigureAwait(false);
 
-    private async Task<ScenarioExecution> ExecuteStepsAsync(ScenarioFile scenario, string file, DateTimeOffset scenarioStarted, double prologueMs)
+    private async Task<ScenarioExecution> ExecuteStepsAsync(ScenarioFile scenario, string file, string scenarioId, DateTimeOffset scenarioStarted, double prologueMs)
     {
         var steps = new List<ScenarioStepResult>(scenario.Steps.Count);
         var executedStepMs = 0d;
@@ -184,7 +197,7 @@ public sealed class ScenarioExecutor
             var step = scenario.Steps[index];
             using var delayScope = DelayMetrics.BeginScope();
             var started = _timeProvider.GetUtcNow();
-            await EmitStepAsync("scenario_step_started", file, scenario.Name, index, step, started).ConfigureAwait(false);
+            await EmitStepAsync("scenario_step_started", file, scenarioId, scenario.Name, index, step, started).ConfigureAwait(false);
 
             try
             {
@@ -192,7 +205,7 @@ public sealed class ScenarioExecutor
                 var durationMs = (_timeProvider.GetUtcNow() - started).TotalMilliseconds;
                 executedStepMs += durationMs;
                 previousStepStartedAt = started;
-                await EmitStepAsync("scenario_step_passed", file, scenario.Name, index, step, _timeProvider.GetUtcNow(), "passed", durationMs).ConfigureAwait(false);
+                await EmitStepAsync("scenario_step_passed", file, scenarioId, scenario.Name, index, step, _timeProvider.GetUtcNow(), "passed", durationMs).ConfigureAwait(false);
 
                 steps.Add(new ScenarioStepResult(
                     step.Name ?? step.Action,
@@ -207,7 +220,7 @@ public sealed class ScenarioExecutor
                 var durationMs = (_timeProvider.GetUtcNow() - started).TotalMilliseconds;
                 executedStepMs += durationMs;
                 previousStepStartedAt = started;
-                await EmitStepAsync("scenario_step_continued_on_error", file, scenario.Name, index, step, _timeProvider.GetUtcNow(), "continued_on_error", durationMs, error).ConfigureAwait(false);
+                await EmitStepAsync("scenario_step_continued_on_error", file, scenarioId, scenario.Name, index, step, _timeProvider.GetUtcNow(), "continued_on_error", durationMs, error).ConfigureAwait(false);
                 steps.Add(new ScenarioStepResult(
                     step.Name ?? step.Action,
                     step.Action,
@@ -224,11 +237,11 @@ public sealed class ScenarioExecutor
             {
                 var durationMs = (_timeProvider.GetUtcNow() - started).TotalMilliseconds;
                 executedStepMs += durationMs;
-                var failureArtifacts = await _actionHost.CaptureFailureArtifactsAsync(
+                var error = ScenarioErrorInfo.From(ex);
+                await EmitStepAsync("scenario_step_failed", file, scenarioId, scenario.Name, index, step, _timeProvider.GetUtcNow(), "failed", durationMs, error).ConfigureAwait(false);
+                var failureArtifacts = await CaptureFailureArtifactsBestEffortAsync(
                     new FailureCaptureRequest("scenario", scenario.Name, file, index + 1, step.Name ?? step.Action, step.Action),
                     ex).ConfigureAwait(false);
-                var error = ScenarioErrorInfo.From(ex);
-                await EmitStepAsync("scenario_step_failed", file, scenario.Name, index, step, _timeProvider.GetUtcNow(), "failed", durationMs, error).ConfigureAwait(false);
                 throw new ScenarioStepFailureException(
                     $"Scenario '{scenario.Name}' failed at step {index + 1} ({step.Name ?? step.Action}).",
                     error.Category,
@@ -244,7 +257,8 @@ public sealed class ScenarioExecutor
                             durationMs,
                             CreateTimingData(step, durationMs, delayScope.TotalMilliseconds)),
                         steps,
-                        failureArtifacts),
+                        failureArtifacts,
+                        scenarioId),
                     ex);
             }
         }
@@ -276,6 +290,7 @@ public sealed class ScenarioExecutor
     private Task EmitStepAsync(
         string eventName,
         string file,
+        string scenarioId,
         string scenario,
         int index,
         ScenarioStep step,
@@ -288,6 +303,7 @@ public sealed class ScenarioExecutor
             timestamp,
             status,
             File: file,
+            ScenarioId: scenarioId,
             Scenario: scenario,
             StepIndex: index + 1,
             Step: step.Name ?? step.Action,
@@ -296,6 +312,39 @@ public sealed class ScenarioExecutor
             Error: error));
 
     private Task EmitAsync(ScenarioEvent scenarioEvent) => _eventSink.EmitAsync(scenarioEvent);
+
+    private async Task<FailureArtifactBundle> CaptureFailureArtifactsBestEffortAsync(FailureCaptureRequest request, Exception failure)
+    {
+        if (_failureArtifactCapturePolicy == ScenarioFailureArtifactCapturePolicy.Never)
+        {
+            return CreateEmptyFailureArtifactBundle(request, failure);
+        }
+
+        try
+        {
+            return await _actionHost.CaptureFailureArtifactsAsync(request, failure).ConfigureAwait(false);
+        }
+        catch (Exception captureException)
+        {
+            var bundle = CreateEmptyFailureArtifactBundle(request, failure);
+            return bundle with { CaptureErrors = [new FailureCaptureError("failure_artifacts", captureException.Message)] };
+        }
+    }
+
+    private FailureArtifactBundle CreateEmptyFailureArtifactBundle(FailureCaptureRequest request, Exception failure) =>
+        new(
+            ResultSchemas.FailureBundle,
+            _timeProvider.GetUtcNow(),
+            request.Scope,
+            request.Name,
+            request.File,
+            request.StepIndex,
+            request.StepName,
+            request.Action,
+            failure.GetType().FullName ?? failure.GetType().Name,
+            failure.Message,
+            [],
+            []);
 
     private sealed record ScenarioExecution(double ExecutedStepMs, IReadOnlyList<ScenarioStepResult> Steps);
 }

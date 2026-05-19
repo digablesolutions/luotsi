@@ -118,7 +118,8 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
                 SelectedCount: plan.SelectedCount,
                 ShardedOutCount: plan.ShardedOutCount,
                 ShardCount: plan.Query.ShardCount,
-                ShardIndex: plan.Query.ShardIndex),
+                ShardIndex: plan.Query.ShardIndex,
+                ShardStrategy: plan.Query.ShardStrategy),
             runAsync,
             result => new ScenarioEvent(
                 "scenario_run_ended",
@@ -132,7 +133,8 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
                 FailedCount: result.FailedCount,
                 ShardedOutCount: result.ShardedOutCount,
                 ShardCount: result.ShardCount,
-                ShardIndex: result.ShardIndex),
+                ShardIndex: result.ShardIndex,
+                ShardStrategy: result.ShardStrategy),
             ex => CreateFailedRunEndedEvent(
                 plan.Query.Path,
                 ex,
@@ -141,7 +143,43 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
                 selectedCount: plan.SelectedCount,
                 shardedOutCount: plan.ShardedOutCount,
                 shardCount: plan.Query.ShardCount,
-                shardIndex: plan.Query.ShardIndex)).ConfigureAwait(false);
+                shardIndex: plan.Query.ShardIndex,
+                shardStrategy: plan.Query.ShardStrategy)).ConfigureAwait(false);
+    }
+
+    public async Task<ScenarioRunBatchResult> RunPathAsync(
+        ScenarioQuery query,
+        Func<IScenarioEventSink, Task<ScenarioRunPlan>> planAsync,
+        Func<ScenarioRunPlan, IScenarioEventSink, Task<ScenarioRunBatchResult>> runAsync)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(planAsync);
+        ArgumentNullException.ThrowIfNull(runAsync);
+
+        ScenarioRunPlan plan;
+        try
+        {
+            plan = await planAsync(_eventSink).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            await _eventSink.EmitAsync(new ScenarioEvent(
+                "scenario_run_started",
+                _timeProvider.GetUtcNow(),
+                Path: query.Path,
+                ShardCount: query.ShardCount,
+                ShardIndex: query.ShardIndex,
+                ShardStrategy: query.ShardStrategy)).ConfigureAwait(false);
+            await _eventSink.EmitAsync(CreateFailedRunEndedEvent(
+                query.Path,
+                ex,
+                shardCount: query.ShardCount,
+                shardIndex: query.ShardIndex,
+                shardStrategy: query.ShardStrategy)).ConfigureAwait(false);
+            throw;
+        }
+
+        return await RunBatchAsync(plan, sink => runAsync(plan, sink)).ConfigureAwait(false);
     }
 
     public ValueTask DisposeAsync() => _eventSink.DisposeAsync();
@@ -176,7 +214,8 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
         int? failedCount = null,
         int? shardedOutCount = null,
         int? shardCount = null,
-        int? shardIndex = null) =>
+        int? shardIndex = null,
+        string? shardStrategy = null) =>
         new(
             "scenario_run_ended",
             _timeProvider.GetUtcNow(),
@@ -190,6 +229,7 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
             ShardedOutCount: shardedOutCount,
             ShardCount: shardCount,
             ShardIndex: shardIndex,
+            ShardStrategy: shardStrategy,
             Error: ScenarioErrorInfo.From(exception));
 }
 
@@ -216,6 +256,7 @@ internal sealed record ScenarioEvent(
     [property: JsonPropertyName("status")] string? Status = null,
     [property: JsonPropertyName("path")] string? Path = null,
     [property: JsonPropertyName("file")] string? File = null,
+    [property: JsonPropertyName("scenario_id")] string? ScenarioId = null,
     [property: JsonPropertyName("scenario")] string? Scenario = null,
     [property: JsonPropertyName("step_index")] int? StepIndex = null,
     [property: JsonPropertyName("step")] string? Step = null,
@@ -229,4 +270,5 @@ internal sealed record ScenarioEvent(
     [property: JsonPropertyName("sharded_out_count")] int? ShardedOutCount = null,
     [property: JsonPropertyName("shard_count")] int? ShardCount = null,
     [property: JsonPropertyName("shard_index")] int? ShardIndex = null,
+    [property: JsonPropertyName("shard_strategy")] string? ShardStrategy = null,
     [property: JsonPropertyName("error")] object? Error = null);
