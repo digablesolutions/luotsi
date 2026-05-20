@@ -239,16 +239,18 @@ public sealed class AdbReadinessTests
     public async Task RunAsync_DeviceStatus_Writes_Exact_Command_Envelope()
     {
         var started = DateTimeOffset.Parse("2026-05-15T12:00:00Z");
+        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>());
         var host = new FakeDeviceHost
         {
             PreflightTemplate = new PreflightResult("Pixel 9", "16", "36", "focus", null, null, "fingerprint", "arm64-v8a", "SER123")
         };
         host.ConnectedDevices.Add(new DeviceInfo("SER123", "device", "product:panther model:Pixel_9 device:panther"));
         var console = new FakeConsole();
-        var provenance = new BuildProvenanceProvider(new FakeEnvironmentVariables(new Dictionary<string, string>())).Create();
+        var provenance = new BuildProvenanceProvider(environment).Create();
         var app = new App(new AppDependencies
         {
             Console = console,
+            Environment = environment,
             FileSystem = new FakeFileSystem(),
             TimeProvider = started.ToTimeProvider(),
             DeviceHostFactory = new FakeDeviceHostFactory(host)
