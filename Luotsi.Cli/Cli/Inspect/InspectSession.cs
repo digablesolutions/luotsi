@@ -79,7 +79,11 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIo console,
                                 currentState is null ? null : InspectScreenStateDelta.Create(currentState, nextState));
                             currentState = nextState;
                         }
-                        catch (Exception ex)
+                        catch (OperationCanceledException ex)
+                        {
+                            _protocol.WriteSessionError(_timeProvider.GetUtcNow(), ex, sessionId, request.Id);
+                        }
+                        catch (TimeoutException ex)
                         {
                             _protocol.WriteSessionError(_timeProvider.GetUtcNow(), ex, sessionId, request.Id);
                         }
