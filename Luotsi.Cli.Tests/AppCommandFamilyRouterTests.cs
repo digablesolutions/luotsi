@@ -2,6 +2,7 @@ using Luotsi.Cli.Cli;
 using Luotsi.Cli.Cli.Composition;
 using Luotsi.Cli.Cli.Inspect;
 using Luotsi.Cli.Cli.Routing;
+using Luotsi.Cli.Errors;
 using Luotsi.Cli.Models;
 using Xunit;
 
@@ -171,6 +172,29 @@ public sealed class AppCommandFamilyRouterTests
         Assert.Equal(0, deviceHostFactory.CreateCallCount);
         Assert.True(envelope.RootElement.GetProperty("data").GetProperty("dry_run").GetBoolean());
         Assert.Equal(1, envelope.RootElement.GetProperty("data").GetProperty("selected_count").GetInt32());
+    }
+
+    [Fact]
+    public async Task DispatchAsync_RunMissingFile_ThrowsUsageError_WithoutCreatingRunner()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-19T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var deviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost());
+        var router = CreateRouter(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            Console = new FakeConsole(),
+            FileSystem = new FakeFileSystem(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = deviceHostFactory,
+            ViewProfileStore = new FakeViewProfileStore()
+        });
+        var context = new AppExecutionContext(timeProvider.GetUtcNow(), CliOptions.Parse(["run", "--file", "/tmp/missing.json"]));
+
+        var exception = await Assert.ThrowsAsync<UsageException>(() => router.DispatchAsync(context));
+
+        Assert.Null(context.Runner);
+        Assert.Equal(0, deviceHostFactory.CreateCallCount);
+        Assert.Contains("does not exist", exception.Message, StringComparison.Ordinal);
     }
 
     private static AppCommandFamilyRouter CreateRouter(AppDependencies dependencies)
