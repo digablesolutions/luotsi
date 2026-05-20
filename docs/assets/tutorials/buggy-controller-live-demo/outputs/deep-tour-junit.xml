@@ -1,0 +1,23 @@
+﻿<testsuite name="C:\tmp\device-e2e-lab\artifacts\live-demo-20260520-204309\deep-tour-scenario.json" tests="1" failures="0" skipped="0" time="27.854" timestamp="2026-05-20T17:54:49.6016127+00:00"><testcase classname="C:\tmp\device-e2e-lab\artifacts\live-demo-20260520-204309\deep-tour-scenario.json" name="buggy deep tab tour" id="C:\tmp\device-e2e-lab\artifacts\live-demo-20260520-204309\deep-tour-scenario.json::buggy deep tab tour" time="27.537"><system-out>metric: action.takescreenshot.count=5
+metric: action.takescreenshot.ms=14247.109
+metric: action.tappoint.count=5
+metric: action.tappoint.ms=12606.446
+metric: continued_on_error_step_count=0
+metric: failed_step_count=0
+metric: harness_delay_ms=3700
+metric: main_step_count=10
+metric: non_delay_ms=23153.555
+metric: non_step_ms=683.755
+metric: passed_step_count=10
+metric: prologue_ms=636.721
+metric: setup_step_count=0
+metric: slowest_step_ms=4534.623
+metric: step_count=10
+metric: steps_ms=26853.555
+metric: teardown_step_count=0
+metric: total_ms=27537.31
+screenshot: deep-01-commands-screenshot.png (step 2: commands screenshot)
+screenshot: deep-02-telemetry-screenshot.png (step 4: telemetry screenshot)
+screenshot: deep-03-map-screenshot.png (step 6: map screenshot)
+screenshot: deep-04-vision-screenshot.png (step 8: vision screenshot)
+screenshot: deep-05-telemetry-final-screenshot.png (step 10: telemetry final screenshot)</system-out></testcase></testsuite>
