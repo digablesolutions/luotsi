@@ -97,8 +97,8 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
                 _timeProvider.GetUtcNow(),
                 result.Status,
                 Path: file,
-                PassedCount: result.Status == "passed" ? 1 : 0,
-                FailedCount: result.Status == "passed" ? 0 : 1,
+                PassedCount: IsPassed(result.Status) ? 1 : 0,
+                FailedCount: IsFailed(result.Status) ? 1 : 0,
                 Metrics: result.Metrics),
             ex => CreateFailedRunEndedEvent(file, ex, passedCount: 0, failedCount: 1)).ConfigureAwait(false);
     }
@@ -148,19 +148,16 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
                 shardStrategy: plan.Query.ShardStrategy)).ConfigureAwait(false);
     }
 
-    public async Task<ScenarioRunBatchResult> RunPathAsync(
+    public async Task<ScenarioRunPlan> PlanPathAsync(
         ScenarioQuery query,
-        Func<IScenarioEventSink, Task<ScenarioRunPlan>> planAsync,
-        Func<ScenarioRunPlan, IScenarioEventSink, Task<ScenarioRunBatchResult>> runAsync)
+        Func<Task<ScenarioRunPlan>> planAsync)
     {
         ArgumentNullException.ThrowIfNull(query);
         ArgumentNullException.ThrowIfNull(planAsync);
-        ArgumentNullException.ThrowIfNull(runAsync);
 
-        ScenarioRunPlan plan;
         try
         {
-            plan = await planAsync(_eventSink).ConfigureAwait(false);
+            return await planAsync().ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -179,11 +176,15 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
                 shardStrategy: query.ShardStrategy)).ConfigureAwait(false);
             throw;
         }
-
-        return await RunBatchAsync(plan, sink => runAsync(plan, sink)).ConfigureAwait(false);
     }
 
     public ValueTask DisposeAsync() => _eventSink.DisposeAsync();
+
+    private static bool IsPassed(string status) =>
+        string.Equals(status, "passed", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsFailed(string status) =>
+        string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase);
 
     private async Task<TResult> RunAsync<TResult>(
         ScenarioEvent started,

@@ -22,8 +22,8 @@ internal static class ScenarioRunReportFactory
             1,
             1,
             1,
-            result.Status == "passed" ? 1 : 0,
-            result.Status == "passed" ? 0 : 1,
+            IsPassed(result.Status) ? 1 : 0,
+            IsFailed(result.Status) ? 1 : 0,
             0,
             null,
             null,
@@ -232,4 +232,10 @@ internal static class ScenarioRunReportFactory
 
     private static double CalculateDurationMs(DateTimeOffset startedAt, DateTimeOffset endedAt) =>
         Math.Max(0, (endedAt - startedAt).TotalMilliseconds);
+
+    private static bool IsPassed(string status) =>
+        string.Equals(status, "passed", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsFailed(string status) =>
+        string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase);
 }

@@ -15,7 +15,8 @@ internal sealed record ScenarioRunConfiguration(
     string? JsonReportPath,
     string? JUnitReportPath,
     ScenarioFailureArtifactCapturePolicy FailureArtifactCapturePolicy,
-    ScenarioArtifactAttachmentPolicy ArtifactAttachmentPolicy)
+    ScenarioArtifactAttachmentPolicy ArtifactAttachmentPolicy,
+    bool ValidateOnly)
 {
     public static ScenarioRunConfiguration Create(CliOptions options)
     {
@@ -26,7 +27,8 @@ internal sealed record ScenarioRunConfiguration(
             NormalizePath(options.Get("report-json")),
             NormalizePath(options.Get("report-junit")),
             ParseFailureArtifactCapturePolicy(options.Get("capture-on")),
-            ParseArtifactAttachmentPolicy(options.Get("attach-artifacts")));
+            ParseArtifactAttachmentPolicy(options.Get("attach-artifacts")),
+            options.HasFlag("validate-only"));
     }
 
     private static string? NormalizePath(string? value) =>

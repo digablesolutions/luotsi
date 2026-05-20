@@ -57,15 +57,18 @@ public sealed class App
         });
         _commandFamilyRouter = new AppCommandFamilyRouter(new AppCommandFamilyRouterDependencies
         {
-            TimeProvider = infrastructure.TimeProvider,
-            FileSystem = infrastructure.FileSystem,
-            Environment = infrastructure.Environment,
-            ProfileCoordinator = infrastructure.ProfileCoordinator,
+            RouteBootstrapper = new AppCommandRouteBootstrapper(new AppCommandRouteBootstrapperDependencies
+            {
+                TimeProvider = infrastructure.TimeProvider,
+                FileSystem = infrastructure.FileSystem,
+                Environment = infrastructure.Environment,
+                ProfileCoordinator = infrastructure.ProfileCoordinator,
+                DeviceHostLauncher = infrastructure.DeviceHostLauncher
+            }),
             CommandHost = hostedCommands.CommandHost,
             ViewSessionCommandPreparer = viewCommands.ViewSessionCommandPreparer,
             InspectSessionLauncher = new InspectSessionLauncher(infrastructure.DeviceHostLauncher, infrastructure.Console, infrastructure.TimeProvider),
-            ViewDiagnosticsLauncher = viewCommands.ViewDiagnosticsLauncher,
-            DeviceHostLauncher = infrastructure.DeviceHostLauncher
+            ViewDiagnosticsLauncher = viewCommands.ViewDiagnosticsLauncher
         });
     }
 

@@ -14,6 +14,12 @@ internal sealed class ScenarioExecutorFactory(
     private readonly IDelay _delay = delay ?? throw new ArgumentNullException(nameof(delay));
     private readonly IScenarioTemplateResolver _templateResolver = templateResolver ?? throw new ArgumentNullException(nameof(templateResolver));
 
+    public IFileSystem FileSystem => _fileSystem;
+
+    public TimeProvider TimeProvider => _timeProvider;
+
+    public IScenarioTemplateResolver TemplateResolver => _templateResolver;
+
     public IScenarioMetricsCollector MetricsCollector { get; } = metricsCollector ?? throw new ArgumentNullException(nameof(metricsCollector));
 
     public ScenarioExecutor Create(
