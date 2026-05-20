@@ -209,8 +209,16 @@ Every command returns a single JSON envelope:
     "artifact_root": "/tmp/luotsi/..."
   },
   "provenance": {
-    "commit": "...",
-    "branch": "..."
+    "tool": "luotsi",
+    "version": "1.2.3",
+    "commit_sha": "...",
+    "branch": "main",
+    "repository": "digablesolutions/luotsi",
+    "ci_provider": "github-actions",
+    "ci_run_id": "123456789",
+    "os": "Ubuntu 24.04.2 LTS",
+    "architecture": "x64",
+    "framework": ".NET 10.0.8"
   },
   "error": null
 }

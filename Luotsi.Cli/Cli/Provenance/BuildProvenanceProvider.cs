@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Linq;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
 
@@ -57,16 +58,10 @@ internal sealed class BuildProvenanceProvider(IEnvironmentVariables environment)
 
     private string? FirstNonBlank(params string[] names)
     {
-        foreach (var name in names)
-        {
-            var value = _environment.GetEnvironmentVariable(name);
-            if (!string.IsNullOrWhiteSpace(value))
-            {
-                return value.Trim();
-            }
-        }
-
-        return null;
+        return names
+            .Select(_environment.GetEnvironmentVariable)
+            .FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value))
+            ?.Trim();
     }
 
     private static bool IsTruthy(string? value) =>
