@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Scenarios;
 
@@ -65,24 +66,26 @@ internal sealed class JsonlScenarioEventSink : IScenarioEventSink
     public async ValueTask DisposeAsync() => await _stream.DisposeAsync().ConfigureAwait(false);
 }
 
-internal sealed class ScenarioRunEventCoordinatorFactory(IFileSystem fileSystem, TimeProvider timeProvider)
+internal sealed class ScenarioRunEventCoordinatorFactory(IFileSystem fileSystem, TimeProvider timeProvider, BuildProvenance provenance)
 {
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+    private readonly BuildProvenance _provenance = provenance ?? throw new ArgumentNullException(nameof(provenance));
 
     public ScenarioRunEventCoordinator Create(string? path)
     {
         IScenarioEventSink sink = string.IsNullOrWhiteSpace(path)
             ? NullScenarioEventSink.Instance
             : new JsonlScenarioEventSink(_fileSystem, path);
-        return new ScenarioRunEventCoordinator(_timeProvider, sink);
+        return new ScenarioRunEventCoordinator(_timeProvider, sink, _provenance);
     }
 }
 
-internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, IScenarioEventSink eventSink) : IAsyncDisposable
+internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, IScenarioEventSink eventSink, BuildProvenance provenance) : IAsyncDisposable
 {
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     private readonly IScenarioEventSink _eventSink = eventSink ?? throw new ArgumentNullException(nameof(eventSink));
+    private readonly BuildProvenance _provenance = provenance ?? throw new ArgumentNullException(nameof(provenance));
 
     public async Task<ScenarioRunResult> RunFileAsync(string file, Func<IScenarioEventSink, Task<ScenarioRunResult>> runAsync)
     {
@@ -90,7 +93,7 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
         ArgumentNullException.ThrowIfNull(runAsync);
 
         return await RunAsync(
-            new ScenarioEvent("scenario_run_started", _timeProvider.GetUtcNow(), Path: file),
+            new ScenarioEvent("scenario_run_started", _timeProvider.GetUtcNow(), Path: file, Provenance: _provenance),
             runAsync,
             result => new ScenarioEvent(
                 "scenario_run_ended",
@@ -99,7 +102,8 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
                 Path: file,
                 PassedCount: IsPassed(result.Status) ? 1 : 0,
                 FailedCount: IsFailed(result.Status) ? 1 : 0,
-                Metrics: result.Metrics),
+                Metrics: result.Metrics,
+                Provenance: _provenance),
             ex => CreateFailedRunEndedEvent(file, ex, passedCount: 0, failedCount: 1)).ConfigureAwait(false);
     }
 
@@ -119,7 +123,8 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
                 ShardedOutCount: plan.ShardedOutCount,
                 ShardCount: plan.Query.ShardCount,
                 ShardIndex: plan.Query.ShardIndex,
-                ShardStrategy: plan.Query.ShardStrategy),
+                ShardStrategy: plan.Query.ShardStrategy,
+                Provenance: _provenance),
             runAsync,
             result => new ScenarioEvent(
                 "scenario_run_ended",
@@ -135,7 +140,8 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
                 ShardCount: result.ShardCount,
                 ShardIndex: result.ShardIndex,
                 ShardStrategy: result.ShardStrategy,
-                Metrics: result.Metrics),
+                Metrics: result.Metrics,
+                Provenance: _provenance),
             ex => CreateFailedRunEndedEvent(
                 plan.Query.Path,
                 ex,
@@ -167,7 +173,8 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
                 Path: query.Path,
                 ShardCount: query.ShardCount,
                 ShardIndex: query.ShardIndex,
-                ShardStrategy: query.ShardStrategy)).ConfigureAwait(false);
+                ShardStrategy: query.ShardStrategy,
+                Provenance: _provenance)).ConfigureAwait(false);
             await _eventSink.EmitAsync(CreateFailedRunEndedEvent(
                 query.Path,
                 ex,
@@ -233,6 +240,7 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
             ShardIndex: shardIndex,
             ShardStrategy: shardStrategy,
             Metrics: ScenarioFailureDetails.TryGetMetrics(exception),
+            Provenance: _provenance,
             Error: ScenarioErrorInfo.From(exception));
 }
 
@@ -259,4 +267,5 @@ internal sealed record ScenarioEvent(
     [property: JsonPropertyName("shard_index")] int? ShardIndex = null,
     [property: JsonPropertyName("shard_strategy")] string? ShardStrategy = null,
     [property: JsonPropertyName("metrics")] IReadOnlyDictionary<string, double>? Metrics = null,
+    [property: JsonPropertyName("provenance")] BuildProvenance? Provenance = null,
     [property: JsonPropertyName("error")] object? Error = null);

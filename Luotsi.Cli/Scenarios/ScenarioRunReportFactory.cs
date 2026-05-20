@@ -11,7 +11,8 @@ internal static class ScenarioRunReportFactory
         ScenarioRunResult result,
         DateTimeOffset startedAt,
         DateTimeOffset endedAt,
-        ScenarioArtifactAttachmentPolicy attachmentPolicy) =>
+        ScenarioArtifactAttachmentPolicy attachmentPolicy,
+        BuildProvenance provenance) =>
         new(
             ReportSchema,
             file,
@@ -29,6 +30,7 @@ internal static class ScenarioRunReportFactory
             null,
             null,
             result.Metrics,
+            provenance,
             [CreateScenarioFromSuccess(result, file, attachmentPolicy)]);
 
     public static ScenarioRunReport FromSingleFailure(
@@ -36,7 +38,8 @@ internal static class ScenarioRunReportFactory
         Exception exception,
         DateTimeOffset startedAt,
         DateTimeOffset endedAt,
-        ScenarioArtifactAttachmentPolicy attachmentPolicy)
+        ScenarioArtifactAttachmentPolicy attachmentPolicy,
+        BuildProvenance provenance)
     {
         var error = ScenarioErrorInfo.From(exception);
         var failureData = ScenarioFailureDetails.TryGetData(exception);
@@ -60,6 +63,7 @@ internal static class ScenarioRunReportFactory
             null,
             null,
             scenario.Metrics,
+            provenance,
             [scenario],
             error);
     }
@@ -68,7 +72,8 @@ internal static class ScenarioRunReportFactory
         ScenarioRunBatchResult result,
         DateTimeOffset startedAt,
         DateTimeOffset endedAt,
-        ScenarioArtifactAttachmentPolicy attachmentPolicy) =>
+        ScenarioArtifactAttachmentPolicy attachmentPolicy,
+        BuildProvenance provenance) =>
         new(
             ReportSchema,
             result.Path,
@@ -86,6 +91,7 @@ internal static class ScenarioRunReportFactory
             result.ShardIndex,
             result.ShardStrategy,
             result.Metrics ?? ScenarioMetrics.Empty,
+            provenance,
             result.Scenarios.Select(scenario => CreateScenarioFromBatchItem(scenario, attachmentPolicy)).ToArray());
 
     public static ScenarioRunReport FromBatchFailure(
@@ -93,7 +99,8 @@ internal static class ScenarioRunReportFactory
         Exception exception,
         DateTimeOffset startedAt,
         DateTimeOffset endedAt,
-        ScenarioArtifactAttachmentPolicy attachmentPolicy)
+        ScenarioArtifactAttachmentPolicy attachmentPolicy,
+        BuildProvenance provenance)
     {
         var error = ScenarioErrorInfo.From(exception);
         var failureData = ScenarioFailureDetails.TryGetData(exception);
@@ -117,6 +124,7 @@ internal static class ScenarioRunReportFactory
             plan.Query.ShardIndex,
             plan.Query.ShardStrategy,
             failureData?.Metrics ?? ScenarioMetrics.Empty,
+            provenance,
             scenarios,
             error);
     }
@@ -125,7 +133,8 @@ internal static class ScenarioRunReportFactory
         ScenarioQuery query,
         Exception exception,
         DateTimeOffset startedAt,
-        DateTimeOffset endedAt)
+        DateTimeOffset endedAt,
+        BuildProvenance provenance)
     {
         var error = ScenarioErrorInfo.From(exception);
         return new ScenarioRunReport(
@@ -145,6 +154,7 @@ internal static class ScenarioRunReportFactory
             query.ShardIndex,
             query.ShardStrategy,
             ScenarioMetrics.Empty,
+            provenance,
             [CreateScenarioFromException(query.Path, exception, "scenario discovery", $"{query.Path}::discovery")],
             error);
     }

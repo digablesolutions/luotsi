@@ -54,7 +54,11 @@ internal sealed class AppCommandFamilyRouter(AppCommandFamilyRouterDependencies 
             }
 
             default:
-                context.Runner = await _dependencies.RouteBootstrapper.PrepareHostedCommandRunnerAsync(options, routeSetup).ConfigureAwait(false);
+                if (_dependencies.CommandHost.RequiresRunner(options))
+                {
+                    context.Runner = await _dependencies.RouteBootstrapper.PrepareHostedCommandRunnerAsync(options, routeSetup).ConfigureAwait(false);
+                }
+
                 return await _dependencies.CommandHost.RunCommandAsync(options, started, routeSetup.AdbExecutable, context.Runner, routeSetup.Artifacts).ConfigureAwait(false);
         }
     }

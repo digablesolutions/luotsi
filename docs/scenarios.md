@@ -62,10 +62,12 @@ The top-level scenario result also includes `prologue_ms`, `steps_ms`, and `non_
 | `tapText` | `text`, `timeoutSec` |
 | `tapPoint` | `x`, `y` |
 | `doubleTapHeaderLogo` | — |
-| `doubleTap` | `headerLogo: true` |
+| `doubleTap` | `headerLogo: true` only; equivalent to `doubleTapHeaderLogo` |
 | `typeText` | `text` |
 | `typePin` | `pin` |
 | `keyevent` | `code` (KEYCODE_* string) |
+
+`doubleTap` is currently a compatibility alias for the header-logo interaction only. If `headerLogo: true` is omitted, scenario validation rejects the step.
 
 ### Waits & Assertions
 

@@ -42,6 +42,14 @@ If you changed the Android helper, also validate the helper build from
 - Maintain artifact capture on device-facing failures.
 - Prefer injected fakes in tests over real devices or real `adb`.
 
+## Docs Maintenance
+
+When documentation needs a source of truth, prefer the owning implementation surface instead of copying behavior from older docs:
+
+- `Luotsi.Cli/Cli/Help.cs` for the public CLI command list and flags
+- `Luotsi.Cli/Scenarios/ScenarioExecutor.cs` and `Luotsi.Cli/Scenarios/ScenarioValidator.cs` for supported scenario actions and validation rules
+- `Luotsi.ViewServer.Android/app/src/main/AndroidManifest.xml` plus the helper Kotlin sources for Android helper behavior, permissions, and entry points
+
 ## Pull requests
 
 PRs should explain:

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
+using Luotsi.Cli.Cli.Provenance;
 using Luotsi.Cli.Hosts.Android;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
@@ -244,6 +245,7 @@ public sealed class AdbReadinessTests
         };
         host.ConnectedDevices.Add(new DeviceInfo("SER123", "device", "product:panther model:Pixel_9 device:panther"));
         var console = new FakeConsole();
+        var provenance = new BuildProvenanceProvider(new FakeEnvironmentVariables(new Dictionary<string, string>())).Create();
         var app = new App(new AppDependencies
         {
             Console = console,
@@ -289,6 +291,14 @@ public sealed class AdbReadinessTests
             {
                 artifact_root = $"/tmp{Path.DirectorySeparatorChar}luotsi{Path.DirectorySeparatorChar}20260515-120000-device-status",
                 poll_artifacts = "final"
+            },
+            provenance = new
+            {
+                tool = provenance.Tool,
+                version = provenance.Version,
+                os = provenance.Os,
+                architecture = provenance.Architecture,
+                framework = provenance.Framework
             },
             schema = ResultSchemas.CommandEnvelope,
             duration_ms = 0

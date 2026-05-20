@@ -15,52 +15,64 @@ internal sealed class AppCommandDispatcher(
     private readonly ScenarioCommandDispatcher _scenarioCommandDispatcher = scenarioCommandDispatcher ?? throw new ArgumentNullException(nameof(scenarioCommandDispatcher));
     private readonly ViewProfileCoordinator _profileCoordinator = profileCoordinator ?? throw new ArgumentNullException(nameof(profileCoordinator));
 
-    public async Task<object> ExecuteAsync(string command, CliOptions options, string adbExecutable, IDeviceHost runner)
+    public bool RequiresRunner(CliOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(runner);
+
+        return options.Command switch
+        {
+            "scenario-list" => false,
+            "run" => _scenarioCommandDispatcher.RequiresRunner(options),
+            _ => true
+        };
+    }
+
+    public async Task<object> ExecuteAsync(string command, CliOptions options, string adbExecutable, IDeviceHost? runner)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentException.ThrowIfNullOrWhiteSpace(command);
 
         return command switch
         {
             "adb" => await _adbSubcommandDispatcher.ExecuteAsync(options, RequireAdbCommandHost(runner, command)).ConfigureAwait(false),
-            "devices" => DeviceInventory.FromDeviceList(await runner.GetDevicesAsync().ConfigureAwait(false)),
-            "device-status" => await DeviceStatusResolver.ReadAsync(runner, RequireAdbCommandHost(runner, command)).ConfigureAwait(false),
+            "devices" => DeviceInventory.FromDeviceList(await RequireRunner(runner, command).GetDevicesAsync().ConfigureAwait(false)),
+            "device-status" => await DeviceStatusResolver.ReadAsync(RequireRunner(runner, command), RequireAdbCommandHost(runner, command)).ConfigureAwait(false),
             "device-wait" or "wait-for-device" => await RequireAdbCommandHost(runner, command).WaitForDeviceAsync(options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
             "preflight" => await RequireAdbCommandHost(runner, command).PreflightAsync(options.Get("package")).ConfigureAwait(false),
-            "wireless" => await GetWirelessHost(runner).EnableWirelessAsync(options.Get("host"), options.Int("port", 5555)).ConfigureAwait(false),
-            "wireless-scan" => await GetWirelessHost(runner).ScanWirelessServicesAsync().ConfigureAwait(false),
-            "wireless-pair" => await GetWirelessHost(runner).PairWirelessAsync(GetWirelessEndpoint(options, "wireless-pair"), options.Get("service"), options.Get("code") ?? options.Get("pairing-code")).ConfigureAwait(false),
-            "wireless-connect" => await ConnectWirelessAsync(options, adbExecutable, GetWirelessHost(runner)).ConfigureAwait(false),
-            "forward-list" => await runner.ListForwardsAsync().ConfigureAwait(false),
-            "forward" => await runner.ForwardAsync(options.Require("local"), options.Require("remote"), options.HasFlag("no-rebind")).ConfigureAwait(false),
-            "forward-remove" => await runner.RemoveForwardAsync(options.Require("local")).ConfigureAwait(false),
-            "reverse-list" => await runner.ListReversesAsync().ConfigureAwait(false),
-            "reverse" => await runner.ReverseAsync(options.Require("remote"), options.Require("local"), options.HasFlag("no-rebind")).ConfigureAwait(false),
-            "reverse-remove" => await runner.RemoveReverseAsync(options.Require("remote")).ConfigureAwait(false),
-            "start-app" => await runner.StartAppAsync(options.Require("package"), options.Get("activity"), options.HasFlag("wait")).ConfigureAwait(false),
-            "start-uri" => await runner.StartUriAsync(options.Require("uri"), options.Get("package"), options.Get("activity"), options.Get("action"), options.HasFlag("wait")).ConfigureAwait(false),
-            "force-stop" => await runner.ForceStopAsync(options.Require("package")).ConfigureAwait(false),
-            "clear" or "clear-app" => await runner.ClearAppAsync(options.Require("package")).ConfigureAwait(false),
-            "wait-for-activity" => await runner.WaitForActivityAsync(options.Require("activity"), options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
-            "wait-for-not-activity" => await runner.WaitForNotActivityAsync(options.Require("activity"), options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
-            "is-app-installed" => await runner.IsAppInstalledAsync(options.Require("package")).ConfigureAwait(false),
-            "list-installed-packages" => await runner.ListInstalledPackagesAsync(options.HasFlag("third-party")).ConfigureAwait(false),
-            "grant-permission" => await runner.GrantPermissionAsync(options.Require("package"), options.Require("permission")).ConfigureAwait(false),
-            "revoke-permission" => await runner.RevokePermissionAsync(options.Require("package"), options.Require("permission")).ConfigureAwait(false),
+            "wireless" => await GetWirelessHost(runner, command).EnableWirelessAsync(options.Get("host"), options.Int("port", 5555)).ConfigureAwait(false),
+            "wireless-scan" => await GetWirelessHost(runner, command).ScanWirelessServicesAsync().ConfigureAwait(false),
+            "wireless-pair" => await GetWirelessHost(runner, command).PairWirelessAsync(GetWirelessEndpoint(options, "wireless-pair"), options.Get("service"), options.Get("code") ?? options.Get("pairing-code")).ConfigureAwait(false),
+            "wireless-connect" => await ConnectWirelessAsync(options, adbExecutable, GetWirelessHost(runner, command)).ConfigureAwait(false),
+            "forward-list" => await RequireRunner(runner, command).ListForwardsAsync().ConfigureAwait(false),
+            "forward" => await RequireRunner(runner, command).ForwardAsync(options.Require("local"), options.Require("remote"), options.HasFlag("no-rebind")).ConfigureAwait(false),
+            "forward-remove" => await RequireRunner(runner, command).RemoveForwardAsync(options.Require("local")).ConfigureAwait(false),
+            "reverse-list" => await RequireRunner(runner, command).ListReversesAsync().ConfigureAwait(false),
+            "reverse" => await RequireRunner(runner, command).ReverseAsync(options.Require("remote"), options.Require("local"), options.HasFlag("no-rebind")).ConfigureAwait(false),
+            "reverse-remove" => await RequireRunner(runner, command).RemoveReverseAsync(options.Require("remote")).ConfigureAwait(false),
+            "start-app" => await RequireRunner(runner, command).StartAppAsync(options.Require("package"), options.Get("activity"), options.HasFlag("wait")).ConfigureAwait(false),
+            "start-uri" => await RequireRunner(runner, command).StartUriAsync(options.Require("uri"), options.Get("package"), options.Get("activity"), options.Get("action"), options.HasFlag("wait")).ConfigureAwait(false),
+            "force-stop" => await RequireRunner(runner, command).ForceStopAsync(options.Require("package")).ConfigureAwait(false),
+            "clear" or "clear-app" => await RequireRunner(runner, command).ClearAppAsync(options.Require("package")).ConfigureAwait(false),
+            "wait-for-activity" => await RequireRunner(runner, command).WaitForActivityAsync(options.Require("activity"), options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
+            "wait-for-not-activity" => await RequireRunner(runner, command).WaitForNotActivityAsync(options.Require("activity"), options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
+            "is-app-installed" => await RequireRunner(runner, command).IsAppInstalledAsync(options.Require("package")).ConfigureAwait(false),
+            "list-installed-packages" => await RequireRunner(runner, command).ListInstalledPackagesAsync(options.HasFlag("third-party")).ConfigureAwait(false),
+            "grant-permission" => await RequireRunner(runner, command).GrantPermissionAsync(options.Require("package"), options.Require("permission")).ConfigureAwait(false),
+            "revoke-permission" => await RequireRunner(runner, command).RevokePermissionAsync(options.Require("package"), options.Require("permission")).ConfigureAwait(false),
             "scenario-list" => await _scenarioCommandDispatcher.ListAsync(options).ConfigureAwait(false),
-            "screen-state" => await runner.GetScreenStateAsync().ConfigureAwait(false),
-            "telemetry-tail" => await runner.TelemetryTailAsync(options.Int("tail", CliDefaults.DefaultLogTail)).ConfigureAwait(false),
-            "telemetry-watch" => await runner.TelemetryWatchAsync(options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
-            "wait-step" => await runner.WaitForStepAsync(options.Require("step"), options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
-            "wait-action-ready" => await runner.WaitForActionReadyAsync(options.Require("action"), options.Get("step"), options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
-            "tap" => await runner.TapAsync(options.Require("x"), options.Require("y")).ConfigureAwait(false),
-            "tap-text" => await runner.TapTextAsync(options.Require("text"), options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
-            "wait-visible" => await runner.WaitVisibleAsync(options.Require("text"), options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
-            "type-text" => await runner.TypeTextAsync(options.Require("text")).ConfigureAwait(false),
-            "keyevent" => await runner.KeyEventAsync(options.Require("code")).ConfigureAwait(false),
-            "logcat" => await runner.LogcatAsync(options.Int("tail", CliDefaults.DefaultLogTail)).ConfigureAwait(false),
-            "wait-log" => await runner.WaitForLogAsync(options.Require("contains"), options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
-            "record" => await runner.RecordAsync(options.Require("output"), options.Int("time-limit-sec", CliDefaults.DefaultRecordTimeLimitSeconds)).ConfigureAwait(false),
+            "screen-state" => await RequireRunner(runner, command).GetScreenStateAsync().ConfigureAwait(false),
+            "telemetry-tail" => await RequireRunner(runner, command).TelemetryTailAsync(options.Int("tail", CliDefaults.DefaultLogTail)).ConfigureAwait(false),
+            "telemetry-watch" => await RequireRunner(runner, command).TelemetryWatchAsync(options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
+            "wait-step" => await RequireRunner(runner, command).WaitForStepAsync(options.Require("step"), options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
+            "wait-action-ready" => await RequireRunner(runner, command).WaitForActionReadyAsync(options.Require("action"), options.Get("step"), options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
+            "tap" => await RequireRunner(runner, command).TapAsync(options.Require("x"), options.Require("y")).ConfigureAwait(false),
+            "tap-text" => await RequireRunner(runner, command).TapTextAsync(options.Require("text"), options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
+            "wait-visible" => await RequireRunner(runner, command).WaitVisibleAsync(options.Require("text"), options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
+            "type-text" => await RequireRunner(runner, command).TypeTextAsync(options.Require("text")).ConfigureAwait(false),
+            "keyevent" => await RequireRunner(runner, command).KeyEventAsync(options.Require("code")).ConfigureAwait(false),
+            "logcat" => await RequireRunner(runner, command).LogcatAsync(options.Int("tail", CliDefaults.DefaultLogTail)).ConfigureAwait(false),
+            "wait-log" => await RequireRunner(runner, command).WaitForLogAsync(options.Require("contains"), options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
+            "record" => await RequireRunner(runner, command).RecordAsync(options.Require("output"), options.Int("time-limit-sec", CliDefaults.DefaultRecordTimeLimitSeconds)).ConfigureAwait(false),
             "run" => await _scenarioCommandDispatcher.RunAsync(options, runner).ConfigureAwait(false),
             _ => throw new UsageException($"Unknown command '{command}'.")
         };
@@ -82,8 +94,8 @@ internal sealed class AppCommandDispatcher(
         return result;
     }
 
-    private static IWirelessDebugHost GetWirelessHost(IDeviceHost runner) =>
-        runner as IWirelessDebugHost
+    private static IWirelessDebugHost GetWirelessHost(IDeviceHost? runner, string command) =>
+        RequireRunner(runner, command) as IWirelessDebugHost
         ?? throw new InvalidOperationException("The selected device host does not support wireless ADB commands.");
 
     private static string? GetWirelessEndpoint(CliOptions options, string commandName)
@@ -109,6 +121,9 @@ internal sealed class AppCommandDispatcher(
         return $"{host}:{port}";
     }
 
-    private static IAdbCommandHost RequireAdbCommandHost(IDeviceHost runner, string command) =>
-        runner as IAdbCommandHost ?? throw new InvalidOperationException($"Command '{command}' requires a direct adb-backed device host.");
+    private static IDeviceHost RequireRunner(IDeviceHost? runner, string command) =>
+        runner ?? throw new InvalidOperationException($"Command '{command}' requires a device host.");
+
+    private static IAdbCommandHost RequireAdbCommandHost(IDeviceHost? runner, string command) =>
+        RequireRunner(runner, command) as IAdbCommandHost ?? throw new InvalidOperationException($"Command '{command}' requires a direct adb-backed device host.");
 }

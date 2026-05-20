@@ -15,7 +15,7 @@ Luotsi is a host-driven CLI for Android device automation, inspection, and live 
 
 ## How it works
 
-1. **Run a command** — every command returns one JSON envelope with `ok`, `data`, `artifacts`, and `error`. No third-party device server required.
+1. **Run a command** — every command returns one JSON envelope with `ok`, `command`, `data`, `artifacts`, `provenance`, and `error`. No third-party device server required.
 2. **Run a scenario** — drive multi-step device flows from a small JSON playbook. Steps are validated, templated, and timed; failures produce artifact bundles automatically.
 3. **Inspect mode** — open a JSONL session for agent-driven exploration. Luotsi emits screen snapshots and diffs so an agent can reason about the UI and act without a scenario file.
 4. **Live view** — stream a mirrored device display to a local SDL window with an operator control layer, hotkeys, and JSONL events for agents consuming stream state.
@@ -69,6 +69,7 @@ Quick reference. See [docs/commands.md](docs/commands.md) for flags, retry behav
 | Command | Description |
 |---|---|
 | `devices` | List adb-visible devices |
+| `device-status --device <serial>` | Read selected device readiness and inventory metadata |
 | `adb server-status` | Host ADB server status |
 | `adb version` | ADB binary version |
 | `adb features --device <serial>` | ADB feature set for a device |
@@ -86,6 +87,7 @@ Quick reference. See [docs/commands.md](docs/commands.md) for flags, retry behav
 | `view --profile <name>` | Open view using a saved profile |
 | `view --last` | Reopen the last successful view session |
 | `reconnect` | Reconnect using the last successful profile |
+| `view setup --device <serial> [options]` | Resolve helper and backend prerequisites without opening a stream |
 | `view-doctor --device <serial>` | Diagnostic report without opening a stream |
 | `profile-list` | List saved profiles |
 | `profile-delete --name <name>` | Delete a saved profile |
@@ -136,11 +138,15 @@ Quick reference. See [docs/commands.md](docs/commands.md) for flags, retry behav
 | `wait-step --device <serial> --step <name>` | Wait for a semantic step telemetry event |
 | `wait-action-ready --device <serial> --action <name> [--step <name>]` | Wait for a semantic action-ready telemetry event |
 
+The full command reference also includes direct UI and capture commands such as `wait-visible`, `tap`, `type-text`, `keyevent`, `logcat`, and `record`. See [docs/commands.md](docs/commands.md) for the complete surface.
+
 ### Scenarios & Inspect
 
 | Command | Description |
 |---|---|
+| `scenario-list --path <file-or-dir-or-glob>` | Discover scenario files and filters without executing them |
 | `run --device <serial> --file <path>` | Execute a JSON scenario playbook |
+| `run --device <serial> --path <file-or-dir-or-glob>` | Execute one or many scenario files resolved from a file, directory, or glob |
 | `inspect --device <serial>` | Open an agent-driven JSONL inspection session |
 
 ## View session
@@ -202,9 +208,15 @@ Every command returns a single JSON envelope:
   "artifacts": {
     "artifact_root": "/tmp/luotsi/..."
   },
+  "provenance": {
+    "commit": "...",
+    "branch": "..."
+  },
   "error": null
 }
 ```
+
+Failure envelopes include `error.type`, `error.message`, and `error.category`. The current category values are documented in [docs/commands.md](docs/commands.md).
 
 Scenario `run` commands return the scenario result inside `data`, including per-step timing and top-level overhead:
 

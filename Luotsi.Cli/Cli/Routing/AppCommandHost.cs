@@ -31,10 +31,16 @@ internal sealed class AppCommandHost(AppCommandHostDependencies dependencies)
         return 0;
     }
 
-    public async Task<int> RunCommandAsync(CliOptions options, DateTimeOffset started, string adbExecutable, IDeviceHost runner, ArtifactSession artifacts)
+    public bool RequiresRunner(CliOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(runner);
+
+        return _dependencies.CommandDispatcher.RequiresRunner(options);
+    }
+
+    public async Task<int> RunCommandAsync(CliOptions options, DateTimeOffset started, string adbExecutable, IDeviceHost? runner, ArtifactSession artifacts)
+    {
+        ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(artifacts);
 
         var data = await _dependencies.CommandDispatcher.ExecuteAsync(options.Command!, options, adbExecutable, runner).ConfigureAwait(false);
