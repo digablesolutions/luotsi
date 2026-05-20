@@ -26,7 +26,7 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIo console,
                 currentState = await _deviceHost.GetScreenStateAsync().ConfigureAwait(false);
                 _protocol.WriteStateSnapshot(sessionId, null, currentState);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _protocol.WriteSessionError(_timeProvider.GetUtcNow(), ex, sessionId);
             }
