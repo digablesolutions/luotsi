@@ -127,7 +127,7 @@ internal sealed class ViewSessionRecordingCoordinator
             throw new InvalidOperationException("Recording file name must be relative.");
         }
 
-        return Path.Combine(directory, safeFileName);
+        return Path.Join(directory, safeFileName);
     }
 
     private void WriteEvent(object value) => _writeEvent(value);
