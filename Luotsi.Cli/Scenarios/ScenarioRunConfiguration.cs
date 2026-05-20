@@ -16,7 +16,10 @@ internal sealed record ScenarioRunConfiguration(
     string? JUnitReportPath,
     ScenarioFailureArtifactCapturePolicy FailureArtifactCapturePolicy,
     ScenarioArtifactAttachmentPolicy ArtifactAttachmentPolicy,
-    bool ValidateOnly)
+    bool ValidateOnly,
+    bool RequireDeviceReady,
+    int DeviceWaitTimeoutSec,
+    string? DeviceReadinessPackage)
 {
     public static ScenarioRunConfiguration Create(CliOptions options)
     {
@@ -28,11 +31,17 @@ internal sealed record ScenarioRunConfiguration(
             NormalizePath(options.Get("report-junit")),
             ParseFailureArtifactCapturePolicy(options.Get("capture-on")),
             ParseArtifactAttachmentPolicy(options.Get("attach-artifacts")),
-            options.HasFlag("validate-only"));
+            options.HasFlag("validate-only"),
+            !options.HasFlag("no-require-device-ready"),
+            options.Int("device-ready-timeout-sec", CliDefaults.DefaultTimeoutSeconds),
+            NormalizePackage(options.Get("package")));
     }
 
     private static string? NormalizePath(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value;
+
+    private static string? NormalizePackage(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static ScenarioFailureArtifactCapturePolicy ParseFailureArtifactCapturePolicy(string? value)
     {

@@ -15,6 +15,5 @@ internal sealed record ViewSessionInteractionContext(
     IArtifactFolderOpener ArtifactFolderOpener);
 
 internal sealed record ViewSessionInteractionCallbacks(
-    Func<Task> PublishChromeAsync,
     Func<string> ActiveDeviceSelector,
     Func<string, string?, bool> RequestReconnect);

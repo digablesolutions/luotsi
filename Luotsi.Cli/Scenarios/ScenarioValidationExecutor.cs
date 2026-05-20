@@ -19,33 +19,23 @@ internal sealed class ScenarioValidationExecutor(
 
         var started = _timeProvider.GetUtcNow();
         var scenario = await _scenarioCatalog.LoadValidatedAsync(file, ScenarioExecutor.SupportedScenarioActions).ConfigureAwait(false);
-        var scenarioId = ScenarioIdentity.Create(file, scenario.Name);
-        await _eventSink.EmitAsync(new ScenarioEvent("scenario_started", started, File: file, ScenarioId: scenarioId, Scenario: scenario.Name, Status: "validating")).ConfigureAwait(false);
-
-        var steps = CreateStepResults(scenario).ToArray();
-        var endedAt = _timeProvider.GetUtcNow();
-        var durationMs = Math.Max(0, (endedAt - started).TotalMilliseconds);
-        var timing = new ScenarioRunTiming(durationMs, 0, 0, durationMs);
-        var metrics = _metricsCollector.CollectScenario(new ScenarioScenarioMetricContext("validated", timing, steps));
-
-        await _eventSink.EmitAsync(new ScenarioEvent(
-            "scenario_ended",
-            endedAt,
-            "validated",
-            File: file,
-            ScenarioId: scenarioId,
-            Scenario: scenario.Name,
-            DurationMs: durationMs,
-            Metrics: metrics)).ConfigureAwait(false);
-
-        return new ScenarioRunResult(
+        var lifecycle = new ScenarioLifecycleCoordinator(_timeProvider, _eventSink);
+        var context = new ScenarioLifecycleContext(
+            file,
+            ScenarioIdentity.Create(file, scenario.Name),
             scenario.Name,
-            "validated",
-            timing,
-            metrics,
-            steps,
-            scenarioId,
-            file);
+            started);
+
+        return await lifecycle.RunAsync(
+            context,
+            startedStatus: "validating",
+            lifecycleContext =>
+            {
+                var endedAt = _timeProvider.GetUtcNow();
+                return Task.FromResult(new ScenarioLifecycleCompletion(
+                    CreateValidatedResult(scenario, lifecycleContext, endedAt),
+                    endedAt));
+            }).ConfigureAwait(false);
     }
 
     public async Task<ScenarioRunBatchResult> ValidatePlanAsync(ScenarioRunPlan plan)
@@ -92,7 +82,7 @@ internal sealed class ScenarioValidationExecutor(
     {
         foreach (var (step, phase) in EnumerateSteps(scenario))
         {
-            var timing = new ScenarioStepTiming(0, 0, GetConfiguredDelayMs(step), 0);
+            var timing = ScenarioTimingSupport.CreateStepTiming(step, 0, 0);
             var metrics = _metricsCollector.CollectStep(new ScenarioStepMetricContext(step, phase, "validated", timing));
             yield return new ScenarioStepResult(
                 step.Name ?? step.Action,
@@ -104,6 +94,24 @@ internal sealed class ScenarioValidationExecutor(
                 Status: "validated",
                 Phase: phase);
         }
+    }
+
+    private ScenarioRunResult CreateValidatedResult(ScenarioFile scenario, ScenarioLifecycleContext context, DateTimeOffset endedAt)
+    {
+        var steps = CreateStepResults(scenario).ToArray();
+        var durationMs = Math.Max(0, (endedAt - context.StartedAt).TotalMilliseconds);
+        var timing = new ScenarioRunTiming(durationMs, 0, 0, durationMs);
+        var metrics = _metricsCollector.CollectScenario(new ScenarioScenarioMetricContext("validated", timing, steps));
+
+        return new ScenarioRunResult(
+            scenario.Name,
+            "validated",
+            timing,
+            metrics,
+            steps,
+            null,
+            context.ScenarioId,
+            context.File);
     }
 
     private static IEnumerable<(ScenarioStep Step, string Phase)> EnumerateSteps(ScenarioFile scenario)
@@ -124,13 +132,6 @@ internal sealed class ScenarioValidationExecutor(
         }
     }
 
-    private static int? GetConfiguredDelayMs(ScenarioStep step) => step.Action switch
-    {
-        "sleep" => Math.Max(0, step.Milliseconds ?? 1000),
-        "tapPoint" => Math.Max(0, step.PostTapDelayMs ?? 300),
-        "typePin" when !string.IsNullOrWhiteSpace(step.Text) => Math.Max(0, step.IntervalMs ?? 120) * step.Text.Count(char.IsDigit),
-        _ => null
-    };
 }
 
 internal sealed record ScenarioValidationStepResult(string Status);

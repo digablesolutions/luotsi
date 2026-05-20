@@ -79,6 +79,7 @@ public sealed class CliOptions
         "last",
         "overlay-screen-state",
         "overlay-telemetry",
+        "no-require-device-ready",
         "read-only",
         "validate-only"
     }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);

@@ -103,6 +103,7 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
                 PassedCount: IsPassed(result.Status) ? 1 : 0,
                 FailedCount: IsFailed(result.Status) ? 1 : 0,
                 Metrics: result.Metrics,
+                DeviceAllocation: result.DeviceAllocation,
                 Provenance: _provenance),
             ex => CreateFailedRunEndedEvent(file, ex, passedCount: 0, failedCount: 1)).ConfigureAwait(false);
     }
@@ -141,6 +142,7 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
                 ShardIndex: result.ShardIndex,
                 ShardStrategy: result.ShardStrategy,
                 Metrics: result.Metrics,
+                DeviceAllocation: result.DeviceAllocation,
                 Provenance: _provenance),
             ex => CreateFailedRunEndedEvent(
                 plan.Query.Path,
@@ -244,6 +246,69 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
             Error: ScenarioErrorInfo.From(exception));
 }
 
+internal readonly record struct ScenarioLifecycleContext(
+    string File,
+    string ScenarioId,
+    string ScenarioName,
+    DateTimeOffset StartedAt);
+
+internal readonly record struct ScenarioLifecycleCompletion(
+    ScenarioRunResult Result,
+    DateTimeOffset? EndedAt = null);
+
+internal sealed class ScenarioLifecycleCoordinator(TimeProvider timeProvider, IScenarioEventSink eventSink)
+{
+    private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+    private readonly IScenarioEventSink _eventSink = eventSink ?? throw new ArgumentNullException(nameof(eventSink));
+
+    public async Task<ScenarioRunResult> RunAsync(
+        ScenarioLifecycleContext context,
+        string? startedStatus,
+        Func<ScenarioLifecycleContext, Task<ScenarioLifecycleCompletion>> runAsync)
+    {
+        ArgumentNullException.ThrowIfNull(runAsync);
+
+        await _eventSink.EmitAsync(new ScenarioEvent(
+            "scenario_started",
+            context.StartedAt,
+            startedStatus,
+            File: context.File,
+            ScenarioId: context.ScenarioId,
+            Scenario: context.ScenarioName)).ConfigureAwait(false);
+
+        try
+        {
+            var completion = await runAsync(context).ConfigureAwait(false);
+            var result = completion.Result;
+            var endedAt = completion.EndedAt ?? _timeProvider.GetUtcNow();
+            await _eventSink.EmitAsync(new ScenarioEvent(
+                "scenario_ended",
+                endedAt,
+                result.Status,
+                File: context.File,
+                ScenarioId: context.ScenarioId,
+                Scenario: context.ScenarioName,
+                DurationMs: Math.Max(0, (endedAt - context.StartedAt).TotalMilliseconds),
+                Metrics: result.Metrics)).ConfigureAwait(false);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            var endedAt = _timeProvider.GetUtcNow();
+            await _eventSink.EmitAsync(new ScenarioEvent(
+                "scenario_ended",
+                endedAt,
+                "failed",
+                File: context.File,
+                ScenarioId: context.ScenarioId,
+                Scenario: context.ScenarioName,
+                DurationMs: Math.Max(0, (endedAt - context.StartedAt).TotalMilliseconds),
+                Metrics: ScenarioFailureDetails.TryGetMetrics(ex))).ConfigureAwait(false);
+            throw;
+        }
+    }
+}
+
 internal sealed record ScenarioEvent(
     [property: JsonPropertyName("event")] string Event,
     [property: JsonPropertyName("timestamp")] DateTimeOffset Timestamp,
@@ -267,5 +332,6 @@ internal sealed record ScenarioEvent(
     [property: JsonPropertyName("shard_index")] int? ShardIndex = null,
     [property: JsonPropertyName("shard_strategy")] string? ShardStrategy = null,
     [property: JsonPropertyName("metrics")] IReadOnlyDictionary<string, double>? Metrics = null,
+    [property: JsonPropertyName("device_allocation")] ScenarioDeviceAllocation? DeviceAllocation = null,
     [property: JsonPropertyName("provenance")] BuildProvenance? Provenance = null,
     [property: JsonPropertyName("error")] object? Error = null);

@@ -30,6 +30,7 @@ internal static class ScenarioRunReportFactory
             null,
             null,
             result.Metrics,
+            result.DeviceAllocation,
             provenance,
             [CreateScenarioFromSuccess(result, file, attachmentPolicy)]);
 
@@ -63,6 +64,7 @@ internal static class ScenarioRunReportFactory
             null,
             null,
             scenario.Metrics,
+            null,
             provenance,
             [scenario],
             error);
@@ -91,6 +93,7 @@ internal static class ScenarioRunReportFactory
             result.ShardIndex,
             result.ShardStrategy,
             result.Metrics ?? ScenarioMetrics.Empty,
+            result.DeviceAllocation,
             provenance,
             result.Scenarios.Select(scenario => CreateScenarioFromBatchItem(scenario, attachmentPolicy)).ToArray());
 
@@ -124,6 +127,7 @@ internal static class ScenarioRunReportFactory
             plan.Query.ShardIndex,
             plan.Query.ShardStrategy,
             failureData?.Metrics ?? ScenarioMetrics.Empty,
+            null,
             provenance,
             scenarios,
             error);
@@ -154,6 +158,7 @@ internal static class ScenarioRunReportFactory
             query.ShardIndex,
             query.ShardStrategy,
             ScenarioMetrics.Empty,
+            null,
             provenance,
             [CreateScenarioFromException(query.Path, exception, "scenario discovery", $"{query.Path}::discovery")],
             error);

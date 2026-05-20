@@ -8,7 +8,8 @@ internal sealed class ScenarioRunOrchestrator(
     ScenarioBatchExecutorFactory scenarioBatchExecutorFactory,
     ScenarioValidationExecutorFactory scenarioValidationExecutorFactory,
     ScenarioRunEventCoordinatorFactory scenarioRunEventCoordinatorFactory,
-    ScenarioRunReportCoordinatorFactory scenarioRunReportCoordinatorFactory)
+    ScenarioRunReportCoordinatorFactory scenarioRunReportCoordinatorFactory,
+    IScenarioDeviceAllocator deviceAllocator)
 {
     private readonly ScenarioRunPlanner _runPlanner = runPlanner ?? throw new ArgumentNullException(nameof(runPlanner));
     private readonly ScenarioExecutorFactory _scenarioExecutorFactory = scenarioExecutorFactory ?? throw new ArgumentNullException(nameof(scenarioExecutorFactory));
@@ -16,6 +17,7 @@ internal sealed class ScenarioRunOrchestrator(
     private readonly ScenarioValidationExecutorFactory _scenarioValidationExecutorFactory = scenarioValidationExecutorFactory ?? throw new ArgumentNullException(nameof(scenarioValidationExecutorFactory));
     private readonly ScenarioRunEventCoordinatorFactory _scenarioRunEventCoordinatorFactory = scenarioRunEventCoordinatorFactory ?? throw new ArgumentNullException(nameof(scenarioRunEventCoordinatorFactory));
     private readonly ScenarioRunReportCoordinatorFactory _scenarioRunReportCoordinatorFactory = scenarioRunReportCoordinatorFactory ?? throw new ArgumentNullException(nameof(scenarioRunReportCoordinatorFactory));
+    private readonly IScenarioDeviceAllocator _deviceAllocator = deviceAllocator ?? throw new ArgumentNullException(nameof(deviceAllocator));
 
     public async Task<ScenarioRunResult> RunFileAsync(string file, IDeviceHost runner, ScenarioRunConfiguration configuration)
     {
@@ -78,17 +80,25 @@ internal sealed class ScenarioRunOrchestrator(
             sink => CreateValidationExecutor(sink).ValidatePlanAsync(preparedPlan)).ConfigureAwait(false);
     }
 
-    private Task<ScenarioRunResult> RunFileCoreAsync(
+    private async Task<ScenarioRunResult> RunFileCoreAsync(
         string file,
         IDeviceHost runner,
         ScenarioRunConfiguration configuration,
         ScenarioRunEventCoordinator runEvents,
-        ScenarioRunReportCoordinator runReports) =>
-        ExecuteFileAsync(
+        ScenarioRunReportCoordinator runReports)
+    {
+        return await ExecuteFileAsync(
             file,
             runEvents,
             runReports,
-            sink => _scenarioExecutorFactory.Create(runner, sink, configuration.FailureArtifactCapturePolicy).RunAsync(file));
+            async sink =>
+            {
+                await CreateValidationExecutor(NullScenarioEventSink.Instance).ValidateFileAsync(file).ConfigureAwait(false);
+                var allocation = await _deviceAllocator.AllocateAsync(runner, configuration).ConfigureAwait(false);
+                var result = await _scenarioExecutorFactory.Create(runner, sink, configuration.FailureArtifactCapturePolicy).RunAsync(file).ConfigureAwait(false);
+                return result with { DeviceAllocation = allocation };
+            }).ConfigureAwait(false);
+    }
 
     private async Task<ScenarioRunBatchResult> RunPathCoreAsync(
         ScenarioQuery query,
@@ -102,7 +112,12 @@ internal sealed class ScenarioRunOrchestrator(
             preparedPlan,
             runEvents,
             runReports,
-            sink => _scenarioBatchExecutorFactory.Create(runner, sink, configuration.FailureArtifactCapturePolicy).RunAsync(preparedPlan)).ConfigureAwait(false);
+            async sink =>
+            {
+                var allocation = await _deviceAllocator.AllocateAsync(runner, configuration).ConfigureAwait(false);
+                var result = await _scenarioBatchExecutorFactory.Create(runner, sink, configuration.FailureArtifactCapturePolicy).RunAsync(preparedPlan).ConfigureAwait(false);
+                return result with { DeviceAllocation = allocation };
+            }).ConfigureAwait(false);
     }
 
     private Task<ScenarioRunResult> ExecuteFileAsync(

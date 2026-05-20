@@ -601,6 +601,93 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_File_Prepares_Device_And_Writes_Allocation_Metadata()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "name": "pause", "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var host = new FakeDeviceHost
+        {
+            PreflightTemplate = new PreflightResult("Pixel 7", "16", "36", "focus", null, null, "fingerprint", "arm64-v8a", "SER123")
+        };
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync([
+            "run",
+            "--file", "/tmp/scenario.json",
+            "--events-jsonl", "/tmp/events.jsonl",
+            "--report-json", "/tmp/report.json",
+            "--package", "dev.luotsi.app",
+            "--device-ready-timeout-sec", "7"]);
+        var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal([7], host.WaitForDeviceRequests);
+        Assert.Equal(["dev.luotsi.app"], host.ReadOnlyPreflightRequests);
+        var eventAllocation = events[^1].GetProperty("device_allocation");
+        Assert.Equal("allocated", eventAllocation.GetProperty("status").GetString());
+        Assert.Equal("SER123", eventAllocation.GetProperty("serial").GetString());
+        Assert.True(eventAllocation.GetProperty("require_ready").GetBoolean());
+        Assert.Equal(7, eventAllocation.GetProperty("wait_timeout_sec").GetInt32());
+        Assert.Equal("dev.luotsi.app", eventAllocation.GetProperty("package").GetString());
+        Assert.Equal("Pixel 7", eventAllocation.GetProperty("readiness").GetProperty("model").GetString());
+        var reportAllocation = report.RootElement.GetProperty("device_allocation");
+        Assert.Equal("SER123", reportAllocation.GetProperty("serial").GetString());
+        Assert.Equal("dev.luotsi.app", reportAllocation.GetProperty("readiness").GetProperty("package").GetString());
+    }
+
+    [Fact]
+    public async Task RunAsync_File_NoRequireDeviceReady_Skips_Wait_But_Records_Readiness()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "name": "pause", "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var host = new FakeDeviceHost();
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json", "--report-json", "/tmp/report.json", "--no-require-device-ready"]);
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(host.WaitForDeviceRequests);
+        Assert.Single(host.ReadOnlyPreflightRequests);
+        Assert.False(report.RootElement.GetProperty("device_allocation").GetProperty("require_ready").GetBoolean());
+    }
+
+    [Fact]
     public async Task RunAsync_File_Runs_Setup_Steps_Teardown_In_Order()
     {
         var fileSystem = new FakeFileSystem();
@@ -1967,7 +2054,7 @@ public sealed partial class AppTests
             Console = console
         });
 
-        var exitCode = await app.RunAsync(["run", "--file", scenarioPath, "--artifacts", "/tmp/test-artifacts"]);
+        var exitCode = await app.RunAsync(["run", "--file", scenarioPath, "--artifacts", "/tmp/test-artifacts", "--no-require-device-ready"]);
         using var envelope = console.ParseSingleOutputAsJson();
 
         Assert.Equal(1, exitCode);

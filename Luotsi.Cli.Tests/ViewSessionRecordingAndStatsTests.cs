@@ -3,7 +3,6 @@ using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
 using Luotsi.Cli.Models;
 using Luotsi.Cli.View.Contracts;
-using Luotsi.Cli.View.Session;
 using Luotsi.Cli.View.Transport;
 using Xunit;
 
@@ -311,6 +310,51 @@ public sealed partial class AppTests
         Assert.True(recorderFactory.LastRecorder!.Disposed);
         Assert.Contains(console.OutputLines, line => line.Contains(SessionEventTypes.View.RecordingStarted, StringComparison.Ordinal));
         Assert.Contains(console.OutputLines, line => line.Contains(SessionEventTypes.View.RecordingStopped, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_View_Reconnect_Stops_Active_Recording_With_Reconnect_Reason()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var renderer = new ClosingViewRenderer();
+        var rendererFactory = new FakeViewRendererFactory(renderer);
+        var recorderFactory = new FakeViewRecorderFactory();
+        var bootstrap = new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward"));
+        var session = CreateViewSession(
+            host,
+            ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
+            console,
+            timeProvider,
+            bootstrap,
+            new FakeViewBackendFactory(new BlockingViewBackend()),
+            new FakeViewStreamConnector(
+                new ViewPacketStreamHarness().WriteHeader("h264", 1080, 1920).Build(),
+                new ViewPacketStreamHarness().WriteHeader("h264", 1080, 1920).Build()),
+            new ViewPacketStreamReader(),
+            rendererFactory,
+            recorderFactory);
+
+        var runTask = session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", false, "capture.h264", 1600, 60, "8M", false, false));
+        var interactionHandler = await ViewTestWaitHelpers.WaitForInteractionHandlerAsync(rendererFactory);
+        await ViewTestWaitHelpers.WaitForOutputLineAsync(console, SessionEventTypes.View.RecordingStarted);
+        await interactionHandler(new ViewWindowCommandRequest(ViewWindowCommand.Reconnect));
+        await ViewTestWaitHelpers.WaitForStartCallsAsync(bootstrap, 2);
+        await ViewTestWaitHelpers.WaitForOutputLineAsync(console, SessionEventTypes.View.RecordingStopped);
+        renderer.Close();
+        var exitCode = await runTask;
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(recorderFactory.LastRecorder);
+        Assert.True(recorderFactory.LastRecorder!.Disposed);
+
+        var stoppedLine = Assert.Single(console.OutputLines, line => line.Contains(SessionEventTypes.View.RecordingStopped, StringComparison.Ordinal));
+        using var stopped = JsonDocument.Parse(stoppedLine);
+        Assert.Equal("reconnect", stopped.RootElement.GetProperty("reason").GetString());
+        Assert.Equal("capture.h264", stopped.RootElement.GetProperty("record_path").GetString());
+        Assert.Single(console.OutputLines, line => line.Contains(SessionEventTypes.View.RecordingStarted, StringComparison.Ordinal));
     }
 
 
