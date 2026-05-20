@@ -1,0 +1,2 @@
+{"type":"session_started","session_id":"9849a049dfee4279b122d98dc915d62f","started_at":"2026-05-20T17:47:14.8071417+00:00"}
+{"type":"session_error","received_at":"2026-05-20T17:47:17.7406537+00:00","error":{"type":"System.InvalidOperationException","message":"UI hierarchy dump was empty or invalid XML. See hierarchy-invalid.xml for the raw dump.","category":"scenario_error"}}
