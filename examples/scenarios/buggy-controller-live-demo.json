@@ -1,0 +1,16 @@
+{
+  "name": "buggy deep tab tour",
+  "tags": ["demo", "live-device", "buggy", "telemetry"],
+  "steps": [
+    { "name": "commands before tour", "action": "tapPoint", "label": "Commands tab", "x": 65, "y": 155, "postTapDelayMs": 500 },
+    { "name": "commands screenshot", "action": "takeScreenshot", "label": "deep-01-commands" },
+    { "name": "open telemetry tab", "action": "tapPoint", "label": "Telemetry tab", "x": 170, "y": 155, "postTapDelayMs": 800 },
+    { "name": "telemetry screenshot", "action": "takeScreenshot", "label": "deep-02-telemetry" },
+    { "name": "open map tab", "action": "tapPoint", "label": "Map tab", "x": 300, "y": 155, "postTapDelayMs": 800 },
+    { "name": "map screenshot", "action": "takeScreenshot", "label": "deep-03-map" },
+    { "name": "open vision tab", "action": "tapPoint", "label": "Vision tab", "x": 420, "y": 155, "postTapDelayMs": 800 },
+    { "name": "vision screenshot", "action": "takeScreenshot", "label": "deep-04-vision" },
+    { "name": "return telemetry tab", "action": "tapPoint", "label": "Telemetry tab", "x": 170, "y": 155, "postTapDelayMs": 800 },
+    { "name": "telemetry final screenshot", "action": "takeScreenshot", "label": "deep-05-telemetry-final" }
+  ]
+}

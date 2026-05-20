@@ -195,6 +195,8 @@ Template syntax: `${env:NAME}`, `${env:NAME|fallback}`, `${var:name}`, `${now:HH
 
 Generic examples: [`examples/scenarios/android-home-smoke.json`](examples/scenarios/android-home-smoke.json), [`examples/scenarios/android-navigation-smoke.json`](examples/scenarios/android-navigation-smoke.json).
 
+For a full device walkthrough with screenshots, video, reports, and troubleshooting notes, see [Guides And Tutorials](docs/tutorials.md).
+
 ## Output format
 
 Every command returns a single JSON envelope:
