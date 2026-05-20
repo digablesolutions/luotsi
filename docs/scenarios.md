@@ -60,11 +60,11 @@ The top-level scenario result also includes `prologue_ms`, `steps_ms`, and `non_
 | `waitVisible` | `text`, `timeoutSec` |
 | `waitNotVisible` | `text`, `timeoutSec` |
 | `tapText` | `text`, `timeoutSec` |
-| `tapPoint` | `x`, `y` |
+| `tapPoint` | `x`, `y` or `xRatio`, `yRatio`; `postTapDelayMs` *(optional)* |
 | `doubleTapHeaderLogo` | — |
 | `doubleTap` | `headerLogo: true` only; equivalent to `doubleTapHeaderLogo` |
 | `typeText` | `text` |
-| `typePin` | `pin` |
+| `typePin` | `text`, `intervalMs` *(optional)* |
 | `keyevent` | `code` (KEYCODE_* string) |
 
 `doubleTap` is currently a compatibility alias for the header-logo interaction only. If `headerLogo: true` is omitted, scenario validation rejects the step.
@@ -78,10 +78,10 @@ The top-level scenario result also includes `prologue_ms`, `steps_ms`, and `non_
 | `waitActionReady` | `text` *(required)*, `step` *(optional)*, `timeoutSec` |
 | `resetLog` | — |
 | `assertEvent` | `event`, `timeoutSec`; supports `observeFromPreviousStep: true` |
-| `assertTextInputReady` | `timeoutSec` |
-| `assertBelow` | `above`, `below` selectors |
-| `assertAligned` | `left`, `right` selectors |
-| `assertAppVersion` | `package`, `version` |
+| `assertTextInputReady` | `timeoutSec`, `requireKeyboard` *(optional bool)* |
+| `assertBelow` | `text`, `below`, `maxGapPx` *(optional)* |
+| `assertAligned` | `text`, `with`, `maxDeltaPx` *(optional)* |
+| `assertAppVersion` | `package` *(optional)*, `maxTopInsetPx` *(optional)*, `maxRightInsetPx` *(optional)* |
 
 `assertEvent` with `observeFromPreviousStep: true` begins the log observation window at the previous step's start time rather than the assert step's own start time.
 
@@ -90,13 +90,13 @@ The top-level scenario result also includes `prologue_ms`, `steps_ms`, and `non_
 | Action | Key arguments |
 |---|---|
 | `startApp` | `package`, `activity` *(optional)*, `wait` *(bool)* |
-| `startUri` | `uri`, `package`, `activity`, `action` *(all optional)*, `wait` |
+| `startUri` | `uri`, `package`, `activity`, `intentAction` *(optional)*, `wait` |
 | `forceStop` | `package` |
 | `clear` / `clearApp` | `package` |
 | `waitForActivity` | `activity` (string or pattern), `timeoutSec` |
 | `waitForNotActivity` | `activity` (string or pattern), `timeoutSec` |
 | `isAppInstalled` | `package` |
-| `listInstalledPackages` | `thirdParty` *(bool)* |
+| `listInstalledPackages` | `thirdPartyOnly` *(bool)* |
 | `grantPermission` | `package`, `permission` |
 | `revokePermission` | `package`, `permission` |
 

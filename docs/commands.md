@@ -156,14 +156,23 @@ Luotsi reads the `LUOTSI_DEVICE_TELEMETRY` logcat marker to parse structured sem
 | Command | Description |
 |---|---|
 | `scenario-list --path <scenario-file-or-directory-or-glob> [filters]` | Discover scenario files and report matched names, tags, and actions without executing them |
-| `run --device <serial> --file <path>` | Execute one JSON scenario playbook |
-| `run --device <serial> --path <scenario-file-or-directory-or-glob>` | Execute one or many scenario files discovered from a file, directory, or glob; supports filtering and sharding |
+| `run --device <serial> --file <path>` | Execute one JSON scenario playbook; also supports `--validate-only`, `--events-jsonl`, `--report-json`, `--report-junit`, `--capture-on`, and `--attach-artifacts` |
+| `run --device <serial> --path <scenario-file-or-directory-or-glob>` | Execute one or many scenario files discovered from a file, directory, or glob; supports filtering, `--dry-run`, `--validate-only`, reporting, artifact-policy flags, and sharding |
 | `inspect --device <serial>` | Open an agent-driven JSONL inspection session |
 
 See [scenarios.md](scenarios.md) for the playbook format and full action reference.
 `inspect` is described in the README [Inspect mode](../README.md#inspect-mode) section.
 
 `scenario-list` and `run --path` share the same discovery filters: `--include-tag`, `--exclude-tag`, `--name`, and `--action`. `run --path` also supports `--shard-count`, `--shard-index`, and `--shard-strategy` for parallel execution.
+
+Scenario runner flags:
+
+- `--validate-only` validates the selected scenario file(s) and writes reports without creating a device host or executing device work.
+- `--dry-run` is available only with `run --path`; it returns the selected scenario plan after filtering and sharding without validating or executing it.
+- `--validate-only` and `--dry-run` are mutually exclusive.
+- `--events-jsonl`, `--report-json`, and `--report-junit` write machine-readable run outputs for validation and execution flows.
+- `--capture-on failure|never` controls runtime failure capture during scenario execution.
+- `--attach-artifacts never|on-failure|always` controls whether report outputs include artifact references.
 
 ---
 
