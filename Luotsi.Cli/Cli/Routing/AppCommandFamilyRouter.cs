@@ -54,6 +54,7 @@ internal sealed class AppCommandFamilyRouter(AppCommandFamilyRouterDependencies 
             }
 
             default:
+                _dependencies.RouteBootstrapper.ValidateHostedCommandPrerequisites(options);
                 if (_dependencies.CommandHost.RequiresRunner(options))
                 {
                     context.Runner = await _dependencies.RouteBootstrapper.PrepareHostedCommandRunnerAsync(options, routeSetup).ConfigureAwait(false);

@@ -24,6 +24,15 @@ public sealed record DeviceState(
     string Availability,
     string? RecommendedFix);
 
+public sealed record ScenarioDeviceAllocation(
+    string Status,
+    string? Serial,
+    DeviceState? Device,
+    PreflightResult? Readiness,
+    bool RequireReady,
+    int WaitTimeoutSec,
+    string? Package = null);
+
 // Preflight
 public sealed record PreflightResult(
     string Model,

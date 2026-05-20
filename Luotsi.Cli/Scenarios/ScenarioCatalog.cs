@@ -69,6 +69,7 @@ public sealed record ScenarioRunResult(
     ScenarioRunTiming Timing,
     IReadOnlyDictionary<string, double> Metrics,
     IReadOnlyList<ScenarioStepResult> Steps,
+    ScenarioDeviceAllocation? DeviceAllocation = null,
     string? ScenarioId = null,
     string? File = null);
 
@@ -134,7 +135,8 @@ public sealed record ScenarioRunBatchResult(
     int? ShardIndex,
     IReadOnlyList<ScenarioBatchItemResult> Scenarios,
     string ShardStrategy = ScenarioShardStrategies.Index,
-    IReadOnlyDictionary<string, double>? Metrics = null);
+    IReadOnlyDictionary<string, double>? Metrics = null,
+    ScenarioDeviceAllocation? DeviceAllocation = null);
 
 public sealed record ScenarioQuery(
     string Path,

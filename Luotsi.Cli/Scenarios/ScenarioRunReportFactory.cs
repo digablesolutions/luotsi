@@ -30,6 +30,7 @@ internal static class ScenarioRunReportFactory
             null,
             null,
             result.Metrics,
+            result.DeviceAllocation,
             provenance,
             [CreateScenarioFromSuccess(result, file, attachmentPolicy)]);
 
@@ -43,6 +44,7 @@ internal static class ScenarioRunReportFactory
     {
         var error = ScenarioErrorInfo.From(exception);
         var failureData = ScenarioFailureDetails.TryGetData(exception);
+        var deviceAllocation = ScenarioFailureDetails.TryGetDeviceAllocation(exception);
         var scenario = failureData is null
             ? CreateScenarioFromException(file, exception)
             : CreateScenarioFromFailure(failureData, error, attachmentPolicy);
@@ -63,6 +65,7 @@ internal static class ScenarioRunReportFactory
             null,
             null,
             scenario.Metrics,
+            deviceAllocation,
             provenance,
             [scenario],
             error);
@@ -91,6 +94,7 @@ internal static class ScenarioRunReportFactory
             result.ShardIndex,
             result.ShardStrategy,
             result.Metrics ?? ScenarioMetrics.Empty,
+            result.DeviceAllocation,
             provenance,
             result.Scenarios.Select(scenario => CreateScenarioFromBatchItem(scenario, attachmentPolicy)).ToArray());
 
@@ -104,6 +108,7 @@ internal static class ScenarioRunReportFactory
     {
         var error = ScenarioErrorInfo.From(exception);
         var failureData = ScenarioFailureDetails.TryGetData(exception);
+        var deviceAllocation = ScenarioFailureDetails.TryGetDeviceAllocation(exception);
         ScenarioReportScenario[] scenarios = failureData is null
             ? [CreateScenarioFromException(plan.Query.Path, exception, "scenario run", $"{plan.Query.Path}::run")]
             : [CreateScenarioFromFailure(failureData, error, attachmentPolicy)];
@@ -124,6 +129,7 @@ internal static class ScenarioRunReportFactory
             plan.Query.ShardIndex,
             plan.Query.ShardStrategy,
             failureData?.Metrics ?? ScenarioMetrics.Empty,
+            deviceAllocation,
             provenance,
             scenarios,
             error);
@@ -154,6 +160,7 @@ internal static class ScenarioRunReportFactory
             query.ShardIndex,
             query.ShardStrategy,
             ScenarioMetrics.Empty,
+            null,
             provenance,
             [CreateScenarioFromException(query.Path, exception, "scenario discovery", $"{query.Path}::discovery")],
             error);

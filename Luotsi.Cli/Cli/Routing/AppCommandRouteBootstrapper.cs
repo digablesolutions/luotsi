@@ -2,6 +2,7 @@ using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli.Composition;
 using Luotsi.Cli.Cli.Hosting;
 using Luotsi.Cli.Cli.View;
+using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 
 namespace Luotsi.Cli.Cli.Routing;
@@ -38,6 +39,29 @@ internal sealed class AppCommandRouteBootstrapper(AppCommandRouteBootstrapperDep
             options.Command,
             _dependencies.DeviceHostLauncher).ConfigureAwait(false);
         return _dependencies.DeviceHostLauncher.Create(options, setup.AdbExecutable, setup.Artifacts, deviceSelector);
+    }
+
+    public void ValidateHostedCommandPrerequisites(CliOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        if (!string.Equals(options.Command, "run", StringComparison.Ordinal) ||
+            options.HasFlag("validate-only") ||
+            options.HasFlag("dry-run"))
+        {
+            return;
+        }
+
+        var file = options.Get("file");
+        if (string.IsNullOrWhiteSpace(file))
+        {
+            return;
+        }
+
+        if (!_dependencies.FileSystem.FileExists(file))
+        {
+            throw new UsageException($"Scenario file '{file}' does not exist.");
+        }
     }
 }
 

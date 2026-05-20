@@ -72,8 +72,8 @@ Commands:
   logcat [--tail 200]
   wait-log --contains <text> [--timeout-sec 15]
   record --output <file.mp4> [--time-limit-sec 30]
-  run --file <scenario.json> [--validate-only] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always]
-  run --path <scenario-file-or-directory-or-glob> [--dry-run|--validate-only] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>] [--shard-count <n> --shard-index <zero-based>] [--shard-strategy index|hash]
+  run --file <scenario.json> [--validate-only] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always]
+  run --path <scenario-file-or-directory-or-glob> [--dry-run|--validate-only] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>] [--shard-count <n> --shard-index <zero-based>] [--shard-strategy index|hash]
 
 Common options:
   --device <adb serial>

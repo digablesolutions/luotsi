@@ -148,46 +148,39 @@ public sealed class ScenarioExecutor
     {
         var scenarioStarted = _timeProvider.GetUtcNow();
         var scenario = await LoadValidatedScenarioAsync(file).ConfigureAwait(false);
-        var scenarioId = ScenarioIdentity.Create(file, scenario.Name);
-        await EmitAsync(new ScenarioEvent("scenario_started", scenarioStarted, File: file, ScenarioId: scenarioId, Scenario: scenario.Name)).ConfigureAwait(false);
+        var lifecycle = new ScenarioLifecycleCoordinator(_timeProvider, _eventSink);
+        var context = new ScenarioLifecycleContext(
+            file,
+            ScenarioIdentity.Create(file, scenario.Name),
+            scenario.Name,
+            scenarioStarted);
 
-        var status = "failed";
-        IReadOnlyDictionary<string, double>? scenarioMetrics = null;
-        try
-        {
-            await _actionHost.WriteDeviceFingerprintAsync().ConfigureAwait(false);
-            var prologueMs = (_timeProvider.GetUtcNow() - scenarioStarted).TotalMilliseconds;
-            var execution = await ExecuteLifecycleAsync(scenario, file, scenarioId, scenarioStarted, prologueMs).ConfigureAwait(false);
-            status = "passed";
-            scenarioMetrics = CollectScenarioMetrics(status, execution.Timing, execution.Steps);
+        return await lifecycle.RunAsync(
+            context,
+            startedStatus: null,
+            async lifecycleContext =>
+            {
+                await _actionHost.WriteDeviceFingerprintAsync().ConfigureAwait(false);
+                var prologueMs = (_timeProvider.GetUtcNow() - lifecycleContext.StartedAt).TotalMilliseconds;
+                var execution = await ExecuteLifecycleAsync(
+                    scenario,
+                    lifecycleContext.File,
+                    lifecycleContext.ScenarioId,
+                    lifecycleContext.StartedAt,
+                    prologueMs).ConfigureAwait(false);
+                var scenarioMetrics = CollectScenarioMetrics("passed", execution.Timing, execution.Steps);
 
-            return new ScenarioRunResult(
-                scenario.Name,
-                status,
-                execution.Timing,
-                scenarioMetrics,
-                execution.Steps,
-                scenarioId,
-                file);
-        }
-        catch (Exception ex)
-        {
-            scenarioMetrics = ScenarioFailureDetails.TryGetMetrics(ex);
-            throw;
-        }
-        finally
-        {
-            var endedAt = _timeProvider.GetUtcNow();
-            await EmitAsync(new ScenarioEvent(
-                "scenario_ended",
-                endedAt,
-                status,
-                File: file,
-                ScenarioId: scenarioId,
-                Scenario: scenario.Name,
-                DurationMs: (endedAt - scenarioStarted).TotalMilliseconds,
-                Metrics: scenarioMetrics)).ConfigureAwait(false);
-        }
+                return new ScenarioLifecycleCompletion(
+                    new ScenarioRunResult(
+                        scenario.Name,
+                        "passed",
+                        execution.Timing,
+                        scenarioMetrics,
+                        execution.Steps,
+                        null,
+                        lifecycleContext.ScenarioId,
+                        lifecycleContext.File));
+            }).ConfigureAwait(false);
     }
 
     private Task<ScenarioFile> LoadValidatedScenarioAsync(string file) =>
@@ -304,15 +297,8 @@ public sealed class ScenarioExecutor
         }
     }
 
-    private static ScenarioStepTiming CreateTimingData(ScenarioStep step, double durationMs, int harnessDelayMs)
-    {
-        var configuredDelayMs = GetConfiguredDelayMs(step);
-        return new ScenarioStepTiming(
-            durationMs,
-            harnessDelayMs,
-            configuredDelayMs,
-            Math.Max(0, durationMs - harnessDelayMs));
-    }
+    private static ScenarioStepTiming CreateTimingData(ScenarioStep step, double durationMs, int harnessDelayMs) =>
+        ScenarioTimingSupport.CreateStepTiming(step, durationMs, harnessDelayMs);
 
     private static ScenarioRunTiming CreateScenarioRunTiming(double totalMs, double prologueMs, double executedStepMs) =>
         new(totalMs, prologueMs, executedStepMs, Math.Max(0, totalMs - executedStepMs));
@@ -384,14 +370,6 @@ public sealed class ScenarioExecutor
         ScenarioRunTiming timing,
         IReadOnlyList<ScenarioStepResult> steps) =>
         _metricsCollector.CollectScenario(new ScenarioScenarioMetricContext(status, timing, steps));
-
-    private static int? GetConfiguredDelayMs(ScenarioStep step) => step.Action switch
-    {
-        "sleep" => Math.Max(0, step.Milliseconds ?? 1000),
-        "tapPoint" => Math.Max(0, step.PostTapDelayMs ?? 300),
-        "typePin" when !string.IsNullOrWhiteSpace(step.Text) => Math.Max(0, step.IntervalMs ?? 120) * step.Text.Count(char.IsDigit),
-        _ => null
-    };
 
     private static ScenarioFailedStepResult CreateFailedStepResult(int stepIndex, ScenarioStepResult failedStep) =>
         new(

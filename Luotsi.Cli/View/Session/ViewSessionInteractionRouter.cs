@@ -1,5 +1,4 @@
 using Luotsi.Cli.Errors;
-using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
 using Luotsi.Cli.View.Contracts;
 
@@ -9,65 +8,32 @@ internal sealed class ViewSessionInteractionRouter(
     ViewSessionInteractionContext context)
 {
     private readonly ViewSessionInteractionContext _context = context ?? throw new ArgumentNullException(nameof(context));
-    private readonly IDeviceHost _deviceHost = context.DeviceHost ?? throw new ArgumentNullException(nameof(context.DeviceHost));
-    private readonly ViewOptions _options = context.Options ?? throw new ArgumentNullException(nameof(context.Options));
-    private readonly SessionControlledViewRecorder _recorder = context.Recorder ?? throw new ArgumentNullException(nameof(context.Recorder));
     private readonly TimeProvider _timeProvider = context.TimeProvider ?? throw new ArgumentNullException(nameof(context.TimeProvider));
     private readonly string _sessionId = string.IsNullOrWhiteSpace(context.SessionId) ? throw new ArgumentException("Session id is required.", nameof(context.SessionId)) : context.SessionId;
     private readonly Action<object> _writeJsonLine = context.WriteEvent ?? throw new ArgumentNullException(nameof(context.WriteEvent));
 
-    private CancellationTokenSource? _iterationCancellation;
-    private TaskCompletionSource _reconnectRequested = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private Func<ViewChromeState, Task>? _chromeUpdater;
-    private IReadOnlyList<ViewChromeDevice> _devices = [];
-    private string? _shareEndpoint = context.Options.JoinShareEndpoint;
-    private int _observerCount;
-
-    public string ActiveDeviceSelector { get; private set; } = context.Options.DeviceSelector;
+    public string ActiveDeviceSelector => State.ActiveDeviceSelector;
 
     public void BeginIteration(string deviceSelector, CancellationTokenSource iterationCancellation)
-    {
-        ActiveDeviceSelector = string.IsNullOrWhiteSpace(deviceSelector) ? _options.DeviceSelector : deviceSelector;
-        _iterationCancellation = iterationCancellation;
-        UpdateActiveDeviceFlags();
-    }
+        => State.BeginIteration(deviceSelector, iterationCancellation);
 
-    public void AttachConnection(ViewConnectionInfo connectionInfo) => InputCommands.AttachConnection(connectionInfo);
+    public void AttachConnection(ViewConnectionInfo connectionInfo) => Recording.AttachConnection(connectionInfo);
 
-    public void AttachChromeUpdater(Func<ViewChromeState, Task> chromeUpdater) => _chromeUpdater = chromeUpdater;
+    public void AttachChromeUpdater(Func<ViewChromeState, Task> chromeUpdater) => State.AttachChromeUpdater(chromeUpdater);
 
     public void AttachStreamPauseUpdater(Action<bool> streamPauseUpdater) => InputCommands.AttachStreamPauseUpdater(streamPauseUpdater);
 
-    public Task WaitForReconnectAsync() => _reconnectRequested.Task;
+    public Task WaitForReconnectAsync() => State.WaitForReconnectAsync();
 
-    public void ResetReconnectSignal() => _reconnectRequested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    public void ResetReconnectSignal() => State.ResetReconnectSignal();
 
-    public bool RequestReconnect(string source, string? reason = null)
-    {
-        if (_reconnectRequested.Task.IsCompleted)
-        {
-            return false;
-        }
-
-        WriteEvent(new
-        {
-            type = SessionEventTypes.View.ReconnectRequested,
-            session_id = _sessionId,
-            occurred_at = _timeProvider.GetUtcNow(),
-            device = ActiveDeviceSelector,
-            source,
-            reason
-        });
-        _reconnectRequested.TrySetResult();
-        _iterationCancellation?.Cancel();
-        return true;
-    }
+    public bool RequestReconnect(string source, string? reason = null) => State.RequestReconnect(source, reason);
 
     public async Task StartInitialRecordingIfNeededAsync()
-        => await InputCommands.StartInitialRecordingIfNeededAsync().ConfigureAwait(false);
+        => await Recording.StartInitialRecordingIfNeededAsync().ConfigureAwait(false);
 
     public async Task StopRecordingForReconnectAsync()
-        => await InputCommands.StopRecordingForReconnectAsync().ConfigureAwait(false);
+        => await Recording.StopRecordingForReconnectAsync().ConfigureAwait(false);
 
     public async Task HandleAsync(ViewInteractionRequest request)
     {
@@ -108,125 +74,30 @@ internal sealed class ViewSessionInteractionRouter(
             throw new UsageException("device switch requires a non-empty device selector.");
         }
 
-        if (string.Equals(request.DeviceSelector, ActiveDeviceSelector, StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
-        WriteEvent(new
-        {
-            type = SessionEventTypes.View.DeviceSwitchRequested,
-            session_id = _sessionId,
-            occurred_at = _timeProvider.GetUtcNow(),
-            from_device = ActiveDeviceSelector,
-            to_device = request.DeviceSelector
-        });
-        ActiveDeviceSelector = request.DeviceSelector;
-        UpdateActiveDeviceFlags();
-        await PublishChromeAsync().ConfigureAwait(false);
-        _reconnectRequested.TrySetResult();
-        var iterationCancellation = _iterationCancellation;
-        if (iterationCancellation is not null)
-        {
-            await iterationCancellation.CancelAsync().ConfigureAwait(false);
-        }
+        await State.SwitchDeviceAsync(request.DeviceSelector).ConfigureAwait(false);
     }
 
     public async Task EmitDeviceShelfSnapshotIfNeededAsync()
-    {
-        if (!string.IsNullOrWhiteSpace(_options.JoinShareEndpoint))
-        {
-            _devices = [];
-            await PublishChromeAsync().ConfigureAwait(false);
-            return;
-        }
+        => await State.EmitDeviceShelfSnapshotIfNeededAsync().ConfigureAwait(false);
 
-        try
-        {
-            var devices = await _deviceHost.GetDevicesAsync().ConfigureAwait(false);
-            _devices = devices.Devices
-                .Select((device, index) => new ViewChromeDevice(
-                    index + 1,
-                    device.Serial ?? $"device-{index + 1}",
-                    device.Status,
-                    device.Details,
-                    string.Equals(device.Serial, ActiveDeviceSelector, StringComparison.OrdinalIgnoreCase)))
-                .ToArray();
-            UpdateActiveDeviceFlags();
-            await PublishChromeAsync().ConfigureAwait(false);
-            if (devices.Devices.Count <= 1)
-            {
-                return;
-            }
-
-            WriteEvent(new
-            {
-                type = SessionEventTypes.View.DeviceShelf,
-                session_id = _sessionId,
-                observed_at = _timeProvider.GetUtcNow(),
-                active_device = ActiveDeviceSelector,
-                devices = devices.Devices
-            });
-        }
-        catch (Exception ex) when (!IsFatalException(ex))
-        {
-        }
-    }
-
-    public Task PublishChromeAsync()
-    {
-        var chromeUpdater = _chromeUpdater;
-        return chromeUpdater is null ? Task.CompletedTask : chromeUpdater(BuildChromeState());
-    }
+    public Task PublishChromeAsync() => State.PublishChromeAsync();
 
     public async Task UpdateShareStateAsync(string? shareEndpoint, int observerCount)
-    {
-        _shareEndpoint = shareEndpoint;
-        _observerCount = observerCount;
-        await PublishChromeAsync().ConfigureAwait(false);
-    }
-
-    private ViewChromeState BuildChromeState() => new(
-        ActiveDeviceSelector,
-        _devices,
-        _options.ReadOnly,
-        !string.IsNullOrWhiteSpace(_options.JoinShareEndpoint),
-        _recorder.IsRecording,
-        string.IsNullOrWhiteSpace(_options.JoinShareEndpoint),
-        string.IsNullOrWhiteSpace(_options.JoinShareEndpoint),
-        true,
-        _devices.Count > 1 && string.IsNullOrWhiteSpace(_options.JoinShareEndpoint),
-        _shareEndpoint,
-        _observerCount);
-
-    private void UpdateActiveDeviceFlags()
-    {
-        if (_devices.Count == 0)
-        {
-            return;
-        }
-
-        _devices = _devices
-            .Select(device => device with { IsActive = string.Equals(device.DeviceSelector, ActiveDeviceSelector, StringComparison.OrdinalIgnoreCase) })
-            .ToArray();
-    }
+        => await State.UpdateShareStateAsync(shareEndpoint, observerCount).ConfigureAwait(false);
 
     private ViewSessionInputCommandHandler InputCommands =>
         field ??= new ViewSessionInputCommandHandler(
             _context,
+            Recording,
             new ViewSessionInteractionCallbacks(
-                PublishChromeAsync,
                 () => ActiveDeviceSelector,
                 RequestReconnect));
 
-    private void WriteEvent(object value) => _writeJsonLine(value);
+    private ViewSessionRecordingCoordinator Recording =>
+        field ??= new ViewSessionRecordingCoordinator(_context, PublishChromeAsync);
 
-    private static bool IsFatalException(Exception exception) =>
-        exception is OutOfMemoryException
-            or StackOverflowException
-            or AccessViolationException
-            or AppDomainUnloadedException
-            or BadImageFormatException
-            or CannotUnloadAppDomainException
-            or InvalidProgramException;
+    private ViewSessionStateCoordinator State =>
+        field ??= new ViewSessionStateCoordinator(_context);
+
+    private void WriteEvent(object value) => _writeJsonLine(value);
 }
