@@ -1,4 +1,5 @@
 using Luotsi.Cli.Cli.Envelope;
+using Luotsi.Cli.Cli.Provenance;
 using Luotsi.Cli.Cli.Routing;
 using Luotsi.Cli.Cli.View;
 using Luotsi.Cli.Infrastructure.Contracts;
@@ -12,21 +13,24 @@ internal static class AppHostedCommandCompositionBuilder
     {
         ArgumentNullException.ThrowIfNull(dependencies);
 
+        var provenance = new BuildProvenanceProvider(dependencies.Environment).Create();
         var scenarioTemplateResolver = new ScenarioTemplateResolver(dependencies.TimeProvider, dependencies.Environment);
         var scenarioMetricsCollector = CompositeScenarioMetricsCollector.CreateDefault();
         var scenarioCatalog = new ScenarioCatalog(dependencies.FileSystem, scenarioTemplateResolver);
         var scenarioRunPlanner = new ScenarioRunPlanner(scenarioCatalog);
         var scenarioExecutorFactory = new ScenarioExecutorFactory(dependencies.FileSystem, dependencies.TimeProvider, dependencies.Delay, scenarioTemplateResolver, scenarioMetricsCollector);
-        var scenarioBatchExecutorFactory = new ScenarioBatchExecutorFactory(scenarioExecutorFactory);
-        var scenarioRunEventCoordinatorFactory = new ScenarioRunEventCoordinatorFactory(dependencies.FileSystem, dependencies.TimeProvider);
-        var scenarioRunReportCoordinatorFactory = new ScenarioRunReportCoordinatorFactory(dependencies.FileSystem, dependencies.TimeProvider);
+        var scenarioBatchExecutorFactory = new ScenarioBatchExecutorFactory(scenarioExecutorFactory, scenarioMetricsCollector);
+        var scenarioValidationExecutorFactory = new ScenarioValidationExecutorFactory(scenarioCatalog, dependencies.TimeProvider, scenarioMetricsCollector);
+        var scenarioRunEventCoordinatorFactory = new ScenarioRunEventCoordinatorFactory(dependencies.FileSystem, dependencies.TimeProvider, provenance);
+        var scenarioRunReportCoordinatorFactory = new ScenarioRunReportCoordinatorFactory(dependencies.FileSystem, dependencies.TimeProvider, provenance);
         var scenarioRunOrchestrator = new ScenarioRunOrchestrator(
             scenarioRunPlanner,
             scenarioExecutorFactory,
             scenarioBatchExecutorFactory,
+            scenarioValidationExecutorFactory,
             scenarioRunEventCoordinatorFactory,
             scenarioRunReportCoordinatorFactory);
-        var envelopeWriter = new AppCommandEnvelopeWriter(dependencies.Console, dependencies.TimeProvider);
+        var envelopeWriter = new AppCommandEnvelopeWriter(dependencies.Console, dependencies.TimeProvider, provenance);
         var commandDispatcher = new AppCommandDispatcher(
             new AdbSubcommandDispatcher(),
             new ScenarioCommandDispatcher(scenarioRunPlanner, scenarioRunOrchestrator),

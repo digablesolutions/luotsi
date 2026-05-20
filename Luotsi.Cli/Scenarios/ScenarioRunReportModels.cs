@@ -19,6 +19,7 @@ internal sealed record ScenarioRunReport(
     int? ShardIndex,
     string? ShardStrategy,
     IReadOnlyDictionary<string, double> Metrics,
+    BuildProvenance Provenance,
     IReadOnlyList<ScenarioReportScenario> Scenarios,
     ErrorInfo? Error = null);
 

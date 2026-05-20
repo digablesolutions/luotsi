@@ -10,6 +10,8 @@ luotsi [--device <serial> | --device-query <query>] [--platform android] [--adb 
 
 **Retry policy.** Safe reads (diagnostics, UI dumps, log snapshots, read-only shell probes) get one visible retry after known transient transport errors (protocol faults, missing/offline/connecting devices). Mutating commands (tap, type, install, push, key events) are not retried.
 
+**Artifacts.** Use `--artifacts <directory>` to override the artifact root for the current command or session. Use `--poll-artifacts <final|per-attempt|none>` to control whether polling-style commands write artifacts only at the end, on each attempt, or not at all.
+
 ---
 
 ## Device & ADB
@@ -24,6 +26,7 @@ luotsi [--device <serial> | --device-query <query>] [--platform android] [--adb 
 | `adb mdns check` | mDNS availability check |
 | `wait-for-device --device <serial> --timeout-sec <n>` | Wait for device readiness; verifies `adb shell echo ping` before returning |
 | `adb reconnect offline` | Reconnect an offline ADB transport (separate from `reconnect` view command) |
+| `adb reconnect device` | Reconnect a device transport without changing the active view/profile state |
 | `preflight --device <serial> --package <app.id>` | Device preflight check; writes `device-fingerprint.json` |
 | `screen-state --device <serial>` | Dump current screen state |
 
@@ -42,6 +45,7 @@ See [view-session.md](view-session.md) for the full view reference (presets, bac
 | `view --last` | Reopen the last successful view session |
 | `reconnect` | Reconnect using the last successful profile |
 | `reconnect --profile <name>` | Reconnect using a specific profile |
+| `view setup --device <serial> [options]` | Resolve helper, decoder, backend, and recording prerequisites without opening a stream (alias: `view-setup`) |
 | `view-doctor --device <serial> [options]` | Diagnostic report: decoder, helper, backend, preflight, MediaProjection, recording |
 | `profile-list` | List saved view profiles |
 | `profile-delete --name <name>` | Delete a saved view profile |
@@ -115,7 +119,24 @@ Endpoints use adb syntax: `tcp:8080`, `tcp:0`, `localabstract:service`.
 
 ---
 
-## Telemetry & Waits
+## Interaction, Logs, and Capture
+
+These commands are the direct device-control surface outside scenarios and `inspect`.
+
+| Command | Description |
+|---|---|
+| `wait-visible --text <label> [--timeout-sec 15]` | Wait until a visible text selector appears on screen |
+| `tap-text --device <serial> --text <text>` | Tap a UI element by visible text |
+| `tap --x <px> --y <px>` | Tap an absolute screen coordinate |
+| `type-text --text <value>` | Send text input to the focused field |
+| `keyevent --code <code>` | Send an Android key event such as `KEYCODE_HOME` |
+| `logcat [--tail 200]` | Snapshot recent raw logcat lines |
+| `wait-log --device <serial> --contains <text> --timeout-sec <n>` | Wait for a logcat line matching a substring |
+| `record --output <file.mp4> [--time-limit-sec 30]` | Record the device screen to a host video file |
+
+---
+
+## Telemetry & Semantic Waits
 
 Luotsi reads the `LUOTSI_DEVICE_TELEMETRY` logcat marker to parse structured semantic events from the app under test.
 
@@ -123,8 +144,6 @@ Luotsi reads the `LUOTSI_DEVICE_TELEMETRY` logcat marker to parse structured sem
 |---|---|
 | `telemetry-tail --device <serial> --tail <n>` | Snapshot recent telemetry from logcat |
 | `telemetry-watch --device <serial> --timeout-sec <n>` | Collect telemetry over a bounded window |
-| `wait-log --device <serial> --contains <text> --timeout-sec <n>` | Wait for a logcat line matching a substring |
-| `tap-text --device <serial> --text <text>` | Tap a UI element by visible text |
 | `wait-step --device <serial> --step <name>` | Wait for a `LUOTSI_DEVICE_TELEMETRY` step event |
 | `wait-action-ready --device <serial> --action <name> [--step <name>]` | Wait for a `LUOTSI_DEVICE_TELEMETRY` action-ready event |
 
@@ -136,8 +155,40 @@ Luotsi reads the `LUOTSI_DEVICE_TELEMETRY` logcat marker to parse structured sem
 
 | Command | Description |
 |---|---|
-| `run --device <serial> --file <path>` | Execute a JSON scenario playbook |
+| `scenario-list --path <scenario-file-or-directory-or-glob> [filters]` | Discover scenario files and report matched names, tags, and actions without executing them |
+| `run --device <serial> --file <path>` | Execute one JSON scenario playbook; also supports `--validate-only`, `--events-jsonl`, `--report-json`, `--report-junit`, `--capture-on`, and `--attach-artifacts` |
+| `run --device <serial> --path <scenario-file-or-directory-or-glob>` | Execute one or many scenario files discovered from a file, directory, or glob; supports filtering, `--dry-run`, `--validate-only`, reporting, artifact-policy flags, and sharding |
 | `inspect --device <serial>` | Open an agent-driven JSONL inspection session |
 
 See [scenarios.md](scenarios.md) for the playbook format and full action reference.
 `inspect` is described in the README [Inspect mode](../README.md#inspect-mode) section.
+
+`scenario-list` and `run --path` share the same discovery filters: `--include-tag`, `--exclude-tag`, `--name`, and `--action`. `run --path` also supports `--shard-count`, `--shard-index`, and `--shard-strategy` for parallel execution.
+
+Scenario runner flags:
+
+- `--validate-only` validates the selected scenario file(s) and writes reports without creating a device host or executing device work.
+- `--dry-run` is available only with `run --path`; it returns the selected scenario plan after filtering and sharding without validating or executing it.
+- `--validate-only` and `--dry-run` are mutually exclusive.
+- `--events-jsonl`, `--report-json`, and `--report-junit` write machine-readable run outputs for validation and execution flows.
+- `--capture-on failure|never` controls runtime failure capture during scenario execution.
+- `--attach-artifacts never|on-failure|always` controls whether report outputs include artifact references.
+
+---
+
+## Output Envelopes
+
+Normal command mode returns a single JSON envelope with `ok`, `command`, `data`, `artifacts`, `provenance`, and `error`. Long-lived `inspect` and `view` sessions are the exceptions: they stream JSONL events instead of a single final envelope.
+
+Common `error.category` values currently include:
+
+| Category | Typical meaning |
+|---|---|
+| `usage_error` | The command line or scenario input is invalid |
+| `log_wait_timeout` | A `wait-log` operation timed out |
+| `oracle_timeout` | A semantic telemetry wait such as `wait-step` or `wait-action-ready` timed out |
+| `configuration_error` | Host, adb, device-availability, helper, or environment setup is not ready |
+| `selector_or_screen_state` | A UI/screen-state wait timed out |
+| `scenario_error` | A scenario failed for another runtime reason |
+
+The exact classification is derived from the current command failure path, so treat these as the current public values rather than a forever-closed enum.

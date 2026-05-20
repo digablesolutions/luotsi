@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
+using Luotsi.Cli.Cli.Provenance;
 using Luotsi.Cli.Hosts.Android;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
@@ -238,15 +239,18 @@ public sealed class AdbReadinessTests
     public async Task RunAsync_DeviceStatus_Writes_Exact_Command_Envelope()
     {
         var started = DateTimeOffset.Parse("2026-05-15T12:00:00Z");
+        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>());
         var host = new FakeDeviceHost
         {
             PreflightTemplate = new PreflightResult("Pixel 9", "16", "36", "focus", null, null, "fingerprint", "arm64-v8a", "SER123")
         };
         host.ConnectedDevices.Add(new DeviceInfo("SER123", "device", "product:panther model:Pixel_9 device:panther"));
         var console = new FakeConsole();
+        var provenance = new BuildProvenanceProvider(environment).Create();
         var app = new App(new AppDependencies
         {
             Console = console,
+            Environment = environment,
             FileSystem = new FakeFileSystem(),
             TimeProvider = started.ToTimeProvider(),
             DeviceHostFactory = new FakeDeviceHostFactory(host)
@@ -289,6 +293,14 @@ public sealed class AdbReadinessTests
             {
                 artifact_root = $"/tmp{Path.DirectorySeparatorChar}luotsi{Path.DirectorySeparatorChar}20260515-120000-device-status",
                 poll_artifacts = "final"
+            },
+            provenance = new
+            {
+                tool = provenance.Tool,
+                version = provenance.Version,
+                os = provenance.Os,
+                architecture = provenance.Architecture,
+                framework = provenance.Framework
             },
             schema = ResultSchemas.CommandEnvelope,
             duration_ms = 0

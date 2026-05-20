@@ -2,7 +2,6 @@ using Luotsi.Cli.Cli;
 using Luotsi.Cli.Cli.Composition;
 using Luotsi.Cli.Cli.Inspect;
 using Luotsi.Cli.Cli.Routing;
-using Luotsi.Cli.Infrastructure.Devices;
 using Luotsi.Cli.Models;
 using Xunit;
 
@@ -69,7 +68,7 @@ public sealed class AppCommandFamilyRouterTests
     }
 
     [Fact]
-    public async Task DispatchAsync_RunValidateOnly_Uses_UnsupportedRunner_Without_DeviceHost_Creation()
+    public async Task DispatchAsync_RunValidateOnly_Skips_Runner_Creation()
     {
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-19T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var console = new FakeConsole();
@@ -98,9 +97,80 @@ public sealed class AppCommandFamilyRouterTests
         using var envelope = console.ParseSingleOutputAsJson();
 
         Assert.Equal(0, exitCode);
-        Assert.IsType<UnsupportedDeviceHost>(context.Runner);
+                Assert.Null(context.Runner);
         Assert.Equal(0, deviceHostFactory.CreateCallCount);
         Assert.Equal("validated", envelope.RootElement.GetProperty("data").GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public async Task DispatchAsync_ScenarioList_Does_Not_Create_Runner()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-19T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        fileSystem.AddFile("/tmp/scenarios/a.json", """
+        {
+            "name": "a",
+            "steps": [
+                { "action": "sleep", "milliseconds": 1 }
+            ]
+        }
+        """);
+        var deviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost());
+        var router = CreateRouter(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            Console = console,
+            FileSystem = fileSystem,
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = deviceHostFactory,
+            ViewProfileStore = new FakeViewProfileStore()
+        });
+        var context = new AppExecutionContext(timeProvider.GetUtcNow(), CliOptions.Parse(["scenario-list", "--path", "/tmp/scenarios"]));
+
+        var exitCode = await router.DispatchAsync(context);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.Null(context.Runner);
+        Assert.Equal(0, deviceHostFactory.CreateCallCount);
+        Assert.Equal(1, envelope.RootElement.GetProperty("data").GetProperty("matched_count").GetInt32());
+    }
+
+    [Fact]
+    public async Task DispatchAsync_RunDryRun_Does_Not_Create_Runner()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-19T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        fileSystem.AddFile("/tmp/scenarios/a.json", """
+        {
+            "name": "a",
+            "steps": [
+                { "action": "sleep", "milliseconds": 1 }
+            ]
+        }
+        """);
+        var deviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost());
+        var router = CreateRouter(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            Console = console,
+            FileSystem = fileSystem,
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = deviceHostFactory,
+            ViewProfileStore = new FakeViewProfileStore()
+        });
+        var context = new AppExecutionContext(timeProvider.GetUtcNow(), CliOptions.Parse(["run", "--path", "/tmp/scenarios", "--dry-run"]));
+
+        var exitCode = await router.DispatchAsync(context);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.Null(context.Runner);
+        Assert.Equal(0, deviceHostFactory.CreateCallCount);
+        Assert.True(envelope.RootElement.GetProperty("data").GetProperty("dry_run").GetBoolean());
+        Assert.Equal(1, envelope.RootElement.GetProperty("data").GetProperty("selected_count").GetInt32());
     }
 
     private static AppCommandFamilyRouter CreateRouter(AppDependencies dependencies)

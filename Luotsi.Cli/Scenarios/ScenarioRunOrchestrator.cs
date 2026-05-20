@@ -6,12 +6,14 @@ internal sealed class ScenarioRunOrchestrator(
     ScenarioRunPlanner runPlanner,
     ScenarioExecutorFactory scenarioExecutorFactory,
     ScenarioBatchExecutorFactory scenarioBatchExecutorFactory,
+    ScenarioValidationExecutorFactory scenarioValidationExecutorFactory,
     ScenarioRunEventCoordinatorFactory scenarioRunEventCoordinatorFactory,
     ScenarioRunReportCoordinatorFactory scenarioRunReportCoordinatorFactory)
 {
     private readonly ScenarioRunPlanner _runPlanner = runPlanner ?? throw new ArgumentNullException(nameof(runPlanner));
     private readonly ScenarioExecutorFactory _scenarioExecutorFactory = scenarioExecutorFactory ?? throw new ArgumentNullException(nameof(scenarioExecutorFactory));
     private readonly ScenarioBatchExecutorFactory _scenarioBatchExecutorFactory = scenarioBatchExecutorFactory ?? throw new ArgumentNullException(nameof(scenarioBatchExecutorFactory));
+    private readonly ScenarioValidationExecutorFactory _scenarioValidationExecutorFactory = scenarioValidationExecutorFactory ?? throw new ArgumentNullException(nameof(scenarioValidationExecutorFactory));
     private readonly ScenarioRunEventCoordinatorFactory _scenarioRunEventCoordinatorFactory = scenarioRunEventCoordinatorFactory ?? throw new ArgumentNullException(nameof(scenarioRunEventCoordinatorFactory));
     private readonly ScenarioRunReportCoordinatorFactory _scenarioRunReportCoordinatorFactory = scenarioRunReportCoordinatorFactory ?? throw new ArgumentNullException(nameof(scenarioRunReportCoordinatorFactory));
 
@@ -186,11 +188,5 @@ internal sealed class ScenarioRunOrchestrator(
     }
 
     private ScenarioValidationExecutor CreateValidationExecutor(IScenarioEventSink sink) =>
-        new(
-            new ScenarioCatalog(
-                _scenarioExecutorFactory.FileSystem,
-                _scenarioExecutorFactory.TemplateResolver),
-            _scenarioExecutorFactory.TimeProvider,
-            sink,
-            _scenarioExecutorFactory.MetricsCollector);
+        _scenarioValidationExecutorFactory.Create(sink);
 }

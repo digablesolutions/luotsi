@@ -3,7 +3,6 @@ using Luotsi.Cli.Cli.Composition;
 using Luotsi.Cli.Cli.Hosting;
 using Luotsi.Cli.Cli.View;
 using Luotsi.Cli.Infrastructure.Contracts;
-using Luotsi.Cli.Infrastructure.Devices;
 
 namespace Luotsi.Cli.Cli.Routing;
 
@@ -31,11 +30,6 @@ internal sealed class AppCommandRouteBootstrapper(AppCommandRouteBootstrapperDep
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(setup);
-
-        if (string.Equals(options.Command, "run", StringComparison.OrdinalIgnoreCase) && options.HasFlag("validate-only"))
-        {
-            return new UnsupportedDeviceHost();
-        }
 
         var deviceSelector = await DeviceSelectorResolver.ResolveAsync(
             options,

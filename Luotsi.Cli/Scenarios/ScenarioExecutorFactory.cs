@@ -13,14 +13,7 @@ internal sealed class ScenarioExecutorFactory(
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     private readonly IDelay _delay = delay ?? throw new ArgumentNullException(nameof(delay));
     private readonly IScenarioTemplateResolver _templateResolver = templateResolver ?? throw new ArgumentNullException(nameof(templateResolver));
-
-    public IFileSystem FileSystem => _fileSystem;
-
-    public TimeProvider TimeProvider => _timeProvider;
-
-    public IScenarioTemplateResolver TemplateResolver => _templateResolver;
-
-    public IScenarioMetricsCollector MetricsCollector { get; } = metricsCollector ?? throw new ArgumentNullException(nameof(metricsCollector));
+    private readonly IScenarioMetricsCollector _metricsCollector = metricsCollector ?? throw new ArgumentNullException(nameof(metricsCollector));
 
     public ScenarioExecutor Create(
         IScenarioActionHost actionHost,
@@ -28,6 +21,6 @@ internal sealed class ScenarioExecutorFactory(
         ScenarioFailureArtifactCapturePolicy failureArtifactCapturePolicy = ScenarioFailureArtifactCapturePolicy.Failure)
     {
         ArgumentNullException.ThrowIfNull(actionHost);
-        return new ScenarioExecutor(actionHost, _fileSystem, _timeProvider, _delay, _templateResolver, eventSink, failureArtifactCapturePolicy, MetricsCollector);
+        return new ScenarioExecutor(actionHost, _fileSystem, _timeProvider, _delay, _templateResolver, eventSink, failureArtifactCapturePolicy, _metricsCollector);
     }
 }

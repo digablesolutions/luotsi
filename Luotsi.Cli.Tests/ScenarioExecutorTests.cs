@@ -589,7 +589,10 @@ public sealed partial class AppTests
             "scenario_ended",
             "scenario_run_ended"
         ], events.Select(static evt => evt.GetProperty("event").GetString()!).ToArray());
+        Assert.Equal("luotsi", events[0].GetProperty("provenance").GetProperty("tool").GetString());
+        Assert.True(events[0].GetProperty("provenance").TryGetProperty("os", out _));
         Assert.Equal("passed", events[^1].GetProperty("status").GetString());
+        Assert.Equal("luotsi", events[^1].GetProperty("provenance").GetProperty("tool").GetString());
         Assert.Equal(1, events[^1].GetProperty("passed_count").GetInt32());
         Assert.Equal(0, events[^1].GetProperty("failed_count").GetInt32());
         Assert.Equal(1, events[^1].GetProperty("metrics").GetProperty("step_count").GetInt32());
@@ -936,9 +939,11 @@ public sealed partial class AppTests
         Assert.Equal(0, exitCode);
         Assert.Equal("scenario_run_started", events[0].GetProperty("event").GetString());
         Assert.Equal(2, events[0].GetProperty("selected_count").GetInt32());
+        Assert.Equal("luotsi", events[0].GetProperty("provenance").GetProperty("tool").GetString());
         Assert.Equal(["a", "b"], events.Where(static evt => evt.GetProperty("event").GetString() == "scenario_started").Select(static evt => evt.GetProperty("scenario").GetString()!).ToArray());
         Assert.Equal("scenario_run_ended", events[^1].GetProperty("event").GetString());
         Assert.Equal("passed", events[^1].GetProperty("status").GetString());
+        Assert.Equal("luotsi", events[^1].GetProperty("provenance").GetProperty("tool").GetString());
         Assert.Equal(2, events[^1].GetProperty("passed_count").GetInt32());
         Assert.Equal(2, events[^1].GetProperty("metrics").GetProperty("step_count").GetInt32());
         Assert.Equal(2, events[^1].GetProperty("metrics").GetProperty("passed_scenario_count").GetInt32());
@@ -1052,6 +1057,8 @@ public sealed partial class AppTests
         Assert.Equal(0, exitCode);
         Assert.Equal("luotsi-scenario-run-report.v1", report.RootElement.GetProperty("schema").GetString());
         Assert.Equal("passed", report.RootElement.GetProperty("status").GetString());
+        Assert.Equal("luotsi", report.RootElement.GetProperty("provenance").GetProperty("tool").GetString());
+        Assert.True(report.RootElement.GetProperty("provenance").TryGetProperty("framework", out _));
         Assert.Equal(1, report.RootElement.GetProperty("passed_count").GetInt32());
         Assert.Equal("single", report.RootElement.GetProperty("scenarios")[0].GetProperty("scenario").GetString());
         Assert.Equal("/tmp/scenario.json::single", report.RootElement.GetProperty("scenarios")[0].GetProperty("scenario_id").GetString());

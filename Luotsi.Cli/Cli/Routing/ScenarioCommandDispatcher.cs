@@ -20,10 +20,16 @@ internal sealed class ScenarioCommandDispatcher(
         return new ScenarioListResult(selection.Query.Path, selection.TotalCount, selection.MatchedCount, selection.MatchedScenarios);
     }
 
-    public async Task<object> RunAsync(CliOptions options, IDeviceHost runner)
+    public bool RequiresRunner(CliOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(runner);
+
+        return !options.HasFlag("validate-only") && !options.HasFlag("dry-run");
+    }
+
+    public async Task<object> RunAsync(CliOptions options, IDeviceHost? runner)
+    {
+        ArgumentNullException.ThrowIfNull(options);
 
         var configuration = ScenarioRunConfiguration.Create(options);
 
@@ -40,7 +46,7 @@ internal sealed class ScenarioCommandDispatcher(
                 return await _scenarioRunOrchestrator.ValidateFileAsync(file, configuration).ConfigureAwait(false);
             }
 
-            return await _scenarioRunOrchestrator.RunFileAsync(file, runner, configuration).ConfigureAwait(false);
+            return await _scenarioRunOrchestrator.RunFileAsync(file, RequireRunner(runner), configuration).ConfigureAwait(false);
         }
 
         var query = ScenarioQueryFactory.CreateCatalogRunQuery(options);
@@ -70,6 +76,9 @@ internal sealed class ScenarioCommandDispatcher(
             return await _scenarioRunOrchestrator.ValidatePathAsync(query, configuration).ConfigureAwait(false);
         }
 
-        return await _scenarioRunOrchestrator.RunPathAsync(query, runner, configuration).ConfigureAwait(false);
+        return await _scenarioRunOrchestrator.RunPathAsync(query, RequireRunner(runner), configuration).ConfigureAwait(false);
     }
+
+    private static IDeviceHost RequireRunner(IDeviceHost? runner) =>
+        runner ?? throw new InvalidOperationException("Scenario execution requires a device host.");
 }

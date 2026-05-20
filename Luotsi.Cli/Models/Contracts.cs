@@ -343,7 +343,7 @@ public sealed record ScenarioStep(
 /// <summary>
 /// JSON command envelope.
 /// </summary>
-public sealed record CommandEnvelope(bool Ok, string? Command, DateTimeOffset StartedAt, DateTimeOffset EndedAt, object? Data, ArtifactData Artifacts, ErrorInfo? Error)
+public sealed record CommandEnvelope(bool Ok, string? Command, DateTimeOffset StartedAt, DateTimeOffset EndedAt, object? Data, ArtifactData Artifacts, BuildProvenance Provenance, ErrorInfo? Error)
 {
     /// <summary>
     /// Gets the schema name.
@@ -355,6 +355,21 @@ public sealed record CommandEnvelope(bool Ok, string? Command, DateTimeOffset St
     /// </summary>
     public long DurationMs => (long)(EndedAt - StartedAt).TotalMilliseconds;
 }
+
+/// <summary>
+/// Host and build metadata captured with machine-readable outputs.
+/// </summary>
+public sealed record BuildProvenance(
+    string Tool,
+    string Version,
+    string? CommitSha,
+    string? Branch,
+    string? Repository,
+    string? CiProvider,
+    string? CiRunId,
+    string Os,
+    string Architecture,
+    string Framework);
 
 /// <summary>
 /// Structured error information.

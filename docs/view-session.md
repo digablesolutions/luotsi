@@ -142,6 +142,21 @@ Joined share sessions are forced into read-only observer mode. They reconnect to
 
 ---
 
+## view-setup
+
+`view setup` / `view-setup` uses the same option resolution path as `view`, but focuses on preparing the local/device prerequisites instead of opening a stream.
+
+```bash
+luotsi view setup --device <serial>
+luotsi view-setup --device <serial> --dry-run
+```
+
+Without `--dry-run`, setup first tries to resolve the helper APK, builds it with Gradle if needed, installs/verifies it on the selected device, and then runs the same readiness checks exposed by `view-doctor`.
+
+With `--dry-run`, Luotsi stays report-only: it resolves the requested configuration and returns skipped/failing setup steps plus the doctor report, but it does not attempt helper build or install fixes.
+
+---
+
 ## view-doctor
 
 `view-doctor` runs the same option resolution as `view` and returns a diagnostic report without opening a stream.
@@ -151,3 +166,5 @@ luotsi view-doctor --device <serial> --preset low-latency
 ```
 
 Checks: FFmpeg decoder readiness (`LUOTSI_FFMPEG_ROOT` + bundled `ffmpeg/` paths), Android helper package discovery (`LUOTSI_VIEW_HELPER_APK` or repo layout), capture-backend policy, adb device visibility, device preflight, MediaProjection API/encoder/consent readiness, recording target readiness.
+
+Use `view setup` when you want Luotsi to prepare the helper and verify install state before diagnosing readiness. `view-doctor --fix` routes through the same setup path.

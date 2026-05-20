@@ -2,9 +2,12 @@ using Luotsi.Cli.Infrastructure.Contracts;
 
 namespace Luotsi.Cli.Scenarios;
 
-internal sealed class ScenarioBatchExecutorFactory(ScenarioExecutorFactory scenarioExecutorFactory)
+internal sealed class ScenarioBatchExecutorFactory(
+    ScenarioExecutorFactory scenarioExecutorFactory,
+    IScenarioMetricsCollector metricsCollector)
 {
     private readonly ScenarioExecutorFactory _scenarioExecutorFactory = scenarioExecutorFactory ?? throw new ArgumentNullException(nameof(scenarioExecutorFactory));
+    private readonly IScenarioMetricsCollector _metricsCollector = metricsCollector ?? throw new ArgumentNullException(nameof(metricsCollector));
 
     public ScenarioBatchExecutor Create(
         IDeviceHost runner,
@@ -14,6 +17,6 @@ internal sealed class ScenarioBatchExecutorFactory(ScenarioExecutorFactory scena
         ArgumentNullException.ThrowIfNull(runner);
         return new ScenarioBatchExecutor(
             _scenarioExecutorFactory.Create(runner, eventSink, failureArtifactCapturePolicy),
-            _scenarioExecutorFactory.MetricsCollector);
+            _metricsCollector);
     }
 }
