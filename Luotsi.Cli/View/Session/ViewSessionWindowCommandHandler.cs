@@ -24,7 +24,7 @@ internal sealed class ViewSessionWindowCommandHandler
     private Action<bool>? _streamPauseUpdater;
 
     public ViewSessionWindowCommandHandler(
-        ViewSessionInteractionContext context,
+        ViewSessionWindowCommandContext context,
         ViewSessionRecordingCoordinator recording,
         ViewSessionInteractionCallbacks callbacks,
         Func<string, bool> tryBlockReadOnly)
@@ -37,11 +37,11 @@ internal sealed class ViewSessionWindowCommandHandler
         _deviceHost = context.DeviceHost ?? throw new ArgumentNullException(nameof(context.DeviceHost));
         _artifacts = context.Artifacts ?? throw new ArgumentNullException(nameof(context.Artifacts));
         _options = context.Options ?? throw new ArgumentNullException(nameof(context.Options));
-        _timeProvider = context.TimeProvider ?? throw new ArgumentNullException(nameof(context.TimeProvider));
-        _sessionId = string.IsNullOrWhiteSpace(context.SessionId)
-            ? throw new ArgumentException("Session id is required.", nameof(context.SessionId))
-            : context.SessionId;
-        _writeEvent = context.WriteEvent ?? throw new ArgumentNullException(nameof(context.WriteEvent));
+        _timeProvider = context.Events.TimeProvider ?? throw new ArgumentNullException(nameof(context.Events.TimeProvider));
+        _sessionId = string.IsNullOrWhiteSpace(context.Events.SessionId)
+            ? throw new ArgumentException("Session id is required.", nameof(context.Events.SessionId))
+            : context.Events.SessionId;
+        _writeEvent = context.Events.WriteEvent ?? throw new ArgumentNullException(nameof(context.Events.WriteEvent));
         _artifactFolderOpener = context.ArtifactFolderOpener ?? throw new ArgumentNullException(nameof(context.ArtifactFolderOpener));
         _recording = recording;
         _activeDeviceSelector = callbacks.ActiveDeviceSelector ?? throw new ArgumentNullException(nameof(callbacks.ActiveDeviceSelector));

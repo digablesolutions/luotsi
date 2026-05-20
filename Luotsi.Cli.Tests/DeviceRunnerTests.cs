@@ -17,23 +17,47 @@ public sealed partial class AppTests
         var artifacts = ArtifactSession.Create(CliOptions.Parse(["screen-state"]), fileSystem, timeProvider);
         var adb = new FakeAdbClient();
         adb.EnqueueShellResult(new ProcessResult(0, "not-xml", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "still-not-xml", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "UI hierchary dumped to: /dev/tty", string.Empty));
         var runner = new DeviceRunner(adb, artifacts, timeProvider, new FakeDelay(timeProvider), fileSystem);
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(runner.GetScreenStateAsync);
+        var error = await Assert.ThrowsAsync<ScreenStateUnavailableException>(runner.GetScreenStateAsync);
 
-        Assert.Contains("invalid XML", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("screen_state_unavailable", error.CategoryOverride);
+        Assert.Contains("file-backed and stdout fallback attempts", error.Message, StringComparison.OrdinalIgnoreCase);
         Assert.True(fileSystem.FileExists(Path.Combine(artifacts.Root, "hierarchy.xml")));
         Assert.True(fileSystem.FileExists(Path.Combine(artifacts.Root, "hierarchy-invalid.xml")));
+        Assert.True(fileSystem.FileExists(Path.Combine(artifacts.Root, "hierarchy-dump-attempts.json")));
     }
 
 
     [Fact]
-    public async Task GetScreenStateAsync_Uses_ExecOut_UiDump_And_Strips_Prefix_Noise()
+    public async Task GetScreenStateAsync_Prefers_File_Backed_UiDump()
     {
         var fileSystem = new FakeFileSystem();
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var artifacts = ArtifactSession.Create(CliOptions.Parse(["screen-state"]), fileSystem, timeProvider);
         var adb = new FakeAdbClient();
+        adb.EnqueueShellResult(new ProcessResult(0, CreateUiDump("Target"), string.Empty));
+        var runner = new DeviceRunner(adb, artifacts, timeProvider, new FakeDelay(timeProvider), fileSystem);
+
+        var state = await runner.GetScreenStateAsync();
+
+        Assert.Contains(state.Elements, element => element.Text == "Target");
+        Assert.Contains("uiautomator dump '/data/local/tmp/luotsi-window.xml'", adb.ShellCommands[0], StringComparison.Ordinal);
+        Assert.Empty(adb.RunCommands);
+    }
+
+
+    [Fact]
+    public async Task GetScreenStateAsync_Falls_Back_To_ExecOut_UiDump_And_Strips_Prefix_Noise()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var artifacts = ArtifactSession.Create(CliOptions.Parse(["screen-state"]), fileSystem, timeProvider);
+        var adb = new FakeAdbClient();
+        adb.EnqueueShellResult(new ProcessResult(0, "UI hierchary dumped to: /data/local/tmp/luotsi-window.xml", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "UI hierchary dumped to: /sdcard/window_dump.xml", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "UI hierchary dumped to: /dev/tty\n<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>" + CreateUiDump("Target") + "\nUI hierchary dumped to: /dev/tty", string.Empty));
         var runner = new DeviceRunner(adb, artifacts, timeProvider, new FakeDelay(timeProvider), fileSystem);
 
@@ -41,6 +65,7 @@ public sealed partial class AppTests
 
         Assert.Contains(state.Elements, element => element.Text == "Target");
         Assert.Equal(["exec-out", "uiautomator", "dump", "/dev/tty"], adb.RunCommands[0]);
+        Assert.True(fileSystem.FileExists(Path.Combine(artifacts.Root, "hierarchy-dump-attempts.json")));
     }
 
 
@@ -161,6 +186,8 @@ public sealed partial class AppTests
         var delay = new FakeDelay(timeProvider);
         var adb = new FakeAdbClient();
         adb.EnqueueShellResult(new ProcessResult(0, "not-xml", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "still-not-xml", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "UI hierchary dumped to: /dev/tty", string.Empty));
         adb.EnqueueShellResult(new ProcessResult(0, CreateUiDump("Target"), string.Empty));
         var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["wait-visible"]), fileSystem, timeProvider), timeProvider, delay, fileSystem);
 
@@ -215,12 +242,7 @@ public sealed partial class AppTests
 
         Assert.Equal("Target", element.Text);
         Assert.Equal(50, tap.X);
-        Assert.Single(adb.RunCommands, static command =>
-            command.Length == 4 &&
-            string.Equals(command[0], "exec-out", StringComparison.Ordinal) &&
-            string.Equals(command[1], "uiautomator", StringComparison.Ordinal) &&
-            string.Equals(command[2], "dump", StringComparison.Ordinal) &&
-            string.Equals(command[3], "/dev/tty", StringComparison.Ordinal));
+        Assert.Single(adb.ShellCommands, static command => command.Contains("uiautomator dump", StringComparison.Ordinal));
     }
 
 
@@ -240,12 +262,7 @@ public sealed partial class AppTests
 
         Assert.Contains(first.Elements, element => element.Text == "First");
         Assert.Contains(second.Elements, element => element.Text == "Second");
-        Assert.Equal(2, adb.RunCommands.Count(static command =>
-            command.Length == 4 &&
-            string.Equals(command[0], "exec-out", StringComparison.Ordinal) &&
-            string.Equals(command[1], "uiautomator", StringComparison.Ordinal) &&
-            string.Equals(command[2], "dump", StringComparison.Ordinal) &&
-            string.Equals(command[3], "/dev/tty", StringComparison.Ordinal)));
+        Assert.Equal(2, adb.ShellCommands.Count(static command => command.Contains("uiautomator dump", StringComparison.Ordinal)));
     }
 
 
@@ -264,12 +281,7 @@ public sealed partial class AppTests
         await runner.TapAsync("10", "20");
         await runner.WaitVisibleAsync("Target", 1);
 
-        Assert.Equal(2, adb.RunCommands.Count(static command =>
-            command.Length == 4 &&
-            string.Equals(command[0], "exec-out", StringComparison.Ordinal) &&
-            string.Equals(command[1], "uiautomator", StringComparison.Ordinal) &&
-            string.Equals(command[2], "dump", StringComparison.Ordinal) &&
-            string.Equals(command[3], "/dev/tty", StringComparison.Ordinal)));
+        Assert.Equal(2, adb.ShellCommands.Count(static command => command.Contains("uiautomator dump", StringComparison.Ordinal)));
     }
 
 
@@ -279,15 +291,17 @@ public sealed partial class AppTests
         var fileSystem = new FakeFileSystem();
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var delay = new FakeDelay(timeProvider);
-                var artifacts = ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider);
+        var artifacts = ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider);
         var adb = new FakeAdbClient();
         adb.EnqueueShellResult(new ProcessResult(0, "not-xml", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "still-not-xml", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "UI hierchary dumped to: /dev/tty", string.Empty));
         adb.EnqueueShellResult(new ProcessResult(0, """
         <hierarchy>
           <node text="" content-desc="" resource-id="input/name" class="android.widget.EditText" enabled="true" clickable="true" focused="true" bounds="[0,0][100,100]" />
         </hierarchy>
         """, string.Empty));
-                var runner = new DeviceRunner(adb, artifacts, timeProvider, delay, fileSystem);
+        var runner = new DeviceRunner(adb, artifacts, timeProvider, delay, fileSystem);
 
         var result = await runner.AssertTextInputReadyAsync(requireKeyboard: false, timeoutSec: 2);
         var json = SerializeToJsonElement(result);
@@ -500,7 +514,7 @@ public sealed partial class AppTests
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var adb = new FakeAdbClient();
         adb.EnqueueShellResult(new ProcessResult(0, "versionName=1.0.0\nversionCode=123", string.Empty));
-        adb.EnqueueRunResult(new ProcessResult(0, CreateUiDumpWithNodes(CreateUiNode("v1.0.0+123", string.Empty, "android.widget.TextView", false, 900, 0, 1080, 80)), string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, CreateUiDumpWithNodes(CreateUiNode("v1.0.0+123", string.Empty, "android.widget.TextView", false, 900, 0, 1080, 80)), string.Empty));
         adb.EnqueueShellResult(new ProcessResult(0, "Physical size: 1080x1920", string.Empty));
         var environment = new FakeEnvironmentVariables(new Dictionary<string, string>
         {

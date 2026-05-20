@@ -1,12 +1,22 @@
 using System.Xml;
 using System.Xml.Linq;
 using Luotsi.Cli.Artifacts;
+using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Hosts.Android;
 
 internal sealed record ScreenCapture(string Xml, ScreenState State);
+
+internal sealed record HierarchyDumpAttempt(
+    string Strategy,
+    string Command,
+    int ExitCode,
+    bool Succeeded,
+    bool XmlExtracted,
+    string Stdout,
+    string Stderr);
 
 internal sealed class AndroidScreenCaptureService(
     IAdbClient adb,
@@ -77,7 +87,8 @@ internal sealed class AndroidScreenCaptureService(
     public void InvalidateUiDumpCache() => _uiDumpCache = null;
 
     public static bool IsRetryableHierarchyDumpFailure(InvalidOperationException exception) =>
-        exception.Message.Contains("UI hierarchy dump was empty or invalid XML", StringComparison.OrdinalIgnoreCase);
+        exception.Message.Contains("UI hierarchy dump was empty or invalid XML", StringComparison.OrdinalIgnoreCase) ||
+        exception.Message.Contains("UI hierarchy dump did not contain parseable XML", StringComparison.OrdinalIgnoreCase);
 
     private async Task<ScreenCapture> ReadScreenCaptureAsync(bool writeInvalidArtifact)
     {
@@ -98,7 +109,9 @@ internal sealed class AndroidScreenCaptureService(
                 await _artifacts.WriteTextAsync(DeviceArtifactNames.InvalidHierarchyXml, xml).ConfigureAwait(false);
             }
 
-            throw new InvalidOperationException($"UI hierarchy dump was empty or invalid XML. See {DeviceArtifactNames.InvalidHierarchyXml} for the raw dump.", ex);
+            throw new ScreenStateUnavailableException(
+                $"UI hierarchy dump did not contain parseable XML after file-backed and stdout fallback attempts. See {DeviceArtifactNames.InvalidHierarchyXml} and {DeviceArtifactNames.HierarchyDumpAttemptsJson} for raw dump output.",
+                ex);
         }
 
         var elements = document.Descendants("node")
@@ -143,7 +156,9 @@ internal sealed class AndroidScreenCaptureService(
         {
             InvalidateUiDumpCache();
             await _artifacts.WriteTextAsync(DeviceArtifactNames.InvalidHierarchyXml, xml).ConfigureAwait(false);
-            throw new InvalidOperationException("UI hierarchy dump was empty or invalid XML.", ex);
+            throw new ScreenStateUnavailableException(
+                $"UI hierarchy dump did not contain parseable XML. See {DeviceArtifactNames.InvalidHierarchyXml} and {DeviceArtifactNames.HierarchyDumpAttemptsJson} for raw dump output.",
+                ex);
         }
     }
 
@@ -160,26 +175,82 @@ internal sealed class AndroidScreenCaptureService(
 
     private async Task<string> DumpUiAsync()
     {
-        var result = await _adb.RunAsync(["exec-out", "uiautomator", "dump", "/dev/tty"]).ConfigureAwait(false);
-        result.EnsureSuccess("uiautomator dump failed");
-        var xml = result.Stdout;
-        var xmlStart = xml.IndexOf("<?xml", StringComparison.Ordinal);
-        if (xmlStart < 0)
+        var attempts = new List<HierarchyDumpAttempt>();
+        var primary = await RunFileBackedDumpAsync("file:/data/local/tmp", "/data/local/tmp/luotsi-window.xml").ConfigureAwait(false);
+        attempts.Add(primary.Attempt);
+        if (primary.Xml is not null)
         {
-            xmlStart = xml.IndexOf("<hierarchy", StringComparison.Ordinal);
+            await WriteDumpAttemptsAsync(attempts).ConfigureAwait(false);
+            return primary.Xml;
         }
 
-        var xmlEnd = xml.LastIndexOf("</hierarchy>", StringComparison.Ordinal);
+        var secondary = await RunFileBackedDumpAsync("file:/sdcard", "/sdcard/window_dump.xml").ConfigureAwait(false);
+        attempts.Add(secondary.Attempt);
+        if (secondary.Xml is not null)
+        {
+            await WriteDumpAttemptsAsync(attempts).ConfigureAwait(false);
+            return secondary.Xml;
+        }
+
+        var fallback = await RunStdoutDumpAsync().ConfigureAwait(false);
+        attempts.Add(fallback.Attempt);
+        await WriteDumpAttemptsAsync(attempts).ConfigureAwait(false);
+        if (fallback.Xml is not null)
+        {
+            return fallback.Xml;
+        }
+
+        return attempts.LastOrDefault(static attempt => !string.IsNullOrWhiteSpace(attempt.Stdout))?.Stdout
+            ?? string.Join(Environment.NewLine, attempts.Select(static attempt => attempt.Stderr).Where(static value => !string.IsNullOrWhiteSpace(value)));
+    }
+
+    private async Task<(HierarchyDumpAttempt Attempt, string? Xml)> RunFileBackedDumpAsync(string strategy, string remotePath)
+    {
+        var command = $"rm -f {ShellQuote(remotePath)}; uiautomator dump {ShellQuote(remotePath)} >/dev/null 2>&1; cat {ShellQuote(remotePath)}; rm -f {ShellQuote(remotePath)}";
+        var result = await _adb.ShellAsync(command).ConfigureAwait(false);
+        var xml = TryExtractHierarchyXml(result.Stdout);
+        return (CreateAttempt(strategy, command, result.ExitCode, result.Stdout, result.Stderr, xml is not null), xml);
+    }
+
+    private async Task<(HierarchyDumpAttempt Attempt, string? Xml)> RunStdoutDumpAsync()
+    {
+        var result = await _adb.RunAsync(["exec-out", "uiautomator", "dump", "/dev/tty"]).ConfigureAwait(false);
+        var xml = TryExtractHierarchyXml(result.Stdout);
+        return (CreateAttempt("stdout:/dev/tty", "exec-out uiautomator dump /dev/tty", result.ExitCode, result.Stdout, result.Stderr, xml is not null), xml);
+    }
+
+    private static HierarchyDumpAttempt CreateAttempt(string strategy, string command, int exitCode, string stdout, string stderr, bool xmlExtracted) =>
+        new(strategy, command, exitCode, exitCode == 0, xmlExtracted, stdout, stderr);
+
+    private Task WriteDumpAttemptsAsync(IReadOnlyList<HierarchyDumpAttempt> attempts) =>
+        _artifacts.WriteJsonAsync(DeviceArtifactNames.HierarchyDumpAttemptsJson, attempts);
+
+    private static string? TryExtractHierarchyXml(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var xmlStart = value.IndexOf("<?xml", StringComparison.Ordinal);
+        if (xmlStart < 0)
+        {
+            xmlStart = value.IndexOf("<hierarchy", StringComparison.Ordinal);
+        }
+
+        var xmlEnd = value.LastIndexOf("</hierarchy>", StringComparison.Ordinal);
         if (xmlStart >= 0 && xmlEnd >= xmlStart)
         {
             xmlEnd += "</hierarchy>".Length;
-            return xml[xmlStart..xmlEnd];
+            return value[xmlStart..xmlEnd];
         }
 
-        return xmlStart >= 0 ? xml[xmlStart..] : xml;
+        return null;
     }
 
     private void CacheUiDump(string xml) => _uiDumpCache = new UiDumpSnapshot(xml, _timeProvider.GetUtcNow());
+
+    private static string ShellQuote(string value) => $"'{value.Replace("'", "'\\''", StringComparison.Ordinal)}'";
 
     private sealed record UiDumpSnapshot(string Xml, DateTimeOffset CapturedAt);
 }

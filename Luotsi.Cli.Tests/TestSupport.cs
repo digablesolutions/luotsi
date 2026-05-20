@@ -513,6 +513,8 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public Exception? WaitVisibleException { get; set; }
 
+    public Exception? ScreenStateException { get; set; }
+
     public Exception? ForceStopException { get; set; }
 
     public FailureArtifactBundle? FailureArtifacts { get; set; }
@@ -591,8 +593,15 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
         return Task.FromResult(PreflightTemplate with { Package = packageName });
     }
 
-    public Task<ScreenState> GetScreenStateAsync() =>
-        Task.FromResult(_screenStates.Count > 1 ? _screenStates.Dequeue() : _screenStates.Peek());
+    public Task<ScreenState> GetScreenStateAsync()
+    {
+        if (ScreenStateException is not null)
+        {
+            throw ScreenStateException;
+        }
+
+        return Task.FromResult(_screenStates.Count > 1 ? _screenStates.Dequeue() : _screenStates.Peek());
+    }
 
     public Task<TapResult> TapAsync(string x, string y) => Task.FromResult(new TapResult(int.Parse(x), int.Parse(y)));
 

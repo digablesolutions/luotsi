@@ -17,18 +17,18 @@ internal sealed class ViewSessionRecordingCoordinator
     private bool _initialRecordingStarted;
     private int _recordingSequence;
 
-    public ViewSessionRecordingCoordinator(ViewSessionInteractionContext context, Func<Task> publishChromeAsync)
+    public ViewSessionRecordingCoordinator(ViewSessionRecordingContext context, Func<Task> publishChromeAsync)
     {
         ArgumentNullException.ThrowIfNull(context);
 
         _artifacts = context.Artifacts ?? throw new ArgumentNullException(nameof(context.Artifacts));
         _options = context.Options ?? throw new ArgumentNullException(nameof(context.Options));
         _recorder = context.Recorder ?? throw new ArgumentNullException(nameof(context.Recorder));
-        _timeProvider = context.TimeProvider ?? throw new ArgumentNullException(nameof(context.TimeProvider));
-        _sessionId = string.IsNullOrWhiteSpace(context.SessionId)
-            ? throw new ArgumentException("Session id is required.", nameof(context.SessionId))
-            : context.SessionId;
-        _writeEvent = context.WriteEvent ?? throw new ArgumentNullException(nameof(context.WriteEvent));
+        _timeProvider = context.Events.TimeProvider ?? throw new ArgumentNullException(nameof(context.Events.TimeProvider));
+        _sessionId = string.IsNullOrWhiteSpace(context.Events.SessionId)
+            ? throw new ArgumentException("Session id is required.", nameof(context.Events.SessionId))
+            : context.Events.SessionId;
+        _writeEvent = context.Events.WriteEvent ?? throw new ArgumentNullException(nameof(context.Events.WriteEvent));
         _publishChromeAsync = publishChromeAsync ?? throw new ArgumentNullException(nameof(publishChromeAsync));
     }
 

@@ -13,18 +13,18 @@ internal sealed class ViewSessionDeviceInputHandler
     private readonly Func<string, bool> _tryBlockReadOnly;
 
     public ViewSessionDeviceInputHandler(
-        ViewSessionInteractionContext context,
+        ViewSessionDeviceInputContext context,
         Func<string, bool> tryBlockReadOnly)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(tryBlockReadOnly);
 
         _deviceHost = context.DeviceHost ?? throw new ArgumentNullException(nameof(context.DeviceHost));
-        _timeProvider = context.TimeProvider ?? throw new ArgumentNullException(nameof(context.TimeProvider));
-        _sessionId = string.IsNullOrWhiteSpace(context.SessionId)
-            ? throw new ArgumentException("Session id is required.", nameof(context.SessionId))
-            : context.SessionId;
-        _writeEvent = context.WriteEvent ?? throw new ArgumentNullException(nameof(context.WriteEvent));
+        _timeProvider = context.Events.TimeProvider ?? throw new ArgumentNullException(nameof(context.Events.TimeProvider));
+        _sessionId = string.IsNullOrWhiteSpace(context.Events.SessionId)
+            ? throw new ArgumentException("Session id is required.", nameof(context.Events.SessionId))
+            : context.Events.SessionId;
+        _writeEvent = context.Events.WriteEvent ?? throw new ArgumentNullException(nameof(context.Events.WriteEvent));
         _tryBlockReadOnly = tryBlockReadOnly;
     }
 

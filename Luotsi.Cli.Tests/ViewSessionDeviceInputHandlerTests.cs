@@ -19,7 +19,7 @@ public sealed class ViewSessionDeviceInputHandlerTests
         var events = new List<string>();
         var options = new ViewOptions("device-a", "adb", "h264", "ffmpeg", false, null, 1600, 60, "8M", false, false);
         var context = CreateContext(host, fileSystem, timeProvider, options, value => events.Add(JsonSerializer.Serialize(value)));
-        var handler = new ViewSessionDeviceInputHandler(context, _ => false);
+        var handler = new ViewSessionDeviceInputHandler(context.CreateDeviceInputContext(), _ => false);
 
         Assert.True(await handler.TryHandleAsync(new ViewTapRequest(0.25d, 0.75d)));
         Assert.True(await handler.TryHandleAsync(new ViewTextInputRequest("hello")));

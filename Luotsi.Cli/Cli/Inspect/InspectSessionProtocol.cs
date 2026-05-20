@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
+using Luotsi.Cli.Scenarios;
 
 namespace Luotsi.Cli.Cli.Inspect;
 
@@ -96,13 +97,20 @@ internal sealed class InspectSessionProtocol(IConsoleIo console)
             state
         });
 
-    public void WriteSessionError(DateTimeOffset receivedAt, Exception exception) =>
+    public void WriteSessionError(DateTimeOffset receivedAt, Exception exception, string? sessionId = null, string? requestId = null)
+    {
+        var category = exception is ICommandFailureDetails failure
+            ? failure.CategoryOverride
+            : ErrorInfo.Classify(exception.Message);
         WriteJsonLine(new
         {
             type = SessionEventTypes.Inspect.SessionError,
+            session_id = sessionId,
+            id = requestId,
             received_at = receivedAt,
-            error = ErrorInfo.From(exception, ErrorInfo.Classify(exception.Message))
+            error = ErrorInfo.From(exception, category)
         });
+    }
 
     private void WriteJsonLine(object value) => _console.WriteLine(JsonSerializer.Serialize(value, OutputJsonOptions));
 }
