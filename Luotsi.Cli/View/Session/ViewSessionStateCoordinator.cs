@@ -139,6 +139,14 @@ internal sealed class ViewSessionStateCoordinator
         }
         catch (Exception ex) when (!IsFatalException(ex))
         {
+            WriteEvent(new
+            {
+                type = SessionEventTypes.View.Error,
+                session_id = _sessionId,
+                occurred_at = _timeProvider.GetUtcNow(),
+                source = "device_shelf_probe",
+                error = ErrorInfo.From(ex, ErrorInfo.Classify(ex.Message))
+            });
         }
     }
 

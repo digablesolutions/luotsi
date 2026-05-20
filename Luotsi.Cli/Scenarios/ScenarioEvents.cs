@@ -242,6 +242,7 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
             ShardIndex: shardIndex,
             ShardStrategy: shardStrategy,
             Metrics: ScenarioFailureDetails.TryGetMetrics(exception),
+            DeviceAllocation: ScenarioFailureDetails.TryGetDeviceAllocation(exception),
             Provenance: _provenance,
             Error: ScenarioErrorInfo.From(exception));
 }

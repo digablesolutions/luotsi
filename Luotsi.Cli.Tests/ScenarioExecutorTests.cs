@@ -522,7 +522,8 @@ public sealed partial class AppTests
         """);
         var host = new FakeDeviceHost
         {
-            WaitVisibleException = new InvalidOperationException("not visible")
+          WaitVisibleException = new InvalidOperationException("not visible"),
+          PreflightTemplate = new PreflightResult("Pixel 7", "16", "36", "focus", "dev.luotsi.app", null, "fingerprint", "arm64-v8a", "SER123")
         };
         var app = new App(new AppDependencies
         {
@@ -686,6 +687,55 @@ public sealed partial class AppTests
         Assert.Single(host.ReadOnlyPreflightRequests);
         Assert.False(report.RootElement.GetProperty("device_allocation").GetProperty("require_ready").GetBoolean());
     }
+
+      [Fact]
+      public async Task RunAsync_File_Failure_Preserves_DeviceAllocation_In_Events_And_Report()
+      {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+          { "action": "waitVisible", "text": "Target" }
+          ]
+        }
+        """);
+        var host = new FakeDeviceHost
+        {
+          WaitVisibleException = new InvalidOperationException("not visible"),
+          PreflightTemplate = new PreflightResult("Pixel 7", "16", "36", "focus", "dev.luotsi.app", null, "fingerprint", "arm64-v8a", "SER123")
+        };
+        var app = new App(new AppDependencies
+        {
+          TimeProvider = timeProvider,
+          FileSystem = fileSystem,
+          ProcessRunner = new DefaultProcessRunner(),
+          Delay = new FakeDelay(timeProvider),
+          DeviceHostFactory = new FakeDeviceHostFactory(host),
+          Console = console
+        });
+
+        var exitCode = await app.RunAsync([
+          "run",
+          "--file", "/tmp/scenario.json",
+          "--events-jsonl", "/tmp/events.jsonl",
+          "--report-json", "/tmp/report.json",
+          "--package", "dev.luotsi.app"]);
+        var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+
+        Assert.Equal(1, exitCode);
+        var endedEvent = Assert.Single(events, static evt => evt.GetProperty("event").GetString() == "scenario_run_ended");
+        var eventAllocation = endedEvent.GetProperty("device_allocation");
+        Assert.Equal("SER123", eventAllocation.GetProperty("serial").GetString());
+        Assert.Equal("dev.luotsi.app", eventAllocation.GetProperty("package").GetString());
+
+        var reportAllocation = report.RootElement.GetProperty("device_allocation");
+        Assert.Equal("SER123", reportAllocation.GetProperty("serial").GetString());
+        Assert.Equal("dev.luotsi.app", reportAllocation.GetProperty("package").GetString());
+      }
 
     [Fact]
     public async Task RunAsync_File_Runs_Setup_Steps_Teardown_In_Order()

@@ -122,6 +122,11 @@ internal sealed class ViewSessionRecordingCoordinator
             ? "view-window-record"
             : Path.GetFileNameWithoutExtension(preferredPath);
         var safeFileName = Path.GetFileName($"{fileBaseName}-{sequence:000}{extension}");
+        if (Path.IsPathRooted(safeFileName))
+        {
+            throw new InvalidOperationException("Recording file name must be relative.");
+        }
+
         return Path.Combine(directory, safeFileName);
     }
 

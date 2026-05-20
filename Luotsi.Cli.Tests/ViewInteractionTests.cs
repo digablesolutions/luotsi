@@ -201,6 +201,9 @@ public sealed partial class AppTests
         Assert.Equal(0, exitCode);
         Assert.DoesNotContain(console.OutputLines, line => line.Contains(SessionEventTypes.View.DeviceShelf, StringComparison.Ordinal));
         Assert.Contains(console.OutputLines, line => line.Contains(SessionEventTypes.View.Started, StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, line =>
+            line.Contains(SessionEventTypes.View.Error, StringComparison.Ordinal) &&
+            line.Contains("device_shelf_probe", StringComparison.Ordinal));
     }
 
 

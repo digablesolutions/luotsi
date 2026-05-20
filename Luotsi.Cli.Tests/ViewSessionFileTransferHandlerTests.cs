@@ -28,7 +28,7 @@ public sealed class ViewSessionFileTransferHandlerTests
         using var pulled = JsonDocument.Parse(events[0]);
         Assert.Equal(SessionEventTypes.View.FilePulled, pulled.RootElement.GetProperty("type").GetString());
         Assert.Equal("/sdcard/Download/report.txt", pulled.RootElement.GetProperty("remote_path").GetString());
-        Assert.Equal(Path.Combine(context.Artifacts.Root, "report.txt"), pulled.RootElement.GetProperty("local_path").GetString());
+        Assert.Equal(Path.Join(context.Artifacts.Root, "report.txt"), pulled.RootElement.GetProperty("local_path").GetString());
     }
 
     private static ViewSessionInteractionContext CreateContext(

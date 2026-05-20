@@ -93,10 +93,16 @@ internal sealed class ScenarioRunOrchestrator(
             runReports,
             async sink =>
             {
-                await CreateValidationExecutor(NullScenarioEventSink.Instance).ValidateFileAsync(file).ConfigureAwait(false);
                 var allocation = await _deviceAllocator.AllocateAsync(runner, configuration).ConfigureAwait(false);
-                var result = await _scenarioExecutorFactory.Create(runner, sink, configuration.FailureArtifactCapturePolicy).RunAsync(file).ConfigureAwait(false);
-                return result with { DeviceAllocation = allocation };
+                try
+                {
+                    var result = await _scenarioExecutorFactory.Create(runner, sink, configuration.FailureArtifactCapturePolicy).RunAsync(file).ConfigureAwait(false);
+                    return result with { DeviceAllocation = allocation };
+                }
+                catch (Exception ex) when (!IsFatalException(ex))
+                {
+                    throw ScenarioFailureDetails.AttachDeviceAllocation(ex, allocation);
+                }
             }).ConfigureAwait(false);
     }
 
@@ -115,8 +121,15 @@ internal sealed class ScenarioRunOrchestrator(
             async sink =>
             {
                 var allocation = await _deviceAllocator.AllocateAsync(runner, configuration).ConfigureAwait(false);
-                var result = await _scenarioBatchExecutorFactory.Create(runner, sink, configuration.FailureArtifactCapturePolicy).RunAsync(preparedPlan).ConfigureAwait(false);
-                return result with { DeviceAllocation = allocation };
+                try
+                {
+                    var result = await _scenarioBatchExecutorFactory.Create(runner, sink, configuration.FailureArtifactCapturePolicy).RunAsync(preparedPlan).ConfigureAwait(false);
+                    return result with { DeviceAllocation = allocation };
+                }
+                catch (Exception ex) when (!IsFatalException(ex))
+                {
+                    throw ScenarioFailureDetails.AttachDeviceAllocation(ex, allocation);
+                }
             }).ConfigureAwait(false);
     }
 
@@ -204,4 +217,13 @@ internal sealed class ScenarioRunOrchestrator(
 
     private ScenarioValidationExecutor CreateValidationExecutor(IScenarioEventSink sink) =>
         _scenarioValidationExecutorFactory.Create(sink);
+
+    private static bool IsFatalException(Exception exception) =>
+        exception is OutOfMemoryException
+            or StackOverflowException
+            or AccessViolationException
+            or AppDomainUnloadedException
+            or BadImageFormatException
+            or CannotUnloadAppDomainException
+            or InvalidProgramException;
 }
