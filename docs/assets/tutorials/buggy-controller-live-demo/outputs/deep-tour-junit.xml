@@ -1,4 +1,4 @@
-﻿<testsuite name="C:\tmp\device-e2e-lab\artifacts\live-demo-20260520-204309\deep-tour-scenario.json" tests="1" failures="0" skipped="0" time="27.854" timestamp="2026-05-20T17:54:49.6016127+00:00"><testcase classname="C:\tmp\device-e2e-lab\artifacts\live-demo-20260520-204309\deep-tour-scenario.json" name="buggy deep tab tour" id="C:\tmp\device-e2e-lab\artifacts\live-demo-20260520-204309\deep-tour-scenario.json::buggy deep tab tour" time="27.537"><system-out>metric: action.takescreenshot.count=5
+<testsuite name="C:\tmp\device-e2e-lab\artifacts\live-demo-20260520-204309\deep-tour-scenario.json" tests="1" failures="0" skipped="0" time="27.854" timestamp="2026-05-20T17:54:49.6016127+00:00"><testcase classname="C:\tmp\device-e2e-lab\artifacts\live-demo-20260520-204309\deep-tour-scenario.json" name="buggy deep tab tour" id="C:\tmp\device-e2e-lab\artifacts\live-demo-20260520-204309\deep-tour-scenario.json::buggy deep tab tour" time="27.537"><system-out>metric: action.takescreenshot.count=5
 metric: action.takescreenshot.ms=14247.109
 metric: action.tappoint.count=5
 metric: action.tappoint.ms=12606.446

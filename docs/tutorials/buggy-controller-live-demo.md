@@ -36,14 +36,14 @@ abi=armeabi-v7a,armeabi
 - Replace `com.digablesolutions.buggycontroller` if your package name differs.
 - Keep the device awake and unlocked. The scenario uses fixed coordinates because this Android 6 device does not provide usable UI hierarchy XML.
 
-The commands below assume you are running from the repository root. Release users can replace `dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll` with `luotsi` or `luotsi.exe`.
+The commands below assume you are running from the repository root and use `dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- <command>`. Release users can replace that prefix with `luotsi` or `luotsi.exe`.
 
 ## Demo Recording
 
 The deeper run was recorded with Luotsi's host-side `record` command:
 
 ```powershell
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll record `
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- record `
   --device 0123456789ABCDEF `
   --output .\artifacts\buggy-demo\deep-tour-record.mp4 `
   --time-limit-sec 35
@@ -74,7 +74,7 @@ The tutorial includes durable sample outputs from the live run:
 Start by listing devices and selecting the target serial:
 
 ```powershell
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll devices
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- devices
 ```
 
 The live run found both a USB device and a wireless ADB device. The tutorial used the USB device:
@@ -92,7 +92,7 @@ The live run found both a USB device and a wireless ADB device. The tutorial use
 Then read readiness and focused activity:
 
 ```powershell
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll device-status `
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- device-status `
   --device 0123456789ABCDEF
 ```
 
@@ -107,7 +107,7 @@ mFocusedApp=Token{... com.digablesolutions.buggycontroller/.MainActivity ...}
 Run a preflight check with the package name:
 
 ```powershell
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll preflight `
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- preflight `
   --device 0123456789ABCDEF `
   --package com.digablesolutions.buggycontroller
 ```
@@ -117,11 +117,11 @@ Luotsi returned device metadata, foreground focus, package info, fingerprint, AB
 Check package installation and foreground activity:
 
 ```powershell
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll is-app-installed `
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- is-app-installed `
   --device 0123456789ABCDEF `
   --package com.digablesolutions.buggycontroller
 
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll wait-for-activity `
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- wait-for-activity `
   --device 0123456789ABCDEF `
   --activity com.digablesolutions.buggycontroller/.MainActivity `
   --timeout-sec 3
@@ -132,16 +132,16 @@ Both passed during the live run.
 The deeper pass also exercised lifecycle recovery:
 
 ```powershell
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll force-stop `
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- force-stop `
   --device 0123456789ABCDEF `
   --package com.digablesolutions.buggycontroller
 
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll wait-for-not-activity `
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- wait-for-not-activity `
   --device 0123456789ABCDEF `
   --activity com.digablesolutions.buggycontroller/.MainActivity `
   --timeout-sec 5
 
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll start-app `
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- start-app `
   --device 0123456789ABCDEF `
   --package com.digablesolutions.buggycontroller `
   --activity .MainActivity `
@@ -193,7 +193,7 @@ The scenario is checked in as [`examples/scenarios/buggy-controller-live-demo.js
 Run it with JSONL events plus JSON and JUnit reports:
 
 ```powershell
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll run `
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- run `
   --file .\examples\scenarios\buggy-controller-live-demo.json `
   --device 0123456789ABCDEF `
   --package com.digablesolutions.buggycontroller `
@@ -249,7 +249,7 @@ This is the core Luotsi workflow: a small JSON playbook drives the device, every
 Before executing in CI, discover the scenario metadata:
 
 ```powershell
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll scenario-list `
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- scenario-list `
   --path .\examples\scenarios\buggy-controller-live-demo.json
 ```
 
@@ -267,7 +267,7 @@ The live result reported:
 Then generate a deterministic plan without touching the device:
 
 ```powershell
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll run `
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- run `
   --path .\examples\scenarios\buggy-controller-live-demo.json `
   --dry-run
 ```
@@ -279,15 +279,15 @@ Dry-run is useful for CI sharding and review because it resolves metadata, filte
 Useful host and device diagnostics:
 
 ```powershell
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll adb server-status --device 0123456789ABCDEF
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll adb version --device 0123456789ABCDEF
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll adb features --device 0123456789ABCDEF
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll adb mdns check --device 0123456789ABCDEF
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll forward-list --device 0123456789ABCDEF
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll reverse-list --device 0123456789ABCDEF
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll list-installed-packages --device 0123456789ABCDEF --third-party
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll logcat --device 0123456789ABCDEF --tail 40
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll telemetry-watch --device 0123456789ABCDEF --timeout-sec 3
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- adb server-status --device 0123456789ABCDEF
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- adb version --device 0123456789ABCDEF
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- adb features --device 0123456789ABCDEF
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- adb mdns check --device 0123456789ABCDEF
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- forward-list --device 0123456789ABCDEF
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- reverse-list --device 0123456789ABCDEF
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- list-installed-packages --device 0123456789ABCDEF --third-party
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- logcat --device 0123456789ABCDEF --tail 40
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- telemetry-watch --device 0123456789ABCDEF --timeout-sec 3
 ```
 
 In the live run, `forward-list` showed two active `luotsi_view_*` forwards from the existing view session, and `list-installed-packages --third-party` included `com.digablesolutions.buggycontroller` and `dev.luotsi.view`.
@@ -295,12 +295,12 @@ In the live run, `forward-list` showed two active `luotsi_view_*` forwards from 
 The deeper pass also exercised generic port plumbing:
 
 ```powershell
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll forward `
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- forward `
   --device 0123456789ABCDEF `
   --local tcp:0 `
   --remote tcp:7100
 
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll reverse `
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- reverse `
   --device 0123456789ABCDEF `
   --remote tcp:7101 `
   --local tcp:7101
@@ -324,10 +324,10 @@ That is still useful signal: Luotsi distinguishes "the command works but the app
 
 ## Legacy Android Note: Hierarchy Dump Failure
 
-On this Android 6 device, `screen-state` and `inspect` could not parse the UI hierarchy because `uiautomator dump` returned this text instead of XML:
+On this Android 6 device, `screen-state` and `inspect` could not parse the UI hierarchy because `uiautomator dump` returned this text instead of XML. The misspelling is verbatim device output:
 
 ```text
-UI hierchary dumped to: /dev/tty
+UI hierchary dumped to: /dev/tty (sic)
 ```
 
 Luotsi still produced a failure envelope and artifact bundle:
@@ -341,15 +341,15 @@ That is useful behavior for CI and live debugging: even when hierarchy extractio
 The live tutorial intentionally creates temporary local artifacts and may create temporary port plumbing. Clean up after manual runs:
 
 ```powershell
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll forward-list --device 0123456789ABCDEF
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll reverse-list --device 0123456789ABCDEF
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- forward-list --device 0123456789ABCDEF
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- reverse-list --device 0123456789ABCDEF
 ```
 
 Remove any demo entries you created:
 
 ```powershell
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll forward-remove --device 0123456789ABCDEF --local tcp:<allocated-host-port>
-dotnet .\Luotsi.Cli\bin\Debug\net10.0\win-x64\luotsi.dll reverse-remove --device 0123456789ABCDEF --remote tcp:7101
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- forward-remove --device 0123456789ABCDEF --local tcp:<allocated-host-port>
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- reverse-remove --device 0123456789ABCDEF --remote tcp:7101
 ```
 
 The checked-in assets under `docs/assets/tutorials/buggy-controller-live-demo/` are examples. New local runs should write to `artifacts/`, which is intentionally ignored by git.
