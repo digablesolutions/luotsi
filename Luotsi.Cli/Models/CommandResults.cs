@@ -43,7 +43,11 @@ public sealed record PreflightResult(
     string? PackageInfo,
     string Fingerprint,
     string Abi,
-    string Serial);
+    string Serial,
+    string? ForegroundPackage = null,
+    int? DisplayWidth = null,
+    int? DisplayHeight = null,
+    string? DisplayOrientation = null);
 
 // Tap
 public sealed record TapResult(int X, int Y);

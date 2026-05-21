@@ -475,7 +475,8 @@ public sealed partial class AppTests
         var fileSystem = new FakeFileSystem();
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var adb = new FakeAdbClient();
-        adb.EnqueueShellResult(new ProcessResult(0, CreateDeviceFingerprintShellOutput("SER123", "Pixel 9", "16", "36", "google/pixel/device", "arm64-v8a,x86_64", "mCurrentFocus=App"), string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, CreateDeviceFingerprintShellOutput("SER123", "Pixel 9", "16", "36", "google/pixel/device", "arm64-v8a,x86_64", "mCurrentFocus=Window{1 u0 dev.actual/.MainActivity}"), string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "Physical size: 1080x1920", string.Empty));
         var artifacts = ArtifactSession.Create(CliOptions.Parse(["preflight"]), fileSystem, timeProvider);
         var runner = new DeviceRunner(adb, artifacts, timeProvider, new FakeDelay(timeProvider), fileSystem);
 
@@ -485,7 +486,12 @@ public sealed partial class AppTests
 
         Assert.Equal("Pixel 9", json.GetProperty("model").GetString());
         Assert.Equal("google/pixel/device", json.GetProperty("fingerprint").GetString());
-        Assert.Single(adb.ShellCommands);
+        Assert.Equal("dev.actual", json.GetProperty("foreground_package").GetString());
+        Assert.Equal(1080, json.GetProperty("display_width").GetInt32());
+        Assert.Equal(1920, json.GetProperty("display_height").GetInt32());
+        Assert.Equal("portrait", json.GetProperty("display_orientation").GetString());
+        Assert.Equal(2, adb.ShellCommands.Count);
+        Assert.Equal("wm size", adb.ShellCommands[1]);
         Assert.True(fileSystem.FileExists(Path.Combine(artifactRoot, "device-fingerprint.json")));
     }
 
@@ -495,7 +501,8 @@ public sealed partial class AppTests
         var fileSystem = new FakeFileSystem();
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var adb = new FakeAdbClient();
-        adb.EnqueueShellResult(new ProcessResult(0, CreateDeviceFingerprintShellOutput("SER123", "Pixel 9", "16", "36", "google/pixel/device", "arm64-v8a,x86_64", "mCurrentFocus=App"), string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, CreateDeviceFingerprintShellOutput("SER123", "Pixel 9", "16", "36", "google/pixel/device", "arm64-v8a,x86_64", "mCurrentFocus=Window{1 u0 dev.actual/.MainActivity}"), string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "Physical size: 1080x1920", string.Empty));
         var artifacts = ArtifactSession.Create(CliOptions.Parse(["preflight"]), fileSystem, timeProvider);
         var runner = new DeviceRunner(adb, artifacts, timeProvider, new FakeDelay(timeProvider), fileSystem);
 
@@ -505,7 +512,12 @@ public sealed partial class AppTests
 
         Assert.Equal("Pixel 9", json.GetProperty("model").GetString());
         Assert.Equal("google/pixel/device", json.GetProperty("fingerprint").GetString());
-        Assert.Single(adb.ShellCommands);
+        Assert.Equal("dev.actual", json.GetProperty("foreground_package").GetString());
+        Assert.Equal(1080, json.GetProperty("display_width").GetInt32());
+        Assert.Equal(1920, json.GetProperty("display_height").GetInt32());
+        Assert.Equal("portrait", json.GetProperty("display_orientation").GetString());
+        Assert.Equal(2, adb.ShellCommands.Count);
+        Assert.Equal("wm size", adb.ShellCommands[1]);
         Assert.False(fileSystem.FileExists(Path.Join(artifactRoot, "device-fingerprint.json")));
     }
 

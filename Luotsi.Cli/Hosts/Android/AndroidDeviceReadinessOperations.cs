@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
@@ -129,7 +131,9 @@ internal sealed class AndroidDeviceReadinessOperations(
     private async Task<PreflightResult> CreatePreflightResultAsync(DeviceFingerprint fingerprint, string? packageName)
     {
         var focus = fingerprint.CurrentFocus;
+        var foregroundPackage = ParseForegroundPackage(focus);
         string? packageInfo = null;
+        var displayLayout = await TryReadDisplayLayoutAsync().ConfigureAwait(false);
 
         if (!string.IsNullOrWhiteSpace(packageName))
         {
@@ -154,7 +158,11 @@ internal sealed class AndroidDeviceReadinessOperations(
             packageInfo,
             fingerprint.Fingerprint,
             fingerprint.Abi,
-            fingerprint.Serial);
+            fingerprint.Serial,
+            foregroundPackage,
+            displayLayout?.Width,
+            displayLayout?.Height,
+            displayLayout?.Orientation);
     }
 
     private async Task<string> ShellTextAsync(string command)
@@ -168,6 +176,47 @@ internal sealed class AndroidDeviceReadinessOperations(
     {
         var result = await _adb.RunAsync(args).ConfigureAwait(false);
         return new AdbDiagnosticResult(ResultSchemas.AdbDiagnostic, name, ToAdbCommandOutput(result));
+    }
+
+    private async Task<DisplayLayoutSnapshot?> TryReadDisplayLayoutAsync()
+    {
+        try
+        {
+            return ParseDisplayLayout(await ShellTextAsync("wm size").ConfigureAwait(false));
+        }
+        catch (Exception ex) when (!IsFatalException(ex))
+        {
+            return null;
+        }
+    }
+
+    private static DisplayLayoutSnapshot? ParseDisplayLayout(string value)
+    {
+        var match = Regex.Match(value, @"(?<width>\d+)x(?<height>\d+)");
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        var width = int.Parse(match.Groups["width"].Value, CultureInfo.InvariantCulture);
+        var height = int.Parse(match.Groups["height"].Value, CultureInfo.InvariantCulture);
+        var orientation = width == height
+            ? "square"
+            : width > height
+                ? "landscape"
+                : "portrait";
+        return new DisplayLayoutSnapshot(width, height, orientation);
+    }
+
+    private static string? ParseForegroundPackage(string currentFocus)
+    {
+        if (string.IsNullOrWhiteSpace(currentFocus))
+        {
+            return null;
+        }
+
+        var match = Regex.Match(currentFocus, @"(?<package>[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+)/");
+        return match.Success ? match.Groups["package"].Value : null;
     }
 
     private static AdbCommandOutput ToAdbCommandOutput(AdbCommandResult result) =>
@@ -282,7 +331,18 @@ internal sealed class AndroidDeviceReadinessOperations(
         return value;
     }
 
+    private static bool IsFatalException(Exception exception) =>
+        exception is OutOfMemoryException
+            or StackOverflowException
+            or AccessViolationException
+            or AppDomainUnloadedException
+            or BadImageFormatException
+            or CannotUnloadAppDomainException
+            or InvalidProgramException;
+
     private static string ShellQuote(string value) => "'" + value.Replace("'", "'\\''", StringComparison.Ordinal) + "'";
+
+    private sealed record DisplayLayoutSnapshot(int Width, int Height, string Orientation);
 
     private sealed record DeviceFingerprintSnapshot(
         string Serial,

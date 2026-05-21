@@ -1935,6 +1935,7 @@ public sealed partial class AppTests
                 var delay = new FakeDelay(timeProvider);
                 var adb = new FakeAdbClient();
                 adb.EnqueueShellResult(new ProcessResult(0, CreateDeviceFingerprintShellOutput("SER123", "Pixel 9", "16", "36", "google/pixel/device", "arm64-v8a", "mCurrentFocus=App"), string.Empty));
+                adb.EnqueueShellResult(new ProcessResult(0, "Physical size: 1080x1920", string.Empty));
                 adb.EnqueueLogLines("I/flutter (17495): Log.PRINTING_SUCCESSFUL: [Main Isolate] Printing successful");
                 var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, delay, fileSystem);
                 var scenarios = new ScenarioExecutor(runner, fileSystem, timeProvider, delay);
@@ -1965,6 +1966,7 @@ public sealed partial class AppTests
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var adb = new FakeAdbClient();
         adb.EnqueueShellResult(new ProcessResult(0, CreateDeviceFingerprintShellOutput("SER123", "Pixel 9", "16", "36", "google/pixel/device", "arm64-v8a", "mCurrentFocus=App"), string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "Physical size: 1080x1920", string.Empty));
         adb.EnqueueLogLines("05-15 12:00:00.000 I/Luotsi: LUOTSI_DEVICE_TELEMETRY {\"schema\":\"luotsi-device-telemetry.v1\",\"seq\":12,\"session\":\"abc\",\"timestamp\":\"2026-05-15T12:00:00Z\",\"event\":\"step\",\"step\":\"STEP_IDLE\"}");
         var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
         var scenarios = new ScenarioExecutor(runner, fileSystem, timeProvider, new FakeDelay(timeProvider));
@@ -2090,6 +2092,7 @@ public sealed partial class AppTests
         }
         """);
                 adb.EnqueueShellResult(new ProcessResult(0, CreateDeviceFingerprintShellOutput("SER123", "Pixel 9", "16", "36", "google/pixel/device", "arm64-v8a", "mCurrentFocus=App"), string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "Physical size: 1080x1920", string.Empty));
         adb.EnqueueLogLines("I/Test: boot", "I/Test: still waiting");
         adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "01-01 00:00:00.000 I/Test: snapshot", string.Empty));
@@ -2172,12 +2175,17 @@ public sealed partial class AppTests
         {
           "name": "coordinate smoke",
           "metadata": {
-            "package": "dev.expected",
+            "package": "dev.actual",
             "activity": ".ExpectedActivity",
             "device": {
               "model": "Expected Model",
               "androidRelease": "15",
               "sdk": "35"
+            },
+            "layout": {
+              "width": 1080,
+              "height": 2400,
+              "orientation": "landscape"
             }
           },
           "steps": [
@@ -2187,7 +2195,20 @@ public sealed partial class AppTests
         """);
         var host = new FakeDeviceHost
         {
-            PreflightTemplate = new PreflightResult("Actual Model", "6.0", "23", "com.actual/.MainActivity", "dev.actual", null, "fingerprint", "armeabi-v7a", "SER")
+            PreflightTemplate = new PreflightResult(
+                "Actual Model",
+                "6.0",
+                "23",
+                "mCurrentFocus=Window{1 u0 dev.actual.debug/.MainActivity}",
+                null,
+                null,
+                "fingerprint",
+                "armeabi-v7a",
+                "SER",
+                "dev.actual.debug",
+                720,
+                1280,
+                "portrait")
         };
         var app = new App(new AppDependencies
         {
@@ -2199,17 +2220,86 @@ public sealed partial class AppTests
             Console = console
         });
 
-        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json", "--package", "dev.actual", "--report-json", "/tmp/report.json"]);
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json", "--report-json", "/tmp/report.json"]);
 
         Assert.Equal(0, exitCode);
+        Assert.Equal([null], host.ReadOnlyPreflightRequests);
         using var envelope = console.ParseSingleOutputAsJson();
         var warnings = envelope.RootElement.GetProperty("data").GetProperty("metadata_warnings");
         Assert.Contains(warnings.EnumerateArray(), warning => warning.GetProperty("code").GetString() == "package");
         Assert.Contains(warnings.EnumerateArray(), warning => warning.GetProperty("code").GetString() == "device_model");
+        Assert.Contains(warnings.EnumerateArray(), warning => warning.GetProperty("code").GetString() == "layout_width");
 
         using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
         var reportWarnings = report.RootElement.GetProperty("scenarios")[0].GetProperty("metadata_warnings");
         Assert.Contains(reportWarnings.EnumerateArray(), warning => warning.GetProperty("code").GetString() == "android_sdk");
+        Assert.Contains(reportWarnings.EnumerateArray(), warning => warning.GetProperty("code").GetString() == "layout_orientation");
+    }
+
+    [Fact]
+    public async Task RunAsync_File_Failure_Preserves_Metadata_Warnings_When_Device_Context_Differs()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new SteppingTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind), TimeSpan.FromMilliseconds(1));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "coordinate smoke",
+          "metadata": {
+            "package": "dev.actual",
+            "device": {
+              "model": "Expected Model"
+            },
+            "layout": {
+              "width": 1080,
+              "height": 2400
+            }
+          },
+          "steps": [
+            { "action": "waitVisible", "text": "Target" }
+          ]
+        }
+        """);
+        var host = new FakeDeviceHost
+        {
+            WaitVisibleException = new InvalidOperationException("not visible"),
+            PreflightTemplate = new PreflightResult(
+                "Actual Model",
+                "6.0",
+                "23",
+                "mCurrentFocus=Window{1 u0 dev.actual.debug/.MainActivity}",
+                null,
+                null,
+                "fingerprint",
+                "armeabi-v7a",
+                "SER",
+                "dev.actual.debug",
+                720,
+                1280,
+                "portrait")
+        };
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new SteppingDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json", "--report-json", "/tmp/report.json"]);
+
+        Assert.Equal(1, exitCode);
+        using var envelope = console.ParseSingleOutputAsJson();
+        var warnings = envelope.RootElement.GetProperty("data").GetProperty("metadata_warnings");
+        Assert.Contains(warnings.EnumerateArray(), warning => warning.GetProperty("code").GetString() == "package");
+        Assert.Contains(warnings.EnumerateArray(), warning => warning.GetProperty("code").GetString() == "layout_width");
+
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+        var reportWarnings = report.RootElement.GetProperty("scenarios")[0].GetProperty("metadata_warnings");
+        Assert.Contains(reportWarnings.EnumerateArray(), warning => warning.GetProperty("code").GetString() == "package");
+        Assert.Contains(reportWarnings.EnumerateArray(), warning => warning.GetProperty("code").GetString() == "layout_height");
     }
 
     [Fact]
