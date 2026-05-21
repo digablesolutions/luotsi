@@ -53,7 +53,7 @@ internal sealed class AndroidArtifactOperations(
     {
         var fileName = DeviceArtifactNames.ScreenshotForLabel(Slugify(label));
         var artifact = await CaptureScreenshotAsync(fileName).ConfigureAwait(false);
-        expectedSha256 = await ResolveExpectedSha256Async(expectedSha256, expectedSha256File, baselineFile).ConfigureAwait(false);
+        expectedSha256 = await ResolveExpectedSha256Async(expectedSha256, expectedSha256File, baselineFile, updateBaseline).ConfigureAwait(false);
         if (expectedWidth is not null && artifact.Width != expectedWidth)
         {
             throw new InvalidOperationException($"Screenshot '{fileName}' width was {artifact.Width?.ToString(CultureInfo.InvariantCulture) ?? "unknown"}; expected {expectedWidth}.");
@@ -73,6 +73,12 @@ internal sealed class AndroidArtifactOperations(
         var baselineUpdated = false;
         if (!string.IsNullOrWhiteSpace(baselineFile) && updateBaseline)
         {
+            var baselineDirectory = Path.GetDirectoryName(baselineFile);
+            if (!string.IsNullOrWhiteSpace(baselineDirectory))
+            {
+                _fileSystem.CreateDirectory(baselineDirectory);
+            }
+
             _fileSystem.CopyFile(ResolveArtifactDestination(fileName), baselineFile, overwrite: true);
             baselineUpdated = true;
         }
@@ -120,7 +126,7 @@ internal sealed class AndroidArtifactOperations(
         return new ScreenshotArtifactInfo(fileName, width, height, sha256);
     }
 
-    private async Task<string?> ResolveExpectedSha256Async(string? expectedSha256, string? expectedSha256File, string? baselineFile)
+    private async Task<string?> ResolveExpectedSha256Async(string? expectedSha256, string? expectedSha256File, string? baselineFile, bool updateBaseline)
     {
         if (!string.IsNullOrWhiteSpace(expectedSha256))
         {
@@ -134,13 +140,26 @@ internal sealed class AndroidArtifactOperations(
                 throw new FileNotFoundException($"Screenshot SHA-256 baseline file '{expectedSha256File}' was not found.", expectedSha256File);
             }
 
-            return (await _fileSystem.ReadAllTextAsync(expectedSha256File).ConfigureAwait(false))
+            var hash = (await _fileSystem.ReadAllTextAsync(expectedSha256File).ConfigureAwait(false))
                 .Split(['\r', '\n', ' ', '\t'], StringSplitOptions.RemoveEmptyEntries)
                 .FirstOrDefault();
+            return !string.IsNullOrWhiteSpace(hash)
+                ? hash
+                : throw new InvalidOperationException($"Screenshot SHA-256 baseline file '{expectedSha256File}' did not contain a hash.");
         }
 
-        if (!string.IsNullOrWhiteSpace(baselineFile) && _fileSystem.FileExists(baselineFile))
+        if (!string.IsNullOrWhiteSpace(baselineFile))
         {
+            if (!_fileSystem.FileExists(baselineFile))
+            {
+                if (updateBaseline)
+                {
+                    return null;
+                }
+
+                throw new FileNotFoundException($"Screenshot baseline file '{baselineFile}' was not found.", baselineFile);
+            }
+
             using var stream = _fileSystem.OpenRead(baselineFile);
             var hash = await SHA256.HashDataAsync(stream).ConfigureAwait(false);
             return Convert.ToHexString(hash).ToLowerInvariant();

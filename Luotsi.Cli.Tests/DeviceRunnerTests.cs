@@ -459,6 +459,45 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task AssertScreenshotAsync_Throws_When_Baseline_File_Is_Missing_And_Not_Updating()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.AttachFileSystem(fileSystem);
+        var idGenerator = new FakeUniqueIdGenerator("fixed-shot-id");
+        adb.AddRemoteFile("/sdcard/device-e2e-fixed-shot-id.png", CreatePngHeader(320, 240));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem, idGenerator);
+
+        var error = await Assert.ThrowsAsync<FileNotFoundException>(() => runner.AssertScreenshotAsync("home", null, null, null, baselineFile: "/tmp/baselines/missing.png"));
+
+        Assert.Contains("baseline file", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task AssertScreenshotAsync_Creates_Baseline_Directory_When_Updating()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.AttachFileSystem(fileSystem);
+        var idGenerator = new FakeUniqueIdGenerator("fixed-shot-id");
+        var png = CreatePngHeader(320, 240);
+        adb.AddRemoteFile("/sdcard/device-e2e-fixed-shot-id.png", png);
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem, idGenerator);
+
+        var result = await runner.AssertScreenshotAsync("home", null, null, null, baselineFile: "/tmp/new-baselines/home.png", updateBaseline: true);
+
+        Assert.True(result.BaselineUpdated);
+        Assert.True(fileSystem.DirectoryExists("/tmp/new-baselines"));
+        Assert.Equal(png, fileSystem.ReadBytes("/tmp/new-baselines/home.png"));
+    }
+
+    [Fact]
     public async Task AssertScreenshotAsync_Throws_When_Width_Does_Not_Match()
     {
         var fileSystem = new FakeFileSystem();

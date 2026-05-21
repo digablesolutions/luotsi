@@ -115,7 +115,7 @@ The top-level scenario result also includes `prologue_ms`, `steps_ms`, and `non_
 | `waitActionReady` | `text` *(required)*, `step` *(optional)*, `timeoutSec` |
 | `resetLog` | — |
 | `assertEvent` | `event`, `timeoutSec`; supports `observeFromPreviousStep: true` |
-| `assertScreenshot` | `label` *(optional)*, `expectedWidth`, `expectedHeight`, `expectedSha256` *(at least one expected value required)* |
+| `assertScreenshot` | `label`, `expectedWidth`, `expectedHeight`, `expectedSha256`, `expectedSha256File`, `baselineFile`, `updateBaseline` |
 | `assertTextInputReady` | `timeoutSec`, `requireKeyboard` *(optional bool)* |
 | `assertBelow` | `text`, `below`, `maxGapPx` *(optional)* |
 | `assertAligned` | `text`, `with`, `maxDeltaPx` *(optional)* |
@@ -123,7 +123,7 @@ The top-level scenario result also includes `prologue_ms`, `steps_ms`, and `non_
 
 `assertEvent` with `observeFromPreviousStep: true` begins the log observation window at the previous step's start time rather than the assert step's own start time.
 
-`assertScreenshot` captures a screenshot, stores it as an artifact, records its dimensions and SHA-256 hash, and fails when the provided expected dimensions or hash do not match. It is a useful smoke assertion on devices where UI hierarchy capture is weak.
+`assertScreenshot` captures a screenshot, stores it as an artifact, records its dimensions and SHA-256 hash, and fails when the provided expected dimensions or hash do not match. It can assert a literal SHA-256, a SHA-256 stored in a text file, or the SHA-256 of a baseline image. Use `updateBaseline: true` with `baselineFile` when intentionally refreshing a checked-in baseline.
 
 ### App & Package
 
@@ -145,12 +145,11 @@ The top-level scenario result also includes `prologue_ms`, `steps_ms`, and `non_
 | Action | Key arguments |
 |---|---|
 | `takeScreenshot` | `label` *(optional)* |
-| `assertScreenshot` | `label`, `expectedWidth`, `expectedHeight`, `expectedSha256`, `expectedSha256File`, `baselineFile`, `updateBaseline` |
 | `captureArtifacts` | — |
 | `screenState` | — |
 | `sleep` | `milliseconds` |
 
-`assertScreenshot` is the preferred fallback when an older Android device has weak or broken hierarchy output. It captures a screenshot artifact and can assert dimensions, a literal SHA-256, a SHA-256 stored in a text file, or the SHA-256 of a baseline image. Use `updateBaseline: true` with `baselineFile` when intentionally refreshing a checked-in baseline.
+Screenshot assertions are the preferred fallback when an older Android device has weak or broken hierarchy output.
 
 ---
 
