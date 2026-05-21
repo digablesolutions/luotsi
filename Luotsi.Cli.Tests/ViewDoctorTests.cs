@@ -352,6 +352,39 @@ public sealed partial class AppTests
             });
     }
 
+    [Fact]
+    public async Task AndroidViewHelperSetupProvisioner_ResolveOrBuildAsync_Builds_From_Published_App_Project_When_Source_Checkout_Is_Missing()
+    {
+        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>());
+        var fileSystem = new FakeFileSystem();
+        var pathResolver = new ViewHostPathResolver(environment);
+        var projectDirectory = Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "Luotsi.ViewServer.Android"));
+        var wrapperPath = OperatingSystem.IsWindows()
+            ? Path.Join(projectDirectory, "gradlew.bat")
+            : Path.Join(projectDirectory, "gradlew");
+        fileSystem.CreateDirectory(projectDirectory);
+        fileSystem.AddFile(wrapperPath, string.Empty);
+
+        var processRunner = new FakeProcessRunner();
+        processRunner.EnqueueResult(new ProcessResult(0, "BUILD SUCCESSFUL", string.Empty));
+
+        var package = new AndroidViewHelperPackage("C:/tmp/helper.apk", "/data/local/tmp/luotsi-view-server.apk", "dev.luotsi.view.Main", "test-helper");
+        var provisioner = new AndroidViewHelperSetupProvisioner(
+            new SequencedAndroidViewHelperPackageLocator(new InvalidOperationException("missing helper"), package),
+            pathResolver,
+            fileSystem,
+            processRunner);
+        var steps = new List<ViewSetupStep>();
+
+        var resolved = await provisioner.ResolveOrBuildAsync(fix: true, steps.Add);
+
+        Assert.Same(package, resolved);
+        var call = Assert.Single(processRunner.Calls);
+        Assert.Equal(wrapperPath, call.FileName);
+        Assert.Equal(["-p", projectDirectory, ":app:assembleDebug"], call.Args);
+        Assert.Contains(steps, step => step.Name == "helper_build" && step.Status == ViewStartupPhaseStatus.Started && step.Detail == projectDirectory);
+    }
+
     private sealed class SequencedAndroidViewHelperPackageLocator(params object[] outcomes) : IAndroidViewHelperPackageLocator
     {
         private readonly Queue<object> _outcomes = new(outcomes);
