@@ -195,6 +195,23 @@ public sealed record ViewProfileListResult(IReadOnlyList<string> Profiles);
 
 public sealed record ViewProfileDeleteResult(string Name, bool Deleted);
 
+public sealed record DoctorCheck(
+    string Name,
+    bool Ok,
+    string Summary,
+    string? Detail = null,
+    string? Recommendation = null);
+
+public sealed record DoctorResult(
+    bool Ready,
+    bool Fix,
+    string AdbExecutable,
+    string? Package,
+    IReadOnlyList<DoctorCheck> Checks,
+    PreflightResult? PackagePreflight,
+    Luotsi.Cli.View.Diagnostics.ViewDoctorResult View,
+    IReadOnlyList<Luotsi.Cli.View.Diagnostics.ViewSetupStep> Repairs);
+
 // Wait not visible
 public sealed record WaitNotVisibleResult(string Text, int AttemptCount, bool Visible);
 

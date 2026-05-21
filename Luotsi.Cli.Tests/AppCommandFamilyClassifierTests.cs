@@ -26,6 +26,15 @@ public sealed class AppCommandFamilyClassifierTests
     }
 
     [Fact]
+    public void Classify_Doctor_Returns_Doctor_Family()
+    {
+        var classification = AppCommandFamilyClassifier.Classify(CliOptions.Parse(["doctor", "--device", "abc"]));
+
+        Assert.Equal(AppCommandFamily.Doctor, classification.Family);
+        Assert.Null(classification.ViewDiagnostic);
+    }
+
+    [Fact]
     public void Classify_ViewSetup_Alias_Returns_ViewDiagnostics_Setup_Invocation()
     {
         var classification = AppCommandFamilyClassifier.Classify(CliOptions.Parse(["view", "setup", "--device", "abc"]));

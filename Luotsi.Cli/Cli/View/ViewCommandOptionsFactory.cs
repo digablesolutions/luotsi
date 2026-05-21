@@ -5,12 +5,12 @@ namespace Luotsi.Cli.Cli.View;
 
 internal static class ViewCommandOptionsFactory
 {
-    public static ViewOptions Build(CliOptions options, string adbExecutable, bool allowJoinShare, TimeSpan? commandTimeout)
+    public static ViewOptions Build(CliOptions options, string adbExecutable, bool allowJoinShare, TimeSpan? commandTimeout, string commandName = "view")
     {
         var joinShareEndpoint = options.Get("join-share");
         if (!allowJoinShare && !string.IsNullOrWhiteSpace(joinShareEndpoint))
         {
-            throw new UsageException("view-doctor does not support --join-share.");
+            throw new UsageException($"{commandName} does not support --join-share.");
         }
 
         var device = options.Get("device");
@@ -20,24 +20,24 @@ internal static class ViewCommandOptionsFactory
         }
         else if (!string.IsNullOrWhiteSpace(device))
         {
-            throw new UsageException("view requires either --device or --join-share, not both.");
+            throw new UsageException($"{commandName} requires either --device or --join-share, not both.");
         }
 
         var preset = ViewPresetCatalog.Resolve(options.HasFlag("defaults") ? ViewPresetCatalog.Safe : options.Get("preset"));
-        var scaleMode = ResolveScaleMode(options.Get("scale-mode"));
+        var scaleMode = ResolveScaleMode(options.Get("scale-mode"), commandName);
         var statsIntervalMs = GetIntOrDefault(options, "stats-interval-ms", preset.StatsIntervalMs);
         var rendererStatsIntervalMs = GetIntOrDefault(options, "renderer-stats-interval-ms", preset.RendererStatsIntervalMs);
         if (statsIntervalMs < 0)
         {
-            throw new UsageException("view requires --stats-interval-ms zero or greater.");
+            throw new UsageException($"{commandName} requires --stats-interval-ms zero or greater.");
         }
 
         if (rendererStatsIntervalMs < 0)
         {
-            throw new UsageException("view requires --renderer-stats-interval-ms zero or greater.");
+            throw new UsageException($"{commandName} requires --renderer-stats-interval-ms zero or greater.");
         }
 
-        var captureBackend = ResolveCaptureBackend(options.Get("capture-backend"));
+        var captureBackend = ResolveCaptureBackend(options.Get("capture-backend"), commandName);
 
         return new ViewOptions(
             device ?? joinShareEndpoint ?? string.Empty,
@@ -66,7 +66,7 @@ internal static class ViewCommandOptionsFactory
     private static int GetIntOrDefault(CliOptions options, string key, int defaultValue) =>
         options.Get(key) is null ? defaultValue : options.Int(key, defaultValue);
 
-    private static string ResolveScaleMode(string? value)
+    private static string ResolveScaleMode(string? value, string commandName)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
@@ -77,11 +77,11 @@ internal static class ViewCommandOptionsFactory
         {
             "fit" => "fit",
             "fill" => "fill",
-            _ => throw new UsageException("view requires --scale-mode to be either fit or fill.")
+            _ => throw new UsageException($"{commandName} requires --scale-mode to be either fit or fill.")
         };
     }
 
-    private static string ResolveCaptureBackend(string? value)
+    private static string ResolveCaptureBackend(string? value, string commandName)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
@@ -93,7 +93,7 @@ internal static class ViewCommandOptionsFactory
             ViewCaptureBackends.Auto => ViewCaptureBackends.Auto,
             ViewCaptureBackends.Screenrecord => ViewCaptureBackends.Screenrecord,
             ViewCaptureBackends.MediaProjection => ViewCaptureBackends.MediaProjection,
-            _ => throw new UsageException("view requires --capture-backend to be auto, screenrecord, or mediaprojection.")
+            _ => throw new UsageException($"{commandName} requires --capture-backend to be auto, screenrecord, or mediaprojection.")
         };
     }
 }

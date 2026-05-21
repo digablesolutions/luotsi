@@ -36,10 +36,15 @@ Each release publishes:
 - `luotsi-cli-<version>-linux-x64.tar.gz`
 - `luotsi-cli-<version>-osx-x64.tar.gz`
 - `luotsi-cli-<version>-osx-arm64.tar.gz`
+- `luotsi-install.ps1`
+- `luotsi-install.sh`
 - `SHA256SUMS`
 
 Each runtime archive contains the self-contained `luotsi` executable
 (`luotsi.exe` on Windows) plus any companion files emitted by `dotnet publish`.
+The installer scripts are published alongside the archives so the documented
+quick-install flows can consume release-backed assets instead of source-tree
+build outputs.
 
 Release validation diagnostics and MSBuild binlogs are kept as workflow
 artifacts for debugging failed releases.

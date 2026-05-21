@@ -6,6 +6,7 @@ internal enum AppCommandFamily
 {
     ProfileList,
     ProfileDelete,
+    Doctor,
     Inspect,
     ViewDiagnostics,
     ViewSession,
@@ -31,6 +32,11 @@ internal static class AppCommandFamilyClassifier
         if (string.Equals(options.Command, "inspect", StringComparison.OrdinalIgnoreCase))
         {
             return new AppCommandFamilyClassification(AppCommandFamily.Inspect);
+        }
+
+        if (string.Equals(options.Command, "doctor", StringComparison.OrdinalIgnoreCase))
+        {
+            return new AppCommandFamilyClassification(AppCommandFamily.Doctor);
         }
 
         var viewDiagnostic = ViewDiagnosticInvocation.Resolve(options);

@@ -20,6 +20,7 @@ public sealed class CliOptions
         "device-status",
         "device-wait",
         "preflight",
+        "doctor",
         "screen-state",
         "inspect",
         "view",

@@ -1,4 +1,6 @@
 using Luotsi.Cli.Cli;
+using Luotsi.Cli.Cli.View;
+using Luotsi.Cli.Errors;
 using Luotsi.Cli.Hosts.Android.View;
 using Luotsi.Cli.Models;
 using Luotsi.Cli.View;
@@ -140,6 +142,145 @@ public sealed partial class AppTests
         Assert.Equal("view-doctor", envelope.RootElement.GetProperty("command").GetString());
         Assert.True(envelope.RootElement.GetProperty("data").GetProperty("fix").GetBoolean());
         Assert.True(Assert.Single(setup.Calls).Fix);
+    }
+
+    [Fact]
+    public async Task RunAsync_Doctor_Reuses_ViewDoctor_And_PackagePreflight()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var doctor = new FakeViewDoctor(options => new ViewDoctorResult(
+            true,
+            options.PresetName,
+            options,
+            [],
+            null,
+            [new ViewDoctorCheck("decoder", true, "FFmpeg native decoder is ready.")]));
+        var factory = new FakeViewDoctorFactory(doctor);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            TimeProvider = timeProvider,
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            ViewDoctorFactory = factory
+        });
+
+        var exitCode = await app.RunAsync([
+            "doctor",
+            "--device", "192.168.0.134:5555",
+            "--package", "dev.luotsi.app",
+            "--preset", "safe"]);
+
+        using var envelope = console.ParseSingleOutputAsJson();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("doctor", envelope.RootElement.GetProperty("command").GetString());
+        Assert.True(envelope.RootElement.GetProperty("data").GetProperty("ready").GetBoolean());
+        Assert.Equal("dev.luotsi.app", envelope.RootElement.GetProperty("data").GetProperty("package").GetString());
+        Assert.Equal("safe", envelope.RootElement.GetProperty("data").GetProperty("view").GetProperty("preset").GetString());
+        Assert.Contains("adb_server_status", envelope.RootElement.GetProperty("data").GetProperty("checks").EnumerateArray().Select(static item => item.GetProperty("name").GetString()));
+        Assert.Equal(["server-status", "version"], host.AdbDiagnostics);
+        Assert.Equal(["dev.luotsi.app"], host.ReadOnlyPreflightRequests);
+        Assert.Same(host, factory.LastDeviceHost);
+    }
+
+    [Fact]
+    public async Task RunAsync_Doctor_Fix_Stages_Ffmpeg_And_Runs_Setup()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var fileSystem = new FakeFileSystem();
+        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>());
+        var pathResolver = new ViewHostPathResolver(environment);
+        fileSystem.AddFile(pathResolver.GetRepositoryRelativeFileCandidates("ffmpeg/download-ffmpeg.ps1").First(), "Write-Host 'ok'");
+
+        var processRunner = new FakeProcessRunner();
+        processRunner.EnqueueResult(new ProcessResult(0, "Done. Staged native libraries.", string.Empty));
+
+        var doctor = new FakeViewDoctor(options => new ViewDoctorResult(
+            false,
+            options.PresetName,
+            options,
+            [],
+            null,
+            [new ViewDoctorCheck("decoder", false, "FFmpeg native decoder is not ready.")]));
+        var setup = new FakeViewSetup((options, fix) => new ViewSetupResult(
+            true,
+            fix,
+            options.PresetName,
+            options,
+            [new ViewSetupStep("helper_install", ViewStartupPhaseStatus.Succeeded, "Installed.")],
+            new ViewDoctorResult(true, options.PresetName, options, [], null, [new ViewDoctorCheck("decoder", true, "FFmpeg native decoder is ready.")])));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            Environment = environment,
+            ProcessRunner = processRunner,
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            ViewDoctorFactory = new FakeViewDoctorFactory(doctor),
+            ViewSetupFactory = new FakeViewSetupFactory(setup)
+        });
+
+        var exitCode = await app.RunAsync([
+            "doctor",
+            "--device", "192.168.0.134:5555",
+            "--fix"]);
+
+        using var envelope = console.ParseSingleOutputAsJson();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("doctor", envelope.RootElement.GetProperty("command").GetString());
+        Assert.True(envelope.RootElement.GetProperty("data").GetProperty("fix").GetBoolean());
+        Assert.True(envelope.RootElement.GetProperty("data").GetProperty("ready").GetBoolean());
+        var repairNames = envelope.RootElement.GetProperty("data").GetProperty("repairs").EnumerateArray().Select(static item => item.GetProperty("name").GetString()).ToArray();
+        Assert.Collection(
+            repairNames,
+            name => Assert.Equal("ffmpeg_stage", name),
+            name => Assert.Equal("ffmpeg_stage", name),
+            name => Assert.Equal("helper_install", name));
+        var call = Assert.Single(processRunner.Calls);
+        Assert.Equal(OperatingSystem.IsWindows() ? "pwsh" : "pwsh", call.FileName);
+        Assert.Contains("-File", call.Args);
+        Assert.True(Assert.Single(setup.Calls).Fix);
+    }
+
+    [Fact]
+    public void ViewCommandOptionsFactory_Build_With_Negative_Stats_Interval_Uses_Doctor_Command_Name()
+    {
+        var constructor = typeof(CliOptions).GetConstructor(
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
+            binder: null,
+            [typeof(string)],
+            modifiers: null);
+        Assert.NotNull(constructor);
+
+        var options = (CliOptions)constructor.Invoke(["doctor"]);
+        var valuesField = typeof(CliOptions).GetField("_values", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(valuesField);
+        var values = (Dictionary<string, string?>)valuesField.GetValue(options)!;
+        values["device"] = "192.168.0.134:5555";
+        values["stats-interval-ms"] = "-1";
+
+        var error = Assert.Throws<UsageException>(() => ViewCommandOptionsFactory.Build(options, "adb", allowJoinShare: false, commandTimeout: TimeSpan.FromSeconds(5), commandName: "doctor"));
+
+        Assert.Equal("doctor requires --stats-interval-ms zero or greater.", error.Message);
+    }
+
+    [Fact]
+    public async Task RunAsync_Doctor_With_Invalid_Capture_Backend_Returns_Doctor_Usage_Error_Envelope()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["doctor", "--device", "192.168.0.134:5555", "--capture-backend", "invalid"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("doctor", envelope.RootElement.GetProperty("command").GetString());
+        Assert.Contains("doctor requires --capture-backend to be auto, screenrecord, or mediaprojection.", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
 
@@ -350,6 +491,60 @@ public sealed partial class AppTests
                 Assert.Equal("helper_resolve", step.Name);
                 Assert.Equal(ViewStartupPhaseStatus.Succeeded, step.Status);
             });
+    }
+
+    [Fact]
+    public async Task FfmpegSetupProvisioner_StageAsync_Uses_Published_App_Script_When_Source_Checkout_Is_Missing()
+    {
+        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>());
+        var fileSystem = new FakeFileSystem();
+        var processRunner = new FakeProcessRunner();
+        processRunner.EnqueueResult(new ProcessResult(0, "Done. Staged native libraries.", string.Empty));
+        var scriptPath = Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "ffmpeg", "download-ffmpeg.ps1"));
+        fileSystem.AddFile(scriptPath, "Write-Host 'ok'");
+        var provisioner = new FfmpegSetupProvisioner(environment, fileSystem, processRunner);
+        var steps = new List<ViewSetupStep>();
+
+        var staged = await provisioner.StageAsync(steps.Add);
+
+        Assert.True(staged);
+        var call = Assert.Single(processRunner.Calls);
+        Assert.Equal("pwsh", call.FileName);
+        Assert.Equal(["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath], call.Args);
+        Assert.Contains(steps, step => step.Name == "ffmpeg_stage" && step.Status == ViewStartupPhaseStatus.Started && step.Detail == scriptPath);
+    }
+
+    [Fact]
+    public async Task AndroidViewHelperSetupProvisioner_ResolveOrBuildAsync_Builds_From_Published_App_Project_When_Source_Checkout_Is_Missing()
+    {
+        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>());
+        var fileSystem = new FakeFileSystem();
+        var pathResolver = new ViewHostPathResolver(environment);
+        var projectDirectory = Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "Luotsi.ViewServer.Android"));
+        var wrapperPath = OperatingSystem.IsWindows()
+            ? Path.Join(projectDirectory, "gradlew.bat")
+            : Path.Join(projectDirectory, "gradlew");
+        fileSystem.CreateDirectory(projectDirectory);
+        fileSystem.AddFile(wrapperPath, string.Empty);
+
+        var processRunner = new FakeProcessRunner();
+        processRunner.EnqueueResult(new ProcessResult(0, "BUILD SUCCESSFUL", string.Empty));
+
+        var package = new AndroidViewHelperPackage("C:/tmp/helper.apk", "/data/local/tmp/luotsi-view-server.apk", "dev.luotsi.view.Main", "test-helper");
+        var provisioner = new AndroidViewHelperSetupProvisioner(
+            new SequencedAndroidViewHelperPackageLocator(new InvalidOperationException("missing helper"), package),
+            pathResolver,
+            fileSystem,
+            processRunner);
+        var steps = new List<ViewSetupStep>();
+
+        var resolved = await provisioner.ResolveOrBuildAsync(fix: true, steps.Add);
+
+        Assert.Same(package, resolved);
+        var call = Assert.Single(processRunner.Calls);
+        Assert.Equal(wrapperPath, call.FileName);
+        Assert.Equal(["-p", projectDirectory, ":app:assembleDebug"], call.Args);
+        Assert.Contains(steps, step => step.Name == "helper_build" && step.Status == ViewStartupPhaseStatus.Started && step.Detail == projectDirectory);
     }
 
     private sealed class SequencedAndroidViewHelperPackageLocator(params object[] outcomes) : IAndroidViewHelperPackageLocator
