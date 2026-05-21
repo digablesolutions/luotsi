@@ -179,7 +179,8 @@ public sealed class ScenarioExecutor
                         execution.Steps,
                         null,
                         lifecycleContext.ScenarioId,
-                        lifecycleContext.File));
+                        lifecycleContext.File,
+                        scenario.Metadata));
             }).ConfigureAwait(false);
     }
 
@@ -343,7 +344,8 @@ public sealed class ScenarioExecutor
             CreateFailedStepResult(context.NextStepIndex, failedStep),
             failureSteps,
             failureArtifacts,
-            context.ScenarioId);
+            context.ScenarioId,
+            context.Scenario.Metadata);
     }
 
     private ScenarioRunFailureData CreateFinalFailureData(

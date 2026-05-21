@@ -2116,6 +2116,102 @@ public sealed partial class AppTests
         Assert.True(failureArtifacts.GetProperty("artifacts").GetArrayLength() >= 2);
     }
 
+    [Fact]
+    public async Task ScenarioList_Includes_Scenario_Metadata()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "coordinate smoke",
+          "metadata": {
+            "package": "dev.luotsi.app",
+            "activity": ".MainActivity",
+            "notes": "Uses fixed coordinates.",
+            "device": {
+              "model": "PDA3505",
+              "androidRelease": "6.0",
+              "sdk": "23"
+            },
+            "layout": {
+              "width": 1920,
+              "height": 1080,
+              "orientation": "landscape"
+            }
+          },
+          "steps": [
+            { "action": "tapPoint", "x": 100, "y": 200 }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["scenario-list", "--path", "/tmp/scenario.json"]);
+
+        Assert.Equal(0, exitCode);
+        using var envelope = console.ParseSingleOutputAsJson();
+        var metadata = envelope.RootElement.GetProperty("data").GetProperty("scenarios")[0].GetProperty("metadata");
+        Assert.Equal("dev.luotsi.app", metadata.GetProperty("package").GetString());
+        Assert.Equal("PDA3505", metadata.GetProperty("device").GetProperty("model").GetString());
+        Assert.Equal(1920, metadata.GetProperty("layout").GetProperty("width").GetInt32());
+    }
+
+    [Fact]
+    public async Task RunAsync_File_Adds_Metadata_Warnings_When_Device_Context_Differs()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new SteppingTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind), TimeSpan.FromMilliseconds(1));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "coordinate smoke",
+          "metadata": {
+            "package": "dev.expected",
+            "activity": ".ExpectedActivity",
+            "device": {
+              "model": "Expected Model",
+              "androidRelease": "15",
+              "sdk": "35"
+            }
+          },
+          "steps": [
+            { "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var host = new FakeDeviceHost
+        {
+            PreflightTemplate = new PreflightResult("Actual Model", "6.0", "23", "com.actual/.MainActivity", "dev.actual", null, "fingerprint", "armeabi-v7a", "SER")
+        };
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new SteppingDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json", "--package", "dev.actual", "--report-json", "/tmp/report.json"]);
+
+        Assert.Equal(0, exitCode);
+        using var envelope = console.ParseSingleOutputAsJson();
+        var warnings = envelope.RootElement.GetProperty("data").GetProperty("metadata_warnings");
+        Assert.Contains(warnings.EnumerateArray(), warning => warning.GetProperty("code").GetString() == "package");
+        Assert.Contains(warnings.EnumerateArray(), warning => warning.GetProperty("code").GetString() == "device_model");
+
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+        var reportWarnings = report.RootElement.GetProperty("scenarios")[0].GetProperty("metadata_warnings");
+        Assert.Contains(reportWarnings.EnumerateArray(), warning => warning.GetProperty("code").GetString() == "android_sdk");
+    }
+
     private static JsonElement[] ReadJsonlEvents(FakeFileSystem fileSystem, string path) =>
         fileSystem.ReadAllTextAsync(path).GetAwaiter().GetResult()
             .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)

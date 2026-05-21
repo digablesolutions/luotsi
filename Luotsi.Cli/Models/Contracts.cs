@@ -259,13 +259,33 @@ public sealed record Bounds(int Left, int Top, int Right, int Bottom);
 /// <param name="Tags">Optional runner tags used for filtering and reporting.</param>
 /// <param name="Setup">Optional setup steps that run before scenario steps.</param>
 /// <param name="Teardown">Optional teardown steps that run after setup and scenario steps.</param>
+/// <param name="Metadata">Optional scenario context used for diagnostics and device compatibility warnings.</param>
 public sealed record ScenarioFile(
     string Name,
     IReadOnlyList<ScenarioStep> Steps,
     IReadOnlyDictionary<string, string>? Variables = null,
     IReadOnlyList<string>? Tags = null,
     IReadOnlyList<ScenarioStep>? Setup = null,
-    IReadOnlyList<ScenarioStep>? Teardown = null);
+    IReadOnlyList<ScenarioStep>? Teardown = null,
+    ScenarioMetadata? Metadata = null);
+
+public sealed record ScenarioMetadata(
+    string? Package = null,
+    string? Activity = null,
+    string? Notes = null,
+    ScenarioDeviceMetadata? Device = null,
+    ScenarioLayoutMetadata? Layout = null);
+
+public sealed record ScenarioDeviceMetadata(
+    string? Serial = null,
+    string? Model = null,
+    string? AndroidRelease = null,
+    string? Sdk = null);
+
+public sealed record ScenarioLayoutMetadata(
+    int? Width = null,
+    int? Height = null,
+    string? Orientation = null);
 
 /// <summary>
 /// Scenario playbook step.

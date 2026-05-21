@@ -181,7 +181,9 @@ internal static class ScenarioRunReportFactory
             result.Steps,
             null,
             ScenarioReportArtifactProjection.FromSteps(result.Steps, attachmentPolicy),
-            null);
+            null,
+            result.Metadata,
+            result.MetadataWarnings);
 
     private static ScenarioReportScenario CreateScenarioFromFailure(
         ScenarioRunFailureData data,
@@ -198,7 +200,9 @@ internal static class ScenarioRunReportFactory
             data.Steps,
             data.FailedStep,
             ScenarioReportArtifactProjection.FromFailureAndSteps(data.Steps, data.FailureArtifacts, attachmentPolicy),
-            error);
+            error,
+            data.Metadata,
+            data.MetadataWarnings);
 
     private static ScenarioReportScenario CreateScenarioFromBatchItem(
         ScenarioBatchItemResult item,
@@ -223,7 +227,9 @@ internal static class ScenarioRunReportFactory
             item.Steps ?? [],
             null,
             item.Steps is null ? [] : ScenarioReportArtifactProjection.FromSteps(item.Steps, attachmentPolicy),
-            item.Error);
+            item.Error,
+            item.Metadata,
+            item.MetadataWarnings);
     }
 
     private static ScenarioReportScenario CreateScenarioFromException(

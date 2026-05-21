@@ -98,7 +98,11 @@ internal sealed class ScenarioRunOrchestrator(
                 try
                 {
                     var result = await _scenarioExecutorFactory.Create(runner, sink, configuration.FailureArtifactCapturePolicy).RunAsync(file).ConfigureAwait(false);
-                    return result with { DeviceAllocation = allocation };
+                    return result with
+                    {
+                        DeviceAllocation = allocation,
+                        MetadataWarnings = ScenarioMetadataCompatibility.Evaluate(result.Metadata, allocation)
+                    };
                 }
                 catch (Exception ex) when (!IsFatalException(ex) && ex is not UsageException)
                 {
@@ -125,7 +129,16 @@ internal sealed class ScenarioRunOrchestrator(
                 try
                 {
                     var result = await _scenarioBatchExecutorFactory.Create(runner, sink, configuration.FailureArtifactCapturePolicy).RunAsync(preparedPlan).ConfigureAwait(false);
-                    return result with { DeviceAllocation = allocation };
+                    return result with
+                    {
+                        DeviceAllocation = allocation,
+                        Scenarios = result.Scenarios
+                            .Select(scenario => scenario with
+                            {
+                                MetadataWarnings = ScenarioMetadataCompatibility.Evaluate(scenario.Metadata, allocation)
+                            })
+                            .ToArray()
+                    };
                 }
                 catch (Exception ex) when (!IsFatalException(ex) && ex is not UsageException)
                 {
