@@ -36,20 +36,24 @@ public sealed partial class AppTests
         var outputRoot = Path.Combine(FindRepositoryRoot(), "docs", "assets", "tutorials", "buggy-controller-live-demo", "outputs");
         Assert.True(Directory.Exists(outputRoot), $"Tutorial output directory '{outputRoot}' was not found.");
 
-        foreach (var jsonFile in Directory.GetFiles(outputRoot, "*.json", SearchOption.AllDirectories))
+        foreach (var json in Directory.GetFiles(outputRoot, "*.json", SearchOption.AllDirectories).Select(File.ReadAllText))
         {
-            using var _ = JsonDocument.Parse(File.ReadAllText(jsonFile));
+            using var _ = JsonDocument.Parse(json);
         }
 
-        foreach (var jsonlFile in Directory.GetFiles(outputRoot, "*.jsonl", SearchOption.AllDirectories))
+        foreach (var asset in Directory.GetFiles(outputRoot, "*.jsonl", SearchOption.AllDirectories)
+                     .Select(static jsonlFile => new
+                     {
+                         File = jsonlFile,
+                         Lines = File.ReadLines(jsonlFile)
+                             .Where(static line => !string.IsNullOrWhiteSpace(line))
+                             .ToArray()
+                     }))
         {
-            var lines = File.ReadLines(jsonlFile)
-                .Where(static line => !string.IsNullOrWhiteSpace(line))
-                .ToArray();
-            Assert.NotEmpty(lines);
-            foreach (var line in lines)
+            Assert.NotEmpty(asset.Lines);
+            foreach (var document in asset.Lines.Select(static line => JsonDocument.Parse(line)))
             {
-                using var _ = JsonDocument.Parse(line);
+                using var _ = document;
             }
         }
 
@@ -61,22 +65,22 @@ public sealed partial class AppTests
 
     private static IEnumerable<string> ExtractLocalLinks(string markdown)
     {
-        foreach (Match match in MarkdownLinkRegex().Matches(markdown))
+        foreach (var link in MarkdownLinkRegex()
+                     .Matches(markdown)
+                     .Cast<Match>()
+                     .Select(static match => match.Groups["target"].Value.Trim())
+                     .Where(static link => !IsExternalOrAnchorLink(link)))
         {
-            var link = match.Groups["target"].Value.Trim();
-            if (!IsExternalOrAnchorLink(link))
-            {
-                yield return link;
-            }
+            yield return link;
         }
 
-        foreach (Match match in HtmlSourceRegex().Matches(markdown))
+        foreach (var link in HtmlSourceRegex()
+                     .Matches(markdown)
+                     .Cast<Match>()
+                     .Select(static match => match.Groups["target"].Value.Trim())
+                     .Where(static link => !IsExternalOrAnchorLink(link)))
         {
-            var link = match.Groups["target"].Value.Trim();
-            if (!IsExternalOrAnchorLink(link))
-            {
-                yield return link;
-            }
+            yield return link;
         }
     }
 

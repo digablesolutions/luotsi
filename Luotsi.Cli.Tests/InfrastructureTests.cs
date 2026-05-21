@@ -43,7 +43,7 @@ public sealed partial class AppTests
         await session.WriteJsonAsync("screen-state.json", new { element_count = 1 });
         await session.WriteTextAsync("hierarchy.xml", "<hierarchy />");
 
-        var index = await fileSystem.ReadAllTextAsync(Path.Combine(session.Root, "index.md"));
+        var index = await fileSystem.ReadAllTextAsync(Path.Join(session.Root, "index.md"));
 
         Assert.Contains("# Luotsi Artifacts", index, StringComparison.Ordinal);
         Assert.Contains("## Logs", index, StringComparison.Ordinal);
@@ -61,19 +61,19 @@ public sealed partial class AppTests
         var fileSystem = new FakeFileSystem();
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-18T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var session = ArtifactSession.Create(CliOptions.Parse(["record"]), fileSystem, timeProvider);
-        await using (var screenshot = fileSystem.OpenWrite(Path.Combine(session.Root, "demo shot.png")))
+        await using (var screenshot = fileSystem.OpenWrite(Path.Join(session.Root, "demo shot.png")))
         {
             await screenshot.WriteAsync(new byte[] { 1, 2, 3 });
         }
 
-        await using (var recording = fileSystem.OpenWrite(Path.Combine(session.Root, "demo.mp4")))
+        await using (var recording = fileSystem.OpenWrite(Path.Join(session.Root, "demo.mp4")))
         {
             await recording.WriteAsync(new byte[] { 4, 5, 6 });
         }
 
         await session.RefreshIndexAsync();
 
-        var index = await fileSystem.ReadAllTextAsync(Path.Combine(session.Root, "index.md"));
+        var index = await fileSystem.ReadAllTextAsync(Path.Join(session.Root, "index.md"));
 
         Assert.Contains("## Screenshots", index, StringComparison.Ordinal);
         Assert.Contains("- [demo shot.png](demo%20shot.png)", index, StringComparison.Ordinal);

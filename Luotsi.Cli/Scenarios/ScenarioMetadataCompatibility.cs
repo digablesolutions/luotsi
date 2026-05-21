@@ -163,12 +163,9 @@ internal static class ScenarioMetadataCompatibility
     private static string NormalizeLooseText(string value)
     {
         var builder = new StringBuilder(value.Length);
-        foreach (var character in value)
+        foreach (var character in value.Where(char.IsLetterOrDigit))
         {
-            if (char.IsLetterOrDigit(character))
-            {
-                builder.Append(char.ToLowerInvariant(character));
-            }
+            builder.Append(char.ToLowerInvariant(character));
         }
 
         return builder.ToString();
