@@ -253,6 +253,8 @@ internal sealed class FakeAdbClient(string? serial = null) : IAdbClient
     private readonly Queue<ProcessResult> _runResults = new();
     private readonly Queue<string[]> _logLines = new();
     private readonly Queue<AdbLogStreamResult> _logResults = new();
+    private readonly Dictionary<string, byte[]> _remoteFiles = new(StringComparer.Ordinal);
+    private IFileSystem? _fileSystem;
 
     public List<string> ShellCommands { get; } = [];
 
@@ -266,6 +268,10 @@ internal sealed class FakeAdbClient(string? serial = null) : IAdbClient
 
     public void EnqueueRunResult(ProcessResult result) => _runResults.Enqueue(result);
 
+    public void AttachFileSystem(IFileSystem fileSystem) => _fileSystem = fileSystem;
+
+    public void AddRemoteFile(string path, byte[] content) => _remoteFiles[path] = content;
+
     public void EnqueueLogLines(params string[] lines) => _logLines.Enqueue(lines);
 
     public void EnqueueLogResult(AdbLogStreamResult result) => _logResults.Enqueue(result);
@@ -274,6 +280,11 @@ internal sealed class FakeAdbClient(string? serial = null) : IAdbClient
     {
         var finalArgs = args.ToArray();
         RunCommands.Add(finalArgs);
+        if (TryHandlePull(finalArgs))
+        {
+            return Task.FromResult(new AdbCommandResult("adb", serial, finalArgs, new ProcessResult(0, string.Empty, string.Empty)));
+        }
+
                 var result = _runResults.Count > 0
                         ? _runResults.Dequeue()
                         : finalArgs.Length == 4 &&
@@ -285,6 +296,25 @@ internal sealed class FakeAdbClient(string? serial = null) : IAdbClient
                                 ? _shellResults.Dequeue()
                                 : new ProcessResult(0, string.Empty, string.Empty);
         return Task.FromResult(new AdbCommandResult("adb", serial, finalArgs, result));
+    }
+
+    private bool TryHandlePull(string[] finalArgs)
+    {
+        if (finalArgs.Length != 3 ||
+            !string.Equals(finalArgs[0], "pull", StringComparison.Ordinal) ||
+            !_remoteFiles.TryGetValue(finalArgs[1], out var content))
+        {
+            return false;
+        }
+
+        if (_fileSystem is null)
+        {
+            return true;
+        }
+
+        using var stream = _fileSystem.OpenWrite(finalArgs[2]);
+        stream.Write(content);
+        return true;
     }
 
     public Task<AdbCommandResult> ShellAsync(string command, CancellationToken cancellationToken = default)
@@ -639,6 +669,12 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
     {
         TakeScreenshotRequests.Add(label);
         return Task.FromResult(new TakeScreenshotResult(label, $"{label}.png"));
+    }
+
+    public Task<ScreenshotAssertionResult> AssertScreenshotAsync(string label, int? expectedWidth, int? expectedHeight, string? expectedSha256)
+    {
+        TakeScreenshotRequests.Add(label);
+        return Task.FromResult(new ScreenshotAssertionResult(label, $"{label}.png", expectedWidth, expectedHeight, expectedSha256, expectedWidth, expectedHeight, expectedSha256));
     }
 
     public Task<CaptureArtifactsResult> CaptureArtifactsAsync(string label) => Task.FromResult(new CaptureArtifactsResult(label, $"{label}.png", $"{label}.txt", $"{label}.json", $"{label}.xml"));

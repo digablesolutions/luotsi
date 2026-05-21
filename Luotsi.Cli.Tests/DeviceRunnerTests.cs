@@ -408,6 +408,30 @@ public sealed partial class AppTests
         Assert.Contains("rm -f /sdcard/device-e2e-fixed-recording-id.mp4", adb.ShellCommands[1], StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task AssertScreenshotAsync_Captures_Dimensions_And_Sha256()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.AttachFileSystem(fileSystem);
+        var idGenerator = new FakeUniqueIdGenerator("fixed-shot-id");
+        var png = CreatePngHeader(320, 240);
+        adb.AddRemoteFile("/sdcard/device-e2e-fixed-shot-id.png", png);
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem, idGenerator);
+        var expectedHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(png)).ToLowerInvariant();
+
+        var result = await runner.AssertScreenshotAsync("home", 320, 240, expectedHash);
+
+        Assert.Equal("home", result.Label);
+        Assert.Equal("home-screenshot.png", result.File);
+        Assert.Equal(320, result.Width);
+        Assert.Equal(240, result.Height);
+        Assert.Equal(expectedHash, result.Sha256);
+    }
+
 
     [Fact]
     public async Task WaitForStepAsync_Uses_Incremental_Telemetry_Parsing()

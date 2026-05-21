@@ -324,6 +324,9 @@ public sealed record ScenarioLayoutMetadata(
 /// <param name="IntentAction">Intent action override for startUri.</param>
 /// <param name="Wait">Whether app/URI starts should wait for launch completion.</param>
 /// <param name="ThirdPartyOnly">Whether package listing should include only third-party apps.</param>
+/// <param name="ExpectedWidth">Expected screenshot width for visual assertions.</param>
+/// <param name="ExpectedHeight">Expected screenshot height for visual assertions.</param>
+/// <param name="ExpectedSha256">Expected screenshot SHA-256 for visual assertions.</param>
 public sealed record ScenarioStep(
     string? Name,
     string Action,
@@ -358,7 +361,10 @@ public sealed record ScenarioStep(
     string? Permission = null,
     string? IntentAction = null,
     bool? Wait = null,
-    bool? ThirdPartyOnly = null);
+    bool? ThirdPartyOnly = null,
+    int? ExpectedWidth = null,
+    int? ExpectedHeight = null,
+    string? ExpectedSha256 = null);
 
 /// <summary>
 /// JSON command envelope.

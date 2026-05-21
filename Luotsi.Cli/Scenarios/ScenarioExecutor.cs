@@ -23,6 +23,7 @@ public interface IScenarioActionHost
     Task<ResetLogResult> ResetLogAsync();
     Task<AssertEventResult> AssertEventAsync(string name, IReadOnlyList<string> contains, string? detailsPattern, int timeoutSec, DateTimeOffset? since = null);
     Task<TakeScreenshotResult> TakeScreenshotAsync(string label);
+    Task<ScreenshotAssertionResult> AssertScreenshotAsync(string label, int? expectedWidth, int? expectedHeight, string? expectedSha256);
     Task<CaptureArtifactsResult> CaptureArtifactsAsync(string label);
     Task<AssertTextInputReadyResult> AssertTextInputReadyAsync(bool requireKeyboard, int timeoutSec);
     Task<AssertBelowResult> AssertBelowAsync(string text, string referenceText, int maxGapPx);
@@ -64,6 +65,7 @@ public sealed class ScenarioExecutor
         "resetLog",
         "assertEvent",
         "takeScreenshot",
+        "assertScreenshot",
         "captureArtifacts",
         "assertTextInputReady",
         "assertBelow",

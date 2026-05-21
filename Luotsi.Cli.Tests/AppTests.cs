@@ -44,4 +44,24 @@ public sealed partial class AppTests
 
     private static ScreenState CreateScreenState(DateTimeOffset capturedAt, string text) =>
         new(capturedAt, 1, [new ScreenElement(text, null, $"id/{text}", "android.widget.TextView", true, true, 0, 0, 100, 100)]);
+
+    private static byte[] CreatePngHeader(int width, int height)
+    {
+        var bytes = new byte[24];
+        bytes[0] = 0x89;
+        bytes[1] = 0x50;
+        bytes[2] = 0x4e;
+        bytes[3] = 0x47;
+        WriteBigEndian(bytes, 16, width);
+        WriteBigEndian(bytes, 20, height);
+        return bytes;
+    }
+
+    private static void WriteBigEndian(byte[] bytes, int offset, int value)
+    {
+        bytes[offset] = (byte)(value >> 24);
+        bytes[offset + 1] = (byte)(value >> 16);
+        bytes[offset + 2] = (byte)(value >> 8);
+        bytes[offset + 3] = (byte)value;
+    }
 }

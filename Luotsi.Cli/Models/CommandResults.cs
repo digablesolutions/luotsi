@@ -210,7 +210,17 @@ public sealed record ResetLogResult(bool Cleared);
 public sealed record AssertEventResult(string Name, IReadOnlyList<string> Contains, string? DetailsPattern, string MatchedLine);
 
 // Take screenshot
-public sealed record TakeScreenshotResult(string Label, string File);
+public sealed record TakeScreenshotResult(string Label, string File, int? Width = null, int? Height = null, string? Sha256 = null);
+
+public sealed record ScreenshotAssertionResult(
+    string Label,
+    string File,
+    int? Width,
+    int? Height,
+    string? Sha256,
+    int? ExpectedWidth,
+    int? ExpectedHeight,
+    string? ExpectedSha256);
 
 // Capture artifacts
 public sealed record CaptureArtifactsResult(string Label, string Screenshot, string Logcat, string ScreenState, string Hierarchy);

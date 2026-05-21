@@ -2212,6 +2212,32 @@ public sealed partial class AppTests
         Assert.Contains(reportWarnings.EnumerateArray(), warning => warning.GetProperty("code").GetString() == "android_sdk");
     }
 
+    [Fact]
+    public async Task RunScenarioAsync_AssertScreenshot_Action_Uses_Visual_Assertions()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var host = new FakeDeviceHost();
+        var scenarioPath = "/tmp/assert-screenshot.json";
+        fileSystem.AddFile(scenarioPath, """
+        {
+          "name": "visual smoke",
+          "steps": [
+            { "name": "home screenshot", "action": "assertScreenshot", "label": "home", "expectedWidth": 320, "expectedHeight": 240, "expectedSha256": "abc123" }
+          ]
+        }
+        """);
+        var scenarios = new ScenarioExecutor(host, fileSystem, timeProvider, new FakeDelay(timeProvider));
+
+        var result = await scenarios.RunAsync(scenarioPath);
+        var json = SerializeToJsonElement(result);
+
+        Assert.Equal("assertScreenshot", json.GetProperty("steps")[0].GetProperty("action").GetString());
+        Assert.Equal("home", json.GetProperty("steps")[0].GetProperty("result").GetProperty("label").GetString());
+        Assert.Equal(320, json.GetProperty("steps")[0].GetProperty("result").GetProperty("width").GetInt32());
+        Assert.Equal(["home"], host.TakeScreenshotRequests);
+    }
+
     private static JsonElement[] ReadJsonlEvents(FakeFileSystem fileSystem, string path) =>
         fileSystem.ReadAllTextAsync(path).GetAwaiter().GetResult()
             .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)

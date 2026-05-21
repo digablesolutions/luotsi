@@ -306,6 +306,9 @@ public sealed class DeviceRunner(
     public async Task<TakeScreenshotResult> TakeScreenshotAsync(string label)
         => await ArtifactOperations.TakeScreenshotAsync(label).ConfigureAwait(false);
 
+    public async Task<ScreenshotAssertionResult> AssertScreenshotAsync(string label, int? expectedWidth, int? expectedHeight, string? expectedSha256)
+        => await ArtifactOperations.AssertScreenshotAsync(label, expectedWidth, expectedHeight, expectedSha256).ConfigureAwait(false);
+
     public async Task<CaptureArtifactsResult> CaptureArtifactsAsync(string label)
         => await ArtifactOperations.CaptureArtifactsAsync(label).ConfigureAwait(false);
 
@@ -379,6 +382,7 @@ public sealed class DeviceRunner(
             _adb,
             _artifacts,
             _timeProvider,
+            _fileSystem,
             _idGenerator,
             _environment,
             ScreenStateReadModel);
