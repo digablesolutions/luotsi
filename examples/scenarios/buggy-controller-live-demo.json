@@ -1,9 +1,25 @@
 {
   "name": "buggy deep tab tour",
   "tags": ["demo", "live-device", "buggy", "telemetry"],
+  "metadata": {
+    "package": "com.digablesolutions.buggycontroller",
+    "activity": ".MainActivity",
+    "notes": "Captured on an Android 6 PDA3505 device; coordinate taps are device-layout-specific.",
+    "device": {
+      "serial": "0123456789ABCDEF",
+      "model": "PDA3505",
+      "androidRelease": "6.0",
+      "sdk": "23"
+    },
+    "layout": {
+      "width": 1280,
+      "height": 720,
+      "orientation": "landscape"
+    }
+  },
   "steps": [
     { "name": "commands before tour", "action": "tapPoint", "label": "Commands tab", "x": 65, "y": 155, "postTapDelayMs": 500 },
-    { "name": "commands screenshot", "action": "takeScreenshot", "label": "deep-01-commands" },
+    { "name": "commands screenshot", "action": "assertScreenshot", "label": "deep-01-commands", "expectedWidth": 1280, "expectedHeight": 720 },
     { "name": "open telemetry tab", "action": "tapPoint", "label": "Telemetry tab", "x": 170, "y": 155, "postTapDelayMs": 800 },
     { "name": "telemetry screenshot", "action": "takeScreenshot", "label": "deep-02-telemetry" },
     { "name": "open map tab", "action": "tapPoint", "label": "Map tab", "x": 300, "y": 155, "postTapDelayMs": 800 },
