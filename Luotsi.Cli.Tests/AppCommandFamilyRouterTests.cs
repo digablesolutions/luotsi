@@ -233,7 +233,8 @@ public sealed class AppCommandFamilyRouterTests
             CommandHost = hostedCommands.CommandHost,
             ViewSessionCommandPreparer = viewCommands.ViewSessionCommandPreparer,
             InspectSessionLauncher = new InspectSessionLauncher(infrastructure.DeviceHostLauncher, infrastructure.Console, infrastructure.TimeProvider),
-            ViewDiagnosticsLauncher = viewCommands.ViewDiagnosticsLauncher
+            ViewDiagnosticsLauncher = viewCommands.ViewDiagnosticsLauncher,
+            DoctorCommandLauncher = viewCommands.DoctorCommandLauncher
         });
     }
 }

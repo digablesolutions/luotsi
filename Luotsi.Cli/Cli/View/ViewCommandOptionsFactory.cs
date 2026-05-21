@@ -5,12 +5,12 @@ namespace Luotsi.Cli.Cli.View;
 
 internal static class ViewCommandOptionsFactory
 {
-    public static ViewOptions Build(CliOptions options, string adbExecutable, bool allowJoinShare, TimeSpan? commandTimeout)
+    public static ViewOptions Build(CliOptions options, string adbExecutable, bool allowJoinShare, TimeSpan? commandTimeout, string commandName = "view")
     {
         var joinShareEndpoint = options.Get("join-share");
         if (!allowJoinShare && !string.IsNullOrWhiteSpace(joinShareEndpoint))
         {
-            throw new UsageException("view-doctor does not support --join-share.");
+            throw new UsageException($"{commandName} does not support --join-share.");
         }
 
         var device = options.Get("device");
@@ -20,7 +20,7 @@ internal static class ViewCommandOptionsFactory
         }
         else if (!string.IsNullOrWhiteSpace(device))
         {
-            throw new UsageException("view requires either --device or --join-share, not both.");
+            throw new UsageException($"{commandName} requires either --device or --join-share, not both.");
         }
 
         var preset = ViewPresetCatalog.Resolve(options.HasFlag("defaults") ? ViewPresetCatalog.Safe : options.Get("preset"));

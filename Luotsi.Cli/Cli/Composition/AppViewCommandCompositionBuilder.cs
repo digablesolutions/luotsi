@@ -1,4 +1,5 @@
 using Luotsi.Cli.Cli.Envelope;
+using Luotsi.Cli.Cli.Doctor;
 using Luotsi.Cli.Cli.Hosting;
 using Luotsi.Cli.Cli.View;
 using Luotsi.Cli.Infrastructure.Contracts;
@@ -37,6 +38,15 @@ internal static class AppViewCommandCompositionBuilder
             dependencies.EnvelopeWriter,
             resolvedViewDoctorFactory,
             resolvedViewSetupFactory));
+        var doctorCommandHost = new DoctorCommandHost(new(
+            dependencies.Environment,
+            dependencies.EnvelopeWriter,
+            resolvedViewDoctorFactory,
+            resolvedViewSetupFactory,
+            new FfmpegSetupProvisioner(
+                dependencies.Environment,
+                dependencies.FileSystem,
+                dependencies.ProcessRunner)));
 
         return new(
             new ViewSessionCommandPreparer(
@@ -44,7 +54,8 @@ internal static class AppViewCommandCompositionBuilder
                 resolvedViewSessionFactory,
                 dependencies.ProfileCoordinator,
                 dependencies.Environment),
-            new ViewDiagnosticsLauncher(dependencies.DeviceHostLauncher, viewDiagnosticCommandHost));
+            new ViewDiagnosticsLauncher(dependencies.DeviceHostLauncher, viewDiagnosticCommandHost),
+            new DoctorCommandLauncher(dependencies.DeviceHostLauncher, doctorCommandHost));
     }
 }
 
@@ -63,4 +74,5 @@ internal sealed record AppViewCommandCompositionBuilderDependencies(
 
 internal sealed record AppViewCommandComposition(
     ViewSessionCommandPreparer ViewSessionCommandPreparer,
-    ViewDiagnosticsLauncher ViewDiagnosticsLauncher);
+    ViewDiagnosticsLauncher ViewDiagnosticsLauncher,
+    DoctorCommandLauncher DoctorCommandLauncher);

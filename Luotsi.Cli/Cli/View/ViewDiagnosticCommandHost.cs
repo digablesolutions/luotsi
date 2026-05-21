@@ -33,7 +33,7 @@ internal sealed class ViewDiagnosticCommandHost(ViewDiagnosticCommandHostDepende
     private Luotsi.Cli.View.Contracts.ViewOptions BuildViewOptions(CliOptions options, string adbExecutable)
     {
         var commandTimeout = AdbCommandTimeoutResolver.Resolve(options, _dependencies.Environment);
-        return ViewCommandOptionsFactory.Build(options, adbExecutable, allowJoinShare: false, commandTimeout);
+        return ViewCommandOptionsFactory.Build(options, adbExecutable, allowJoinShare: false, commandTimeout, options.Command ?? "view-doctor");
     }
 }
 

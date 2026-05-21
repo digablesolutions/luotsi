@@ -28,9 +28,12 @@ luotsi [--device <serial> | --device-query <query>] [--platform android] [--adb 
 | `adb reconnect offline` | Reconnect an offline ADB transport (separate from `reconnect` view command) |
 | `adb reconnect device` | Reconnect a device transport without changing the active view/profile state |
 | `preflight --device <serial> --package <app.id>` | Device preflight check; writes `device-fingerprint.json` |
+| `doctor --device <serial> [--package <app.id>] [options]` | Unified onboarding diagnostics for adb, optional package preflight, and live-view readiness |
 | `screen-state --device <serial>` | Dump current screen state |
 
 `wait-for-device` is also available as `device-wait` or `adb wait-for-device`.
+
+`doctor` is the first-run entry point. It reuses the existing adb/version checks, optional package-specific preflight, and the same live-view readiness report exposed by `view-doctor`. `doctor --fix` stages Luotsi-owned FFmpeg native libraries when the requested decoder is missing them, then routes through the same helper/install readiness path as `view setup`.
 
 ---
 

@@ -142,6 +142,108 @@ public sealed partial class AppTests
         Assert.True(Assert.Single(setup.Calls).Fix);
     }
 
+    [Fact]
+    public async Task RunAsync_Doctor_Reuses_ViewDoctor_And_PackagePreflight()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var doctor = new FakeViewDoctor(options => new ViewDoctorResult(
+            true,
+            options.PresetName,
+            options,
+            [],
+            null,
+            [new ViewDoctorCheck("decoder", true, "FFmpeg native decoder is ready.")]));
+        var factory = new FakeViewDoctorFactory(doctor);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            TimeProvider = timeProvider,
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            ViewDoctorFactory = factory
+        });
+
+        var exitCode = await app.RunAsync([
+            "doctor",
+            "--device", "192.168.0.134:5555",
+            "--package", "dev.luotsi.app",
+            "--preset", "safe"]);
+
+        using var envelope = console.ParseSingleOutputAsJson();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("doctor", envelope.RootElement.GetProperty("command").GetString());
+        Assert.True(envelope.RootElement.GetProperty("data").GetProperty("ready").GetBoolean());
+        Assert.Equal("dev.luotsi.app", envelope.RootElement.GetProperty("data").GetProperty("package").GetString());
+        Assert.Equal("safe", envelope.RootElement.GetProperty("data").GetProperty("view").GetProperty("preset").GetString());
+        Assert.Contains("adb_server_status", envelope.RootElement.GetProperty("data").GetProperty("checks").EnumerateArray().Select(static item => item.GetProperty("name").GetString()));
+        Assert.Equal(["server-status", "version"], host.AdbDiagnostics);
+        Assert.Equal(["dev.luotsi.app"], host.ReadOnlyPreflightRequests);
+        Assert.Same(host, factory.LastDeviceHost);
+    }
+
+    [Fact]
+    public async Task RunAsync_Doctor_Fix_Stages_Ffmpeg_And_Runs_Setup()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var fileSystem = new FakeFileSystem();
+        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>());
+        var pathResolver = new ViewHostPathResolver(environment);
+        fileSystem.AddFile(pathResolver.GetRepositoryRelativeFileCandidates("ffmpeg/download-ffmpeg.ps1").First(), "Write-Host 'ok'");
+
+        var processRunner = new FakeProcessRunner();
+        processRunner.EnqueueResult(new ProcessResult(0, "Done. Staged native libraries.", string.Empty));
+
+        var doctor = new FakeViewDoctor(options => new ViewDoctorResult(
+            false,
+            options.PresetName,
+            options,
+            [],
+            null,
+            [new ViewDoctorCheck("decoder", false, "FFmpeg native decoder is not ready.")]));
+        var setup = new FakeViewSetup((options, fix) => new ViewSetupResult(
+            true,
+            fix,
+            options.PresetName,
+            options,
+            [new ViewSetupStep("helper_install", ViewStartupPhaseStatus.Succeeded, "Installed.")],
+            new ViewDoctorResult(true, options.PresetName, options, [], null, [new ViewDoctorCheck("decoder", true, "FFmpeg native decoder is ready.")])));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            Environment = environment,
+            ProcessRunner = processRunner,
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            ViewDoctorFactory = new FakeViewDoctorFactory(doctor),
+            ViewSetupFactory = new FakeViewSetupFactory(setup)
+        });
+
+        var exitCode = await app.RunAsync([
+            "doctor",
+            "--device", "192.168.0.134:5555",
+            "--fix"]);
+
+        using var envelope = console.ParseSingleOutputAsJson();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("doctor", envelope.RootElement.GetProperty("command").GetString());
+        Assert.True(envelope.RootElement.GetProperty("data").GetProperty("fix").GetBoolean());
+        Assert.True(envelope.RootElement.GetProperty("data").GetProperty("ready").GetBoolean());
+        var repairNames = envelope.RootElement.GetProperty("data").GetProperty("repairs").EnumerateArray().Select(static item => item.GetProperty("name").GetString()).ToArray();
+        Assert.Collection(
+            repairNames,
+            name => Assert.Equal("ffmpeg_stage", name),
+            name => Assert.Equal("ffmpeg_stage", name),
+            name => Assert.Equal("helper_install", name));
+        var call = Assert.Single(processRunner.Calls);
+        Assert.Equal(OperatingSystem.IsWindows() ? "pwsh" : "pwsh", call.FileName);
+        Assert.Contains("-File", call.Args);
+        Assert.True(Assert.Single(setup.Calls).Fix);
+    }
+
 
     [Fact]
     public async Task ViewDoctor_DiagnoseAsync_Reports_Ready_For_Healthy_Ffmpeg_View_Setup()

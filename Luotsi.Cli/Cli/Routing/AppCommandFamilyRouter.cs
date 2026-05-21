@@ -1,4 +1,5 @@
 using Luotsi.Cli.Cli.Composition;
+using Luotsi.Cli.Cli.Doctor;
 using Luotsi.Cli.Cli.Inspect;
 using Luotsi.Cli.Cli.View;
 
@@ -27,6 +28,13 @@ internal sealed class AppCommandFamilyRouter(AppCommandFamilyRouterDependencies 
 
             case AppCommandFamily.Inspect:
                 return await _dependencies.InspectSessionLauncher.RunAsync(options, routeSetup.AdbExecutable, routeSetup.Artifacts).ConfigureAwait(false);
+
+            case AppCommandFamily.Doctor:
+            {
+                var preparedDoctor = _dependencies.DoctorCommandLauncher.Prepare(options, started, routeSetup.AdbExecutable, routeSetup.Artifacts);
+                context.Runner = preparedDoctor.Runner;
+                return await preparedDoctor.ExecuteAsync().ConfigureAwait(false);
+            }
 
             case AppCommandFamily.ViewDiagnostics:
             {
@@ -76,4 +84,6 @@ internal sealed class AppCommandFamilyRouterDependencies
     public required InspectSessionLauncher InspectSessionLauncher { get; init; }
 
     public required ViewDiagnosticsLauncher ViewDiagnosticsLauncher { get; init; }
+
+    public required DoctorCommandLauncher DoctorCommandLauncher { get; init; }
 }

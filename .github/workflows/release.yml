@@ -258,11 +258,17 @@ jobs:
           path: release-assets
           merge-multiple: true
 
+      - name: Stage installer scripts
+        shell: bash
+        run: |
+          cp scripts/install.ps1 release-assets/luotsi-install.ps1
+          cp scripts/install.sh release-assets/luotsi-install.sh
+
       - name: Build checksum manifest
         shell: bash
         run: |
           cd release-assets
-          find . -maxdepth 1 -type f \( -name "*.zip" -o -name "*.tar.gz" \) -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+          find . -maxdepth 1 -type f \( -name "*.zip" -o -name "*.tar.gz" -o -name "*.ps1" -o -name "*.sh" \) -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
           cat SHA256SUMS
 
       - name: Attest release assets
@@ -271,6 +277,8 @@ jobs:
           subject-path: |
             release-assets/*.zip
             release-assets/*.tar.gz
+            release-assets/*.ps1
+            release-assets/*.sh
             release-assets/SHA256SUMS
 
       - name: Create GitHub release
@@ -284,6 +292,7 @@ jobs:
           args=(
             "$TAG"
             release-assets/luotsi-cli-*
+            release-assets/luotsi-install.*
             release-assets/SHA256SUMS
             --title "Luotsi $VERSION"
             --verify-tag
@@ -297,7 +306,7 @@ jobs:
           fi
 
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" release-assets/luotsi-cli-* release-assets/SHA256SUMS --clobber
+            gh release upload "$TAG" release-assets/luotsi-cli-* release-assets/luotsi-install.* release-assets/SHA256SUMS --clobber
           else
             gh release create "${args[@]}"
           fi

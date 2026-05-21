@@ -53,6 +53,16 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public void Parse_Recognizes_Doctor_Command()
+    {
+        var options = CliOptions.Parse(["--device", "abc", "doctor", "--fix"]);
+
+        Assert.Equal("doctor", options.Command);
+        Assert.Equal("abc", options.Get("device"));
+        Assert.True(options.HasFlag("fix"));
+    }
+
+    [Fact]
     public void Parse_Normalizes_ViewSetup_Alias_Command_And_Removes_Alias_Argument()
     {
         var options = CliOptions.Parse(["view", "--device", "abc", "setup", "extra"]);
