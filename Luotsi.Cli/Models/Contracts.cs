@@ -327,6 +327,9 @@ public sealed record ScenarioLayoutMetadata(
 /// <param name="ExpectedWidth">Expected screenshot width for visual assertions.</param>
 /// <param name="ExpectedHeight">Expected screenshot height for visual assertions.</param>
 /// <param name="ExpectedSha256">Expected screenshot SHA-256 for visual assertions.</param>
+/// <param name="ExpectedSha256File">Host-local file containing the expected screenshot SHA-256.</param>
+/// <param name="BaselineFile">Host-local baseline screenshot path used for full-image visual assertions.</param>
+/// <param name="UpdateBaseline">Whether assertScreenshot should write the captured screenshot as the new baseline.</param>
 public sealed record ScenarioStep(
     string? Name,
     string Action,
@@ -364,7 +367,10 @@ public sealed record ScenarioStep(
     bool? ThirdPartyOnly = null,
     int? ExpectedWidth = null,
     int? ExpectedHeight = null,
-    string? ExpectedSha256 = null);
+    string? ExpectedSha256 = null,
+    string? ExpectedSha256File = null,
+    string? BaselineFile = null,
+    bool? UpdateBaseline = null);
 
 /// <summary>
 /// JSON command envelope.

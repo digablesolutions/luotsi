@@ -125,7 +125,7 @@ public sealed class ViewTransportTests
         await bootstrap.StartAsync(new ViewStartRequest("adb", "device-1", 1280, 30, "8M", "h264", ViewCaptureBackends.Screenrecord));
         await bootstrap.StopAsync();
 
-        Assert.Equal(["forward", "--remove", "tcp:38543"], adb.RunCommands[2]);
+        Assert.Equal(["forward", "--remove", "tcp:38543"], adb.RunCommands[3]);
         Assert.Contains("pkill -f luotsi_view_session123", adb.ShellCommands[1], StringComparison.Ordinal);
         Assert.Contains("rm -f /data/local/tmp/luotsi-view-server.apk", adb.ShellCommands[2], StringComparison.Ordinal);
     }
@@ -146,7 +146,7 @@ public sealed class ViewTransportTests
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => bootstrap.StartAsync(new ViewStartRequest("adb", "device-1", 1280, 30, "8M", "h264", ViewCaptureBackends.Screenrecord)));
 
         Assert.Contains("view helper start failed", error.Message, StringComparison.Ordinal);
-        Assert.Equal(["forward", "--remove", "tcp:38543"], adb.RunCommands[2]);
+        Assert.Equal(["forward", "--remove", "tcp:38543"], adb.RunCommands[3]);
         Assert.Contains("pkill -f luotsi_view_session123", adb.ShellCommands[1], StringComparison.Ordinal);
         Assert.Contains("rm -f /data/local/tmp/luotsi-view-server.apk", adb.ShellCommands[2], StringComparison.Ordinal);
     }
@@ -207,11 +207,12 @@ public sealed class ViewTransportTests
         Assert.Equal(["shell", "cmd", "package", "resolve-activity", "--brief", "dev.luotsi.view/.ConsentActivity"], adb.RunCommands[1]);
         Assert.Equal(["shell", "pm", "dump", "dev.luotsi.view"], adb.RunCommands[2]);
         Assert.Equal(["forward", "tcp:0", "localabstract:luotsi_view_session123"], adb.RunCommands[3]);
-        Assert.Equal("shell", adb.RunCommands[4][0]);
-        Assert.Equal("am", adb.RunCommands[4][1]);
-        Assert.Equal("start", adb.RunCommands[4][2]);
-        Assert.Contains("dev.luotsi.view/.ConsentActivity", adb.RunCommands[4], StringComparer.Ordinal);
-        Assert.Contains("luotsi_view_session123", adb.RunCommands[4], StringComparer.Ordinal);
+        Assert.Equal(["forward", "--list"], adb.RunCommands[4]);
+        Assert.Equal("shell", adb.RunCommands[5][0]);
+        Assert.Equal("am", adb.RunCommands[5][1]);
+        Assert.Equal("start", adb.RunCommands[5][2]);
+        Assert.Contains("dev.luotsi.view/.ConsentActivity", adb.RunCommands[5], StringComparer.Ordinal);
+        Assert.Contains("luotsi_view_session123", adb.RunCommands[5], StringComparer.Ordinal);
         Assert.Contains("uiautomator dump /data/local/tmp/luotsi-view-window.xml", adb.ShellCommands[0], StringComparison.Ordinal);
         Assert.Contains("cat /data/local/tmp/luotsi-view-window.xml", adb.ShellCommands[0], StringComparison.Ordinal);
         Assert.Equal("input tap 1276 665", adb.ShellCommands[1]);

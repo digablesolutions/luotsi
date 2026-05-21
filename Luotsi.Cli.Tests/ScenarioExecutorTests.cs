@@ -95,6 +95,118 @@ public sealed partial class AppTests
         Assert.Equal("smoke", data.GetProperty("scenarios")[0].GetProperty("tags")[1].GetString());
     }
 
+    [Fact]
+    public async Task ScenarioInit_Writes_Starter_Scenario_And_Returns_Next_Commands()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            AdbClientFactory = new FakeAdbClientFactory(new FakeAdbClient()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["scenario-init", "--file", "/tmp/scenarios/login-smoke.json", "--name", "login smoke", "--package", "dev.luotsi.demo", "--activity", ".MainActivity", "--width", "720", "--height", "1280", "--orientation", "portrait"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.True(fileSystem.FileExists("/tmp/scenarios/login-smoke.json"));
+        var scenarioJson = await fileSystem.ReadAllTextAsync("/tmp/scenarios/login-smoke.json");
+        using var scenario = JsonDocument.Parse(scenarioJson);
+        Assert.Equal("login smoke", scenario.RootElement.GetProperty("name").GetString());
+        Assert.Equal("startApp", scenario.RootElement.GetProperty("setup")[0].GetProperty("action").GetString());
+        Assert.Equal("takeScreenshot", scenario.RootElement.GetProperty("steps")[1].GetProperty("action").GetString());
+        Assert.Equal(720, scenario.RootElement.GetProperty("metadata").GetProperty("layout").GetProperty("width").GetInt32());
+        Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Contains("scenario-validate", envelope.RootElement.GetProperty("data").GetProperty("next_commands")[0].GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ScenarioExplain_Returns_Authoring_Summary()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenarios/login.json", """
+        {
+          "name": "login smoke",
+          "tags": ["smoke", "auth"],
+          "metadata": {
+            "package": "dev.luotsi.demo",
+            "layout": { "width": 720, "height": 1280, "orientation": "portrait" }
+          },
+          "setup": [
+            { "action": "startApp", "package": "dev.luotsi.demo", "activity": ".MainActivity", "wait": true }
+          ],
+          "steps": [
+            { "action": "waitVisible", "text": "Sign in" },
+            { "action": "tapText", "text": "Sign in" }
+          ],
+          "teardown": [
+            { "action": "captureArtifacts", "label": "final" }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            AdbClientFactory = new FakeAdbClientFactory(new FakeAdbClient()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["scenario-explain", "--file", "/tmp/scenarios/login.json"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("login smoke", data.GetProperty("name").GetString());
+        Assert.Equal(1, data.GetProperty("setup_step_count").GetInt32());
+        Assert.Equal(2, data.GetProperty("step_count").GetInt32());
+        Assert.Equal(1, data.GetProperty("teardown_step_count").GetInt32());
+        Assert.Contains(data.GetProperty("actions").EnumerateArray(), action => action.GetString() == "tapText");
+        Assert.Contains("run --file", data.GetProperty("suggested_commands")[2].GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ScenarioValidate_Validates_File_Without_Device()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "basic",
+          "steps": [
+            { "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            AdbClientFactory = new FakeAdbClientFactory(new FakeAdbClient()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["scenario-validate", "--file", "/tmp/scenario.json"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("validated", envelope.RootElement.GetProperty("data").GetProperty("status").GetString());
+    }
+
 
     [Fact]
     public async Task RunAsync_Path_DryRun_Returns_Deterministic_Shard_Plan()

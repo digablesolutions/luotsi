@@ -139,9 +139,14 @@ internal static class ScenarioValidator
                 break;
 
             case "assertScreenshot":
-                if (step.ExpectedWidth is null && step.ExpectedHeight is null && string.IsNullOrWhiteSpace(step.ExpectedSha256))
+                if (step.ExpectedWidth is null &&
+                    step.ExpectedHeight is null &&
+                    string.IsNullOrWhiteSpace(step.ExpectedSha256) &&
+                    string.IsNullOrWhiteSpace(step.ExpectedSha256File) &&
+                    string.IsNullOrWhiteSpace(step.BaselineFile) &&
+                    step.UpdateBaseline is not true)
                 {
-                    throw new UsageException($"{stepLabel} assertScreenshot requires expectedWidth, expectedHeight, or expectedSha256.");
+                    throw new UsageException($"{stepLabel} assertScreenshot requires expectedWidth, expectedHeight, expectedSha256, expectedSha256File, baselineFile, or updateBaseline.");
                 }
 
                 break;

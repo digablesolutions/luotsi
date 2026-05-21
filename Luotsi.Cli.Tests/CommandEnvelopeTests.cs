@@ -53,6 +53,54 @@ public sealed partial class AppTests
         Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
     }
 
+    [Fact]
+    public async Task LabStatus_Returns_Device_Decisions()
+    {
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("usb-1", "device", "product:p model:Pixel_9 device:komodo usb:1-1"));
+        host.ConnectedDevices.Add(new DeviceInfo("wifi-1:5555", "offline", "product:p model:Old_Box device:box"));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var exitCode = await app.RunAsync(["lab", "status", "--device-query", "model=Pixel_9"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(2, data.GetProperty("total").GetInt32());
+        Assert.Equal(1, data.GetProperty("available").GetInt32());
+        Assert.True(data.GetProperty("decisions")[0].GetProperty("selected").GetBoolean());
+        Assert.False(data.GetProperty("decisions")[1].GetProperty("selected").GetBoolean());
+    }
+
+    [Fact]
+    public async Task LabDoctor_Flags_Ambiguous_And_Offline_Devices()
+    {
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("usb-1", "device", "product:p model:Pixel_9 device:komodo usb:1-1"));
+        host.ConnectedDevices.Add(new DeviceInfo("usb-2", "device", "product:p model:Pixel_8 device:shiba usb:1-2"));
+        host.ConnectedDevices.Add(new DeviceInfo("wifi-1:5555", "offline", "product:p model:Old_Box device:box"));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var exitCode = await app.RunAsync(["lab", "doctor"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("attention_required", data.GetProperty("status").GetString());
+        Assert.Contains("Multiple available devices", data.GetProperty("findings")[1].GetString(), StringComparison.Ordinal);
+        Assert.Contains("adb reconnect offline", data.GetProperty("recommended_actions")[0].GetString(), StringComparison.Ordinal);
+    }
+
 
     [Fact]
     public async Task RunAsync_Missing_Scenario_File_Returns_Usage_Error_Envelope()

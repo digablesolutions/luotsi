@@ -469,7 +469,7 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public List<string> TakeScreenshotRequests { get; } = [];
 
-    public List<(string Label, int? ExpectedWidth, int? ExpectedHeight, string? ExpectedSha256)> AssertScreenshotRequests { get; } = [];
+    public List<(string Label, int? ExpectedWidth, int? ExpectedHeight, string? ExpectedSha256, string? ExpectedSha256File, string? BaselineFile, bool UpdateBaseline)> AssertScreenshotRequests { get; } = [];
 
     public List<string> RecordRequests { get; } = [];
 
@@ -681,9 +681,9 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
         return Task.FromResult(new TakeScreenshotResult(label, $"{label}.png"));
     }
 
-    public Task<ScreenshotAssertionResult> AssertScreenshotAsync(string label, int? expectedWidth, int? expectedHeight, string? expectedSha256)
+    public Task<ScreenshotAssertionResult> AssertScreenshotAsync(string label, int? expectedWidth, int? expectedHeight, string? expectedSha256, string? expectedSha256File = null, string? baselineFile = null, bool updateBaseline = false)
     {
-        AssertScreenshotRequests.Add((label, expectedWidth, expectedHeight, expectedSha256));
+        AssertScreenshotRequests.Add((label, expectedWidth, expectedHeight, expectedSha256, expectedSha256File, baselineFile, updateBaseline));
         if (AssertScreenshotException is not null)
         {
             throw AssertScreenshotException;
@@ -697,7 +697,9 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
             AssertScreenshotObservedSha256,
             expectedWidth,
             expectedHeight,
-            expectedSha256));
+            expectedSha256,
+            baselineFile,
+            updateBaseline));
     }
 
     public Task<CaptureArtifactsResult> CaptureArtifactsAsync(string label) => Task.FromResult(new CaptureArtifactsResult(label, $"{label}.png", $"{label}.txt", $"{label}.json", $"{label}.xml"));

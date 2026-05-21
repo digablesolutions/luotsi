@@ -433,6 +433,32 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task AssertScreenshotAsync_Uses_Baseline_File_And_Can_Update_Baseline()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.AttachFileSystem(fileSystem);
+        var idGenerator = new FakeUniqueIdGenerator("fixed-shot-id");
+        var png = CreatePngHeader(320, 240);
+        adb.AddRemoteFile("/sdcard/device-e2e-fixed-shot-id.png", png);
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        var baselinePath = "/tmp/baselines/home.png";
+        await using (var baseline = fileSystem.OpenWrite(baselinePath))
+        {
+            await baseline.WriteAsync(png);
+        }
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem, idGenerator);
+
+        var result = await runner.AssertScreenshotAsync("home", 320, 240, null, baselineFile: baselinePath, updateBaseline: true);
+
+        Assert.Equal(baselinePath, result.BaselineFile);
+        Assert.True(result.BaselineUpdated);
+        Assert.Equal(png, fileSystem.ReadBytes(baselinePath));
+    }
+
+    [Fact]
     public async Task AssertScreenshotAsync_Throws_When_Width_Does_Not_Match()
     {
         var fileSystem = new FakeFileSystem();

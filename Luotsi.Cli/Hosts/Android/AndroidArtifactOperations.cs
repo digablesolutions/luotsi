@@ -49,10 +49,11 @@ internal sealed class AndroidArtifactOperations(
         return new TakeScreenshotResult(label, fileName, artifact.Width, artifact.Height, artifact.Sha256);
     }
 
-    public async Task<ScreenshotAssertionResult> AssertScreenshotAsync(string label, int? expectedWidth, int? expectedHeight, string? expectedSha256)
+    public async Task<ScreenshotAssertionResult> AssertScreenshotAsync(string label, int? expectedWidth, int? expectedHeight, string? expectedSha256, string? expectedSha256File = null, string? baselineFile = null, bool updateBaseline = false)
     {
         var fileName = DeviceArtifactNames.ScreenshotForLabel(Slugify(label));
         var artifact = await CaptureScreenshotAsync(fileName).ConfigureAwait(false);
+        expectedSha256 = await ResolveExpectedSha256Async(expectedSha256, expectedSha256File, baselineFile).ConfigureAwait(false);
         if (expectedWidth is not null && artifact.Width != expectedWidth)
         {
             throw new InvalidOperationException($"Screenshot '{fileName}' width was {artifact.Width?.ToString(CultureInfo.InvariantCulture) ?? "unknown"}; expected {expectedWidth}.");
@@ -69,7 +70,12 @@ internal sealed class AndroidArtifactOperations(
             throw new InvalidOperationException($"Screenshot '{fileName}' SHA-256 was {artifact.Sha256 ?? "unknown"}; expected {expectedSha256}.");
         }
 
-        return new ScreenshotAssertionResult(label, fileName, artifact.Width, artifact.Height, artifact.Sha256, expectedWidth, expectedHeight, expectedSha256);
+        if (!string.IsNullOrWhiteSpace(baselineFile) && updateBaseline)
+        {
+            _fileSystem.CopyFile(ResolveArtifactDestination(fileName), baselineFile, overwrite: true);
+        }
+
+        return new ScreenshotAssertionResult(label, fileName, artifact.Width, artifact.Height, artifact.Sha256, expectedWidth, expectedHeight, expectedSha256, baselineFile, updateBaseline);
     }
 
     public async Task<CaptureArtifactsResult> CaptureArtifactsAsync(string label)
@@ -110,6 +116,36 @@ internal sealed class AndroidArtifactOperations(
         var (width, height) = ReadPngDimensions(bytes);
         var sha256 = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
         return new ScreenshotArtifactInfo(fileName, width, height, sha256);
+    }
+
+    private async Task<string?> ResolveExpectedSha256Async(string? expectedSha256, string? expectedSha256File, string? baselineFile)
+    {
+        if (!string.IsNullOrWhiteSpace(expectedSha256))
+        {
+            return expectedSha256.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(expectedSha256File))
+        {
+            if (!_fileSystem.FileExists(expectedSha256File))
+            {
+                throw new FileNotFoundException($"Screenshot SHA-256 baseline file '{expectedSha256File}' was not found.", expectedSha256File);
+            }
+
+            return (await _fileSystem.ReadAllTextAsync(expectedSha256File).ConfigureAwait(false))
+                .Split(['\r', '\n', ' ', '\t'], StringSplitOptions.RemoveEmptyEntries)
+                .FirstOrDefault();
+        }
+
+        if (!string.IsNullOrWhiteSpace(baselineFile) && _fileSystem.FileExists(baselineFile))
+        {
+            using var stream = _fileSystem.OpenRead(baselineFile);
+            using var memory = new MemoryStream();
+            stream.CopyTo(memory);
+            return Convert.ToHexString(SHA256.HashData(memory.ToArray())).ToLowerInvariant();
+        }
+
+        return null;
     }
 
     private static (int? Width, int? Height) ReadPngDimensions(byte[] bytes)

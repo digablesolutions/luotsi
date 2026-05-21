@@ -437,6 +437,17 @@ public sealed class ViewSession : IViewSession
         }
         catch (Exception ex)
         {
+            var diagnostic = ViewRuntimeDiagnostic.From(ex, options);
+            WriteJsonLine(new
+            {
+                type = SessionEventTypes.View.Diagnostic,
+                session_id = sessionId,
+                occurred_at = _timeProvider.GetUtcNow(),
+                category = diagnostic.Category,
+                message = diagnostic.Message,
+                next_command = diagnostic.NextCommand
+            });
+
             WriteJsonLine(new
             {
                 type = SessionEventTypes.View.Error,
@@ -708,4 +719,58 @@ public sealed class ViewSession : IViewSession
         exception is InvalidOperationException invalidOperationException &&
         invalidOperationException.Message.Contains("Unexpected end of stream", StringComparison.Ordinal);
 }
+
+internal sealed record ViewRuntimeDiagnostic(string Category, string Message, string NextCommand)
+{
+    public static ViewRuntimeDiagnostic From(Exception exception, ViewOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        ArgumentNullException.ThrowIfNull(options);
+
+        var message = exception.Message;
+        var commandPrefix = $"luotsi view-doctor --device {options.DeviceSelector}";
+
+        if (exception is UsageException && message.Contains("decoder", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ViewRuntimeDiagnostic(
+                "decoder",
+                "The requested host decoder is not available for live view.",
+                $"{commandPrefix} --decoder ffmpeg --fix");
+        }
+
+        if (message.Contains("Android view helper package was not found", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("view helper", StringComparison.OrdinalIgnoreCase) && message.Contains("manifest", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ViewRuntimeDiagnostic(
+                "helper",
+                "The Android view helper is missing or does not match the expected helper components.",
+                $"luotsi view setup --device {options.DeviceSelector} --capture-backend {options.CaptureBackend} --fix");
+        }
+
+        if (exception is MediaProjectionConsentException ||
+            message.Contains("MediaProjection consent", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ViewRuntimeDiagnostic(
+                "mediaprojection_consent",
+                "MediaProjection could not start because Android screen-capture consent was not approved.",
+                $"luotsi view --device {options.DeviceSelector} --capture-backend auto");
+        }
+
+        if (message.Contains("forward", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("localhost", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("Unexpected end of stream", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ViewRuntimeDiagnostic(
+                "transport",
+                "The adb-forward view transport did not become readable.",
+                $"luotsi view-doctor --device {options.DeviceSelector} --capture-backend {options.CaptureBackend} --fix");
+        }
+
+        return new ViewRuntimeDiagnostic(
+            ErrorInfo.Classify(message),
+            "Live view failed before it reached a stable stream.",
+            $"{commandPrefix} --capture-backend {options.CaptureBackend}");
+    }
+}
+
 

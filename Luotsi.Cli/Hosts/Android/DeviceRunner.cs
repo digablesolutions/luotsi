@@ -306,8 +306,8 @@ public sealed class DeviceRunner(
     public async Task<TakeScreenshotResult> TakeScreenshotAsync(string label)
         => await ArtifactOperations.TakeScreenshotAsync(label).ConfigureAwait(false);
 
-    public async Task<ScreenshotAssertionResult> AssertScreenshotAsync(string label, int? expectedWidth, int? expectedHeight, string? expectedSha256)
-        => await ArtifactOperations.AssertScreenshotAsync(label, expectedWidth, expectedHeight, expectedSha256).ConfigureAwait(false);
+    public async Task<ScreenshotAssertionResult> AssertScreenshotAsync(string label, int? expectedWidth, int? expectedHeight, string? expectedSha256, string? expectedSha256File = null, string? baselineFile = null, bool updateBaseline = false)
+        => await ArtifactOperations.AssertScreenshotAsync(label, expectedWidth, expectedHeight, expectedSha256, expectedSha256File, baselineFile, updateBaseline).ConfigureAwait(false);
 
     public async Task<CaptureArtifactsResult> CaptureArtifactsAsync(string label)
         => await ArtifactOperations.CaptureArtifactsAsync(label).ConfigureAwait(false);

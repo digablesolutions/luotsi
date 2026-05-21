@@ -22,6 +22,9 @@ internal sealed class AppCommandDispatcher(
         return options.Command switch
         {
             "scenario-list" => false,
+            "scenario-init" => false,
+            "scenario-validate" => false,
+            "scenario-explain" => false,
             "run" => _scenarioCommandDispatcher.RequiresRunner(options),
             _ => true
         };
@@ -56,10 +59,14 @@ internal sealed class AppCommandDispatcher(
             "wait-for-activity" => await RequireRunner(runner, command).WaitForActivityAsync(options.Require("activity"), options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
             "wait-for-not-activity" => await RequireRunner(runner, command).WaitForNotActivityAsync(options.Require("activity"), options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
             "is-app-installed" => await RequireRunner(runner, command).IsAppInstalledAsync(options.Require("package")).ConfigureAwait(false),
+            "lab" => await ExecuteLabAsync(options, RequireRunner(runner, command)).ConfigureAwait(false),
             "list-installed-packages" => await RequireRunner(runner, command).ListInstalledPackagesAsync(options.HasFlag("third-party")).ConfigureAwait(false),
             "grant-permission" => await RequireRunner(runner, command).GrantPermissionAsync(options.Require("package"), options.Require("permission")).ConfigureAwait(false),
             "revoke-permission" => await RequireRunner(runner, command).RevokePermissionAsync(options.Require("package"), options.Require("permission")).ConfigureAwait(false),
             "scenario-list" => await _scenarioCommandDispatcher.ListAsync(options).ConfigureAwait(false),
+            "scenario-init" => await _scenarioCommandDispatcher.InitAsync(options).ConfigureAwait(false),
+            "scenario-validate" => await _scenarioCommandDispatcher.ValidateAsync(options).ConfigureAwait(false),
+            "scenario-explain" => await _scenarioCommandDispatcher.ExplainAsync(options).ConfigureAwait(false),
             "screen-state" => await RequireRunner(runner, command).GetScreenStateAsync().ConfigureAwait(false),
             "telemetry-tail" => await RequireRunner(runner, command).TelemetryTailAsync(options.Int("tail", CliDefaults.DefaultLogTail)).ConfigureAwait(false),
             "telemetry-watch" => await RequireRunner(runner, command).TelemetryWatchAsync(options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
@@ -92,6 +99,17 @@ internal sealed class AppCommandDispatcher(
         }
 
         return result;
+    }
+
+    private static async Task<object> ExecuteLabAsync(CliOptions options, IDeviceHost runner)
+    {
+        var action = options.Arguments.FirstOrDefault() ?? "status";
+        return action.ToLowerInvariant() switch
+        {
+            "status" => await LabCommandResolver.ReadStatusAsync(runner, options.Get("device-query")).ConfigureAwait(false),
+            "doctor" => await LabCommandResolver.DiagnoseAsync(runner, options.Get("device-query")).ConfigureAwait(false),
+            _ => throw new UsageException("lab requires subcommand status or doctor.")
+        };
     }
 
     private static IWirelessDebugHost GetWirelessHost(IDeviceHost? runner, string command) =>

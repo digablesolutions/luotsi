@@ -88,7 +88,7 @@ internal sealed class UnsupportedDeviceHost : IDeviceHost
 
     public Task<TakeScreenshotResult> TakeScreenshotAsync(string label) => Unsupported<TakeScreenshotResult>();
 
-    public Task<ScreenshotAssertionResult> AssertScreenshotAsync(string label, int? expectedWidth, int? expectedHeight, string? expectedSha256) => Unsupported<ScreenshotAssertionResult>();
+    public Task<ScreenshotAssertionResult> AssertScreenshotAsync(string label, int? expectedWidth, int? expectedHeight, string? expectedSha256, string? expectedSha256File = null, string? baselineFile = null, bool updateBaseline = false) => Unsupported<ScreenshotAssertionResult>();
 
     public Task<CaptureArtifactsResult> CaptureArtifactsAsync(string label) => Unsupported<CaptureArtifactsResult>();
 

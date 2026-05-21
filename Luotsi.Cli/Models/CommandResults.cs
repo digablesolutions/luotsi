@@ -12,6 +12,21 @@ public sealed record DeviceInventoryResult(IReadOnlyList<DeviceState> Devices);
 
 public sealed record DeviceStatusResult(DeviceState Device, PreflightResult Readiness);
 
+public sealed record LabDeviceDecision(string? Serial, string Status, string Reason, bool Selected);
+
+public sealed record LabStatusResult(
+    int Total,
+    int Available,
+    int Unavailable,
+    IReadOnlyList<DeviceState> Devices,
+    IReadOnlyList<LabDeviceDecision> Decisions);
+
+public sealed record LabDoctorResult(
+    string Status,
+    LabStatusResult Inventory,
+    IReadOnlyList<string> Findings,
+    IReadOnlyList<string> RecommendedActions);
+
 public sealed record DeviceState(
     string? Serial,
     string State,
@@ -241,7 +256,9 @@ public sealed record ScreenshotAssertionResult(
     string? Sha256,
     int? ExpectedWidth,
     int? ExpectedHeight,
-    string? ExpectedSha256);
+    string? ExpectedSha256,
+    string? BaselineFile = null,
+    bool BaselineUpdated = false);
 
 // Capture artifacts
 public sealed record CaptureArtifactsResult(string Label, string Screenshot, string Logcat, string ScreenState, string Hierarchy);

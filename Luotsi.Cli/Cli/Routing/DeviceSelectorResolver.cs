@@ -19,6 +19,11 @@ internal static class DeviceSelectorResolver
             return null;
         }
 
+        if (string.Equals(command, "lab", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
         if (string.Equals(command, "devices", StringComparison.OrdinalIgnoreCase))
         {
             throw new UsageException("--device-query selects one target device and is not supported with `devices`. Use `device-status --device-query <query>` for a single-device status.");
