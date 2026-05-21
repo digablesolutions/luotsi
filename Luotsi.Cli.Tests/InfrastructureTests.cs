@@ -32,5 +32,54 @@ public sealed partial class AppTests
         await Assert.ThrowsAsync<UsageException>(() => session.WriteJsonAsync("/tmp/escape.json", new { ok = true }));
     }
 
+    [Fact]
+    public async Task ArtifactSession_Writes_Markdown_Index_For_Text_And_Json_Artifacts()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-18T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var session = ArtifactSession.Create(CliOptions.Parse(["screen-state"]), fileSystem, timeProvider);
+
+        await session.WriteTextAsync("logcat.txt", "log");
+        await session.WriteJsonAsync("screen-state.json", new { element_count = 1 });
+        await session.WriteTextAsync("hierarchy.xml", "<hierarchy />");
+
+        var index = await fileSystem.ReadAllTextAsync(Path.Combine(session.Root, "index.md"));
+
+        Assert.Contains("# Luotsi Artifacts", index, StringComparison.Ordinal);
+        Assert.Contains("## Logs", index, StringComparison.Ordinal);
+        Assert.Contains("- [logcat.txt](logcat.txt)", index, StringComparison.Ordinal);
+        Assert.Contains("## Screen State", index, StringComparison.Ordinal);
+        Assert.Contains("- [screen-state.json](screen-state.json)", index, StringComparison.Ordinal);
+        Assert.Contains("## Hierarchy", index, StringComparison.Ordinal);
+        Assert.Contains("- [hierarchy.xml](hierarchy.xml)", index, StringComparison.Ordinal);
+        Assert.DoesNotContain("[index.md]", index, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ArtifactSession_RefreshIndex_Includes_Pulled_Media_Files()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-18T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var session = ArtifactSession.Create(CliOptions.Parse(["record"]), fileSystem, timeProvider);
+        await using (var screenshot = fileSystem.OpenWrite(Path.Combine(session.Root, "demo shot.png")))
+        {
+            await screenshot.WriteAsync(new byte[] { 1, 2, 3 });
+        }
+
+        await using (var recording = fileSystem.OpenWrite(Path.Combine(session.Root, "demo.mp4")))
+        {
+            await recording.WriteAsync(new byte[] { 4, 5, 6 });
+        }
+
+        await session.RefreshIndexAsync();
+
+        var index = await fileSystem.ReadAllTextAsync(Path.Combine(session.Root, "index.md"));
+
+        Assert.Contains("## Screenshots", index, StringComparison.Ordinal);
+        Assert.Contains("- [demo shot.png](demo%20shot.png)", index, StringComparison.Ordinal);
+        Assert.Contains("## Recordings", index, StringComparison.Ordinal);
+        Assert.Contains("- [demo.mp4](demo.mp4)", index, StringComparison.Ordinal);
+    }
+
 
 }

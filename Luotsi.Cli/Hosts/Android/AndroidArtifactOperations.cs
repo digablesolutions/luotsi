@@ -32,6 +32,7 @@ internal sealed class AndroidArtifactOperations(
         var pull = await _adb.RunAsync(["pull", NormalizeDevicePathForPull(remote), targetOutput]).ConfigureAwait(false);
         await _adb.ShellAsync($"rm -f {remote}").ConfigureAwait(false);
         pull.EnsureSuccess("pull recording failed");
+        await _artifacts.RefreshIndexAsync().ConfigureAwait(false);
         return new RecordResult(targetOutput, clamped);
     }
 
@@ -65,6 +66,7 @@ internal sealed class AndroidArtifactOperations(
         var pull = await _adb.RunAsync(["pull", NormalizeDevicePathForPull(remote), destination]).ConfigureAwait(false);
         await _adb.ShellAsync($"rm -f {remote}").ConfigureAwait(false);
         pull.EnsureSuccess("pull screenshot failed");
+        await _artifacts.RefreshIndexAsync().ConfigureAwait(false);
     }
 
     private string ResolveArtifactDestination(string fileName)
