@@ -10,7 +10,7 @@ public sealed partial class AppTests
     [Fact]
     public void Tutorial_Documentation_Links_Resolve()
     {
-        var docsRoot = Path.Combine(FindRepositoryRoot(), "docs");
+        var docsRoot = Path.GetFullPath(Path.Join(FindRepositoryRoot(), "docs"));
         var markdownFiles = Directory.GetFiles(docsRoot, "*.md", SearchOption.AllDirectories);
         var missingLinks = new List<string>();
 
@@ -33,7 +33,7 @@ public sealed partial class AppTests
     [Fact]
     public void Tutorial_Output_Assets_Parse_As_Their_Documented_Formats()
     {
-        var outputRoot = Path.Combine(FindRepositoryRoot(), "docs", "assets", "tutorials", "buggy-controller-live-demo", "outputs");
+        var outputRoot = Path.GetFullPath(Path.Join(FindRepositoryRoot(), "docs", "assets", "tutorials", "buggy-controller-live-demo", "outputs"));
         Assert.True(Directory.Exists(outputRoot), $"Tutorial output directory '{outputRoot}' was not found.");
 
         foreach (var json in Directory.GetFiles(outputRoot, "*.json", SearchOption.AllDirectories).Select(File.ReadAllText))
@@ -51,9 +51,9 @@ public sealed partial class AppTests
                      }))
         {
             Assert.NotEmpty(asset.Lines);
-            foreach (var document in asset.Lines.Select(static line => JsonDocument.Parse(line)))
+            foreach (var line in asset.Lines)
             {
-                using var _ = document;
+                using var _ = JsonDocument.Parse(line);
             }
         }
 
@@ -107,7 +107,8 @@ public sealed partial class AppTests
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "Luotsi.sln")) && Directory.Exists(Path.Combine(directory.FullName, "docs")))
+            if (File.Exists(Path.Join(directory.FullName, "Luotsi.sln")) &&
+                Directory.Exists(Path.Join(directory.FullName, "docs")))
             {
                 return directory.FullName;
             }
