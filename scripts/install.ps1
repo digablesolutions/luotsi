@@ -45,12 +45,11 @@ function Normalize-ReleaseTag([string]$RequestedVersion) {
         return $null
     }
 
-    return if ($RequestedVersion.StartsWith("v", [StringComparison]::OrdinalIgnoreCase)) {
-        $RequestedVersion
+    if ($RequestedVersion.StartsWith("v", [StringComparison]::OrdinalIgnoreCase)) {
+        return $RequestedVersion
     }
-    else {
-        "v$RequestedVersion"
-    }
+
+    return "v$RequestedVersion"
 }
 
 function Invoke-GitHubJson([string]$Uri) {

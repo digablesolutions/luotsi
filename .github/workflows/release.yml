@@ -143,7 +143,7 @@ jobs:
 
   package:
     name: Package ${{ matrix.rid }}
-    runs-on: windows-latest
+    runs-on: ${{ matrix.runner }}
     needs:
       - validate-tag
       - validate
@@ -154,12 +154,16 @@ jobs:
         include:
           - rid: win-x64
             archive_ext: zip
+            runner: windows-latest
           - rid: linux-x64
             archive_ext: tar.gz
+            runner: ubuntu-latest
           - rid: osx-x64
             archive_ext: tar.gz
+            runner: ubuntu-latest
           - rid: osx-arm64
             archive_ext: tar.gz
+            runner: ubuntu-latest
 
     steps:
       - name: Checkout
@@ -193,10 +197,25 @@ jobs:
           /p:Version=${{ needs.validate-tag.outputs.version }}
           /bl:artifacts/binlogs/release-publish-${{ matrix.rid }}.binlog
 
-      - name: Smoke published binary
+      - name: Normalize non-Windows apphost permissions
+        if: matrix.archive_ext == 'tar.gz'
+        shell: bash
+        run: chmod 755 "artifacts/publish/${{ matrix.rid }}/luotsi"
+
+      - name: Verify non-Windows apphost permissions
+        if: matrix.archive_ext == 'tar.gz'
+        shell: bash
+        run: test -x "artifacts/publish/${{ matrix.rid }}/luotsi"
+
+      - name: Smoke published Windows binary
         if: matrix.rid == 'win-x64'
         shell: pwsh
         run: artifacts/publish/win-x64/luotsi.exe --help
+
+      - name: Smoke published Linux binary
+        if: matrix.rid == 'linux-x64'
+        shell: bash
+        run: artifacts/publish/linux-x64/luotsi --help
 
       - name: Archive package
         shell: pwsh
