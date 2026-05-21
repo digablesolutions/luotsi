@@ -139,6 +139,11 @@ internal static class ScenarioValidator
                 break;
 
             case "assertScreenshot":
+                if (step.UpdateBaseline is true && string.IsNullOrWhiteSpace(step.BaselineFile))
+                {
+                    throw new UsageException($"{stepLabel} assertScreenshot updateBaseline requires baselineFile.");
+                }
+
                 if (step.ExpectedWidth is null &&
                     step.ExpectedHeight is null &&
                     string.IsNullOrWhiteSpace(step.ExpectedSha256) &&

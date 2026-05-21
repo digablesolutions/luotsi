@@ -120,10 +120,35 @@ public sealed partial class AppTests
         using var scenario = JsonDocument.Parse(scenarioJson);
         Assert.Equal("login smoke", scenario.RootElement.GetProperty("name").GetString());
         Assert.Equal("startApp", scenario.RootElement.GetProperty("setup")[0].GetProperty("action").GetString());
+        Assert.Equal("${var:targetPackage}", scenario.RootElement.GetProperty("setup")[0].GetProperty("package").GetString());
+        Assert.Equal("${var:targetActivity}", scenario.RootElement.GetProperty("setup")[0].GetProperty("activity").GetString());
         Assert.Equal("takeScreenshot", scenario.RootElement.GetProperty("steps")[1].GetProperty("action").GetString());
         Assert.Equal(720, scenario.RootElement.GetProperty("metadata").GetProperty("layout").GetProperty("width").GetInt32());
         Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
         Assert.Contains("scenario-validate", envelope.RootElement.GetProperty("data").GetProperty("next_commands")[0].GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ScenarioInit_Creates_Target_Directory()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            AdbClientFactory = new FakeAdbClientFactory(new FakeAdbClient()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["scenario-init", "--file", "/tmp/new-scenarios/smoke.json"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.True(fileSystem.DirectoryExists("/tmp/new-scenarios"));
+        Assert.True(fileSystem.FileExists("/tmp/new-scenarios/smoke.json"));
     }
 
     [Fact]
@@ -2452,6 +2477,29 @@ public sealed partial class AppTests
         Assert.Null(request.ExpectedHeight);
         Assert.Null(request.ExpectedSha256);
         Assert.Empty(host.TakeScreenshotRequests);
+    }
+
+    [Fact]
+    public async Task RunScenarioAsync_AssertScreenshot_Requires_Baseline_When_UpdateBaseline_Is_True()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var host = new FakeDeviceHost();
+        var scenarioPath = "/tmp/assert-screenshot-update-baseline.json";
+        fileSystem.AddFile(scenarioPath, """
+        {
+          "name": "visual smoke",
+          "steps": [
+            { "name": "home screenshot", "action": "assertScreenshot", "label": "home", "updateBaseline": true }
+          ]
+        }
+        """);
+        var scenarios = new ScenarioExecutor(host, fileSystem, timeProvider, new FakeDelay(timeProvider));
+
+        var error = await Assert.ThrowsAsync<UsageException>(() => scenarios.RunAsync(scenarioPath));
+
+        Assert.Contains("updateBaseline requires baselineFile", error.Message, StringComparison.Ordinal);
+        Assert.Empty(host.AssertScreenshotRequests);
     }
 
     [Fact]

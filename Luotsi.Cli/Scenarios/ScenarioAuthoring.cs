@@ -61,7 +61,7 @@ internal sealed class ScenarioAuthoringService(IFileSystem fileSystem, ScenarioC
             Tags: ["smoke", "generated"],
             Setup:
             [
-                new ScenarioStep("start app", "startApp", null, null, null, Package: "{{targetPackage}}", Activity: "{{targetActivity}}", Wait: true)
+                new ScenarioStep("start app", "startApp", null, null, null, Package: "${var:targetPackage}", Activity: "${var:targetActivity}", Wait: true)
             ],
             Teardown:
             [
@@ -78,6 +78,12 @@ internal sealed class ScenarioAuthoringService(IFileSystem fileSystem, ScenarioC
                     options.Get("orientation"))));
 
         var text = JsonSerializer.Serialize(scenario, AppJson.Options) + Environment.NewLine;
+        var directory = Path.GetDirectoryName(file);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            _fileSystem.CreateDirectory(directory);
+        }
+
         await _fileSystem.WriteAllTextAsync(file, text, new UTF8Encoding(false)).ConfigureAwait(false);
 
         return new ScenarioInitResult(

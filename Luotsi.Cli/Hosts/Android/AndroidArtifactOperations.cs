@@ -70,12 +70,14 @@ internal sealed class AndroidArtifactOperations(
             throw new InvalidOperationException($"Screenshot '{fileName}' SHA-256 was {artifact.Sha256 ?? "unknown"}; expected {expectedSha256}.");
         }
 
+        var baselineUpdated = false;
         if (!string.IsNullOrWhiteSpace(baselineFile) && updateBaseline)
         {
             _fileSystem.CopyFile(ResolveArtifactDestination(fileName), baselineFile, overwrite: true);
+            baselineUpdated = true;
         }
 
-        return new ScreenshotAssertionResult(label, fileName, artifact.Width, artifact.Height, artifact.Sha256, expectedWidth, expectedHeight, expectedSha256, baselineFile, updateBaseline);
+        return new ScreenshotAssertionResult(label, fileName, artifact.Width, artifact.Height, artifact.Sha256, expectedWidth, expectedHeight, expectedSha256, baselineFile, baselineUpdated);
     }
 
     public async Task<CaptureArtifactsResult> CaptureArtifactsAsync(string label)
@@ -140,9 +142,8 @@ internal sealed class AndroidArtifactOperations(
         if (!string.IsNullOrWhiteSpace(baselineFile) && _fileSystem.FileExists(baselineFile))
         {
             using var stream = _fileSystem.OpenRead(baselineFile);
-            using var memory = new MemoryStream();
-            stream.CopyTo(memory);
-            return Convert.ToHexString(SHA256.HashData(memory.ToArray())).ToLowerInvariant();
+            var hash = await SHA256.HashDataAsync(stream).ConfigureAwait(false);
+            return Convert.ToHexString(hash).ToLowerInvariant();
         }
 
         return null;
