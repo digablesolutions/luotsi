@@ -469,6 +469,8 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public List<string> TakeScreenshotRequests { get; } = [];
 
+    public List<(string Label, int? ExpectedWidth, int? ExpectedHeight, string? ExpectedSha256)> AssertScreenshotRequests { get; } = [];
+
     public List<string> RecordRequests { get; } = [];
 
     public List<int> LogcatRequests { get; } = [];
@@ -547,6 +549,8 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public Exception? WaitVisibleException { get; set; }
 
+    public Exception? AssertScreenshotException { get; set; }
+
     public Exception? ScreenStateException { get; set; }
 
     public Exception? ForceStopException { get; set; }
@@ -554,6 +558,12 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
     public FailureArtifactBundle? FailureArtifacts { get; set; }
 
     public Exception? FailureArtifactException { get; set; }
+
+    public int? AssertScreenshotObservedWidth { get; set; } = 320;
+
+    public int? AssertScreenshotObservedHeight { get; set; } = 240;
+
+    public string? AssertScreenshotObservedSha256 { get; set; } = "observed-screenshot-sha256";
 
     public List<FailureCaptureRequest> FailureArtifactRequests { get; } = [];
 
@@ -673,8 +683,21 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public Task<ScreenshotAssertionResult> AssertScreenshotAsync(string label, int? expectedWidth, int? expectedHeight, string? expectedSha256)
     {
-        TakeScreenshotRequests.Add(label);
-        return Task.FromResult(new ScreenshotAssertionResult(label, $"{label}.png", expectedWidth, expectedHeight, expectedSha256, expectedWidth, expectedHeight, expectedSha256));
+        AssertScreenshotRequests.Add((label, expectedWidth, expectedHeight, expectedSha256));
+        if (AssertScreenshotException is not null)
+        {
+            throw AssertScreenshotException;
+        }
+
+        return Task.FromResult(new ScreenshotAssertionResult(
+            label,
+            $"{label}.png",
+            AssertScreenshotObservedWidth,
+            AssertScreenshotObservedHeight,
+            AssertScreenshotObservedSha256,
+            expectedWidth,
+            expectedHeight,
+            expectedSha256));
     }
 
     public Task<CaptureArtifactsResult> CaptureArtifactsAsync(string label) => Task.FromResult(new CaptureArtifactsResult(label, $"{label}.png", $"{label}.txt", $"{label}.json", $"{label}.xml"));

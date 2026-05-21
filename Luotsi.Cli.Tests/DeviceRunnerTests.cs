@@ -432,6 +432,25 @@ public sealed partial class AppTests
         Assert.Equal(expectedHash, result.Sha256);
     }
 
+    [Fact]
+    public async Task AssertScreenshotAsync_Throws_When_Width_Does_Not_Match()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.AttachFileSystem(fileSystem);
+        var idGenerator = new FakeUniqueIdGenerator("fixed-shot-id");
+        var png = CreatePngHeader(400, 240);
+        adb.AddRemoteFile("/sdcard/device-e2e-fixed-shot-id.png", png);
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem, idGenerator);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => runner.AssertScreenshotAsync("home", 320, null, null));
+
+        Assert.Contains("width was 400; expected 320", error.Message, StringComparison.Ordinal);
+    }
+
 
     [Fact]
     public async Task WaitForStepAsync_Uses_Incremental_Telemetry_Parsing()

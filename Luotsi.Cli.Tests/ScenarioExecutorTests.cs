@@ -2307,13 +2307,18 @@ public sealed partial class AppTests
     {
         var fileSystem = new FakeFileSystem();
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
-        var host = new FakeDeviceHost();
+        var host = new FakeDeviceHost
+        {
+            AssertScreenshotObservedWidth = 320,
+            AssertScreenshotObservedHeight = 241,
+            AssertScreenshotObservedSha256 = "observed-home-sha"
+        };
         var scenarioPath = "/tmp/assert-screenshot.json";
         fileSystem.AddFile(scenarioPath, """
         {
           "name": "visual smoke",
           "steps": [
-            { "name": "home screenshot", "action": "assertScreenshot", "label": "home", "expectedWidth": 320, "expectedHeight": 240, "expectedSha256": "abc123" }
+            { "name": "home screenshot", "action": "assertScreenshot", "label": "home", "expectedWidth": 320 }
           ]
         }
         """);
@@ -2321,11 +2326,55 @@ public sealed partial class AppTests
 
         var result = await scenarios.RunAsync(scenarioPath);
         var json = SerializeToJsonElement(result);
+        var stepResult = json.GetProperty("steps")[0].GetProperty("result");
 
         Assert.Equal("assertScreenshot", json.GetProperty("steps")[0].GetProperty("action").GetString());
-        Assert.Equal("home", json.GetProperty("steps")[0].GetProperty("result").GetProperty("label").GetString());
-        Assert.Equal(320, json.GetProperty("steps")[0].GetProperty("result").GetProperty("width").GetInt32());
-        Assert.Equal(["home"], host.TakeScreenshotRequests);
+        Assert.Equal("home", stepResult.GetProperty("label").GetString());
+        Assert.Equal(320, stepResult.GetProperty("width").GetInt32());
+        Assert.Equal(241, stepResult.GetProperty("height").GetInt32());
+        Assert.Equal("observed-home-sha", stepResult.GetProperty("sha256").GetString());
+        Assert.Equal(320, stepResult.GetProperty("expected_width").GetInt32());
+        var request = Assert.Single(host.AssertScreenshotRequests);
+        Assert.Equal("home", request.Label);
+        Assert.Equal(320, request.ExpectedWidth);
+        Assert.Null(request.ExpectedHeight);
+        Assert.Null(request.ExpectedSha256);
+        Assert.Empty(host.TakeScreenshotRequests);
+    }
+
+    [Fact]
+    public async Task RunScenarioAsync_AssertScreenshot_Action_Fails_When_Host_Reports_Mismatch()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var host = new FakeDeviceHost
+        {
+            AssertScreenshotException = new InvalidOperationException("Screenshot 'home-screenshot.png' width was 400; expected 320.")
+        };
+        var scenarioPath = "/tmp/assert-screenshot-fails.json";
+        fileSystem.AddFile(scenarioPath, """
+        {
+          "name": "visual smoke",
+          "steps": [
+            { "name": "home screenshot", "action": "assertScreenshot", "label": "home", "expectedWidth": 320 }
+          ]
+        }
+        """);
+        var scenarios = new ScenarioExecutor(host, fileSystem, timeProvider, new FakeDelay(timeProvider));
+
+        var error = await Assert.ThrowsAsync<ScenarioStepFailureException>(() => scenarios.RunAsync(scenarioPath));
+
+        var failure = ScenarioFailureDetails.TryGetData(error);
+        Assert.NotNull(failure);
+        Assert.Equal("failed", failure.Status);
+        Assert.Equal("home screenshot", failure.FailedStep.Name);
+        Assert.Equal("assertScreenshot", failure.FailedStep.Action);
+        Assert.Equal("Screenshot 'home-screenshot.png' width was 400; expected 320.", failure.FailureArtifacts.ErrorMessage);
+        Assert.Equal("failed", failure.Steps[0].Status);
+        Assert.Contains("expected 320", failure.Steps[0].Error?.Message, StringComparison.Ordinal);
+        var request = Assert.Single(host.AssertScreenshotRequests);
+        Assert.Equal("home", request.Label);
+        Assert.Equal(320, request.ExpectedWidth);
     }
 
     private static JsonElement[] ReadJsonlEvents(FakeFileSystem fileSystem, string path) =>

@@ -4,9 +4,13 @@ using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Scenarios;
 
-internal sealed class ScenarioActionDispatcher(IScenarioActionHost actionHost, IDelay delay)
+internal sealed class ScenarioActionDispatcher(
+    IScenarioActionHost actionHost,
+    IScenarioScreenshotAssertionHost screenshotAssertionHost,
+    IDelay delay)
 {
     private readonly IScenarioActionHost _actionHost = actionHost ?? throw new ArgumentNullException(nameof(actionHost));
+    private readonly IScenarioScreenshotAssertionHost _screenshotAssertionHost = screenshotAssertionHost ?? throw new ArgumentNullException(nameof(screenshotAssertionHost));
     private readonly IDelay _delay = delay ?? throw new ArgumentNullException(nameof(delay));
 
     public async Task<object> ExecuteAsync(ScenarioStep step, DateTimeOffset? previousStepStartedAt)
@@ -28,7 +32,7 @@ internal sealed class ScenarioActionDispatcher(IScenarioActionHost actionHost, I
             "resetLog" => await _actionHost.ResetLogAsync().ConfigureAwait(false),
             "assertEvent" => await _actionHost.AssertEventAsync(step.Event ?? step.Text ?? throw new UsageException("assertEvent requires event or text."), step.Contains ?? [], step.DetailsPattern, step.TimeoutSec ?? 15, step.ObserveFromPreviousStep is true ? previousStepStartedAt : null).ConfigureAwait(false),
             "takeScreenshot" => await _actionHost.TakeScreenshotAsync(step.Label ?? step.Text ?? step.Name ?? throw new UsageException("takeScreenshot requires label, text, or name.")).ConfigureAwait(false),
-            "assertScreenshot" => await _actionHost.AssertScreenshotAsync(step.Label ?? step.Text ?? step.Name ?? "screenshot", step.ExpectedWidth, step.ExpectedHeight, step.ExpectedSha256).ConfigureAwait(false),
+            "assertScreenshot" => await _screenshotAssertionHost.AssertScreenshotAsync(step.Label ?? step.Text ?? step.Name ?? "screenshot", step.ExpectedWidth, step.ExpectedHeight, step.ExpectedSha256).ConfigureAwait(false),
             "captureArtifacts" => await _actionHost.CaptureArtifactsAsync(step.Label ?? step.Text ?? step.Name ?? throw new UsageException("captureArtifacts requires label, text, or name.")).ConfigureAwait(false),
             "assertTextInputReady" => await _actionHost.AssertTextInputReadyAsync(step.RequireKeyboard ?? false, step.TimeoutSec ?? 15).ConfigureAwait(false),
             "assertBelow" => await _actionHost.AssertBelowAsync(step.Text ?? throw new UsageException("assertBelow requires text."), step.Below ?? throw new UsageException("assertBelow requires below."), step.MaxGapPx ?? 260).ConfigureAwait(false),
