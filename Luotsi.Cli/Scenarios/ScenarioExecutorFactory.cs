@@ -21,6 +21,16 @@ internal sealed class ScenarioExecutorFactory(
         ScenarioFailureArtifactCapturePolicy failureArtifactCapturePolicy = ScenarioFailureArtifactCapturePolicy.Failure)
     {
         ArgumentNullException.ThrowIfNull(actionHost);
-        return new ScenarioExecutor(actionHost, _fileSystem, _timeProvider, _delay, _templateResolver, eventSink, failureArtifactCapturePolicy, _metricsCollector);
+        return new ScenarioExecutor(
+            actionHost,
+            actionHost as IScenarioScreenshotAssertionHost
+                ?? throw new ArgumentException($"{nameof(actionHost)} must implement {nameof(IScenarioScreenshotAssertionHost)}.", nameof(actionHost)),
+            _fileSystem,
+            _timeProvider,
+            _delay,
+            _templateResolver,
+            eventSink,
+            failureArtifactCapturePolicy,
+            _metricsCollector);
     }
 }

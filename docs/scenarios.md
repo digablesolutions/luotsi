@@ -16,6 +16,21 @@ luotsi run --device <serial> --file examples/scenarios/android-home-smoke.json
   "variables": {
     "appPackage": "com.example.app"
   },
+  "metadata": {
+    "package": "com.example.app",
+    "activity": ".MainActivity",
+    "device": {
+      "model": "Pixel 9",
+      "androidRelease": "16",
+      "sdk": "36"
+    },
+    "layout": {
+      "width": 1080,
+      "height": 2400,
+      "orientation": "portrait"
+    },
+    "notes": "Coordinate steps are calibrated for this layout."
+  },
   "steps": [
     { "name": "go home",           "action": "keyevent",       "code": "KEYCODE_HOME" },
     { "name": "let launcher settle","action": "sleep",          "milliseconds": 750 },
@@ -36,6 +51,28 @@ Scenario string values support lightweight substitution before execution:
 | `${env:NAME\|fallback}` | Optional environment variable with a fallback value |
 | `${var:name}` | Variable from the root `variables` block |
 | `${now:HHmmss}` | Timestamp fragment — useful for live test data |
+
+---
+
+## Metadata
+
+The optional `metadata` block documents the device and app context a scenario was calibrated against. Luotsi includes it in `scenario-list`, run results, JSON reports, and dry-run plans.
+
+When a real run has device readiness data, Luotsi emits non-fatal `metadata_warnings` if the connected device or foreground app differs from the scenario metadata. This is especially useful for coordinate-heavy scenarios where a different screen, app package, or activity can invalidate tap points.
+
+Supported metadata fields:
+
+| Field | Purpose |
+|---|---|
+| `package` | Expected app package. |
+| `activity` | Expected activity or focus fragment. |
+| `device.serial` | Expected device serial. |
+| `device.model` | Expected Android model. |
+| `device.androidRelease` | Expected Android release. |
+| `device.sdk` | Expected SDK level. |
+| `layout.width`, `layout.height` | Expected screenshot/screen dimensions. |
+| `layout.orientation` | Expected orientation. |
+| `notes` | Human notes for maintainers and CI reviewers. |
 
 ---
 
@@ -78,12 +115,15 @@ The top-level scenario result also includes `prologue_ms`, `steps_ms`, and `non_
 | `waitActionReady` | `text` *(required)*, `step` *(optional)*, `timeoutSec` |
 | `resetLog` | — |
 | `assertEvent` | `event`, `timeoutSec`; supports `observeFromPreviousStep: true` |
+| `assertScreenshot` | `label` *(optional)*, `expectedWidth`, `expectedHeight`, `expectedSha256` *(at least one expected value required)* |
 | `assertTextInputReady` | `timeoutSec`, `requireKeyboard` *(optional bool)* |
 | `assertBelow` | `text`, `below`, `maxGapPx` *(optional)* |
 | `assertAligned` | `text`, `with`, `maxDeltaPx` *(optional)* |
 | `assertAppVersion` | `package` *(optional)*, `maxTopInsetPx` *(optional)*, `maxRightInsetPx` *(optional)* |
 
 `assertEvent` with `observeFromPreviousStep: true` begins the log observation window at the previous step's start time rather than the assert step's own start time.
+
+`assertScreenshot` captures a screenshot, stores it as an artifact, records its dimensions and SHA-256 hash, and fails when the provided expected dimensions or hash do not match. It is a useful smoke assertion on devices where UI hierarchy capture is weak.
 
 ### App & Package
 

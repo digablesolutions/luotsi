@@ -22,7 +22,7 @@ abi=armeabi-v7a,armeabi
 
 - Device inventory and readiness: `devices`, `device-status`, `preflight`
 - App lifecycle checks: `is-app-installed`, `wait-for-activity`, `force-stop`, `wait-for-not-activity`, `start-app`
-- Capture: `record`, `takeScreenshot`, failure screenshots, logcat
+- Capture: `record`, `takeScreenshot`, `assertScreenshot`, failure screenshots, logcat
 - Scenarios: `scenario-list`, `run --file`, `run --path --dry-run`
 - Reports: command envelope JSON, JSONL scenario events, JSON report, JUnit XML
 - Diagnostics: ADB server status/version/features/mDNS, forward/reverse add/list/remove, logcat, telemetry watch
@@ -165,7 +165,7 @@ The Buggy app started on the Commands tab:
 
 This is an operator-friendly screen but not a hierarchy-friendly one on this particular Android 6 build. Because text selectors were unavailable, the scenario used coordinate taps and screenshot assertions as the reliable demo path.
 
-Coordinate scenarios should be treated as device-profile-specific. For a different screen size, capture one screenshot first, adjust tab coordinates, then dry-run and execute the scenario.
+Coordinate scenarios should be treated as device-profile-specific. The checked-in scenario declares its expected app, device, and layout metadata so Luotsi can surface non-fatal `metadata_warnings` when a run happens on a different device context. For a different screen size, capture one screenshot first, adjust tab coordinates, then dry-run and execute the scenario.
 
 ## 4. Run The Scenario
 
@@ -175,9 +175,25 @@ The scenario is checked in as [`examples/scenarios/buggy-controller-live-demo.js
 {
   "name": "buggy deep tab tour",
   "tags": ["demo", "live-device", "buggy", "telemetry"],
+  "metadata": {
+    "package": "com.digablesolutions.buggycontroller",
+    "activity": ".MainActivity",
+    "notes": "Captured on an Android 6 PDA3505 device; coordinate taps are device-layout-specific.",
+    "device": {
+      "serial": "0123456789ABCDEF",
+      "model": "PDA3505",
+      "androidRelease": "6.0",
+      "sdk": "23"
+    },
+    "layout": {
+      "width": 1280,
+      "height": 720,
+      "orientation": "landscape"
+    }
+  },
   "steps": [
     { "name": "commands before tour", "action": "tapPoint", "label": "Commands tab", "x": 65, "y": 155, "postTapDelayMs": 500 },
-    { "name": "commands screenshot", "action": "takeScreenshot", "label": "deep-01-commands" },
+    { "name": "commands screenshot", "action": "assertScreenshot", "label": "deep-01-commands", "expectedWidth": 1280, "expectedHeight": 720 },
     { "name": "open telemetry tab", "action": "tapPoint", "label": "Telemetry tab", "x": 170, "y": 155, "postTapDelayMs": 800 },
     { "name": "telemetry screenshot", "action": "takeScreenshot", "label": "deep-02-telemetry" },
     { "name": "open map tab", "action": "tapPoint", "label": "Map tab", "x": 300, "y": 155, "postTapDelayMs": 800 },
@@ -214,7 +230,8 @@ The live run passed:
   "metrics": {
     "step_count": 10,
     "passed_step_count": 10,
-    "action.takescreenshot.count": 5,
+    "action.assertscreenshot.count": 1,
+    "action.takescreenshot.count": 4,
     "action.tappoint.count": 5
   }
 }
@@ -260,7 +277,15 @@ The live result reported:
   "name": "buggy deep tab tour",
   "tags": ["buggy", "demo", "live-device", "telemetry"],
   "step_count": 10,
-  "actions": ["takeScreenshot", "tapPoint"]
+  "actions": ["assertScreenshot", "takeScreenshot", "tapPoint"],
+  "metadata": {
+    "package": "com.digablesolutions.buggycontroller",
+    "layout": {
+      "width": 1280,
+      "height": 720,
+      "orientation": "landscape"
+    }
+  }
 }
 ```
 

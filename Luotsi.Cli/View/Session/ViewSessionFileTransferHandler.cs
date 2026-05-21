@@ -15,7 +15,7 @@ internal sealed class ViewSessionFileTransferHandler
     private readonly Func<string, bool> _tryBlockReadOnly;
 
     public ViewSessionFileTransferHandler(
-        ViewSessionInteractionContext context,
+        ViewSessionFileTransferContext context,
         Func<string, bool> tryBlockReadOnly)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -23,11 +23,11 @@ internal sealed class ViewSessionFileTransferHandler
 
         _deviceHost = context.DeviceHost ?? throw new ArgumentNullException(nameof(context.DeviceHost));
         _artifacts = context.Artifacts ?? throw new ArgumentNullException(nameof(context.Artifacts));
-        _timeProvider = context.TimeProvider ?? throw new ArgumentNullException(nameof(context.TimeProvider));
-        _sessionId = string.IsNullOrWhiteSpace(context.SessionId)
-            ? throw new ArgumentException("Session id is required.", nameof(context.SessionId))
-            : context.SessionId;
-        _writeEvent = context.WriteEvent ?? throw new ArgumentNullException(nameof(context.WriteEvent));
+        _timeProvider = context.Events.TimeProvider ?? throw new ArgumentNullException(nameof(context.Events.TimeProvider));
+        _sessionId = string.IsNullOrWhiteSpace(context.Events.SessionId)
+            ? throw new ArgumentException("Session id is required.", nameof(context.Events.SessionId))
+            : context.Events.SessionId;
+        _writeEvent = context.Events.WriteEvent ?? throw new ArgumentNullException(nameof(context.Events.WriteEvent));
         _tryBlockReadOnly = tryBlockReadOnly;
     }
 

@@ -20,9 +20,9 @@ public sealed class ViewSessionWindowCommandHandlerTests
         var pausedStates = new List<bool>();
         var options = new ViewOptions("device-a", "adb", "h264", "ffmpeg", false, null, 1600, 60, "8M", false, false);
         var context = CreateContext(host, fileSystem, timeProvider, options, value => events.Add(JsonSerializer.Serialize(value)));
-        var recording = new ViewSessionRecordingCoordinator(context, () => Task.CompletedTask);
+        var recording = new ViewSessionRecordingCoordinator(context.CreateRecordingContext(), () => Task.CompletedTask);
         var handler = new ViewSessionWindowCommandHandler(
-            context,
+            context.CreateWindowCommandContext(),
             recording,
             new ViewSessionInteractionCallbacks(() => "device-a", (_, _) => true),
             _ => false);

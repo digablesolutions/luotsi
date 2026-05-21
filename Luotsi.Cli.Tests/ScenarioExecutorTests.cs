@@ -1935,6 +1935,7 @@ public sealed partial class AppTests
                 var delay = new FakeDelay(timeProvider);
                 var adb = new FakeAdbClient();
                 adb.EnqueueShellResult(new ProcessResult(0, CreateDeviceFingerprintShellOutput("SER123", "Pixel 9", "16", "36", "google/pixel/device", "arm64-v8a", "mCurrentFocus=App"), string.Empty));
+                adb.EnqueueShellResult(new ProcessResult(0, "Physical size: 1080x1920", string.Empty));
                 adb.EnqueueLogLines("I/flutter (17495): Log.PRINTING_SUCCESSFUL: [Main Isolate] Printing successful");
                 var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, delay, fileSystem);
                 var scenarios = new ScenarioExecutor(runner, fileSystem, timeProvider, delay);
@@ -1965,6 +1966,7 @@ public sealed partial class AppTests
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var adb = new FakeAdbClient();
         adb.EnqueueShellResult(new ProcessResult(0, CreateDeviceFingerprintShellOutput("SER123", "Pixel 9", "16", "36", "google/pixel/device", "arm64-v8a", "mCurrentFocus=App"), string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "Physical size: 1080x1920", string.Empty));
         adb.EnqueueLogLines("05-15 12:00:00.000 I/Luotsi: LUOTSI_DEVICE_TELEMETRY {\"schema\":\"luotsi-device-telemetry.v1\",\"seq\":12,\"session\":\"abc\",\"timestamp\":\"2026-05-15T12:00:00Z\",\"event\":\"step\",\"step\":\"STEP_IDLE\"}");
         var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
         var scenarios = new ScenarioExecutor(runner, fileSystem, timeProvider, new FakeDelay(timeProvider));
@@ -2090,6 +2092,7 @@ public sealed partial class AppTests
         }
         """);
                 adb.EnqueueShellResult(new ProcessResult(0, CreateDeviceFingerprintShellOutput("SER123", "Pixel 9", "16", "36", "google/pixel/device", "arm64-v8a", "mCurrentFocus=App"), string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "Physical size: 1080x1920", string.Empty));
         adb.EnqueueLogLines("I/Test: boot", "I/Test: still waiting");
         adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "01-01 00:00:00.000 I/Test: snapshot", string.Empty));
@@ -2114,6 +2117,264 @@ public sealed partial class AppTests
         var failureArtifacts = envelope.RootElement.GetProperty("data").GetProperty("failure_artifacts");
         Assert.Equal(ResultSchemas.FailureBundle, failureArtifacts.GetProperty("schema").GetString());
         Assert.True(failureArtifacts.GetProperty("artifacts").GetArrayLength() >= 2);
+    }
+
+    [Fact]
+    public async Task ScenarioList_Includes_Scenario_Metadata()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "coordinate smoke",
+          "metadata": {
+            "package": "dev.luotsi.app",
+            "activity": ".MainActivity",
+            "notes": "Uses fixed coordinates.",
+            "device": {
+              "model": "PDA3505",
+              "androidRelease": "6.0",
+              "sdk": "23"
+            },
+            "layout": {
+              "width": 1920,
+              "height": 1080,
+              "orientation": "landscape"
+            }
+          },
+          "steps": [
+            { "action": "tapPoint", "x": 100, "y": 200 }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["scenario-list", "--path", "/tmp/scenario.json"]);
+
+        Assert.Equal(0, exitCode);
+        using var envelope = console.ParseSingleOutputAsJson();
+        var metadata = envelope.RootElement.GetProperty("data").GetProperty("scenarios")[0].GetProperty("metadata");
+        Assert.Equal("dev.luotsi.app", metadata.GetProperty("package").GetString());
+        Assert.Equal("PDA3505", metadata.GetProperty("device").GetProperty("model").GetString());
+        Assert.Equal(1920, metadata.GetProperty("layout").GetProperty("width").GetInt32());
+    }
+
+    [Fact]
+    public async Task RunAsync_File_Adds_Metadata_Warnings_When_Device_Context_Differs()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new SteppingTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind), TimeSpan.FromMilliseconds(1));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "coordinate smoke",
+          "metadata": {
+            "package": "dev.actual",
+            "activity": ".ExpectedActivity",
+            "device": {
+              "model": "Expected Model",
+              "androidRelease": "15",
+              "sdk": "35"
+            },
+            "layout": {
+              "width": 1080,
+              "height": 2400,
+              "orientation": "landscape"
+            }
+          },
+          "steps": [
+            { "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var host = new FakeDeviceHost
+        {
+            PreflightTemplate = new PreflightResult(
+                "Actual Model",
+                "6.0",
+                "23",
+                "mCurrentFocus=Window{1 u0 dev.actual.debug/.MainActivity}",
+                null,
+                null,
+                "fingerprint",
+                "armeabi-v7a",
+                "SER",
+                "dev.actual.debug",
+                720,
+                1280,
+                "portrait")
+        };
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new SteppingDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json", "--report-json", "/tmp/report.json"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal([null], host.ReadOnlyPreflightRequests);
+        using var envelope = console.ParseSingleOutputAsJson();
+        var warnings = envelope.RootElement.GetProperty("data").GetProperty("metadata_warnings");
+        Assert.Contains(warnings.EnumerateArray(), warning => warning.GetProperty("code").GetString() == "package");
+        Assert.Contains(warnings.EnumerateArray(), warning => warning.GetProperty("code").GetString() == "device_model");
+        Assert.Contains(warnings.EnumerateArray(), warning => warning.GetProperty("code").GetString() == "layout_width");
+
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+        var reportWarnings = report.RootElement.GetProperty("scenarios")[0].GetProperty("metadata_warnings");
+        Assert.Contains(reportWarnings.EnumerateArray(), warning => warning.GetProperty("code").GetString() == "android_sdk");
+        Assert.Contains(reportWarnings.EnumerateArray(), warning => warning.GetProperty("code").GetString() == "layout_orientation");
+    }
+
+    [Fact]
+    public async Task RunAsync_File_Failure_Preserves_Metadata_Warnings_When_Device_Context_Differs()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new SteppingTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind), TimeSpan.FromMilliseconds(1));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "coordinate smoke",
+          "metadata": {
+            "package": "dev.actual",
+            "device": {
+              "model": "Expected Model"
+            },
+            "layout": {
+              "width": 1080,
+              "height": 2400
+            }
+          },
+          "steps": [
+            { "action": "waitVisible", "text": "Target" }
+          ]
+        }
+        """);
+        var host = new FakeDeviceHost
+        {
+            WaitVisibleException = new InvalidOperationException("not visible"),
+            PreflightTemplate = new PreflightResult(
+                "Actual Model",
+                "6.0",
+                "23",
+                "mCurrentFocus=Window{1 u0 dev.actual.debug/.MainActivity}",
+                null,
+                null,
+                "fingerprint",
+                "armeabi-v7a",
+                "SER",
+                "dev.actual.debug",
+                720,
+                1280,
+                "portrait")
+        };
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new SteppingDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json", "--report-json", "/tmp/report.json"]);
+
+        Assert.Equal(1, exitCode);
+        using var envelope = console.ParseSingleOutputAsJson();
+        var warnings = envelope.RootElement.GetProperty("data").GetProperty("metadata_warnings");
+        Assert.Contains(warnings.EnumerateArray(), warning => warning.GetProperty("code").GetString() == "package");
+        Assert.Contains(warnings.EnumerateArray(), warning => warning.GetProperty("code").GetString() == "layout_width");
+
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+        var reportWarnings = report.RootElement.GetProperty("scenarios")[0].GetProperty("metadata_warnings");
+        Assert.Contains(reportWarnings.EnumerateArray(), warning => warning.GetProperty("code").GetString() == "package");
+        Assert.Contains(reportWarnings.EnumerateArray(), warning => warning.GetProperty("code").GetString() == "layout_height");
+    }
+
+    [Fact]
+    public async Task RunScenarioAsync_AssertScreenshot_Action_Uses_Visual_Assertions()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var host = new FakeDeviceHost
+        {
+            AssertScreenshotObservedWidth = 320,
+            AssertScreenshotObservedHeight = 241,
+            AssertScreenshotObservedSha256 = "observed-home-sha"
+        };
+        var scenarioPath = "/tmp/assert-screenshot.json";
+        fileSystem.AddFile(scenarioPath, """
+        {
+          "name": "visual smoke",
+          "steps": [
+            { "name": "home screenshot", "action": "assertScreenshot", "label": "home", "expectedWidth": 320 }
+          ]
+        }
+        """);
+        var scenarios = new ScenarioExecutor(host, fileSystem, timeProvider, new FakeDelay(timeProvider));
+
+        var result = await scenarios.RunAsync(scenarioPath);
+        var json = SerializeToJsonElement(result);
+        var stepResult = json.GetProperty("steps")[0].GetProperty("result");
+
+        Assert.Equal("assertScreenshot", json.GetProperty("steps")[0].GetProperty("action").GetString());
+        Assert.Equal("home", stepResult.GetProperty("label").GetString());
+        Assert.Equal(320, stepResult.GetProperty("width").GetInt32());
+        Assert.Equal(241, stepResult.GetProperty("height").GetInt32());
+        Assert.Equal("observed-home-sha", stepResult.GetProperty("sha256").GetString());
+        Assert.Equal(320, stepResult.GetProperty("expected_width").GetInt32());
+        var request = Assert.Single(host.AssertScreenshotRequests);
+        Assert.Equal("home", request.Label);
+        Assert.Equal(320, request.ExpectedWidth);
+        Assert.Null(request.ExpectedHeight);
+        Assert.Null(request.ExpectedSha256);
+        Assert.Empty(host.TakeScreenshotRequests);
+    }
+
+    [Fact]
+    public async Task RunScenarioAsync_AssertScreenshot_Action_Fails_When_Host_Reports_Mismatch()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var host = new FakeDeviceHost
+        {
+            AssertScreenshotException = new InvalidOperationException("Screenshot 'home-screenshot.png' width was 400; expected 320.")
+        };
+        var scenarioPath = "/tmp/assert-screenshot-fails.json";
+        fileSystem.AddFile(scenarioPath, """
+        {
+          "name": "visual smoke",
+          "steps": [
+            { "name": "home screenshot", "action": "assertScreenshot", "label": "home", "expectedWidth": 320 }
+          ]
+        }
+        """);
+        var scenarios = new ScenarioExecutor(host, fileSystem, timeProvider, new FakeDelay(timeProvider));
+
+        var error = await Assert.ThrowsAsync<ScenarioStepFailureException>(() => scenarios.RunAsync(scenarioPath));
+
+        var failure = ScenarioFailureDetails.TryGetData(error);
+        Assert.NotNull(failure);
+        Assert.Equal("failed", failure.Status);
+        Assert.Equal("home screenshot", failure.FailedStep.Name);
+        Assert.Equal("assertScreenshot", failure.FailedStep.Action);
+        Assert.Equal("Screenshot 'home-screenshot.png' width was 400; expected 320.", failure.FailureArtifacts.ErrorMessage);
+        Assert.Equal("failed", failure.Steps[0].Status);
+        Assert.Contains("expected 320", failure.Steps[0].Error?.Message, StringComparison.Ordinal);
+        var request = Assert.Single(host.AssertScreenshotRequests);
+        Assert.Equal("home", request.Label);
+        Assert.Equal(320, request.ExpectedWidth);
     }
 
     private static JsonElement[] ReadJsonlEvents(FakeFileSystem fileSystem, string path) =>

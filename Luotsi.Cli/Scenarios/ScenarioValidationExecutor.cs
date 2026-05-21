@@ -111,7 +111,8 @@ internal sealed class ScenarioValidationExecutor(
             steps,
             null,
             context.ScenarioId,
-            context.File);
+            context.File,
+            scenario.Metadata);
     }
 
     private static IEnumerable<(ScenarioStep Step, string Phase)> EnumerateSteps(ScenarioFile scenario)

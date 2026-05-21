@@ -72,6 +72,8 @@ internal static class ScenarioValidator
         ValidateNonNegative(step.MaxDeltaPx, $"{stepLabel} maxDeltaPx");
         ValidateNonNegative(step.MaxTopInsetPx, $"{stepLabel} maxTopInsetPx");
         ValidateNonNegative(step.MaxRightInsetPx, $"{stepLabel} maxRightInsetPx");
+        ValidatePositive(step.ExpectedWidth, $"{stepLabel} expectedWidth");
+        ValidatePositive(step.ExpectedHeight, $"{stepLabel} expectedHeight");
 
         if (step.X is < 0 || step.Y is < 0)
         {
@@ -132,6 +134,14 @@ internal static class ScenarioValidator
                 if (string.IsNullOrWhiteSpace(step.Label) && string.IsNullOrWhiteSpace(step.Text) && string.IsNullOrWhiteSpace(step.Name))
                 {
                     throw new UsageException($"{stepLabel} takeScreenshot requires label, text, or name.");
+                }
+
+                break;
+
+            case "assertScreenshot":
+                if (step.ExpectedWidth is null && step.ExpectedHeight is null && string.IsNullOrWhiteSpace(step.ExpectedSha256))
+                {
+                    throw new UsageException($"{stepLabel} assertScreenshot requires expectedWidth, expectedHeight, or expectedSha256.");
                 }
 
                 break;

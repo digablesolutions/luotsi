@@ -9,18 +9,13 @@ internal sealed class ViewSessionInputCommandHandler
     private readonly ViewSessionWindowCommandHandler _windowCommands;
 
     public ViewSessionInputCommandHandler(
-        ViewSessionInteractionContext context,
-        ViewSessionRecordingCoordinator recording,
-        ViewSessionInteractionCallbacks callbacks)
+        ViewSessionDeviceInputHandler deviceInputs,
+        ViewSessionFileTransferHandler fileTransfers,
+        ViewSessionWindowCommandHandler windowCommands)
     {
-        ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(recording);
-        ArgumentNullException.ThrowIfNull(callbacks);
-
-        var readOnlyBlockPolicy = new ViewSessionReadOnlyBlockPolicy(context);
-        _deviceInputs = new ViewSessionDeviceInputHandler(context, readOnlyBlockPolicy.TryBlock);
-        _fileTransfers = new ViewSessionFileTransferHandler(context, readOnlyBlockPolicy.TryBlock);
-        _windowCommands = new ViewSessionWindowCommandHandler(context, recording, callbacks, readOnlyBlockPolicy.TryBlock);
+        _deviceInputs = deviceInputs ?? throw new ArgumentNullException(nameof(deviceInputs));
+        _fileTransfers = fileTransfers ?? throw new ArgumentNullException(nameof(fileTransfers));
+        _windowCommands = windowCommands ?? throw new ArgumentNullException(nameof(windowCommands));
     }
 
     public void AttachStreamPauseUpdater(Action<bool> streamPauseUpdater) => _windowCommands.AttachStreamPauseUpdater(streamPauseUpdater);

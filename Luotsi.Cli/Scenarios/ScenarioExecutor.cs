@@ -42,6 +42,11 @@ public interface IScenarioActionHost
     Task<FailureArtifactBundle> CaptureFailureArtifactsAsync(FailureCaptureRequest request, Exception exception);
 }
 
+public interface IScenarioScreenshotAssertionHost
+{
+    Task<ScreenshotAssertionResult> AssertScreenshotAsync(string label, int? expectedWidth, int? expectedHeight, string? expectedSha256);
+}
+
 /// <summary>
 /// Loads and executes JSON scenario files.
 /// </summary>
@@ -64,6 +69,7 @@ public sealed class ScenarioExecutor
         "resetLog",
         "assertEvent",
         "takeScreenshot",
+        "assertScreenshot",
         "captureArtifacts",
         "assertTextInputReady",
         "assertBelow",
@@ -95,6 +101,7 @@ public sealed class ScenarioExecutor
     public ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem fileSystem, TimeProvider timeProvider, IDelay delay)
         : this(
             actionHost,
+            RequireScreenshotAssertions(actionHost),
             fileSystem,
             timeProvider,
             delay,
@@ -107,6 +114,7 @@ public sealed class ScenarioExecutor
     public ScenarioExecutor(IScenarioActionHost actionHost, IFileSystem fileSystem, TimeProvider timeProvider, IDelay delay, IEnvironmentVariables environment)
         : this(
             actionHost,
+            RequireScreenshotAssertions(actionHost),
             fileSystem,
             timeProvider,
             delay,
@@ -118,6 +126,7 @@ public sealed class ScenarioExecutor
 
     internal ScenarioExecutor(
         IScenarioActionHost actionHost,
+        IScenarioScreenshotAssertionHost screenshotAssertionHost,
         IFileSystem fileSystem,
         TimeProvider timeProvider,
         IDelay delay,
@@ -130,6 +139,7 @@ public sealed class ScenarioExecutor
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         _actionDispatcher = new ScenarioActionDispatcher(
             actionHost,
+            screenshotAssertionHost ?? throw new ArgumentNullException(nameof(screenshotAssertionHost)),
             delay ?? throw new ArgumentNullException(nameof(delay)));
         _scenarioCatalog = new ScenarioCatalog(
             fileSystem ?? throw new ArgumentNullException(nameof(fileSystem)),
@@ -179,12 +189,17 @@ public sealed class ScenarioExecutor
                         execution.Steps,
                         null,
                         lifecycleContext.ScenarioId,
-                        lifecycleContext.File));
+                        lifecycleContext.File,
+                        scenario.Metadata));
             }).ConfigureAwait(false);
     }
 
     private Task<ScenarioFile> LoadValidatedScenarioAsync(string file) =>
         _scenarioCatalog.LoadValidatedAsync(file, SupportedScenarioActions);
+
+    private static IScenarioScreenshotAssertionHost RequireScreenshotAssertions(IScenarioActionHost actionHost) =>
+        actionHost as IScenarioScreenshotAssertionHost
+            ?? throw new ArgumentException($"{nameof(actionHost)} must implement {nameof(IScenarioScreenshotAssertionHost)}.", nameof(actionHost));
 
     private async Task<object> ExecuteStepAsync(ScenarioStep step, DateTimeOffset? previousStepStartedAt) =>
         await _actionDispatcher.ExecuteAsync(step, previousStepStartedAt).ConfigureAwait(false);
@@ -343,7 +358,8 @@ public sealed class ScenarioExecutor
             CreateFailedStepResult(context.NextStepIndex, failedStep),
             failureSteps,
             failureArtifacts,
-            context.ScenarioId);
+            context.ScenarioId,
+            context.Scenario.Metadata);
     }
 
     private ScenarioRunFailureData CreateFinalFailureData(

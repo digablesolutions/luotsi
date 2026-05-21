@@ -19,7 +19,7 @@ public sealed class ViewSessionReadOnlyBlockPolicyTests
         var events = new List<string>();
         var options = new ViewOptions("device-a", "adb", "h264", "ffmpeg", false, null, 1600, 60, "8M", false, false, 1000, 0, "balanced", true);
         var context = CreateContext(host, fileSystem, timeProvider, options, value => events.Add(JsonSerializer.Serialize(value)));
-        var policy = new ViewSessionReadOnlyBlockPolicy(context);
+        var policy = new ViewSessionReadOnlyBlockPolicy(context.CreateReadOnlyContext());
 
         Assert.True(policy.TryBlock("tap"));
 

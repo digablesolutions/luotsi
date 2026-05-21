@@ -19,7 +19,7 @@ public sealed class ViewSessionFileTransferHandlerTests
         var events = new List<string>();
         var options = new ViewOptions("device-a", "adb", "h264", "ffmpeg", false, null, 1600, 60, "8M", false, false);
         var context = CreateContext(host, fileSystem, timeProvider, options, value => events.Add(JsonSerializer.Serialize(value)));
-        var handler = new ViewSessionFileTransferHandler(context, _ => false);
+        var handler = new ViewSessionFileTransferHandler(context.CreateFileTransferContext(), _ => false);
 
         await handler.HandleFilePullAsync(new ViewFilePullRequest("/sdcard/Download/report.txt"));
 

@@ -35,6 +35,8 @@ internal sealed record ScenarioReportScenario(
     IReadOnlyList<ScenarioStepResult> Steps,
     ScenarioFailedStepResult? FailedStep,
     IReadOnlyList<ScenarioReportArtifact> Artifacts,
-    ErrorInfo? Error);
+    ErrorInfo? Error,
+    ScenarioMetadata? Metadata = null,
+    IReadOnlyList<ScenarioMetadataWarning>? MetadataWarnings = null);
 
 internal sealed record ScenarioReportArtifact(string Kind, string FileName, int? StepIndex, string? StepName);

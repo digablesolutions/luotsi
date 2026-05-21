@@ -33,8 +33,12 @@ internal sealed class InspectSessionCommandDispatcher(IDeviceHost deviceHost)
             "wait_visible" => await _deviceHost.WaitVisibleAsync(RequireText(request.Text, "text"), request.TimeoutSec ?? 15).ConfigureAwait(false),
             "type_text" => await _deviceHost.TypeTextAsync(RequireText(request.Text, "text")).ConfigureAwait(false),
             "keyevent" => await _deviceHost.KeyEventAsync(RequireText(request.Code, "code")).ConfigureAwait(false),
+            "logcat" => await _deviceHost.LogcatAsync(request.Tail ?? 200).ConfigureAwait(false),
             "telemetry_tail" => await _deviceHost.TelemetryTailAsync(request.Tail ?? 200).ConfigureAwait(false),
             "telemetry_watch" => await _deviceHost.TelemetryWatchAsync(request.TimeoutSec ?? 15).ConfigureAwait(false),
+            "screenshot" or "take_screenshot" => await _deviceHost.TakeScreenshotAsync(request.Label ?? request.Text ?? "inspect").ConfigureAwait(false),
+            "capture_artifacts" => await _deviceHost.CaptureArtifactsAsync(request.Label ?? request.Text ?? "inspect").ConfigureAwait(false),
+            "record" => await _deviceHost.RecordAsync(RequireText(request.Output, "output"), request.TimeLimitSec ?? 30).ConfigureAwait(false),
             _ => throw new UsageException($"Unknown inspect command '{request.Command}'.")
         };
     }

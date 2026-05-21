@@ -4,36 +4,64 @@ using Luotsi.Cli.View.Contracts;
 
 namespace Luotsi.Cli.View.Session;
 
-internal sealed class ViewSessionInteractionRouter(
-    ViewSessionInteractionContext context)
+internal sealed class ViewSessionInteractionRouter
 {
-    private readonly ViewSessionInteractionContext _context = context ?? throw new ArgumentNullException(nameof(context));
-    private readonly TimeProvider _timeProvider = context.TimeProvider ?? throw new ArgumentNullException(nameof(context.TimeProvider));
-    private readonly string _sessionId = string.IsNullOrWhiteSpace(context.SessionId) ? throw new ArgumentException("Session id is required.", nameof(context.SessionId)) : context.SessionId;
-    private readonly Action<object> _writeJsonLine = context.WriteEvent ?? throw new ArgumentNullException(nameof(context.WriteEvent));
+    private readonly TimeProvider _timeProvider;
+    private readonly string _sessionId;
+    private readonly Action<object> _writeJsonLine;
+    private readonly ViewSessionInputCommandHandler _inputCommands;
+    private readonly ViewSessionRecordingCoordinator _recording;
+    private readonly ViewSessionStateCoordinator _state;
 
-    public string ActiveDeviceSelector => State.ActiveDeviceSelector;
+    public ViewSessionInteractionRouter(ViewSessionInteractionContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var events = context.CreateEventContext();
+        _timeProvider = events.TimeProvider ?? throw new ArgumentNullException(nameof(events.TimeProvider));
+        _sessionId = string.IsNullOrWhiteSpace(events.SessionId)
+            ? throw new ArgumentException("Session id is required.", nameof(events.SessionId))
+            : events.SessionId;
+        _writeJsonLine = events.WriteEvent ?? throw new ArgumentNullException(nameof(events.WriteEvent));
+
+        _state = new ViewSessionStateCoordinator(context.CreateStateContext(events));
+        _recording = new ViewSessionRecordingCoordinator(context.CreateRecordingContext(events), _state.PublishChromeAsync);
+
+        var readOnlyBlockPolicy = new ViewSessionReadOnlyBlockPolicy(context.CreateReadOnlyContext(events));
+        _inputCommands = new ViewSessionInputCommandHandler(
+            new ViewSessionDeviceInputHandler(context.CreateDeviceInputContext(events), readOnlyBlockPolicy.TryBlock),
+            new ViewSessionFileTransferHandler(context.CreateFileTransferContext(events), readOnlyBlockPolicy.TryBlock),
+            new ViewSessionWindowCommandHandler(
+                context.CreateWindowCommandContext(events),
+                _recording,
+                new ViewSessionInteractionCallbacks(
+                    () => ActiveDeviceSelector,
+                    RequestReconnect),
+                readOnlyBlockPolicy.TryBlock));
+    }
+
+    public string ActiveDeviceSelector => _state.ActiveDeviceSelector;
 
     public void BeginIteration(string deviceSelector, CancellationTokenSource iterationCancellation)
-        => State.BeginIteration(deviceSelector, iterationCancellation);
+        => _state.BeginIteration(deviceSelector, iterationCancellation);
 
-    public void AttachConnection(ViewConnectionInfo connectionInfo) => Recording.AttachConnection(connectionInfo);
+    public void AttachConnection(ViewConnectionInfo connectionInfo) => _recording.AttachConnection(connectionInfo);
 
-    public void AttachChromeUpdater(Func<ViewChromeState, Task> chromeUpdater) => State.AttachChromeUpdater(chromeUpdater);
+    public void AttachChromeUpdater(Func<ViewChromeState, Task> chromeUpdater) => _state.AttachChromeUpdater(chromeUpdater);
 
-    public void AttachStreamPauseUpdater(Action<bool> streamPauseUpdater) => InputCommands.AttachStreamPauseUpdater(streamPauseUpdater);
+    public void AttachStreamPauseUpdater(Action<bool> streamPauseUpdater) => _inputCommands.AttachStreamPauseUpdater(streamPauseUpdater);
 
-    public Task WaitForReconnectAsync() => State.WaitForReconnectAsync();
+    public Task WaitForReconnectAsync() => _state.WaitForReconnectAsync();
 
-    public void ResetReconnectSignal() => State.ResetReconnectSignal();
+    public void ResetReconnectSignal() => _state.ResetReconnectSignal();
 
-    public bool RequestReconnect(string source, string? reason = null) => State.RequestReconnect(source, reason);
+    public bool RequestReconnect(string source, string? reason = null) => _state.RequestReconnect(source, reason);
 
     public async Task StartInitialRecordingIfNeededAsync()
-        => await Recording.StartInitialRecordingIfNeededAsync().ConfigureAwait(false);
+        => await _recording.StartInitialRecordingIfNeededAsync().ConfigureAwait(false);
 
     public async Task StopRecordingForReconnectAsync()
-        => await Recording.StopRecordingForReconnectAsync().ConfigureAwait(false);
+        => await _recording.StopRecordingForReconnectAsync().ConfigureAwait(false);
 
     public async Task HandleAsync(ViewInteractionRequest request)
     {
@@ -58,7 +86,7 @@ internal sealed class ViewSessionInteractionRouter(
                 return;
 
             default:
-                if (await InputCommands.TryHandleAsync(request).ConfigureAwait(false))
+                if (await _inputCommands.TryHandleAsync(request).ConfigureAwait(false))
                 {
                     return;
                 }
@@ -74,30 +102,16 @@ internal sealed class ViewSessionInteractionRouter(
             throw new UsageException("device switch requires a non-empty device selector.");
         }
 
-        await State.SwitchDeviceAsync(request.DeviceSelector).ConfigureAwait(false);
+        await _state.SwitchDeviceAsync(request.DeviceSelector).ConfigureAwait(false);
     }
 
     public async Task EmitDeviceShelfSnapshotIfNeededAsync()
-        => await State.EmitDeviceShelfSnapshotIfNeededAsync().ConfigureAwait(false);
+        => await _state.EmitDeviceShelfSnapshotIfNeededAsync().ConfigureAwait(false);
 
-    public Task PublishChromeAsync() => State.PublishChromeAsync();
+    public Task PublishChromeAsync() => _state.PublishChromeAsync();
 
     public async Task UpdateShareStateAsync(string? shareEndpoint, int observerCount)
-        => await State.UpdateShareStateAsync(shareEndpoint, observerCount).ConfigureAwait(false);
-
-    private ViewSessionInputCommandHandler InputCommands =>
-        field ??= new ViewSessionInputCommandHandler(
-            _context,
-            Recording,
-            new ViewSessionInteractionCallbacks(
-                () => ActiveDeviceSelector,
-                RequestReconnect));
-
-    private ViewSessionRecordingCoordinator Recording =>
-        field ??= new ViewSessionRecordingCoordinator(_context, PublishChromeAsync);
-
-    private ViewSessionStateCoordinator State =>
-        field ??= new ViewSessionStateCoordinator(_context);
+        => await _state.UpdateShareStateAsync(shareEndpoint, observerCount).ConfigureAwait(false);
 
     private void WriteEvent(object value) => _writeJsonLine(value);
 }

@@ -19,7 +19,7 @@ public sealed class ViewSessionStateCoordinatorTests
         host.ConnectedDevices.Add(new DeviceInfo("device-a", "device", "Primary"));
         host.ConnectedDevices.Add(new DeviceInfo("device-b", "device", "Secondary"));
         var context = CreateContext(host, fileSystem, timeProvider, new ViewOptions("device-a", "adb", "h264", "ffmpeg", false, null, 1600, 60, "8M", false, false));
-        var coordinator = new ViewSessionStateCoordinator(context);
+        var coordinator = new ViewSessionStateCoordinator(context.CreateStateContext());
         var chromeUpdates = new List<ViewChromeState>();
         using var iterationCancellation = new CancellationTokenSource();
 
@@ -52,7 +52,7 @@ public sealed class ViewSessionStateCoordinatorTests
             fileSystem,
             timeProvider,
             new ViewOptions("device-a", "adb", "h264", "ffmpeg", false, null, 1600, 60, "8M", false, false));
-        var coordinator = new ViewSessionStateCoordinator(context);
+        var coordinator = new ViewSessionStateCoordinator(context.CreateStateContext());
         ViewChromeState? lastChrome = null;
 
         coordinator.AttachChromeUpdater(chrome =>

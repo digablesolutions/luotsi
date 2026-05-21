@@ -17,23 +17,48 @@ public sealed partial class AppTests
         var artifacts = ArtifactSession.Create(CliOptions.Parse(["screen-state"]), fileSystem, timeProvider);
         var adb = new FakeAdbClient();
         adb.EnqueueShellResult(new ProcessResult(0, "not-xml", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "still-not-xml", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "UI hierchary dumped to: /dev/tty", string.Empty));
         var runner = new DeviceRunner(adb, artifacts, timeProvider, new FakeDelay(timeProvider), fileSystem);
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(runner.GetScreenStateAsync);
+        var error = await Assert.ThrowsAsync<ScreenStateUnavailableException>(runner.GetScreenStateAsync);
 
-        Assert.Contains("invalid XML", error.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.True(fileSystem.FileExists(Path.Combine(artifacts.Root, "hierarchy.xml")));
-        Assert.True(fileSystem.FileExists(Path.Combine(artifacts.Root, "hierarchy-invalid.xml")));
+        Assert.Equal("screen_state_unavailable", error.CategoryOverride);
+        Assert.Contains("did not contain parseable XML", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(DeviceArtifactNames.HierarchyDumpAttemptsJson, error.Message, StringComparison.Ordinal);
+        Assert.True(fileSystem.FileExists(Path.Join(artifacts.Root, DeviceArtifactNames.HierarchyXml)));
+        Assert.True(fileSystem.FileExists(Path.Join(artifacts.Root, DeviceArtifactNames.InvalidHierarchyXml)));
+        Assert.True(fileSystem.FileExists(Path.Join(artifacts.Root, DeviceArtifactNames.HierarchyDumpAttemptsJson)));
     }
 
 
     [Fact]
-    public async Task GetScreenStateAsync_Uses_ExecOut_UiDump_And_Strips_Prefix_Noise()
+    public async Task GetScreenStateAsync_Prefers_File_Backed_UiDump()
     {
         var fileSystem = new FakeFileSystem();
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var artifacts = ArtifactSession.Create(CliOptions.Parse(["screen-state"]), fileSystem, timeProvider);
         var adb = new FakeAdbClient();
+        adb.EnqueueShellResult(new ProcessResult(0, CreateUiDump("Target"), string.Empty));
+        var runner = new DeviceRunner(adb, artifacts, timeProvider, new FakeDelay(timeProvider), fileSystem);
+
+        var state = await runner.GetScreenStateAsync();
+
+        Assert.Contains(state.Elements, element => element.Text == "Target");
+        Assert.Contains("uiautomator dump '/data/local/tmp/luotsi-window.xml'", adb.ShellCommands[0], StringComparison.Ordinal);
+        Assert.Empty(adb.RunCommands);
+    }
+
+
+    [Fact]
+    public async Task GetScreenStateAsync_Falls_Back_To_ExecOut_UiDump_And_Strips_Prefix_Noise()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var artifacts = ArtifactSession.Create(CliOptions.Parse(["screen-state"]), fileSystem, timeProvider);
+        var adb = new FakeAdbClient();
+        adb.EnqueueShellResult(new ProcessResult(0, "UI hierchary dumped to: /data/local/tmp/luotsi-window.xml", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "UI hierchary dumped to: /sdcard/window_dump.xml", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "UI hierchary dumped to: /dev/tty\n<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>" + CreateUiDump("Target") + "\nUI hierchary dumped to: /dev/tty", string.Empty));
         var runner = new DeviceRunner(adb, artifacts, timeProvider, new FakeDelay(timeProvider), fileSystem);
 
@@ -41,6 +66,15 @@ public sealed partial class AppTests
 
         Assert.Contains(state.Elements, element => element.Text == "Target");
         Assert.Equal(["exec-out", "uiautomator", "dump", "/dev/tty"], adb.RunCommands[0]);
+        Assert.True(fileSystem.FileExists(Path.Join(artifacts.Root, DeviceArtifactNames.HierarchyDumpAttemptsJson)));
+    }
+
+
+    [Fact]
+    public void IsRetryableHierarchyDumpFailure_Uses_ScreenStateUnavailableException_Type()
+    {
+        Assert.True(AndroidScreenCaptureService.IsRetryableHierarchyDumpFailure(new ScreenStateUnavailableException("parse failure")));
+        Assert.False(AndroidScreenCaptureService.IsRetryableHierarchyDumpFailure(new InvalidOperationException("parse failure")));
     }
 
 
@@ -161,6 +195,8 @@ public sealed partial class AppTests
         var delay = new FakeDelay(timeProvider);
         var adb = new FakeAdbClient();
         adb.EnqueueShellResult(new ProcessResult(0, "not-xml", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "still-not-xml", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "UI hierchary dumped to: /dev/tty", string.Empty));
         adb.EnqueueShellResult(new ProcessResult(0, CreateUiDump("Target"), string.Empty));
         var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["wait-visible"]), fileSystem, timeProvider), timeProvider, delay, fileSystem);
 
@@ -215,12 +251,7 @@ public sealed partial class AppTests
 
         Assert.Equal("Target", element.Text);
         Assert.Equal(50, tap.X);
-        Assert.Single(adb.RunCommands, static command =>
-            command.Length == 4 &&
-            string.Equals(command[0], "exec-out", StringComparison.Ordinal) &&
-            string.Equals(command[1], "uiautomator", StringComparison.Ordinal) &&
-            string.Equals(command[2], "dump", StringComparison.Ordinal) &&
-            string.Equals(command[3], "/dev/tty", StringComparison.Ordinal));
+        Assert.Single(adb.ShellCommands, static command => command.Contains("uiautomator dump", StringComparison.Ordinal));
     }
 
 
@@ -240,12 +271,7 @@ public sealed partial class AppTests
 
         Assert.Contains(first.Elements, element => element.Text == "First");
         Assert.Contains(second.Elements, element => element.Text == "Second");
-        Assert.Equal(2, adb.RunCommands.Count(static command =>
-            command.Length == 4 &&
-            string.Equals(command[0], "exec-out", StringComparison.Ordinal) &&
-            string.Equals(command[1], "uiautomator", StringComparison.Ordinal) &&
-            string.Equals(command[2], "dump", StringComparison.Ordinal) &&
-            string.Equals(command[3], "/dev/tty", StringComparison.Ordinal)));
+        Assert.Equal(2, adb.ShellCommands.Count(static command => command.Contains("uiautomator dump", StringComparison.Ordinal)));
     }
 
 
@@ -264,12 +290,7 @@ public sealed partial class AppTests
         await runner.TapAsync("10", "20");
         await runner.WaitVisibleAsync("Target", 1);
 
-        Assert.Equal(2, adb.RunCommands.Count(static command =>
-            command.Length == 4 &&
-            string.Equals(command[0], "exec-out", StringComparison.Ordinal) &&
-            string.Equals(command[1], "uiautomator", StringComparison.Ordinal) &&
-            string.Equals(command[2], "dump", StringComparison.Ordinal) &&
-            string.Equals(command[3], "/dev/tty", StringComparison.Ordinal)));
+        Assert.Equal(2, adb.ShellCommands.Count(static command => command.Contains("uiautomator dump", StringComparison.Ordinal)));
     }
 
 
@@ -279,15 +300,17 @@ public sealed partial class AppTests
         var fileSystem = new FakeFileSystem();
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var delay = new FakeDelay(timeProvider);
-                var artifacts = ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider);
+        var artifacts = ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider);
         var adb = new FakeAdbClient();
         adb.EnqueueShellResult(new ProcessResult(0, "not-xml", string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "still-not-xml", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "UI hierchary dumped to: /dev/tty", string.Empty));
         adb.EnqueueShellResult(new ProcessResult(0, """
         <hierarchy>
           <node text="" content-desc="" resource-id="input/name" class="android.widget.EditText" enabled="true" clickable="true" focused="true" bounds="[0,0][100,100]" />
         </hierarchy>
         """, string.Empty));
-                var runner = new DeviceRunner(adb, artifacts, timeProvider, delay, fileSystem);
+        var runner = new DeviceRunner(adb, artifacts, timeProvider, delay, fileSystem);
 
         var result = await runner.AssertTextInputReadyAsync(requireKeyboard: false, timeoutSec: 2);
         var json = SerializeToJsonElement(result);
@@ -385,6 +408,49 @@ public sealed partial class AppTests
         Assert.Contains("rm -f /sdcard/device-e2e-fixed-recording-id.mp4", adb.ShellCommands[1], StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task AssertScreenshotAsync_Captures_Dimensions_And_Sha256()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.AttachFileSystem(fileSystem);
+        var idGenerator = new FakeUniqueIdGenerator("fixed-shot-id");
+        var png = CreatePngHeader(320, 240);
+        adb.AddRemoteFile("/sdcard/device-e2e-fixed-shot-id.png", png);
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem, idGenerator);
+        var expectedHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(png)).ToLowerInvariant();
+
+        var result = await runner.AssertScreenshotAsync("home", 320, 240, expectedHash);
+
+        Assert.Equal("home", result.Label);
+        Assert.Equal("home-screenshot.png", result.File);
+        Assert.Equal(320, result.Width);
+        Assert.Equal(240, result.Height);
+        Assert.Equal(expectedHash, result.Sha256);
+    }
+
+    [Fact]
+    public async Task AssertScreenshotAsync_Throws_When_Width_Does_Not_Match()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.AttachFileSystem(fileSystem);
+        var idGenerator = new FakeUniqueIdGenerator("fixed-shot-id");
+        var png = CreatePngHeader(400, 240);
+        adb.AddRemoteFile("/sdcard/device-e2e-fixed-shot-id.png", png);
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem, idGenerator);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => runner.AssertScreenshotAsync("home", 320, null, null));
+
+        Assert.Contains("width was 400; expected 320", error.Message, StringComparison.Ordinal);
+    }
+
 
     [Fact]
     public async Task WaitForStepAsync_Uses_Incremental_Telemetry_Parsing()
@@ -428,7 +494,8 @@ public sealed partial class AppTests
         var fileSystem = new FakeFileSystem();
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var adb = new FakeAdbClient();
-        adb.EnqueueShellResult(new ProcessResult(0, CreateDeviceFingerprintShellOutput("SER123", "Pixel 9", "16", "36", "google/pixel/device", "arm64-v8a,x86_64", "mCurrentFocus=App"), string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, CreateDeviceFingerprintShellOutput("SER123", "Pixel 9", "16", "36", "google/pixel/device", "arm64-v8a,x86_64", "mCurrentFocus=Window{1 u0 dev.actual/.MainActivity}"), string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "Physical size: 1080x1920", string.Empty));
         var artifacts = ArtifactSession.Create(CliOptions.Parse(["preflight"]), fileSystem, timeProvider);
         var runner = new DeviceRunner(adb, artifacts, timeProvider, new FakeDelay(timeProvider), fileSystem);
 
@@ -438,7 +505,12 @@ public sealed partial class AppTests
 
         Assert.Equal("Pixel 9", json.GetProperty("model").GetString());
         Assert.Equal("google/pixel/device", json.GetProperty("fingerprint").GetString());
-        Assert.Single(adb.ShellCommands);
+        Assert.Equal("dev.actual", json.GetProperty("foreground_package").GetString());
+        Assert.Equal(1080, json.GetProperty("display_width").GetInt32());
+        Assert.Equal(1920, json.GetProperty("display_height").GetInt32());
+        Assert.Equal("portrait", json.GetProperty("display_orientation").GetString());
+        Assert.Equal(2, adb.ShellCommands.Count);
+        Assert.Equal("wm size", adb.ShellCommands[1]);
         Assert.True(fileSystem.FileExists(Path.Combine(artifactRoot, "device-fingerprint.json")));
     }
 
@@ -448,7 +520,8 @@ public sealed partial class AppTests
         var fileSystem = new FakeFileSystem();
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var adb = new FakeAdbClient();
-        adb.EnqueueShellResult(new ProcessResult(0, CreateDeviceFingerprintShellOutput("SER123", "Pixel 9", "16", "36", "google/pixel/device", "arm64-v8a,x86_64", "mCurrentFocus=App"), string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, CreateDeviceFingerprintShellOutput("SER123", "Pixel 9", "16", "36", "google/pixel/device", "arm64-v8a,x86_64", "mCurrentFocus=Window{1 u0 dev.actual/.MainActivity}"), string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, "Physical size: 1080x1920", string.Empty));
         var artifacts = ArtifactSession.Create(CliOptions.Parse(["preflight"]), fileSystem, timeProvider);
         var runner = new DeviceRunner(adb, artifacts, timeProvider, new FakeDelay(timeProvider), fileSystem);
 
@@ -458,7 +531,12 @@ public sealed partial class AppTests
 
         Assert.Equal("Pixel 9", json.GetProperty("model").GetString());
         Assert.Equal("google/pixel/device", json.GetProperty("fingerprint").GetString());
-        Assert.Single(adb.ShellCommands);
+        Assert.Equal("dev.actual", json.GetProperty("foreground_package").GetString());
+        Assert.Equal(1080, json.GetProperty("display_width").GetInt32());
+        Assert.Equal(1920, json.GetProperty("display_height").GetInt32());
+        Assert.Equal("portrait", json.GetProperty("display_orientation").GetString());
+        Assert.Equal(2, adb.ShellCommands.Count);
+        Assert.Equal("wm size", adb.ShellCommands[1]);
         Assert.False(fileSystem.FileExists(Path.Join(artifactRoot, "device-fingerprint.json")));
     }
 
@@ -500,7 +578,7 @@ public sealed partial class AppTests
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var adb = new FakeAdbClient();
         adb.EnqueueShellResult(new ProcessResult(0, "versionName=1.0.0\nversionCode=123", string.Empty));
-        adb.EnqueueRunResult(new ProcessResult(0, CreateUiDumpWithNodes(CreateUiNode("v1.0.0+123", string.Empty, "android.widget.TextView", false, 900, 0, 1080, 80)), string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, CreateUiDumpWithNodes(CreateUiNode("v1.0.0+123", string.Empty, "android.widget.TextView", false, 900, 0, 1080, 80)), string.Empty));
         adb.EnqueueShellResult(new ProcessResult(0, "Physical size: 1080x1920", string.Empty));
         var environment = new FakeEnvironmentVariables(new Dictionary<string, string>
         {

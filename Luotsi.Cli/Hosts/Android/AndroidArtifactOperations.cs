@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Errors;
@@ -11,6 +12,7 @@ internal sealed class AndroidArtifactOperations(
     IAdbClient adb,
     ArtifactSession artifacts,
     TimeProvider timeProvider,
+    IFileSystem fileSystem,
     IUniqueIdGenerator idGenerator,
     IEnvironmentVariables environment,
     AndroidScreenStateReadModel screenStateReadModel)
@@ -18,6 +20,7 @@ internal sealed class AndroidArtifactOperations(
     private readonly IAdbClient _adb = adb ?? throw new ArgumentNullException(nameof(adb));
     private readonly ArtifactSession _artifacts = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+    private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
     private readonly IUniqueIdGenerator _idGenerator = idGenerator ?? throw new ArgumentNullException(nameof(idGenerator));
     private readonly IEnvironmentVariables _environment = environment ?? throw new ArgumentNullException(nameof(environment));
     private readonly AndroidScreenStateReadModel _screenStateReadModel = screenStateReadModel ?? throw new ArgumentNullException(nameof(screenStateReadModel));
@@ -32,6 +35,7 @@ internal sealed class AndroidArtifactOperations(
         var pull = await _adb.RunAsync(["pull", NormalizeDevicePathForPull(remote), targetOutput]).ConfigureAwait(false);
         await _adb.ShellAsync($"rm -f {remote}").ConfigureAwait(false);
         pull.EnsureSuccess("pull recording failed");
+        await _artifacts.RefreshIndexAsync().ConfigureAwait(false);
         return new RecordResult(targetOutput, clamped);
     }
 
@@ -41,8 +45,31 @@ internal sealed class AndroidArtifactOperations(
     public async Task<TakeScreenshotResult> TakeScreenshotAsync(string label)
     {
         var fileName = DeviceArtifactNames.ScreenshotForLabel(Slugify(label));
-        await CaptureScreenshotAsync(fileName).ConfigureAwait(false);
-        return new TakeScreenshotResult(label, fileName);
+        var artifact = await CaptureScreenshotAsync(fileName).ConfigureAwait(false);
+        return new TakeScreenshotResult(label, fileName, artifact.Width, artifact.Height, artifact.Sha256);
+    }
+
+    public async Task<ScreenshotAssertionResult> AssertScreenshotAsync(string label, int? expectedWidth, int? expectedHeight, string? expectedSha256)
+    {
+        var fileName = DeviceArtifactNames.ScreenshotForLabel(Slugify(label));
+        var artifact = await CaptureScreenshotAsync(fileName).ConfigureAwait(false);
+        if (expectedWidth is not null && artifact.Width != expectedWidth)
+        {
+            throw new InvalidOperationException($"Screenshot '{fileName}' width was {artifact.Width?.ToString(CultureInfo.InvariantCulture) ?? "unknown"}; expected {expectedWidth}.");
+        }
+
+        if (expectedHeight is not null && artifact.Height != expectedHeight)
+        {
+            throw new InvalidOperationException($"Screenshot '{fileName}' height was {artifact.Height?.ToString(CultureInfo.InvariantCulture) ?? "unknown"}; expected {expectedHeight}.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(expectedSha256) &&
+            !string.Equals(artifact.Sha256, expectedSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"Screenshot '{fileName}' SHA-256 was {artifact.Sha256 ?? "unknown"}; expected {expectedSha256}.");
+        }
+
+        return new ScreenshotAssertionResult(label, fileName, artifact.Width, artifact.Height, artifact.Sha256, expectedWidth, expectedHeight, expectedSha256);
     }
 
     public async Task<CaptureArtifactsResult> CaptureArtifactsAsync(string label)
@@ -56,7 +83,7 @@ internal sealed class AndroidArtifactOperations(
         return new CaptureArtifactsResult(label, screenshot, logcat, DeviceArtifactNames.ScreenStateForLabel(slug), DeviceArtifactNames.HierarchyForLabel(slug));
     }
 
-    private async Task CaptureScreenshotAsync(string fileName)
+    private async Task<ScreenshotArtifactInfo> CaptureScreenshotAsync(string fileName)
     {
         var destination = ResolveArtifactDestination(fileName);
         var remote = $"/sdcard/device-e2e-{_idGenerator.NewId()}.png";
@@ -65,7 +92,45 @@ internal sealed class AndroidArtifactOperations(
         var pull = await _adb.RunAsync(["pull", NormalizeDevicePathForPull(remote), destination]).ConfigureAwait(false);
         await _adb.ShellAsync($"rm -f {remote}").ConfigureAwait(false);
         pull.EnsureSuccess("pull screenshot failed");
+        await _artifacts.RefreshIndexAsync().ConfigureAwait(false);
+        return ReadScreenshotArtifact(fileName, destination);
     }
+
+    private ScreenshotArtifactInfo ReadScreenshotArtifact(string fileName, string destination)
+    {
+        if (!_fileSystem.FileExists(destination))
+        {
+            return new ScreenshotArtifactInfo(fileName, null, null, null);
+        }
+
+        using var stream = _fileSystem.OpenRead(destination);
+        using var memory = new MemoryStream();
+        stream.CopyTo(memory);
+        var bytes = memory.ToArray();
+        var (width, height) = ReadPngDimensions(bytes);
+        var sha256 = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+        return new ScreenshotArtifactInfo(fileName, width, height, sha256);
+    }
+
+    private static (int? Width, int? Height) ReadPngDimensions(byte[] bytes)
+    {
+        if (bytes.Length < 24 ||
+            bytes[0] != 0x89 ||
+            bytes[1] != 0x50 ||
+            bytes[2] != 0x4e ||
+            bytes[3] != 0x47)
+        {
+            return (null, null);
+        }
+
+        return (ReadBigEndianInt32(bytes, 16), ReadBigEndianInt32(bytes, 20));
+    }
+
+    private static int ReadBigEndianInt32(byte[] bytes, int offset) =>
+        bytes[offset] << 24 |
+        bytes[offset + 1] << 16 |
+        bytes[offset + 2] << 8 |
+        bytes[offset + 3];
 
     private string ResolveArtifactDestination(string fileName)
     {
@@ -152,7 +217,7 @@ internal sealed class AndroidArtifactOperations(
             _artifacts,
             _timeProvider,
             BuildFailurePrefix,
-            CaptureScreenshotAsync,
+            async fileName => await CaptureScreenshotAsync(fileName).ConfigureAwait(false),
             CaptureLogcatSnapshotAsync,
             prefix => _screenStateReadModel.CaptureScreenStateWithRetryAsync(prefix));
 
@@ -165,4 +230,6 @@ internal sealed class AndroidArtifactOperations(
 
         return value;
     }
+
+    private sealed record ScreenshotArtifactInfo(string FileName, int? Width, int? Height, string? Sha256);
 }

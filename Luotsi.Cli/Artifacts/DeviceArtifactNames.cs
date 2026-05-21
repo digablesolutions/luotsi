@@ -7,6 +7,7 @@ internal static class DeviceArtifactNames
 {
     public const string HierarchyXml = "hierarchy.xml";
     public const string InvalidHierarchyXml = "hierarchy-invalid.xml";
+    public const string HierarchyDumpAttemptsJson = "hierarchy-dump-attempts.json";
     public const string ScreenStateJson = "screen-state.json";
     public const string WaitLogBaseName = "wait-log";
     public const string LogcatText = "logcat.txt";

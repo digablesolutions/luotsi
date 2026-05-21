@@ -29,6 +29,7 @@ internal static class ScenarioFailureDetails
 internal sealed class ScenarioAllocatedFailureException : Exception, ICommandFailureDetails
 {
     private readonly ICommandFailureDetails? _failureDetails;
+    private readonly object? _dataPayload;
 
     public ScenarioAllocatedFailureException(Exception innerException, ScenarioDeviceAllocation deviceAllocation)
         : base(innerException.Message, innerException)
@@ -37,11 +38,14 @@ internal sealed class ScenarioAllocatedFailureException : Exception, ICommandFai
 
         DeviceAllocation = deviceAllocation ?? throw new ArgumentNullException(nameof(deviceAllocation));
         _failureDetails = innerException as ICommandFailureDetails;
+        _dataPayload = _failureDetails?.DataPayload is ScenarioRunFailureData failureData
+            ? ScenarioMetadataCompatibility.Attach(failureData, deviceAllocation)
+            : _failureDetails?.DataPayload;
     }
 
     public string CategoryOverride => _failureDetails?.CategoryOverride ?? ErrorInfo.Classify(Message);
 
-    public object? DataPayload => _failureDetails?.DataPayload;
+    public object? DataPayload => _dataPayload;
 
     public ScenarioDeviceAllocation DeviceAllocation { get; }
 }

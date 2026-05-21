@@ -1,6 +1,7 @@
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
+using Luotsi.Cli.Scenarios;
 
 namespace Luotsi.Cli.Cli.Inspect;
 
@@ -19,8 +20,16 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIo console,
         {
             _protocol.WriteSessionStarted(sessionId, _timeProvider.GetUtcNow());
 
-            var currentState = await _deviceHost.GetScreenStateAsync().ConfigureAwait(false);
-            _protocol.WriteStateSnapshot(sessionId, null, currentState);
+            ScreenState? currentState = null;
+            try
+            {
+                currentState = await _deviceHost.GetScreenStateAsync().ConfigureAwait(false);
+                _protocol.WriteStateSnapshot(sessionId, null, currentState);
+            }
+            catch (Exception ex) when (!IsFatalException(ex) && ex is not OperationCanceledException)
+            {
+                _protocol.WriteSessionError(_timeProvider.GetUtcNow(), ex, sessionId);
+            }
 
             while (true)
             {
@@ -60,22 +69,50 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIo console,
 
                     if (_commandDispatcher.ShouldCaptureScreenState(normalizedCommand))
                     {
-                        var nextState = await _deviceHost.GetScreenStateAsync().ConfigureAwait(false);
-                        _protocol.WriteStateSnapshot(sessionId, request.Id, nextState, InspectScreenStateDelta.Create(currentState, nextState));
-                        currentState = nextState;
+                        try
+                        {
+                            var nextState = await _deviceHost.GetScreenStateAsync().ConfigureAwait(false);
+                            _protocol.WriteStateSnapshot(
+                                sessionId,
+                                request.Id,
+                                nextState,
+                                currentState is null ? null : InspectScreenStateDelta.Create(currentState, nextState));
+                            currentState = nextState;
+                        }
+                        catch (OperationCanceledException ex)
+                        {
+                            _protocol.WriteSessionError(_timeProvider.GetUtcNow(), ex, sessionId, request.Id);
+                        }
+                        catch (TimeoutException ex)
+                        {
+                            _protocol.WriteSessionError(_timeProvider.GetUtcNow(), ex, sessionId, request.Id);
+                        }
                     }
                 }
                 catch (Exception ex)
                 {
-                    var category = ex is UsageException ? "usage_error" : ErrorInfo.Classify(ex.Message);
+                    var category = ex is UsageException
+                        ? "usage_error"
+                        : ex is ICommandFailureDetails failure
+                            ? failure.CategoryOverride
+                            : ErrorInfo.Classify(ex.Message);
                     _protocol.WriteCommandResult(sessionId, request.Id, normalizedCommand, false, startedAt, _timeProvider.GetUtcNow(), error: ErrorInfo.From(ex, category));
                 }
             }
         }
         catch (Exception ex)
         {
-            _protocol.WriteSessionError(_timeProvider.GetUtcNow(), ex);
+            _protocol.WriteSessionError(_timeProvider.GetUtcNow(), ex, sessionId);
             return 1;
         }
     }
+
+    private static bool IsFatalException(Exception exception) =>
+        exception is OutOfMemoryException
+            or StackOverflowException
+            or AccessViolationException
+            or AppDomainUnloadedException
+            or BadImageFormatException
+            or CannotUnloadAppDomainException
+            or InvalidProgramException;
 }

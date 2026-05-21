@@ -253,6 +253,8 @@ internal sealed class FakeAdbClient(string? serial = null) : IAdbClient
     private readonly Queue<ProcessResult> _runResults = new();
     private readonly Queue<string[]> _logLines = new();
     private readonly Queue<AdbLogStreamResult> _logResults = new();
+    private readonly Dictionary<string, byte[]> _remoteFiles = new(StringComparer.Ordinal);
+    private IFileSystem? _fileSystem;
 
     public List<string> ShellCommands { get; } = [];
 
@@ -266,6 +268,10 @@ internal sealed class FakeAdbClient(string? serial = null) : IAdbClient
 
     public void EnqueueRunResult(ProcessResult result) => _runResults.Enqueue(result);
 
+    public void AttachFileSystem(IFileSystem fileSystem) => _fileSystem = fileSystem;
+
+    public void AddRemoteFile(string path, byte[] content) => _remoteFiles[path] = content;
+
     public void EnqueueLogLines(params string[] lines) => _logLines.Enqueue(lines);
 
     public void EnqueueLogResult(AdbLogStreamResult result) => _logResults.Enqueue(result);
@@ -274,6 +280,11 @@ internal sealed class FakeAdbClient(string? serial = null) : IAdbClient
     {
         var finalArgs = args.ToArray();
         RunCommands.Add(finalArgs);
+        if (TryHandlePull(finalArgs))
+        {
+            return Task.FromResult(new AdbCommandResult("adb", serial, finalArgs, new ProcessResult(0, string.Empty, string.Empty)));
+        }
+
                 var result = _runResults.Count > 0
                         ? _runResults.Dequeue()
                         : finalArgs.Length == 4 &&
@@ -285,6 +296,25 @@ internal sealed class FakeAdbClient(string? serial = null) : IAdbClient
                                 ? _shellResults.Dequeue()
                                 : new ProcessResult(0, string.Empty, string.Empty);
         return Task.FromResult(new AdbCommandResult("adb", serial, finalArgs, result));
+    }
+
+    private bool TryHandlePull(string[] finalArgs)
+    {
+        if (finalArgs.Length != 3 ||
+            !string.Equals(finalArgs[0], "pull", StringComparison.Ordinal) ||
+            !_remoteFiles.TryGetValue(finalArgs[1], out var content))
+        {
+            return false;
+        }
+
+        if (_fileSystem is null)
+        {
+            return true;
+        }
+
+        using var stream = _fileSystem.OpenWrite(finalArgs[2]);
+        stream.Write(content);
+        return true;
     }
 
     public Task<AdbCommandResult> ShellAsync(string command, CancellationToken cancellationToken = default)
@@ -439,6 +469,12 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public List<string> TakeScreenshotRequests { get; } = [];
 
+    public List<(string Label, int? ExpectedWidth, int? ExpectedHeight, string? ExpectedSha256)> AssertScreenshotRequests { get; } = [];
+
+    public List<string> RecordRequests { get; } = [];
+
+    public List<int> LogcatRequests { get; } = [];
+
     public List<string> TypeTextRequests { get; } = [];
 
     public List<string> KeyEventRequests { get; } = [];
@@ -513,11 +549,21 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public Exception? WaitVisibleException { get; set; }
 
+    public Exception? AssertScreenshotException { get; set; }
+
+    public Exception? ScreenStateException { get; set; }
+
     public Exception? ForceStopException { get; set; }
 
     public FailureArtifactBundle? FailureArtifacts { get; set; }
 
     public Exception? FailureArtifactException { get; set; }
+
+    public int? AssertScreenshotObservedWidth { get; set; } = 320;
+
+    public int? AssertScreenshotObservedHeight { get; set; } = 240;
+
+    public string? AssertScreenshotObservedSha256 { get; set; } = "observed-screenshot-sha256";
 
     public List<FailureCaptureRequest> FailureArtifactRequests { get; } = [];
 
@@ -591,8 +637,15 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
         return Task.FromResult(PreflightTemplate with { Package = packageName });
     }
 
-    public Task<ScreenState> GetScreenStateAsync() =>
-        Task.FromResult(_screenStates.Count > 1 ? _screenStates.Dequeue() : _screenStates.Peek());
+    public Task<ScreenState> GetScreenStateAsync()
+    {
+        if (ScreenStateException is not null)
+        {
+            throw ScreenStateException;
+        }
+
+        return Task.FromResult(_screenStates.Count > 1 ? _screenStates.Dequeue() : _screenStates.Peek());
+    }
 
     public Task<TapResult> TapAsync(string x, string y) => Task.FromResult(new TapResult(int.Parse(x), int.Parse(y)));
 
@@ -628,6 +681,25 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
         return Task.FromResult(new TakeScreenshotResult(label, $"{label}.png"));
     }
 
+    public Task<ScreenshotAssertionResult> AssertScreenshotAsync(string label, int? expectedWidth, int? expectedHeight, string? expectedSha256)
+    {
+        AssertScreenshotRequests.Add((label, expectedWidth, expectedHeight, expectedSha256));
+        if (AssertScreenshotException is not null)
+        {
+            throw AssertScreenshotException;
+        }
+
+        return Task.FromResult(new ScreenshotAssertionResult(
+            label,
+            $"{label}.png",
+            AssertScreenshotObservedWidth,
+            AssertScreenshotObservedHeight,
+            AssertScreenshotObservedSha256,
+            expectedWidth,
+            expectedHeight,
+            expectedSha256));
+    }
+
     public Task<CaptureArtifactsResult> CaptureArtifactsAsync(string label) => Task.FromResult(new CaptureArtifactsResult(label, $"{label}.png", $"{label}.txt", $"{label}.json", $"{label}.xml"));
 
     public Task<AssertTextInputReadyResult> AssertTextInputReadyAsync(bool requireKeyboard, int timeoutSec) =>
@@ -642,7 +714,11 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
     public Task<AssertAppVersionResult> AssertAppVersionAsync(string? packageName, int maxTopInsetPx, int maxRightInsetPx) =>
         Task.FromResult(new AssertAppVersionResult(packageName ?? string.Empty, "v1.0.0", 0, 0, maxTopInsetPx, maxRightInsetPx));
 
-    public Task<RecordResult> RecordAsync(string output, int timeLimitSec) => Task.FromResult(new RecordResult(output, timeLimitSec));
+    public Task<RecordResult> RecordAsync(string output, int timeLimitSec)
+    {
+        RecordRequests.Add($"{output}|{timeLimitSec}");
+        return Task.FromResult(new RecordResult(output, timeLimitSec));
+    }
 
     public Task<ScreenElement> WaitVisibleAsync(string text, int timeoutSec)
     {
@@ -874,7 +950,11 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
         return Task.FromResult(FailureArtifacts ?? new FailureArtifactBundle(ResultSchemas.FailureBundle, DateTimeOffset.UtcNow, request.Scope, request.Name, request.File, request.StepIndex, request.StepName, request.Action, exception.GetType().FullName ?? exception.GetType().Name, exception.Message, [], []));
     }
 
-    public Task<LogcatResult> LogcatAsync(int tail) => Task.FromResult(new LogcatResult([]));
+    public Task<LogcatResult> LogcatAsync(int tail)
+    {
+        LogcatRequests.Add(tail);
+        return Task.FromResult(new LogcatResult([]));
+    }
 
     private static AdbDiagnosticResult CreateAdbDiagnostic(string name, IReadOnlyList<string> args) =>
         new(

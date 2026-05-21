@@ -12,7 +12,8 @@ public sealed record ScenarioCatalogEntry(
     string File,
     IReadOnlyList<string> Tags,
     int StepCount,
-    IReadOnlyList<string> Actions);
+    IReadOnlyList<string> Actions,
+    ScenarioMetadata? Metadata = null);
 
 public sealed record ScenarioListResult(
     string Path,
@@ -71,7 +72,9 @@ public sealed record ScenarioRunResult(
     IReadOnlyList<ScenarioStepResult> Steps,
     ScenarioDeviceAllocation? DeviceAllocation = null,
     string? ScenarioId = null,
-    string? File = null);
+    string? File = null,
+    ScenarioMetadata? Metadata = null,
+    IReadOnlyList<ScenarioMetadataWarning>? MetadataWarnings = null);
 
 public sealed record ScenarioRunFailureData(
     string Scenario,
@@ -82,7 +85,15 @@ public sealed record ScenarioRunFailureData(
     ScenarioFailedStepResult FailedStep,
     IReadOnlyList<ScenarioStepResult> Steps,
     FailureArtifactBundle FailureArtifacts,
-    string? ScenarioId = null);
+    string? ScenarioId = null,
+    ScenarioMetadata? Metadata = null,
+    IReadOnlyList<ScenarioMetadataWarning>? MetadataWarnings = null);
+
+public sealed record ScenarioMetadataWarning(
+    string Code,
+    string Message,
+    string? Expected = null,
+    string? Actual = null);
 
 public sealed record ScenarioBatchItemResult(
     string Scenario,
@@ -93,7 +104,9 @@ public sealed record ScenarioBatchItemResult(
     string? File = null,
     ScenarioRunFailureData? Data = null,
     ErrorInfo? Error = null,
-    string? ScenarioId = null)
+    string? ScenarioId = null,
+    ScenarioMetadata? Metadata = null,
+    IReadOnlyList<ScenarioMetadataWarning>? MetadataWarnings = null)
 {
     public static ScenarioBatchItemResult FromSuccess(ScenarioRunResult result, ScenarioCatalogEntry? catalogEntry = null)
     {
@@ -105,7 +118,9 @@ public sealed record ScenarioBatchItemResult(
             result.Metrics,
             result.Steps,
             result.File ?? catalogEntry?.File,
-            ScenarioId: result.ScenarioId ?? catalogEntry?.Id);
+            ScenarioId: result.ScenarioId ?? catalogEntry?.Id,
+            Metadata: result.Metadata ?? catalogEntry?.Metadata,
+            MetadataWarnings: result.MetadataWarnings);
     }
 
     public static ScenarioBatchItemResult FromFailure(string scenario, string file, ScenarioRunFailureData? data, ErrorInfo error, string? scenarioId = null)
@@ -118,7 +133,9 @@ public sealed record ScenarioBatchItemResult(
             File: file,
             Data: data,
             Error: error,
-            ScenarioId: scenarioId ?? data?.ScenarioId ?? ScenarioIdentity.Create(file, scenario));
+            ScenarioId: scenarioId ?? data?.ScenarioId ?? ScenarioIdentity.Create(file, scenario),
+            Metadata: data?.Metadata,
+            MetadataWarnings: data?.MetadataWarnings);
     }
 }
 
@@ -386,7 +403,8 @@ internal sealed class ScenarioCatalog(
             file,
             tags,
             EnumerateLifecycleSteps(scenario).Count(),
-            actions);
+            actions,
+            scenario.Metadata);
     }
 
     internal static IEnumerable<ScenarioStep> EnumerateLifecycleSteps(ScenarioFile scenario)

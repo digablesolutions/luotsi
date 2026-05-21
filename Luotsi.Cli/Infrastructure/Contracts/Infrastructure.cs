@@ -76,7 +76,7 @@ public interface IAdbCommandHost
 /// <summary>
 /// Host-side device operations shared by commands and scenarios.
 /// </summary>
-public interface IDeviceHost : IScenarioActionHost
+public interface IDeviceHost : IScenarioActionHost, IScenarioScreenshotAssertionHost
 {
     /// <summary>
     /// Lists connected devices.
