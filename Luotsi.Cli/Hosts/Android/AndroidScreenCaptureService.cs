@@ -87,8 +87,7 @@ internal sealed class AndroidScreenCaptureService(
     public void InvalidateUiDumpCache() => _uiDumpCache = null;
 
     public static bool IsRetryableHierarchyDumpFailure(InvalidOperationException exception) =>
-        exception.Message.Contains("UI hierarchy dump was empty or invalid XML", StringComparison.OrdinalIgnoreCase) ||
-        exception.Message.Contains("UI hierarchy dump did not contain parseable XML", StringComparison.OrdinalIgnoreCase);
+        exception is ScreenStateUnavailableException;
 
     private async Task<ScreenCapture> ReadScreenCaptureAsync(bool writeInvalidArtifact)
     {
@@ -110,7 +109,7 @@ internal sealed class AndroidScreenCaptureService(
             }
 
             throw new ScreenStateUnavailableException(
-                $"UI hierarchy dump did not contain parseable XML after file-backed and stdout fallback attempts. See {DeviceArtifactNames.InvalidHierarchyXml} and {DeviceArtifactNames.HierarchyDumpAttemptsJson} for raw dump output.",
+                $"UI hierarchy dump did not contain parseable XML. See {DeviceArtifactNames.InvalidHierarchyXml} for the raw dump and {DeviceArtifactNames.HierarchyDumpAttemptsJson} for attempt details.",
                 ex);
         }
 

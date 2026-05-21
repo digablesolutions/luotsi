@@ -439,6 +439,10 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public List<string> TakeScreenshotRequests { get; } = [];
 
+    public List<string> RecordRequests { get; } = [];
+
+    public List<int> LogcatRequests { get; } = [];
+
     public List<string> TypeTextRequests { get; } = [];
 
     public List<string> KeyEventRequests { get; } = [];
@@ -651,7 +655,11 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
     public Task<AssertAppVersionResult> AssertAppVersionAsync(string? packageName, int maxTopInsetPx, int maxRightInsetPx) =>
         Task.FromResult(new AssertAppVersionResult(packageName ?? string.Empty, "v1.0.0", 0, 0, maxTopInsetPx, maxRightInsetPx));
 
-    public Task<RecordResult> RecordAsync(string output, int timeLimitSec) => Task.FromResult(new RecordResult(output, timeLimitSec));
+    public Task<RecordResult> RecordAsync(string output, int timeLimitSec)
+    {
+        RecordRequests.Add($"{output}|{timeLimitSec}");
+        return Task.FromResult(new RecordResult(output, timeLimitSec));
+    }
 
     public Task<ScreenElement> WaitVisibleAsync(string text, int timeoutSec)
     {
@@ -883,7 +891,11 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
         return Task.FromResult(FailureArtifacts ?? new FailureArtifactBundle(ResultSchemas.FailureBundle, DateTimeOffset.UtcNow, request.Scope, request.Name, request.File, request.StepIndex, request.StepName, request.Action, exception.GetType().FullName ?? exception.GetType().Name, exception.Message, [], []));
     }
 
-    public Task<LogcatResult> LogcatAsync(int tail) => Task.FromResult(new LogcatResult([]));
+    public Task<LogcatResult> LogcatAsync(int tail)
+    {
+        LogcatRequests.Add(tail);
+        return Task.FromResult(new LogcatResult([]));
+    }
 
     private static AdbDiagnosticResult CreateAdbDiagnostic(string name, IReadOnlyList<string> args) =>
         new(

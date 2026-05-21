@@ -24,10 +24,11 @@ public sealed partial class AppTests
         var error = await Assert.ThrowsAsync<ScreenStateUnavailableException>(runner.GetScreenStateAsync);
 
         Assert.Equal("screen_state_unavailable", error.CategoryOverride);
-        Assert.Contains("file-backed and stdout fallback attempts", error.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.True(fileSystem.FileExists(Path.Combine(artifacts.Root, "hierarchy.xml")));
-        Assert.True(fileSystem.FileExists(Path.Combine(artifacts.Root, "hierarchy-invalid.xml")));
-        Assert.True(fileSystem.FileExists(Path.Combine(artifacts.Root, "hierarchy-dump-attempts.json")));
+        Assert.Contains("did not contain parseable XML", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(DeviceArtifactNames.HierarchyDumpAttemptsJson, error.Message, StringComparison.Ordinal);
+        Assert.True(fileSystem.FileExists(Path.Join(artifacts.Root, DeviceArtifactNames.HierarchyXml)));
+        Assert.True(fileSystem.FileExists(Path.Join(artifacts.Root, DeviceArtifactNames.InvalidHierarchyXml)));
+        Assert.True(fileSystem.FileExists(Path.Join(artifacts.Root, DeviceArtifactNames.HierarchyDumpAttemptsJson)));
     }
 
 
@@ -65,7 +66,15 @@ public sealed partial class AppTests
 
         Assert.Contains(state.Elements, element => element.Text == "Target");
         Assert.Equal(["exec-out", "uiautomator", "dump", "/dev/tty"], adb.RunCommands[0]);
-        Assert.True(fileSystem.FileExists(Path.Combine(artifacts.Root, "hierarchy-dump-attempts.json")));
+        Assert.True(fileSystem.FileExists(Path.Join(artifacts.Root, DeviceArtifactNames.HierarchyDumpAttemptsJson)));
+    }
+
+
+    [Fact]
+    public void IsRetryableHierarchyDumpFailure_Uses_ScreenStateUnavailableException_Type()
+    {
+        Assert.True(AndroidScreenCaptureService.IsRetryableHierarchyDumpFailure(new ScreenStateUnavailableException("parse failure")));
+        Assert.False(AndroidScreenCaptureService.IsRetryableHierarchyDumpFailure(new InvalidOperationException("parse failure")));
     }
 
 

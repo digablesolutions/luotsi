@@ -119,8 +119,11 @@ internal sealed record InspectCommandRequest(
     string? Id,
     string? Command,
     string? Text,
+    string? Label,
     string? Code,
+    string? Output,
     int? TimeoutSec,
+    int? TimeLimitSec,
     int? Tail,
     int? X,
     int? Y);

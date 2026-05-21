@@ -389,7 +389,10 @@ public sealed partial class AppTests
         var console = new FakeConsole();
         console.EnqueueInput(
             "{\"id\":\"1\",\"command\":\"telemetry_tail\",\"tail\":20}",
-            "{\"id\":\"2\",\"command\":\"exit\"}");
+            "{\"id\":\"2\",\"command\":\"logcat\",\"tail\":25}",
+            "{\"id\":\"3\",\"command\":\"screenshot\",\"label\":\"inspect-shot\"}",
+            "{\"id\":\"4\",\"command\":\"record\",\"output\":\"inspect.mp4\",\"time_limit_sec\":3}",
+            "{\"id\":\"5\",\"command\":\"exit\"}");
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Ignored"))
         {
             ScreenStateException = new ScreenStateUnavailableException("UI hierarchy dump did not contain parseable XML.")
@@ -417,8 +420,55 @@ public sealed partial class AppTests
         Assert.True(commandResult.RootElement.GetProperty("ok").GetBoolean());
         Assert.Equal("telemetry_tail", commandResult.RootElement.GetProperty("command").GetString());
 
-        using var sessionEnded = JsonDocument.Parse(console.OutputLines[3]);
+        using var logcatResult = JsonDocument.Parse(console.OutputLines[3]);
+        Assert.Equal(SessionEventTypes.Inspect.CommandResult, logcatResult.RootElement.GetProperty("type").GetString());
+        Assert.True(logcatResult.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("logcat", logcatResult.RootElement.GetProperty("command").GetString());
+
+        using var screenshotResult = JsonDocument.Parse(console.OutputLines[4]);
+        Assert.Equal(SessionEventTypes.Inspect.CommandResult, screenshotResult.RootElement.GetProperty("type").GetString());
+        Assert.True(screenshotResult.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("screenshot", screenshotResult.RootElement.GetProperty("command").GetString());
+
+        using var recordResult = JsonDocument.Parse(console.OutputLines[5]);
+        Assert.Equal(SessionEventTypes.Inspect.CommandResult, recordResult.RootElement.GetProperty("type").GetString());
+        Assert.True(recordResult.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("record", recordResult.RootElement.GetProperty("command").GetString());
+
+        using var sessionEnded = JsonDocument.Parse(console.OutputLines[6]);
         Assert.Equal(SessionEventTypes.Inspect.SessionEnded, sessionEnded.RootElement.GetProperty("type").GetString());
+        Assert.Equal([25], host.LogcatRequests);
+        Assert.Equal(["inspect-shot"], host.TakeScreenshotRequests);
+        Assert.Equal(["inspect.mp4|3"], host.RecordRequests);
+    }
+
+    [Fact]
+    public async Task RunAsync_Inspect_Stops_When_Initial_Screen_State_Throws_Fatal_Exception()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Ignored"))
+        {
+            ScreenStateException = new OutOfMemoryException("fatal")
+        };
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            TimeProvider = timeProvider,
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var exitCode = await app.RunAsync(["inspect"]);
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal(2, console.OutputLines.Count);
+
+        using var sessionStarted = JsonDocument.Parse(console.OutputLines[0]);
+        Assert.Equal(SessionEventTypes.Inspect.SessionStarted, sessionStarted.RootElement.GetProperty("type").GetString());
+
+        using var sessionError = JsonDocument.Parse(console.OutputLines[1]);
+        Assert.Equal(SessionEventTypes.Inspect.SessionError, sessionError.RootElement.GetProperty("type").GetString());
+        Assert.Contains("fatal", sessionError.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
 

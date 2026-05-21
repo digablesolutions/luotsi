@@ -26,7 +26,7 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIo console,
                 currentState = await _deviceHost.GetScreenStateAsync().ConfigureAwait(false);
                 _protocol.WriteStateSnapshot(sessionId, null, currentState);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (!IsFatalException(ex) && ex is not OperationCanceledException)
             {
                 _protocol.WriteSessionError(_timeProvider.GetUtcNow(), ex, sessionId);
             }
@@ -106,4 +106,13 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIo console,
             return 1;
         }
     }
+
+    private static bool IsFatalException(Exception exception) =>
+        exception is OutOfMemoryException
+            or StackOverflowException
+            or AccessViolationException
+            or AppDomainUnloadedException
+            or BadImageFormatException
+            or CannotUnloadAppDomainException
+            or InvalidProgramException;
 }
