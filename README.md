@@ -29,7 +29,7 @@ Quick install is per-user and does not require admin rights.
 **Windows (PowerShell or Windows Terminal):**
 
 ```powershell
-iex (irm https://raw.githubusercontent.com/digablesolutions/luotsi/main/scripts/install.ps1)
+iex (irm https://github.com/digablesolutions/luotsi/releases/latest/download/luotsi-install.ps1)
 ```
 
 The installer downloads the latest published release, installs Luotsi under `%LOCALAPPDATA%\Luotsi`, writes a `luotsi` command shim to `%LOCALAPPDATA%\Luotsi\bin`, and adds that directory to your user `PATH`. Open a new terminal after the install finishes.
@@ -37,14 +37,14 @@ The installer downloads the latest published release, installs Luotsi under `%LO
 To pass installer options, use the scriptblock form:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/digablesolutions/luotsi/main/scripts/install.ps1))) -Version v1.2.3 -DryRun
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/digablesolutions/luotsi/main/scripts/install.ps1))) -InstallRoot 'D:\Tools\Luotsi' -SkipPathUpdate
+& ([scriptblock]::Create((irm https://github.com/digablesolutions/luotsi/releases/latest/download/luotsi-install.ps1))) -Version v1.2.3 -DryRun
+& ([scriptblock]::Create((irm https://github.com/digablesolutions/luotsi/releases/latest/download/luotsi-install.ps1))) -InstallRoot 'D:\Tools\Luotsi' -SkipPathUpdate
 ```
 
 **macOS / Linux:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/digablesolutions/luotsi/main/scripts/install.sh | sh
+curl -fsSL https://github.com/digablesolutions/luotsi/releases/latest/download/luotsi-install.sh | sh
 ```
 
 The shell installer downloads the latest published release, installs Luotsi under `~/.local/share/luotsi`, writes a `luotsi` command shim to `~/.local/share/luotsi/bin`, and updates your shell profile unless you pass `--skip-path-update`. Open a new terminal after the install finishes.
@@ -52,8 +52,8 @@ The shell installer downloads the latest published release, installs Luotsi unde
 To pass installer options:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/digablesolutions/luotsi/main/scripts/install.sh | sh -s -- --version v1.2.3 --dry-run
-curl -fsSL https://raw.githubusercontent.com/digablesolutions/luotsi/main/scripts/install.sh | sh -s -- --install-root "$HOME/tools/luotsi" --skip-path-update
+curl -fsSL https://github.com/digablesolutions/luotsi/releases/latest/download/luotsi-install.sh | sh -s -- --version v1.2.3 --dry-run
+curl -fsSL https://github.com/digablesolutions/luotsi/releases/latest/download/luotsi-install.sh | sh -s -- --install-root "$HOME/tools/luotsi" --skip-path-update
 ```
 
 **Manual fallback.** Download a self-contained archive from [GitHub Releases](https://github.com/digablesolutions/luotsi/releases). Each archive contains the self-contained `luotsi` executable (`luotsi.exe` on Windows) plus any companion files emitted by `dotnet publish`, with no separate .NET runtime required.
@@ -86,7 +86,7 @@ luotsi doctor --device <serial>
 luotsi doctor --device <serial> --fix
 ```
 
-`doctor` reuses the existing adb, device preflight, and live-view readiness checks. With `--fix`, Luotsi stages FFmpeg native libraries when the selected decoder is missing them, then runs the same helper provisioning flow used by `view setup`.
+`doctor` reuses the existing adb, device preflight, and live-view readiness checks. With `--fix`, Luotsi stages FFmpeg native libraries when the selected decoder is missing them, then runs the same helper provisioning flow used by `view setup`. Published Luotsi bundles include the repair assets needed for those fixes, and source checkouts continue to use the repository layout.
 
 ## Code layout
 

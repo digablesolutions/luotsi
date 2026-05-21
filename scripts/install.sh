@@ -13,8 +13,8 @@ usage() {
 Luotsi installer
 
 Usage:
-  curl -fsSL https://raw.githubusercontent.com/digablesolutions/luotsi/main/scripts/install.sh | sh
-  curl -fsSL https://raw.githubusercontent.com/digablesolutions/luotsi/main/scripts/install.sh | sh -s -- --version v1.2.3 --dry-run
+    curl -fsSL https://github.com/digablesolutions/luotsi/releases/latest/download/luotsi-install.sh | sh
+    curl -fsSL https://github.com/digablesolutions/luotsi/releases/latest/download/luotsi-install.sh | sh -s -- --version v1.2.3 --dry-run
 
 Options:
   --version <tag>       Install a specific release tag. Defaults to the latest published release.
@@ -102,6 +102,18 @@ github_api() {
     exit 1
 }
 
+json_get_string() {
+    key=$1
+    json=$2
+
+    if command -v jq >/dev/null 2>&1; then
+        printf '%s' "$json" | jq -r --arg key "$key" '.[$key] // empty'
+        return
+    fi
+
+    printf '%s' "$json" | tr '\n' ' ' | sed -n "s/.*\"$key\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" | head -n 1
+}
+
 download_file() {
     url=$1
     destination=$2
@@ -132,7 +144,17 @@ compute_sha256() {
 get_expected_hash() {
     checksum_file=$1
     asset_name=$2
-    hash=$(awk -v target="$asset_name" '$2 == target {print tolower($1)}' "$checksum_file")
+    hash=$(awk -v target="$asset_name" '
+        {
+            name = $2
+            sub(/^\*/, "", name)
+            sub(/^\.\//, "", name)
+            if (name == target) {
+                print tolower($1)
+                exit
+            }
+        }
+    ' "$checksum_file")
     if [ -z "$hash" ]; then
         printf 'Could not find a SHA-256 entry for %s in %s\n' "$asset_name" "$checksum_file" >&2
         exit 1
@@ -185,10 +207,14 @@ resolve_release_tag() {
         return
     fi
 
-    json=$(github_api "https://api.github.com/repos/$OWNER/$REPOSITORY/releases?per_page=1")
-    tag=$(printf '%s' "$json" | tr '\n' ' ' | grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n 1 | sed 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)"/\1/')
+    if ! json=$(github_api "https://api.github.com/repos/$OWNER/$REPOSITORY/releases/latest"); then
+        printf 'No published stable GitHub Releases were found for %s/%s.\n' "$OWNER" "$REPOSITORY" >&2
+        exit 1
+    fi
+
+    tag=$(json_get_string tag_name "$json")
     if [ -z "$tag" ]; then
-        printf 'No published GitHub Releases were found for %s/%s.\n' "$OWNER" "$REPOSITORY" >&2
+        printf 'No published stable GitHub Releases were found for %s/%s.\n' "$OWNER" "$REPOSITORY" >&2
         exit 1
     fi
 
@@ -315,6 +341,11 @@ RESOLVED_TAG=$(resolve_release_tag "$REQUESTED_TAG")
 RID=$(get_platform_rid)
 RESOLVED_VERSION=${RESOLVED_TAG#v}
 RESOLVED_INSTALL_ROOT=$(resolve_install_root)
+if [ "$SKIP_PATH_UPDATE" -eq 0 ] && [ -z "${HOME:-}" ]; then
+    printf 'HOME is not set; skipping PATH update.\n'
+    SKIP_PATH_UPDATE=1
+fi
+
 BIN_DIR="$RESOLVED_INSTALL_ROOT/bin"
 CURRENT_DIR="$RESOLVED_INSTALL_ROOT/current"
 PREVIOUS_DIR="$RESOLVED_INSTALL_ROOT/previous"

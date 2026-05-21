@@ -162,6 +162,7 @@ public sealed class ViewHostPathResolver(IEnvironmentVariables environment)
         foreach (var candidate in new[]
                  {
                      Path.GetFullPath(Path.Join(Directory.GetCurrentDirectory(), relativePath)),
+                     Path.GetFullPath(Path.Join(AppContext.BaseDirectory, relativePath)),
                      Path.GetFullPath(Path.Join(buildOutputRepositoryRoot, relativePath))
                  }.Where(seen.Add))
         {

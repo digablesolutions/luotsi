@@ -33,7 +33,7 @@ luotsi [--device <serial> | --device-query <query>] [--platform android] [--adb 
 
 `wait-for-device` is also available as `device-wait` or `adb wait-for-device`.
 
-`doctor` is the first-run entry point. It reuses the existing adb/version checks, optional package-specific preflight, and the same live-view readiness report exposed by `view-doctor`. `doctor --fix` stages Luotsi-owned FFmpeg native libraries when the requested decoder is missing them, then routes through the same helper/install readiness path as `view setup`.
+`doctor` is the first-run entry point. It reuses the existing adb/version checks, optional package-specific preflight, and the same live-view readiness report exposed by `view-doctor`. `doctor --fix` stages Luotsi-owned FFmpeg native libraries when the requested decoder is missing them, then routes through the same helper/install readiness path as `view setup`. Published Luotsi bundles include those repair assets; source checkouts continue to resolve them from the repository layout.
 
 ---
 

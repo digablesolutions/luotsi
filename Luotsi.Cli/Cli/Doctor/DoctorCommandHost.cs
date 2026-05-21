@@ -96,7 +96,7 @@ internal sealed class DoctorCommandHost(DoctorCommandHostDependencies dependenci
                 string.IsNullOrWhiteSpace(detail) ? null : detail.Trim(),
                 result.Command.Succeeded ? null : recommendation));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             checks.Add(new DoctorCheck(name, false, failureSummary, ex.Message, recommendation));
         }
@@ -114,7 +114,7 @@ internal sealed class DoctorCommandHost(DoctorCommandHostDependencies dependenci
                 result.CurrentFocus));
             return result;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or System.IO.IOException)
         {
             checks.Add(new DoctorCheck(
                 "package_preflight",

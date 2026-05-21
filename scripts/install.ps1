@@ -9,10 +9,10 @@
     optionally updates the user PATH.
 
 .EXAMPLE
-    iex (irm https://raw.githubusercontent.com/digablesolutions/luotsi/main/scripts/install.ps1)
+    iex (irm https://github.com/digablesolutions/luotsi/releases/latest/download/luotsi-install.ps1)
 
 .EXAMPLE
-    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/digablesolutions/luotsi/main/scripts/install.ps1))) -Version v1.2.3 -DryRun
+    & ([scriptblock]::Create((irm https://github.com/digablesolutions/luotsi/releases/latest/download/luotsi-install.ps1))) -Version v1.2.3 -DryRun
 #>
 [CmdletBinding()]
 param(
@@ -37,11 +37,6 @@ function Get-DefaultInstallRoot {
 }
 
 function Get-PlatformRid {
-    $architecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
-    if ($architecture -eq [System.Runtime.InteropServices.Architecture]::Arm64) {
-        return "win-x64"
-    }
-
     return "win-x64"
 }
 
@@ -82,12 +77,18 @@ function Resolve-ReleaseTag([string]$OwnerName, [string]$RepositoryName, [string
         return [string]$release.tag_name
     }
 
-    $releases = @(Invoke-GitHubJson "https://api.github.com/repos/$OwnerName/$RepositoryName/releases?per_page=1")
-    if ($releases.Count -lt 1 -or [string]::IsNullOrWhiteSpace($releases[0].tag_name)) {
-        throw "No published GitHub Releases were found for $OwnerName/$RepositoryName. Create a release or pass -Version <tag>."
+    try {
+        $release = Invoke-GitHubJson "https://api.github.com/repos/$OwnerName/$RepositoryName/releases/latest"
+    }
+    catch {
+        throw "No published stable GitHub Releases were found for $OwnerName/$RepositoryName. Create a release or pass -Version <tag>."
     }
 
-    return [string]$releases[0].tag_name
+    if ([string]::IsNullOrWhiteSpace($release.tag_name)) {
+        throw "No published stable GitHub Releases were found for $OwnerName/$RepositoryName. Create a release or pass -Version <tag>."
+    }
+
+    return [string]$release.tag_name
 }
 
 function Invoke-Download([string]$Uri, [string]$DestinationPath) {
@@ -97,8 +98,15 @@ function Invoke-Download([string]$Uri, [string]$DestinationPath) {
 function Get-Checksum([string]$ChecksumFile, [string]$AssetName) {
     $pattern = '^(?<hash>[0-9a-fA-F]{64})\s+\*?(?<name>.+)$'
     foreach ($line in Get-Content -LiteralPath $ChecksumFile) {
-        if ($line -match $pattern -and $Matches.name -eq $AssetName) {
-            return $Matches.hash.ToLowerInvariant()
+        if ($line -match $pattern) {
+            $name = $Matches.name.Trim()
+            while ($name.StartsWith('./', [StringComparison]::Ordinal) -or $name.StartsWith('.\\', [StringComparison]::Ordinal)) {
+                $name = $name.Substring(2)
+            }
+
+            if ($name -eq $AssetName) {
+                return $Matches.hash.ToLowerInvariant()
+            }
         }
     }
 

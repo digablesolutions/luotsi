@@ -319,6 +319,21 @@ public sealed class ViewTransportTests
     }
 
     [Fact]
+    public void AndroidViewHelperPackageLocator_Uses_Published_App_Project_Output_When_Environment_Is_Missing()
+    {
+        var fileSystem = new FakeFileSystem();
+        var expectedPath = Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "Luotsi.ViewServer.Android", "app", "build", "outputs", "apk", "debug", "app-debug.apk"));
+        fileSystem.AddFile(expectedPath, "apk");
+        var locator = new AndroidViewHelperPackageLocator(new FakeEnvironmentVariables(new Dictionary<string, string>()), fileSystem);
+
+        var package = locator.Resolve();
+
+        Assert.Equal(expectedPath, package.LocalPath);
+        Assert.Equal("/data/local/tmp/luotsi-view-server.apk", package.RemotePath);
+        Assert.Equal("repository_default", package.ResolutionSource);
+    }
+
+    [Fact]
     public void LibavNativeLibraryLoader_Prefers_Configured_Root_And_Caches_Result()
     {
         var binder = new FakeLibavNativeLibraryBinder();

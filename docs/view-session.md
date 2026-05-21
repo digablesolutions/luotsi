@@ -169,4 +169,4 @@ Checks: FFmpeg decoder readiness (`LUOTSI_FFMPEG_ROOT` + bundled `ffmpeg/` paths
 
 Use `view setup` when you want Luotsi to prepare the helper and verify install state before diagnosing readiness. `view-doctor --fix` routes through the same setup path.
 
-Use `doctor` when you want the broader first-run onboarding report. It wraps adb checks, optional package preflight, and the same `view-doctor` / `view setup` readiness flow behind a single command.
+Use `doctor` when you want the broader first-run onboarding report. It wraps adb checks, optional package preflight, and the same `view-doctor` / `view setup` readiness flow behind a single command. Published Luotsi bundles include the repair assets required by `doctor --fix` and `view-doctor --fix`; source checkouts continue to resolve them from the repository layout.
