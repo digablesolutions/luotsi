@@ -265,7 +265,21 @@ jobs:
         run: |
           $helper = "artifacts/publish/${{ matrix.rid }}/Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release.apk"
           if (!(Test-Path -LiteralPath $helper)) {
-            throw "Published Luotsi bundle is missing the Android view helper APK: $helper"
+            $publishRoot = "artifacts/publish/${{ matrix.rid }}"
+            $candidate = Get-ChildItem -LiteralPath $publishRoot -Recurse -File |
+              Where-Object { $_.Name -like "*app-release.apk" } |
+              Sort-Object FullName |
+              Select-Object -First 1
+            if ($null -eq $candidate) {
+              Get-ChildItem -LiteralPath $publishRoot -Recurse -File | ForEach-Object {
+                Write-Host "Published file: $($_.FullName)"
+              }
+              throw "Published Luotsi bundle is missing the Android view helper APK: $helper"
+            }
+
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $helper) | Out-Null
+            Copy-Item -LiteralPath $candidate.FullName -Destination $helper -Force
+            Write-Host "Normalized published Android helper APK $($candidate.FullName) to $helper."
           }
 
       - name: Verify helper APK signature
