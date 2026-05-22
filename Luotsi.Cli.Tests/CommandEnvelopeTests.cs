@@ -54,6 +54,21 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_Version_Flag_Writes_Version_And_Returns_Success()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["--version"]);
+
+        Assert.Equal(0, exitCode);
+        var line = Assert.Single(console.OutputLines);
+        Assert.StartsWith("luotsi ", line, StringComparison.Ordinal);
+        Assert.DoesNotContain("unknown", line, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(console.ErrorLines);
+    }
+
+    [Fact]
     public async Task RunAsync_Command_Help_Flag_Writes_Command_Topic()
     {
         var console = new FakeConsole();

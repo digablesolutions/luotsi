@@ -17,6 +17,12 @@ internal sealed class AppExecutionShell(AppExecutionShellDependencies dependenci
 
         var started = _dependencies.TimeProvider.GetUtcNow();
         var options = CliOptions.Parse(args);
+        if (options.HasFlag("version"))
+        {
+            _dependencies.Console.WriteLine($"luotsi {AppVersion.GetDisplayVersion()}");
+            return 0;
+        }
+
         if (string.Equals(options.Command, "help", StringComparison.OrdinalIgnoreCase))
         {
             return WriteHelp(options);

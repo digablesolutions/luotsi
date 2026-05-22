@@ -90,7 +90,8 @@ public sealed class CliOptions
         "overlay-telemetry",
         "no-require-device-ready",
         "read-only",
-        "validate-only"
+        "validate-only",
+        "version"
     }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     private readonly Dictionary<string, string?> _values = new(StringComparer.OrdinalIgnoreCase);

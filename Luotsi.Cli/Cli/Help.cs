@@ -236,6 +236,7 @@ Notes:
 Usage:
   luotsi <command> [options]
   luotsi help <topic>
+  luotsi --version
 
 Fast paths:
   luotsi devices
@@ -330,6 +331,7 @@ Common options:
   --adb-timeout-sec <seconds>  default 120, 0 disables; env LUOTSI_ADB_TIMEOUT_SEC
   --artifacts <directory>
   --poll-artifacts <final|per-attempt|none>
+  --version                    print the Luotsi version and exit
 
 Design:
   Luotsi is intentionally host-side and cross-platform. The v1 implementation

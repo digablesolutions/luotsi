@@ -8,6 +8,8 @@ luotsi view --profile desk
 luotsi view --last
 ```
 
+View writes screenshots, live-view recordings, JSONL events, and diagnostics under the current artifact root. By default that root is a timestamped directory under the host temp folder, for example `%TEMP%\luotsi\<timestamp>-view` on Windows or `/tmp/luotsi/<timestamp>-view` on Linux/macOS. Use `--artifacts <directory>` to choose a stable location.
+
 ---
 
 ## Presets
@@ -83,6 +85,10 @@ Plain text input and common navigation/editing keys are forwarded to the device.
 **Drag and drop:** `.apk` files are installed on the device; other files are pushed to `/sdcard/Download`; `device:/sdcard/...` or `adb:/sdcard/...` path tokens pull from the device into the artifact root.
 
 **Toolbar and shelf.** The SDL window paints an in-window toolbar (screenshot, record, reconnect, navigation, rotate, pause, open-folder, fit, fullscreen) so all controls are clickable without memorizing hotkeys. When multiple adb-visible devices are present, a multi-device shelf appears and lets you switch the mirrored device by clicking.
+
+**Artifact paths.** F12/toolbar screenshot writes files such as `view-window-001-screenshot.png` to the artifact root. F9/toolbar record writes `view-window-record-001.h264` there by default. If `--record <file.h264|file.mp4|file.mkv>` is supplied, startup recording writes that exact path and subsequent operator recordings reuse its directory, base name, and extension with a numeric suffix. Container outputs (`.mp4`, `.mkv`) require an `ffmpeg` executable; raw `.h264` does not. F7/toolbar open-folder opens the artifact root.
+
+The `view_started` JSONL event includes `artifacts.artifact_root`; `view_screenshot_captured`, `view_recording_started`, and `view_recording_stopped` include the file or record path that was written.
 
 ---
 

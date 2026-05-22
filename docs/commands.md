@@ -4,6 +4,7 @@ All commands run on the host machine and return a single JSON envelope unless no
 
 ```
 luotsi [--device <serial> | --device-query <query>] [--platform android] [--adb <path>] [--adb-timeout-sec <n>] <command> [flags]
+luotsi --version
 ```
 
 **ADB path.** If `adb` is not on `PATH` (common in WSL), pass `--adb /path/to/adb` or set `LUOTSI_ADB`. Bounded ADB commands default to a 120-second timeout; override with `--adb-timeout-sec <n>` or `LUOTSI_ADB_TIMEOUT_SEC`. Use `0` to disable.
@@ -11,6 +12,8 @@ luotsi [--device <serial> | --device-query <query>] [--platform android] [--adb 
 **Retry policy.** Safe reads (diagnostics, UI dumps, log snapshots, read-only shell probes) get one visible retry after known transient transport errors (protocol faults, missing/offline/connecting devices). Mutating commands (tap, type, install, push, key events) are not retried.
 
 **Artifacts.** Use `--artifacts <directory>` to override the artifact root for the current command or session. Use `--poll-artifacts <final|per-attempt|none>` to control whether polling-style commands write artifacts only at the end, on each attempt, or not at all.
+
+**Version.** `luotsi --version` prints the CLI version. Release builds stamp this from the GitHub release tag via `/p:Version=<version>`; source builds use the assembly version produced by the local build.
 
 ---
 
@@ -54,6 +57,8 @@ See [view-session.md](view-session.md) for the full view reference (presets, bac
 | `view-doctor --device <serial> [options]` | Diagnostic report: decoder, helper, backend, preflight, MediaProjection, recording |
 | `profile-list` | List saved view profiles |
 | `profile-delete --name <name>` | Delete a saved view profile |
+
+View screenshots and operator-triggered recordings are written to the artifact root. By default that root is a timestamped directory under the host temp folder, such as `%TEMP%\luotsi\<timestamp>-view` on Windows or `/tmp/luotsi/<timestamp>-view` on Linux/macOS. Pass `--artifacts <directory>` to choose it. F12/toolbar screenshot writes `view-window-001-screenshot.png`; F9/toolbar record writes `view-window-record-001.h264` unless `--record <file.h264|file.mp4|file.mkv>` supplies a preferred output path. F7/toolbar open-folder opens the artifact root.
 
 ---
 
@@ -138,6 +143,8 @@ These commands are the direct device-control surface outside scenarios and `insp
 | `logcat [--tail 200]` | Snapshot recent raw logcat lines |
 | `wait-log --device <serial> --contains <text> --timeout-sec <n>` | Wait for a logcat line matching a substring |
 | `record --output <file.mp4> [--time-limit-sec 30]` | Record the device screen to a host video file |
+
+`record` is the direct ADB screenrecord command and writes exactly to `--output`. It is separate from live-view F9 recording, which records the decoded live stream and defaults to the current artifact root.
 
 ---
 
