@@ -309,7 +309,7 @@ public sealed class ViewTransportTests
     public void AndroidViewHelperPackageLocator_Uses_Default_Project_Output_When_Environment_Is_Missing()
     {
         var fileSystem = new FakeFileSystem();
-        var expectedPath = Path.GetFullPath(Path.Join(Directory.GetCurrentDirectory(), "Luotsi.ViewServer.Android", "app", "build", "outputs", "apk", "debug", "app-debug.apk"));
+        var expectedPath = Path.GetFullPath(Path.Join(Directory.GetCurrentDirectory(), "Luotsi.ViewServer.Android", "app", "build", "outputs", "apk", "release", "app-release-unsigned.apk"));
         fileSystem.AddFile(expectedPath, "apk");
         var locator = new AndroidViewHelperPackageLocator(new FakeEnvironmentVariables(new Dictionary<string, string>()), fileSystem);
 
@@ -323,7 +323,7 @@ public sealed class ViewTransportTests
     public void AndroidViewHelperPackageLocator_Uses_Published_App_Project_Output_When_Environment_Is_Missing()
     {
         var fileSystem = new FakeFileSystem();
-        var expectedPath = Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "Luotsi.ViewServer.Android", "app", "build", "outputs", "apk", "debug", "app-debug.apk"));
+        var expectedPath = Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "Luotsi.ViewServer.Android", "app", "build", "outputs", "apk", "release", "app-release-unsigned.apk"));
         fileSystem.AddFile(expectedPath, "apk");
         var locator = new AndroidViewHelperPackageLocator(new FakeEnvironmentVariables(new Dictionary<string, string>()), fileSystem);
 

@@ -466,7 +466,7 @@ public sealed partial class AppTests
         Assert.Same(package, resolved);
         var call = Assert.Single(processRunner.Calls);
         Assert.Equal(wrapperPath, call.FileName);
-        Assert.Equal(["-p", projectDirectory, ":app:assembleDebug"], call.Args);
+        Assert.Equal(["-p", projectDirectory, ":app:assembleRelease"], call.Args);
         Assert.Collection(
             steps,
             step =>
@@ -543,7 +543,7 @@ public sealed partial class AppTests
         Assert.Same(package, resolved);
         var call = Assert.Single(processRunner.Calls);
         Assert.Equal(wrapperPath, call.FileName);
-        Assert.Equal(["-p", projectDirectory, ":app:assembleDebug"], call.Args);
+        Assert.Equal(["-p", projectDirectory, ":app:assembleRelease"], call.Args);
         Assert.Contains(steps, step => step.Name == "helper_build" && step.Status == ViewStartupPhaseStatus.Started && step.Detail == projectDirectory);
     }
 
