@@ -88,10 +88,18 @@ Failure modes:
 Luotsi help: lab
 
 Usage:
+  luotsi devices
+  luotsi device-status [--device <adb serial> | --device-query <query>]
+  luotsi wait-for-device [--timeout-sec 15]
+  luotsi device-wait [--timeout-sec 15]
+  luotsi preflight [--package <app.id>]
+  luotsi doctor --device <adb serial> [--package <app.id>] [--fix]
   luotsi lab status [--device-query <query>]
   luotsi lab doctor [--device-query <query>] [--fix]
 
 Examples:
+  luotsi devices
+  luotsi device-status --device emulator-5554
   luotsi lab status
   luotsi lab status --device-query state=device,type=physical
   luotsi lab doctor --fix

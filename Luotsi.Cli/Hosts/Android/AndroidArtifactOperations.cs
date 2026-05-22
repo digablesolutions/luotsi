@@ -54,7 +54,7 @@ internal sealed class AndroidArtifactOperations(
     {
         var fileName = DeviceArtifactNames.ScreenshotForLabel(Slugify(label));
         var artifact = await CaptureScreenshotAsync(fileName).ConfigureAwait(false);
-        expectedSha256 = await ResolveExpectedSha256Async(expectedSha256, expectedSha256File, baselineFile, updateBaseline).ConfigureAwait(false);
+        expectedSha256 = await ResolveExpectedSha256Async(expectedSha256, expectedSha256File, updateBaseline ? null : baselineFile, updateBaseline).ConfigureAwait(false);
         var diffArtifact = (string?)null;
         var regionSha256 = (string?)null;
         expectedRegionSha256 = await ResolveExpectedSha256Async(expectedRegionSha256, expectedRegionSha256File, null, false).ConfigureAwait(false);

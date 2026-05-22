@@ -157,7 +157,7 @@ internal static class ScenarioValidator
                     throw new UsageException($"{stepLabel} assertScreenshot requires expectedWidth, expectedHeight, expectedSha256, expectedSha256File, expectedRegionSha256, expectedRegionSha256File, baselineFile, or updateBaseline.");
                 }
 
-                if ((step.ExpectedRegionSha256 is not null || step.ExpectedRegionSha256File is not null) &&
+                if ((!string.IsNullOrWhiteSpace(step.ExpectedRegionSha256) || !string.IsNullOrWhiteSpace(step.ExpectedRegionSha256File)) &&
                     (step.RegionX is null || step.RegionY is null || step.RegionWidth is null || step.RegionHeight is null))
                 {
                     throw new UsageException($"{stepLabel} assertScreenshot region SHA requires regionX, regionY, regionWidth, and regionHeight.");

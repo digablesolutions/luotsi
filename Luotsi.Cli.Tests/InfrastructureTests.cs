@@ -91,6 +91,25 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task ArtifactSession_Html_Index_Summarizes_Bounded_Jsonl_Tail()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-18T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var session = ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider);
+        var events = string.Join(Environment.NewLine, Enumerable.Range(0, 510).Select(static index => index == 509
+            ? """{"type":"scenario_run_ended","status":"passed"}"""
+            : """{"type":"scenario_step_passed"}"""));
+
+        await session.WriteTextAsync("events.jsonl", events);
+        await session.RefreshIndexAsync();
+
+        var index = await fileSystem.ReadAllTextAsync(Path.Join(session.Root, "index.html"));
+
+        Assert.Contains("events_sampled=500 | terminal=passed", index, StringComparison.Ordinal);
+        Assert.DoesNotContain("events=510", index, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ArtifactSession_RefreshIndex_Includes_Pulled_Media_Files()
     {
         var fileSystem = new FakeFileSystem();

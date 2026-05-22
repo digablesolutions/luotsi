@@ -7,6 +7,8 @@ namespace Luotsi.Cli.Artifacts;
 
 internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
 {
+    private const int MaxJsonlSummaryBytes = 256 * 1024;
+    private const int MaxJsonlSummaryLines = 500;
     private readonly string _root = root ?? throw new ArgumentNullException(nameof(root));
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
 
@@ -38,7 +40,7 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         return builder.ToString();
     }
 
-    public string BuildHtmlIndex(IReadOnlyList<string> files)
+    public async Task<string> BuildHtmlIndexAsync(IReadOnlyList<string> files)
     {
         var builder = new StringBuilder();
         builder.AppendLine("<!doctype html>");
@@ -89,7 +91,7 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
                     builder.AppendLine("        <li>");
                     builder.AppendLine("          <div>");
                     builder.AppendLine($"            <a href=\"{HtmlAttributeEncode(EscapeHtmlLink(file))}\">{HtmlEncode(file)}</a>");
-                    var summary = TryBuildArtifactSummary(file);
+                    var summary = await TryBuildArtifactSummaryAsync(file).ConfigureAwait(false);
                     if (!string.IsNullOrWhiteSpace(summary))
                     {
                         builder.AppendLine($"            <div class=\"root\">{HtmlEncode(summary)}</div>");
@@ -167,23 +169,23 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         return "Other";
     }
 
-    private string? TryBuildArtifactSummary(string path)
+    private async Task<string?> TryBuildArtifactSummaryAsync(string path)
     {
         if (string.Equals(Path.GetExtension(path), ".jsonl", StringComparison.OrdinalIgnoreCase))
         {
-            return TryBuildJsonlSummary(path);
+            return await TryBuildJsonlSummaryAsync(path).ConfigureAwait(false);
         }
 
         return string.Equals(Path.GetExtension(path), ".json", StringComparison.OrdinalIgnoreCase)
-            ? TryBuildJsonReportSummary(path)
+            ? await TryBuildJsonReportSummaryAsync(path).ConfigureAwait(false)
             : null;
     }
 
-    private string? TryBuildJsonReportSummary(string path)
+    private async Task<string?> TryBuildJsonReportSummaryAsync(string path)
     {
         try
         {
-            using var document = JsonDocument.Parse(_fileSystem.ReadAllTextAsync(Path.Join(_root, path)).GetAwaiter().GetResult());
+            using var document = JsonDocument.Parse(await _fileSystem.ReadAllTextAsync(Path.Join(_root, path)).ConfigureAwait(false));
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object)
             {
@@ -211,18 +213,14 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         }
     }
 
-    private string? TryBuildJsonlSummary(string path)
+    private async Task<string?> TryBuildJsonlSummaryAsync(string path)
     {
         try
         {
             var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             var terminalStatuses = new List<string>();
-            foreach (var (type, status) in _fileSystem
-                .ReadAllTextAsync(Path.Join(_root, path))
-                .GetAwaiter()
-                .GetResult()
-                .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
-                .Select(ParseJsonlEvent))
+            var (sampledLines, truncated) = await ReadJsonlTailLinesAsync(path).ConfigureAwait(false);
+            foreach (var (type, status) in sampledLines.Select(ParseJsonlEvent))
             {
                 if (string.IsNullOrWhiteSpace(type))
                 {
@@ -241,7 +239,9 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
                 return null;
             }
 
-            var parts = new List<string> { $"events={counts.Values.Sum()}" };
+            var parts = truncated
+                ? new List<string> { $"events_sampled={counts.Values.Sum()}" }
+                : new List<string> { $"events={counts.Values.Sum()}" };
             if (terminalStatuses.Count > 0)
             {
                 parts.Add($"terminal={string.Join(",", terminalStatuses)}");
@@ -258,6 +258,32 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         {
             return null;
         }
+    }
+
+    private async Task<(string[] Lines, bool Truncated)> ReadJsonlTailLinesAsync(string path)
+    {
+        using var stream = _fileSystem.OpenRead(Path.Join(_root, path));
+        var truncatedByBytes = false;
+        if (stream.CanSeek && stream.Length > MaxJsonlSummaryBytes)
+        {
+            stream.Seek(-MaxJsonlSummaryBytes, SeekOrigin.End);
+            truncatedByBytes = true;
+        }
+
+        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 4096);
+        var text = await reader.ReadToEndAsync().ConfigureAwait(false);
+        var lines = text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        if (truncatedByBytes && lines.Length > 0)
+        {
+            lines = lines[1..];
+        }
+
+        if (lines.Length <= MaxJsonlSummaryLines)
+        {
+            return (lines, truncatedByBytes);
+        }
+
+        return (lines[^MaxJsonlSummaryLines..], true);
     }
 
     private static (string? Type, string? Status) ParseJsonlEvent(string line)

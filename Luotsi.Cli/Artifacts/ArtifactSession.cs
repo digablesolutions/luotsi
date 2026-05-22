@@ -85,7 +85,8 @@ public sealed class ArtifactSession
     {
         var files = GetIndexedFiles();
         await _fileSystem.WriteAllTextAsync(GetArtifactPath(ArtifactIndexFileName), _indexRenderer.BuildMarkdownIndex(files), Encoding.UTF8).ConfigureAwait(false);
-        await _fileSystem.WriteAllTextAsync(GetArtifactPath(ArtifactHtmlIndexFileName), _indexRenderer.BuildHtmlIndex(files), Encoding.UTF8).ConfigureAwait(false);
+        var htmlIndex = await _indexRenderer.BuildHtmlIndexAsync(files).ConfigureAwait(false);
+        await _fileSystem.WriteAllTextAsync(GetArtifactPath(ArtifactHtmlIndexFileName), htmlIndex, Encoding.UTF8).ConfigureAwait(false);
     }
 
     /// <summary>

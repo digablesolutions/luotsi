@@ -115,7 +115,7 @@ The top-level scenario result also includes `prologue_ms`, `steps_ms`, and `non_
 | `waitActionReady` | `text` *(required)*, `step` *(optional)*, `timeoutSec` |
 | `resetLog` | — |
 | `assertEvent` | `event`, `timeoutSec`; supports `observeFromPreviousStep: true` |
-| `assertScreenshot` | `label`, `expectedWidth`, `expectedHeight`, `expectedSha256`, `expectedSha256File`, `baselineFile`, `updateBaseline` |
+| `assertScreenshot` | `label` *(optional; falls back to `text`/`name`)*, `expectedWidth`, `expectedHeight`, `expectedSha256`, `expectedSha256File`, `baselineFile`, `updateBaseline`, `regionX`, `regionY`, `regionWidth`, `regionHeight`, `expectedRegionSha256`, `expectedRegionSha256File` |
 | `assertTextInputReady` | `timeoutSec`, `requireKeyboard` *(optional bool)* |
 | `assertBelow` | `text`, `below`, `maxGapPx` *(optional)* |
 | `assertAligned` | `text`, `with`, `maxDeltaPx` *(optional)* |
@@ -123,7 +123,7 @@ The top-level scenario result also includes `prologue_ms`, `steps_ms`, and `non_
 
 `assertEvent` with `observeFromPreviousStep: true` begins the log observation window at the previous step's start time rather than the assert step's own start time.
 
-`assertScreenshot` captures a screenshot, stores it as an artifact, records its dimensions and SHA-256 hash, and fails when the provided expected dimensions or hash do not match. It can assert a literal SHA-256, a SHA-256 stored in a text file, or the SHA-256 of a baseline image. Use `updateBaseline: true` with `baselineFile` when intentionally refreshing a checked-in baseline.
+`assertScreenshot` captures a screenshot, stores it as an artifact, records its dimensions and SHA-256 hash, and fails when the provided expected dimensions or hash do not match. It can assert a literal SHA-256, a SHA-256 stored in a text file, or the SHA-256 of a baseline image. Region assertions require `regionX`, `regionY`, `regionWidth`, and `regionHeight`; pair them with `expectedRegionSha256` or `expectedRegionSha256File` to validate the cropped pixel region. Use `updateBaseline: true` with `baselineFile` when intentionally refreshing a checked-in baseline.
 
 ### App & Package
 
