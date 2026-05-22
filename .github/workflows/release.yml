@@ -271,6 +271,13 @@ jobs:
               Sort-Object FullName |
               Select-Object -First 1
             if ($null -eq $candidate) {
+              $builtHelper = "Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release.apk"
+              if (Test-Path -LiteralPath $builtHelper) {
+                $candidate = Get-Item -LiteralPath $builtHelper
+              }
+            }
+
+            if ($null -eq $candidate) {
               Get-ChildItem -LiteralPath $publishRoot -Recurse -File | ForEach-Object {
                 Write-Host "Published file: $($_.FullName)"
               }
