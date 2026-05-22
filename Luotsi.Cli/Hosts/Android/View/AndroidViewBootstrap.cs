@@ -71,6 +71,7 @@ public sealed class AndroidViewBootstrap(
             var localPort = await ResolveForwardedLocalPortAsync(adbClient, forward, socketName, cancellationToken).ConfigureAwait(false);
             Report(reportPhase, "adb_forward", ViewStartupPhaseStatus.Succeeded, "ADB forward is ready.", $"local=tcp:{localPort}; remote=localabstract:{socketName}");
             _localPort = localPort;
+            await RemoveStaleViewForwardsAsync(adbClient, $"tcp:{localPort}", reportPhase, cancellationToken).ConfigureAwait(false);
 
             if (string.Equals(activeBackend, ViewCaptureBackends.MediaProjection, StringComparison.Ordinal))
             {
@@ -100,6 +101,7 @@ public sealed class AndroidViewBootstrap(
                 ], cancellationToken).ConfigureAwait(false);
                 start.EnsureSuccess("view helper activity start failed");
                 Report(reportPhase, "mediaprojection_activity", ViewStartupPhaseStatus.Succeeded, "Android MediaProjection consent activity started.", start.Stdout.Trim());
+                await ReportMediaProjectionAppOpsAsync(adbClient, package.PackageName, reportPhase, cancellationToken).ConfigureAwait(false);
                 Report(reportPhase, "mediaprojection_consent", ViewStartupPhaseStatus.Started, "Waiting for Android MediaProjection consent prompt.", "uiautomator=start-now");
                 var approved = await consentApprover.TryApproveAsync(cancellationToken).ConfigureAwait(false);
                 if (!approved)
@@ -178,6 +180,90 @@ public sealed class AndroidViewBootstrap(
         }
 
         throw new InvalidOperationException($"view transport forward did not return a valid local TCP port for localabstract:{socketName}.");
+    }
+
+    private static async Task RemoveStaleViewForwardsAsync(
+        IAdbClient adbClient,
+        string currentLocal,
+        Action<ViewStartupPhase>? reportPhase,
+        CancellationToken cancellationToken)
+    {
+        Report(reportPhase, "adb_forward_cleanup", ViewStartupPhaseStatus.Started, "Checking for stale Luotsi adb forwards.");
+        var list = await adbClient.RunAsync(["forward", "--list"], cancellationToken).ConfigureAwait(false);
+        if (list.ExitCode != 0)
+        {
+            Report(reportPhase, "adb_forward_cleanup", ViewStartupPhaseStatus.Skipped, "Could not list adb forwards before view startup.", list.Stderr.Trim(), "Run `adb forward --list` or restart the adb server if view transport fails.");
+            return;
+        }
+
+        var staleLocals = ParseStaleViewForwardLocals(list.Stdout)
+            .Where(local => !string.Equals(local, currentLocal, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        foreach (var local in staleLocals)
+        {
+            await adbClient.RunAsync(["forward", "--remove", local], cancellationToken).ConfigureAwait(false);
+        }
+
+        Report(
+            reportPhase,
+            "adb_forward_cleanup",
+            ViewStartupPhaseStatus.Succeeded,
+            staleLocals.Length == 0
+                ? "No stale Luotsi adb forwards were found."
+                : $"Removed {staleLocals.Length.ToString(System.Globalization.CultureInfo.InvariantCulture)} stale Luotsi adb forward(s).",
+            staleLocals.Length == 0 ? null : string.Join(", ", staleLocals));
+    }
+
+    private static IReadOnlyList<string> ParseStaleViewForwardLocals(string stdout)
+    {
+        var locals = new List<string>();
+        foreach (var rawLine in stdout.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var tokens = rawLine.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (tokens.Length < 3 || !tokens.Any(static token => token.StartsWith($"localabstract:{AndroidRuntimeDefaults.ViewSocketPrefix}", StringComparison.Ordinal)))
+            {
+                continue;
+            }
+
+            var localSpec = tokens.FirstOrDefault(static token => token.StartsWith("tcp:", StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(localSpec))
+            {
+                locals.Add(localSpec);
+            }
+        }
+
+        return locals;
+    }
+
+    private static async Task ReportMediaProjectionAppOpsAsync(
+        IAdbClient adbClient,
+        string packageName,
+        Action<ViewStartupPhase>? reportPhase,
+        CancellationToken cancellationToken)
+    {
+        Report(reportPhase, "mediaprojection_appops", ViewStartupPhaseStatus.Started, "Checking MediaProjection app-op state.", packageName);
+        var appOps = await adbClient.RunAsync(["shell", "cmd", "appops", "get", packageName, "PROJECT_MEDIA"], cancellationToken).ConfigureAwait(false);
+        if (appOps.ExitCode != 0)
+        {
+            Report(reportPhase, "mediaprojection_appops", ViewStartupPhaseStatus.Skipped, "MediaProjection app-op state is not available on this device.", appOps.Stderr.Trim());
+            return;
+        }
+
+        var output = appOps.Stdout.Trim();
+        if (output.Contains("deny", StringComparison.OrdinalIgnoreCase) ||
+            output.Contains("ignore", StringComparison.OrdinalIgnoreCase))
+        {
+            Report(
+                reportPhase,
+                "mediaprojection_appops",
+                ViewStartupPhaseStatus.Failed,
+                "MediaProjection app-op is currently denied for the helper package.",
+                output,
+                $"Run `adb shell cmd appops set {packageName} PROJECT_MEDIA allow`, approve the Android consent prompt, or use --capture-backend screenrecord.");
+            return;
+        }
+
+        Report(reportPhase, "mediaprojection_appops", ViewStartupPhaseStatus.Succeeded, "MediaProjection app-op is not denied.", string.IsNullOrWhiteSpace(output) ? "no explicit app-op entry" : output);
     }
 
     private static bool TryParseTcpPort(string value, out int localPort)

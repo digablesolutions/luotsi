@@ -433,6 +433,210 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task AssertScreenshotAsync_Accepts_Region_Within_Image_Bounds()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.AttachFileSystem(fileSystem);
+        var idGenerator = new FakeUniqueIdGenerator("fixed-shot-id");
+        var png = CreatePngHeader(320, 240);
+        adb.AddRemoteFile("/sdcard/device-e2e-fixed-shot-id.png", png);
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem, idGenerator);
+
+        var result = await runner.AssertScreenshotAsync("home", null, null, null, region: new ScreenshotAssertionRegion(10, 20, 100, 80));
+
+        Assert.Equal(new ScreenshotAssertionRegion(10, 20, 100, 80), result.Region);
+    }
+
+    [Fact]
+    public async Task AssertScreenshotAsync_Writes_Diff_Artifact_When_Hash_Does_Not_Match()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.AttachFileSystem(fileSystem);
+        var idGenerator = new FakeUniqueIdGenerator("fixed-shot-id");
+        var png = CreatePngHeader(320, 240);
+        adb.AddRemoteFile("/sdcard/device-e2e-fixed-shot-id.png", png);
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        var artifacts = ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider);
+        var runner = new DeviceRunner(adb, artifacts, timeProvider, new FakeDelay(timeProvider), fileSystem, idGenerator);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => runner.AssertScreenshotAsync("home", null, null, "expected-hash", region: new ScreenshotAssertionRegion(0, 0, 50, 50)));
+        var diff = await fileSystem.ReadAllTextAsync(Path.Join(artifacts.Root, "home-screenshot-diff.json"));
+
+        Assert.Contains("Diff artifact: home-screenshot-diff.json", error.Message, StringComparison.Ordinal);
+        Assert.Contains("\"sha256\": \"expected-hash\"", diff, StringComparison.Ordinal);
+        Assert.Contains("\"width\": 50", diff, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AssertScreenshotAsync_Computes_Region_Sha256_From_Pixels()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.AttachFileSystem(fileSystem);
+        var idGenerator = new FakeUniqueIdGenerator("fixed-shot-id");
+        var rgba = new byte[]
+        {
+            255, 0, 0, 255,
+            0, 255, 0, 255,
+            0, 0, 255, 255,
+            255, 255, 255, 255
+        };
+        var png = CreatePngRgba(2, 2, rgba);
+        adb.AddRemoteFile("/sdcard/device-e2e-fixed-shot-id.png", png);
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        var expectedRegionHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(rgba.Take(8).ToArray())).ToLowerInvariant();
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem, idGenerator);
+
+        var result = await runner.AssertScreenshotAsync("home", null, null, null, region: new ScreenshotAssertionRegion(0, 0, 2, 1), expectedRegionSha256: expectedRegionHash);
+
+        Assert.Equal(expectedRegionHash, result.RegionSha256);
+        Assert.Equal(expectedRegionHash, result.ExpectedRegionSha256);
+    }
+
+    [Fact]
+    public async Task AssertScreenshotAsync_Writes_Region_Preview_When_Region_Hash_Does_Not_Match()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.AttachFileSystem(fileSystem);
+        var idGenerator = new FakeUniqueIdGenerator("fixed-shot-id");
+        var png = CreatePngRgba(2, 2,
+        [
+            255, 0, 0, 255,
+            0, 255, 0, 255,
+            0, 0, 255, 255,
+            255, 255, 255, 255
+        ]);
+        var baseline = CreatePngRgba(2, 2,
+        [
+            255, 0, 0, 255,
+            255, 0, 0, 255,
+            0, 0, 255, 255,
+            255, 255, 255, 255
+        ]);
+        adb.AddRemoteFile("/sdcard/device-e2e-fixed-shot-id.png", png);
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        var artifacts = ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider);
+        var baselinePath = "/tmp/baselines/home.png";
+        await using (var baselineStream = fileSystem.OpenWrite(baselinePath))
+        {
+            await baselineStream.WriteAsync(baseline);
+        }
+        var runner = new DeviceRunner(adb, artifacts, timeProvider, new FakeDelay(timeProvider), fileSystem, idGenerator);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => runner.AssertScreenshotAsync("home", null, null, null, baselineFile: baselinePath, region: new ScreenshotAssertionRegion(0, 0, 2, 1), expectedRegionSha256: "not-the-hash"));
+        var diff = await fileSystem.ReadAllTextAsync(Path.Join(artifacts.Root, "home-screenshot-diff.json"));
+
+        Assert.Contains("region SHA-256", error.Message, StringComparison.Ordinal);
+        Assert.Contains("\"region_preview_file\": \"home-screenshot-region.png\"", diff, StringComparison.Ordinal);
+        Assert.Contains("\"region_diff_file\": \"home-screenshot-region-diff.png\"", diff, StringComparison.Ordinal);
+        Assert.True(fileSystem.FileExists(Path.Join(artifacts.Root, "home-screenshot-region.png")));
+        Assert.True(fileSystem.FileExists(Path.Join(artifacts.Root, "home-screenshot-region-diff.png")));
+    }
+
+    [Fact]
+    public async Task AssertScreenshotAsync_Uses_Baseline_File_And_Can_Update_Baseline()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.AttachFileSystem(fileSystem);
+        var idGenerator = new FakeUniqueIdGenerator("fixed-shot-id");
+        var png = CreatePngHeader(320, 240);
+        adb.AddRemoteFile("/sdcard/device-e2e-fixed-shot-id.png", png);
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        var baselinePath = "/tmp/baselines/home.png";
+        await using (var baseline = fileSystem.OpenWrite(baselinePath))
+        {
+            await baseline.WriteAsync(png);
+        }
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem, idGenerator);
+
+        var result = await runner.AssertScreenshotAsync("home", 320, 240, null, baselineFile: baselinePath, updateBaseline: true);
+
+        Assert.Equal(baselinePath, result.BaselineFile);
+        Assert.True(result.BaselineUpdated);
+        Assert.Equal(png, fileSystem.ReadBytes(baselinePath));
+    }
+
+    [Fact]
+    public async Task AssertScreenshotAsync_UpdateBaseline_Replaces_Existing_Mismatched_Baseline()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.AttachFileSystem(fileSystem);
+        var idGenerator = new FakeUniqueIdGenerator("fixed-shot-id");
+        var png = CreatePngHeader(320, 240);
+        adb.AddRemoteFile("/sdcard/device-e2e-fixed-shot-id.png", png);
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        var baselinePath = "/tmp/baselines/home.png";
+        await using (var baseline = fileSystem.OpenWrite(baselinePath))
+        {
+            await baseline.WriteAsync(CreatePngHeader(640, 480));
+        }
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem, idGenerator);
+
+        var result = await runner.AssertScreenshotAsync("home", 320, 240, null, baselineFile: baselinePath, updateBaseline: true);
+
+        Assert.True(result.BaselineUpdated);
+        Assert.Null(result.ExpectedSha256);
+        Assert.Equal(png, fileSystem.ReadBytes(baselinePath));
+    }
+
+    [Fact]
+    public async Task AssertScreenshotAsync_Throws_When_Baseline_File_Is_Missing_And_Not_Updating()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.AttachFileSystem(fileSystem);
+        var idGenerator = new FakeUniqueIdGenerator("fixed-shot-id");
+        adb.AddRemoteFile("/sdcard/device-e2e-fixed-shot-id.png", CreatePngHeader(320, 240));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem, idGenerator);
+
+        var error = await Assert.ThrowsAsync<FileNotFoundException>(() => runner.AssertScreenshotAsync("home", null, null, null, baselineFile: "/tmp/baselines/missing.png"));
+
+        Assert.Contains("baseline file", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task AssertScreenshotAsync_Creates_Baseline_Directory_When_Updating()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.AttachFileSystem(fileSystem);
+        var idGenerator = new FakeUniqueIdGenerator("fixed-shot-id");
+        var png = CreatePngHeader(320, 240);
+        adb.AddRemoteFile("/sdcard/device-e2e-fixed-shot-id.png", png);
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem, idGenerator);
+
+        var result = await runner.AssertScreenshotAsync("home", null, null, null, baselineFile: "/tmp/new-baselines/home.png", updateBaseline: true);
+
+        Assert.True(result.BaselineUpdated);
+        Assert.True(fileSystem.DirectoryExists("/tmp/new-baselines"));
+        Assert.Equal(png, fileSystem.ReadBytes("/tmp/new-baselines/home.png"));
+    }
+
+    [Fact]
     public async Task AssertScreenshotAsync_Throws_When_Width_Does_Not_Match()
     {
         var fileSystem = new FakeFileSystem();

@@ -44,7 +44,17 @@ public interface IScenarioActionHost
 
 public interface IScenarioScreenshotAssertionHost
 {
-    Task<ScreenshotAssertionResult> AssertScreenshotAsync(string label, int? expectedWidth, int? expectedHeight, string? expectedSha256);
+    Task<ScreenshotAssertionResult> AssertScreenshotAsync(
+        string label,
+        int? expectedWidth,
+        int? expectedHeight,
+        string? expectedSha256,
+        string? expectedSha256File = null,
+        string? baselineFile = null,
+        bool updateBaseline = false,
+        ScreenshotAssertionRegion? region = null,
+        string? expectedRegionSha256 = null,
+        string? expectedRegionSha256File = null);
 }
 
 /// <summary>

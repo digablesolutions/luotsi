@@ -5,6 +5,222 @@ namespace Luotsi.Cli.Cli;
 /// </summary>
 public static class Help
 {
+    private static readonly IReadOnlyDictionary<string, string> TopicTexts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["adb"] = """
+Luotsi help: adb
+
+Usage:
+  luotsi adb server-status
+  luotsi adb version
+  luotsi adb features
+  luotsi adb mdns check
+  luotsi adb reconnect [offline|device]
+
+Examples:
+  luotsi adb server-status
+  luotsi adb mdns check
+  luotsi adb reconnect offline
+
+Notes:
+  These commands are host-side ADB readiness checks. Use them when a device
+  disappears, reports offline, or wireless discovery is unreliable.
+""",
+        ["app"] = """
+Luotsi help: app controls
+
+Usage:
+  luotsi start-app --package <app.id> [--activity <activity>] [--wait]
+  luotsi start-uri --uri <uri> [--package <app.id>] [--activity <activity>] [--action android.intent.action.VIEW] [--wait]
+  luotsi force-stop --package <app.id>
+  luotsi clear --package <app.id>
+  luotsi is-app-installed --package <app.id>
+  luotsi list-installed-packages [--third-party]
+  luotsi grant-permission --package <app.id> --permission <permission>
+  luotsi revoke-permission --package <app.id> --permission <permission>
+
+Examples:
+  luotsi force-stop --package com.example.app --device emulator-5554
+  luotsi start-app --package com.example.app --activity .MainActivity --wait
+  luotsi clear --package com.example.app
+
+Failure modes:
+  Missing package names return usage errors. Device-side package manager
+  failures are reported in the command envelope with stderr attached.
+""",
+        ["artifacts"] = """
+Luotsi help: artifacts
+
+Usage:
+  luotsi <command> --artifacts <directory>
+  luotsi run --path scenarios --report-json results.json --report-junit junit.xml
+  luotsi run --path scenarios --events-jsonl events.jsonl
+
+Artifacts:
+  Luotsi writes index.md and index.html in each artifact session. The index
+  groups screenshots, recordings, reports, logs, screen-state dumps, and UI
+  hierarchy files so CI uploads are easier to browse.
+
+Examples:
+  luotsi screen-state --device emulator-5554 --artifacts artifacts
+  luotsi run --path scenarios --device emulator-5554 --artifacts artifacts --report-junit junit.xml
+""",
+        ["inspect"] = """
+Luotsi help: inspect
+
+Usage:
+  luotsi inspect --device <adb serial>
+  luotsi screen-state --device <adb serial>
+  luotsi telemetry-tail --device <adb serial> [--tail 200]
+  luotsi logcat --device <adb serial> [--tail 200]
+  luotsi record --device <adb serial> --output <file.mp4> [--time-limit-sec 30]
+
+Examples:
+  luotsi screen-state --device emulator-5554
+  luotsi inspect --device emulator-5554
+
+Failure modes:
+  Old devices can fail UI hierarchy capture. Inspect keeps non-hierarchy
+  commands useful where possible; screen-state includes attempted strategies
+  and raw output in artifacts when hierarchy capture fails.
+""",
+        ["lab"] = """
+Luotsi help: lab
+
+Usage:
+  luotsi devices
+  luotsi device-status [--device <adb serial> | --device-query <query>]
+  luotsi wait-for-device [--timeout-sec 15]
+  luotsi device-wait [--timeout-sec 15]
+  luotsi preflight [--package <app.id>]
+  luotsi doctor --device <adb serial> [--package <app.id>] [--fix]
+  luotsi lab status [--device-query <query>]
+  luotsi lab doctor [--device-query <query>] [--fix]
+
+Examples:
+  luotsi devices
+  luotsi device-status --device emulator-5554
+  luotsi lab status
+  luotsi lab status --device-query state=device,type=physical
+  luotsi lab doctor --fix
+
+Output:
+  Lab status explains which attached devices match a query. Lab doctor reports
+  ambiguous selection, offline devices, stale devices, and recommended repair
+  commands. With --fix, Luotsi may run safe host-side recovery actions.
+""",
+        ["ports"] = """
+Luotsi help: ports
+
+Usage:
+  luotsi forward-list
+  luotsi forward --local <adb-endpoint> --remote <adb-endpoint> [--no-rebind]
+  luotsi forward-remove --local <adb-endpoint>
+  luotsi reverse-list
+  luotsi reverse --remote <adb-endpoint> --local <adb-endpoint> [--no-rebind]
+  luotsi reverse-remove --remote <adb-endpoint>
+
+Examples:
+  luotsi reverse --remote tcp:8080 --local tcp:8080 --device emulator-5554
+  luotsi forward --local tcp:9222 --remote localabstract:chrome_devtools_remote
+
+Notes:
+  Use reverse when an Android app needs to call a host-local dev server. Use
+  forward when the host needs to reach a device-local service.
+""",
+        ["run"] = """
+Luotsi help: run
+
+Usage:
+  luotsi run --file <scenario.json> [--validate-only]
+  luotsi run --path <scenario-file-or-directory-or-glob> [--dry-run|--validate-only]
+             [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>]
+             [--shard-count <n> --shard-index <zero-based>] [--shard-strategy index|hash]
+             [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>]
+             [--capture-on failure|never] [--attach-artifacts never|on-failure|always]
+
+Examples:
+  luotsi run --path scenarios --device emulator-5554 --report-junit junit.xml
+  luotsi run --path scenarios --include-tag smoke --dry-run
+  luotsi run --path scenarios --shard-count 4 --shard-index 0 --events-jsonl events.jsonl
+
+Artifacts:
+  Runs can emit JSONL lifecycle events, JSON summaries, JUnit XML, failure
+  bundles, screenshots, recordings, and a browsable artifact index.
+
+Failure modes:
+  scenarioRunEnded is emitted even when parsing, ADB readiness, install, or a
+  step fails. Use --validate-only for null-device CI validation.
+""",
+        ["scenario"] = """
+Luotsi help: scenarios
+
+Usage:
+  luotsi scenario-init [--file <scenario.json>] [--name <name>] [--package <app.id>] [--activity <activity>] [--force]
+  luotsi scenario-list --path <scenario-file-or-directory-or-glob> [filters]
+  luotsi scenario-validate (--file <scenario.json> | --path <scenario-file-or-directory-or-glob>)
+  luotsi scenario-explain --file <scenario.json>
+
+Examples:
+  luotsi scenario-init --file scenarios/login.json --name "login smoke"
+  luotsi scenario-validate --path scenarios
+  luotsi scenario-explain --file scenarios/login.json
+
+Notes:
+  Scenario metadata can declare tags, expected package/activity, screen size,
+  orientation, and notes so Luotsi can warn when a device does not match the
+  scenario authoring target.
+""",
+        ["view"] = """
+Luotsi help: view
+
+Usage:
+  luotsi view --device <adb serial> [--profile <name>] [--preset safe|balanced|high-quality|low-latency]
+              [--capture-backend auto|screenrecord|mediaprojection] [--decoder ffmpeg|wmf]
+              [--read-only] [--headless] [--record <file>]
+  luotsi view setup --device <adb serial> [--dry-run]
+  luotsi view-doctor --device <adb serial> [--fix]
+  luotsi reconnect [--profile <name>] [--device <adb serial> | --join-share <host:port>]
+
+Examples:
+  luotsi view --device emulator-5554
+  luotsi view setup --device emulator-5554 --capture-backend mediaprojection
+  luotsi view-doctor --device emulator-5554 --fix
+
+Artifacts:
+  View can record MP4 output, capture screenshots from the window, and write
+  runtime diagnostic events when decoder, helper, transport, or projection
+  startup fails.
+
+Failure modes:
+  If startup fails, Luotsi tries to print one actionable next command such as
+  view setup, view-doctor --fix, or choosing another decoder/capture backend.
+""",
+        ["wireless"] = """
+Luotsi help: wireless
+
+Usage:
+  luotsi wireless --device <usb serial> [--host <ip-or-host>] [--port 5555]
+  luotsi wireless-scan
+  luotsi wireless-pair (--endpoint <host:port> | --service <mdns-service>) --code <pairing-code>
+  luotsi wireless-connect [--endpoint <host:port> | --service <mdns-service>] [--save-profile <name>]
+
+Examples:
+  luotsi wireless-scan
+  luotsi wireless-pair --service adb-1234._adb-tls-pairing._tcp --code 123456
+  luotsi wireless-connect --service adb-1234._adb-tls-connect._tcp --save-profile pixel-wifi
+
+Notes:
+  Prefer TLS pairing and mDNS connect services on modern Android. The legacy
+  adb tcpip path is available for older devices but is not encrypted.
+"""
+    };
+
+    /// <summary>
+    /// Gets available command help topics.
+    /// </summary>
+    public static IReadOnlyList<string> Topics { get; } = TopicTexts.Keys.Order(StringComparer.OrdinalIgnoreCase).ToArray();
+
     /// <summary>
     /// Gets command-line help.
     /// </summary>
@@ -19,6 +235,7 @@ public static class Help
 
 Usage:
   luotsi <command> [options]
+  luotsi help <topic>
 
 Fast paths:
   luotsi devices
@@ -35,6 +252,8 @@ Command groups:
 
   Device inventory and readiness
     devices
+    lab status [--device-query <query>]
+    lab doctor [--device-query <query>]
     device-status [--device <adb serial> | --device-query <query>]
     wait-for-device [--timeout-sec 15]
     device-wait [--timeout-sec 15]
@@ -96,7 +315,10 @@ Command groups:
     record --output <file.mp4> [--time-limit-sec 30]
 
   Scenarios and CI reports
+    scenario-init [--file <scenario.json>] [--name <name>] [--package <app.id>] [--activity <activity>] [--width <px>] [--height <px>] [--orientation <name>] [--force]
     scenario-list --path <scenario-file-or-directory-or-glob> [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>]
+    scenario-validate (--file <scenario.json> | --path <scenario-file-or-directory-or-glob>) [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>]
+    scenario-explain --file <scenario.json>
     run --file <scenario.json> [--validate-only] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always]
     run --path <scenario-file-or-directory-or-glob> [--dry-run|--validate-only] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>] [--shard-count <n> --shard-index <zero-based>] [--shard-strategy index|hash]
 
@@ -113,4 +335,44 @@ Design:
   Luotsi is intentionally host-side and cross-platform. The v1 implementation
   stays on boring ADB commands so it is easy for agents and CI to run.
 """;
+
+    /// <summary>
+    /// Gets a command help topic, or root help when the topic is unknown.
+    /// </summary>
+    /// <param name="topic">Topic or command name.</param>
+    /// <returns>Topic help text.</returns>
+    public static string GetTopic(string topic) => TryGetTopic(topic, out var text) ? text : Text;
+
+    /// <summary>
+    /// Tries to get command-specific help.
+    /// </summary>
+    /// <param name="topic">Topic or command name.</param>
+    /// <param name="text">Topic help text.</param>
+    /// <returns>True when the topic is known.</returns>
+    public static bool TryGetTopic(string topic, out string text)
+    {
+        if (TopicTexts.TryGetValue(topic, out text!))
+        {
+            return true;
+        }
+
+        return TryNormalizeTopic(topic, out var normalized) && TopicTexts.TryGetValue(normalized, out text!);
+    }
+
+    private static bool TryNormalizeTopic(string topic, out string normalized)
+    {
+        normalized = topic.ToLowerInvariant() switch
+        {
+            "view-setup" or "view-doctor" or "reconnect" or "profile-list" or "profile-delete" => "view",
+            "scenario-init" or "scenario-list" or "scenario-validate" or "scenario-explain" => "scenario",
+            "wireless-scan" or "wireless-pair" or "wireless-connect" => "wireless",
+            "forward" or "forward-list" or "forward-remove" or "reverse" or "reverse-list" or "reverse-remove" => "ports",
+            "start-app" or "start-uri" or "force-stop" or "clear" or "clear-app" or "is-app-installed" or "list-installed-packages" or "grant-permission" or "revoke-permission" => "app",
+            "screen-state" or "telemetry-tail" or "telemetry-watch" or "wait-step" or "wait-action-ready" or "wait-visible" or "wait-for-activity" or "wait-for-not-activity" or "tap" or "tap-text" or "type-text" or "keyevent" or "logcat" or "wait-log" or "record" => "inspect",
+            "devices" or "device-status" or "wait-for-device" or "device-wait" or "preflight" or "doctor" => "lab",
+            _ => string.Empty
+        };
+
+        return normalized.Length > 0;
+    }
 }

@@ -19,6 +19,8 @@ luotsi [--device <serial> | --device-query <query>] [--platform android] [--adb 
 | Command | Description |
 |---|---|
 | `devices` | List adb-visible devices |
+| `lab status [--device-query <query>]` | Summarize attached-device availability and explain which devices match or are rejected by a selection query |
+| `lab doctor [--device-query <query>]` | Detect stale/offline/ambiguous lab state and return concrete remediation commands |
 | `device-status (--device <serial> | --device-query <query>)` | Read selected device inventory metadata plus current readiness details |
 | `adb server-status` | Host ADB server status |
 | `adb version` | ADB binary version |
@@ -158,7 +160,10 @@ Luotsi reads the `LUOTSI_DEVICE_TELEMETRY` logcat marker to parse structured sem
 
 | Command | Description |
 |---|---|
+| `scenario-init [--file <path>] [--name <name>] [--package <app.id>]` | Generate a starter scenario with metadata, setup, screenshot-oriented steps, teardown, docs link, and next commands |
 | `scenario-list --path <scenario-file-or-directory-or-glob> [filters]` | Discover scenario files and report matched names, tags, and actions without executing them |
+| `scenario-validate (--file <path> | --path <path>)` | Validate one or many scenarios without creating a device host |
+| `scenario-explain --file <path>` | Summarize scenario metadata, lifecycle step counts, actions, docs, and suggested commands |
 | `run --device <serial> --file <path>` | Execute one JSON scenario playbook; also supports `--validate-only`, `--events-jsonl`, `--report-json`, `--report-junit`, `--capture-on`, and `--attach-artifacts` |
 | `run --device <serial> --path <scenario-file-or-directory-or-glob>` | Execute one or many scenario files discovered from a file, directory, or glob; supports filtering, `--dry-run`, `--validate-only`, reporting, artifact-policy flags, and sharding |
 | `inspect --device <serial>` | Open an agent-driven JSONL inspection session |

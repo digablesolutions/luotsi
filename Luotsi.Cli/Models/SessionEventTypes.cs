@@ -26,6 +26,7 @@ public static class SessionEventTypes
     {
         public const string Started = "view_started";
         public const string StartupPhase = "view_startup_phase";
+        public const string Diagnostic = "view_diagnostic";
         public const string Stats = "view_stats";
         public const string ShareStarted = "view_share_started";
         public const string ShareClientConnected = "view_share_client_connected";

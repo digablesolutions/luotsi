@@ -17,6 +17,7 @@ internal static class AppHostedCommandCompositionBuilder
         var scenarioTemplateResolver = new ScenarioTemplateResolver(dependencies.TimeProvider, dependencies.Environment);
         var scenarioMetricsCollector = CompositeScenarioMetricsCollector.CreateDefault();
         var scenarioCatalog = new ScenarioCatalog(dependencies.FileSystem, scenarioTemplateResolver);
+        var scenarioAuthoring = new ScenarioAuthoringService(dependencies.FileSystem, scenarioCatalog);
         var scenarioRunPlanner = new ScenarioRunPlanner(scenarioCatalog);
         var scenarioExecutorFactory = new ScenarioExecutorFactory(dependencies.FileSystem, dependencies.TimeProvider, dependencies.Delay, scenarioTemplateResolver, scenarioMetricsCollector);
         var scenarioBatchExecutorFactory = new ScenarioBatchExecutorFactory(scenarioExecutorFactory, scenarioMetricsCollector);
@@ -35,7 +36,7 @@ internal static class AppHostedCommandCompositionBuilder
         var envelopeWriter = new AppCommandEnvelopeWriter(dependencies.Console, dependencies.TimeProvider, provenance);
         var commandDispatcher = new AppCommandDispatcher(
             new AdbSubcommandDispatcher(),
-            new ScenarioCommandDispatcher(scenarioRunPlanner, scenarioRunOrchestrator),
+            new ScenarioCommandDispatcher(scenarioRunPlanner, scenarioRunOrchestrator, scenarioAuthoring),
             dependencies.ProfileCoordinator);
 
         return new(

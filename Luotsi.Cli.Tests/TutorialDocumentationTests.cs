@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using Luotsi.Cli.Cli;
 using Xunit;
 
 namespace Luotsi.Cli.Tests;
@@ -61,6 +62,41 @@ public sealed partial class AppTests
         {
             _ = XDocument.Load(xmlFile);
         }
+    }
+
+    [Fact]
+    public async Task Tutorial_And_Example_Scenarios_Are_Discoverable_And_Validate_Without_Device()
+    {
+        var root = FindRepositoryRoot();
+        var artifacts = Path.Join(Path.GetTempPath(), $"luotsi-docs-verify-{Guid.NewGuid():N}");
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var dryRunExitCode = await app.RunAsync([
+            "run",
+            "--path",
+            Path.Join(root, "examples", "scenarios"),
+            "--dry-run",
+            "--artifacts",
+            artifacts
+        ]);
+        var validateExitCode = await app.RunAsync([
+            "scenario-validate",
+            "--path",
+            Path.Join(root, "examples", "scenarios"),
+            "--artifacts",
+            artifacts
+        ]);
+
+        Assert.Equal(0, dryRunExitCode);
+        Assert.Equal(0, validateExitCode);
+        Assert.Equal(2, console.OutputLines.Count);
+        using var dryRun = JsonDocument.Parse(console.OutputLines[0]);
+        using var validation = JsonDocument.Parse(console.OutputLines[1]);
+        Assert.True(dryRun.RootElement.GetProperty("ok").GetBoolean());
+        Assert.True(validation.RootElement.GetProperty("ok").GetBoolean());
+        Assert.True(dryRun.RootElement.GetProperty("data").GetProperty("selected_count").GetInt32() > 0);
+        Assert.Equal("validated", validation.RootElement.GetProperty("data").GetProperty("status").GetString());
     }
 
     private static IEnumerable<string> ExtractLocalLinks(string markdown)

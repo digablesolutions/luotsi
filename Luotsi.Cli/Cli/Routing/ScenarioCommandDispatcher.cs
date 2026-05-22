@@ -6,10 +6,12 @@ namespace Luotsi.Cli.Cli.Routing;
 
 internal sealed class ScenarioCommandDispatcher(
     ScenarioRunPlanner runPlanner,
-    ScenarioRunOrchestrator scenarioRunOrchestrator)
+    ScenarioRunOrchestrator scenarioRunOrchestrator,
+    ScenarioAuthoringService authoringService)
 {
     private readonly ScenarioRunPlanner _runPlanner = runPlanner ?? throw new ArgumentNullException(nameof(runPlanner));
     private readonly ScenarioRunOrchestrator _scenarioRunOrchestrator = scenarioRunOrchestrator ?? throw new ArgumentNullException(nameof(scenarioRunOrchestrator));
+    private readonly ScenarioAuthoringService _authoringService = authoringService ?? throw new ArgumentNullException(nameof(authoringService));
 
     public async Task<ScenarioListResult> ListAsync(CliOptions options)
     {
@@ -20,11 +22,30 @@ internal sealed class ScenarioCommandDispatcher(
         return new ScenarioListResult(selection.Query.Path, selection.TotalCount, selection.MatchedCount, selection.MatchedScenarios);
     }
 
+    public Task<ScenarioInitResult> InitAsync(CliOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return _authoringService.InitAsync(options);
+    }
+
+    public Task<ScenarioExplainResult> ExplainAsync(CliOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return _authoringService.ExplainAsync(options);
+    }
+
     public bool RequiresRunner(CliOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
 
         return !options.HasFlag("validate-only") && !options.HasFlag("dry-run");
+    }
+
+    public Task<object> ValidateAsync(CliOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        options.ApplyDefaults(new Dictionary<string, string?> { ["validate-only"] = "true" });
+        return RunAsync(options, null);
     }
 
     public async Task<object> RunAsync(CliOptions options, IDeviceHost? runner)

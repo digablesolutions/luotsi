@@ -304,7 +304,12 @@ public sealed partial class AppTests
         Assert.Equal(1, exitCode);
         Assert.Equal([ViewCaptureBackends.MediaProjection], bootstrap.StartRequests.Select(static request => request.CaptureBackend).ToArray());
 
-        using var error = JsonDocument.Parse(console.OutputLines[0]);
+        using var diagnostic = JsonDocument.Parse(console.OutputLines[0]);
+        Assert.Equal(SessionEventTypes.View.Diagnostic, diagnostic.RootElement.GetProperty("type").GetString());
+        Assert.Equal("mediaprojection_consent", diagnostic.RootElement.GetProperty("category").GetString());
+        Assert.Contains("capture-backend auto", diagnostic.RootElement.GetProperty("next_command").GetString(), StringComparison.Ordinal);
+
+        using var error = JsonDocument.Parse(console.OutputLines[1]);
         Assert.Equal(SessionEventTypes.View.Error, error.RootElement.GetProperty("type").GetString());
         Assert.Equal("usage_error", error.RootElement.GetProperty("error").GetProperty("category").GetString());
         Assert.Contains("--capture-backend screenrecord", error.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
@@ -337,14 +342,19 @@ public sealed partial class AppTests
         Assert.Equal(1, exitCode);
         Assert.Equal([ViewCaptureBackends.Auto], bootstrap.StartRequests.Select(static request => request.CaptureBackend).ToArray());
         Assert.Equal(1, bootstrap.StopCallCount);
-        Assert.Equal(2, console.OutputLines.Count);
+        Assert.Equal(3, console.OutputLines.Count);
 
-        using var error = JsonDocument.Parse(console.OutputLines[0]);
+        using var diagnostic = JsonDocument.Parse(console.OutputLines[0]);
+        Assert.Equal(SessionEventTypes.View.Diagnostic, diagnostic.RootElement.GetProperty("type").GetString());
+        Assert.Equal("helper", diagnostic.RootElement.GetProperty("category").GetString());
+        Assert.Contains("view setup", diagnostic.RootElement.GetProperty("next_command").GetString(), StringComparison.Ordinal);
+
+        using var error = JsonDocument.Parse(console.OutputLines[1]);
         Assert.Equal(SessionEventTypes.View.Error, error.RootElement.GetProperty("type").GetString());
         Assert.Equal("configuration_error", error.RootElement.GetProperty("error").GetProperty("category").GetString());
         Assert.Contains("LUOTSI_VIEW_HELPER_APK", error.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
 
-        using var ended = JsonDocument.Parse(console.OutputLines[1]);
+        using var ended = JsonDocument.Parse(console.OutputLines[2]);
         Assert.Equal(SessionEventTypes.View.Ended, ended.RootElement.GetProperty("type").GetString());
         Assert.Equal("error", ended.RootElement.GetProperty("reason").GetString());
     }
