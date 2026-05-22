@@ -2503,6 +2503,29 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunScenarioAsync_AssertScreenshot_Region_Requires_Real_Assertion()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var host = new FakeDeviceHost();
+        var scenarioPath = "/tmp/assert-screenshot-region-only.json";
+        fileSystem.AddFile(scenarioPath, """
+        {
+          "name": "visual smoke",
+          "steps": [
+            { "name": "home screenshot", "action": "assertScreenshot", "label": "home", "regionX": 0, "regionY": 0, "regionWidth": 100, "regionHeight": 100 }
+          ]
+        }
+        """);
+        var scenarios = new ScenarioExecutor(host, fileSystem, timeProvider, new FakeDelay(timeProvider));
+
+        var error = await Assert.ThrowsAsync<UsageException>(() => scenarios.RunAsync(scenarioPath));
+
+        Assert.Contains("assertScreenshot requires expectedWidth", error.Message, StringComparison.Ordinal);
+        Assert.Empty(host.AssertScreenshotRequests);
+    }
+
+    [Fact]
     public async Task RunScenarioAsync_AssertScreenshot_Action_Fails_When_Host_Reports_Mismatch()
     {
         var fileSystem = new FakeFileSystem();

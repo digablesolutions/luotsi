@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Net;
 using Luotsi.Cli.Cli;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
@@ -16,6 +17,7 @@ public sealed class ArtifactSession
 {
     private readonly IFileSystem _fileSystem;
     private const string ArtifactIndexFileName = "index.md";
+    private const string ArtifactHtmlIndexFileName = "index.html";
 
     private ArtifactSession(string root, IFileSystem fileSystem, UiPollArtifactPolicy uiPollArtifactPolicy)
     {
@@ -59,7 +61,7 @@ public sealed class ArtifactSession
     public async Task WriteTextAsync(string name, string text)
     {
         await _fileSystem.WriteAllTextAsync(GetArtifactPath(name), text, Encoding.UTF8).ConfigureAwait(false);
-        await _fileSystem.WriteAllTextAsync(GetArtifactPath(ArtifactIndexFileName), BuildMarkdownIndex(), Encoding.UTF8).ConfigureAwait(false);
+        await RefreshIndexAsync().ConfigureAwait(false);
     }
 
     /// <summary>
@@ -78,8 +80,12 @@ public sealed class ArtifactSession
     /// <summary>
     /// Refreshes the Markdown index for artifacts written outside text/JSON helpers.
     /// </summary>
-    public Task RefreshIndexAsync() =>
-        _fileSystem.WriteAllTextAsync(GetArtifactPath(ArtifactIndexFileName), BuildMarkdownIndex(), Encoding.UTF8);
+    public async Task RefreshIndexAsync()
+    {
+        var files = GetIndexedFiles();
+        await _fileSystem.WriteAllTextAsync(GetArtifactPath(ArtifactIndexFileName), BuildMarkdownIndex(files), Encoding.UTF8).ConfigureAwait(false);
+        await _fileSystem.WriteAllTextAsync(GetArtifactPath(ArtifactHtmlIndexFileName), BuildHtmlIndex(files), Encoding.UTF8).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Returns JSON envelope artifact data.
@@ -102,20 +108,23 @@ public sealed class ArtifactSession
         return Path.Join(Root, name);
     }
 
-    private string BuildMarkdownIndex()
-    {
-        var files = _fileSystem.GetFiles(Root, "*", SearchOption.AllDirectories)
+    private string[] GetIndexedFiles() =>
+        _fileSystem.GetFiles(Root, "*", SearchOption.AllDirectories)
             .Select(path => Path.GetRelativePath(Root, path))
             .Where(static path => !string.Equals(path, ArtifactIndexFileName, StringComparison.OrdinalIgnoreCase))
+            .Where(static path => !string.Equals(path, ArtifactHtmlIndexFileName, StringComparison.OrdinalIgnoreCase))
             .OrderBy(GetArtifactSortGroup)
             .ThenBy(static path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+
+    private string BuildMarkdownIndex(IReadOnlyList<string> files)
+    {
         var builder = new StringBuilder();
         builder.AppendLine("# Luotsi Artifacts");
         builder.AppendLine();
         builder.AppendLine($"Artifact root: `{Root}`");
         builder.AppendLine();
-        if (files.Length == 0)
+        if (files.Count == 0)
         {
             builder.AppendLine("No artifacts have been written yet.");
             return builder.ToString();
@@ -133,6 +142,79 @@ public sealed class ArtifactSession
             builder.AppendLine();
         }
 
+        return builder.ToString();
+    }
+
+    private string BuildHtmlIndex(IReadOnlyList<string> files)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("<!doctype html>");
+        builder.AppendLine("<html lang=\"en\">");
+        builder.AppendLine("<head>");
+        builder.AppendLine("  <meta charset=\"utf-8\">");
+        builder.AppendLine("  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+        builder.AppendLine("  <title>Luotsi Artifacts</title>");
+        builder.AppendLine("  <style>");
+        builder.AppendLine("    :root { color-scheme: light dark; --bg: #0f172a; --panel: #111827; --text: #e5e7eb; --muted: #9ca3af; --line: #334155; --accent: #38bdf8; }");
+        builder.AppendLine("    @media (prefers-color-scheme: light) { :root { --bg: #f8fafc; --panel: #ffffff; --text: #0f172a; --muted: #475569; --line: #cbd5e1; --accent: #0369a1; } }");
+        builder.AppendLine("    body { margin: 0; font: 14px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }");
+        builder.AppendLine("    main { max-width: 1040px; margin: 0 auto; padding: 32px 20px 48px; }");
+        builder.AppendLine("    header { margin-bottom: 24px; }");
+        builder.AppendLine("    h1 { margin: 0 0 8px; font-size: 28px; letter-spacing: 0; }");
+        builder.AppendLine("    .root { color: var(--muted); word-break: break-all; }");
+        builder.AppendLine("    section { margin-top: 22px; border: 1px solid var(--line); background: var(--panel); border-radius: 8px; overflow: hidden; }");
+        builder.AppendLine("    h2 { margin: 0; padding: 14px 16px; font-size: 16px; border-bottom: 1px solid var(--line); }");
+        builder.AppendLine("    ul { list-style: none; margin: 0; padding: 0; }");
+        builder.AppendLine("    li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; padding: 12px 16px; border-top: 1px solid var(--line); }");
+        builder.AppendLine("    li:first-child { border-top: 0; }");
+        builder.AppendLine("    a { color: var(--accent); text-decoration: none; overflow-wrap: anywhere; }");
+        builder.AppendLine("    a:hover { text-decoration: underline; }");
+        builder.AppendLine("    .kind { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }");
+        builder.AppendLine("    .empty { padding: 18px 16px; color: var(--muted); }");
+        builder.AppendLine("  </style>");
+        builder.AppendLine("</head>");
+        builder.AppendLine("<body>");
+        builder.AppendLine("  <main>");
+        builder.AppendLine("    <header>");
+        builder.AppendLine("      <h1>Luotsi Artifacts</h1>");
+        builder.AppendLine($"      <div class=\"root\">{HtmlEncode(Root)}</div>");
+        builder.AppendLine("    </header>");
+
+        if (files.Count == 0)
+        {
+            builder.AppendLine("    <section><h2>Artifacts</h2><div class=\"empty\">No artifacts have been written yet.</div></section>");
+        }
+        else
+        {
+            foreach (var group in files.GroupBy(GetArtifactCategory))
+            {
+                builder.AppendLine("    <section>");
+                builder.AppendLine($"      <h2>{HtmlEncode(group.Key)}</h2>");
+                builder.AppendLine("      <ul>");
+                foreach (var file in group)
+                {
+                    builder.AppendLine("        <li>");
+                    builder.AppendLine("          <div>");
+                    builder.AppendLine($"            <a href=\"{HtmlAttributeEncode(EscapeHtmlLink(file))}\">{HtmlEncode(file)}</a>");
+                    var summary = TryBuildArtifactSummary(file);
+                    if (!string.IsNullOrWhiteSpace(summary))
+                    {
+                        builder.AppendLine($"            <div class=\"root\">{HtmlEncode(summary)}</div>");
+                    }
+
+                    builder.AppendLine("          </div>");
+                    builder.AppendLine($"          <span class=\"kind\">{HtmlEncode(GetArtifactKind(file))}</span>");
+                    builder.AppendLine("        </li>");
+                }
+
+                builder.AppendLine("      </ul>");
+                builder.AppendLine("    </section>");
+            }
+        }
+
+        builder.AppendLine("  </main>");
+        builder.AppendLine("</body>");
+        builder.AppendLine("</html>");
         return builder.ToString();
     }
 
@@ -192,8 +274,148 @@ public sealed class ArtifactSession
         return "Other";
     }
 
+    private static string GetArtifactKind(string path)
+    {
+        var extension = Path.GetExtension(path);
+        return string.IsNullOrWhiteSpace(extension) ? "file" : extension.TrimStart('.').ToUpperInvariant();
+    }
+
+    private string? TryBuildArtifactSummary(string path)
+    {
+        if (string.Equals(Path.GetExtension(path), ".jsonl", StringComparison.OrdinalIgnoreCase))
+        {
+            return TryBuildJsonlSummary(path);
+        }
+
+        if (!string.Equals(Path.GetExtension(path), ".json", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(_fileSystem.ReadAllTextAsync(Path.Join(Root, path)).GetAwaiter().GetResult());
+            var root = document.RootElement;
+            if (!root.TryGetProperty("schema", out var schema) ||
+                !string.Equals(schema.GetString(), "luotsi-scenario-run-report.v1", StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            var parts = new List<string>();
+            AddJsonProperty(parts, root, "status");
+            AddJsonProperty(parts, root, "total");
+            AddJsonProperty(parts, root, "passed");
+            AddJsonProperty(parts, root, "failed");
+            AddJsonProperty(parts, root, "skipped");
+            AddJsonProperty(parts, root, "durationMs", "duration_ms");
+            return parts.Count == 0 ? null : string.Join(" | ", parts);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private string? TryBuildJsonlSummary(string path)
+    {
+        try
+        {
+            var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var terminalStatuses = new List<string>();
+            foreach (var line in _fileSystem.ReadAllTextAsync(Path.Join(Root, path)).GetAwaiter().GetResult().Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+            {
+                using var document = JsonDocument.Parse(line);
+                var root = document.RootElement;
+                if (!root.TryGetProperty("type", out var typeProperty))
+                {
+                    continue;
+                }
+
+                var type = typeProperty.GetString();
+                if (string.IsNullOrWhiteSpace(type))
+                {
+                    continue;
+                }
+
+                counts[type] = counts.GetValueOrDefault(type) + 1;
+                if (string.Equals(type, "scenario_run_ended", StringComparison.OrdinalIgnoreCase) &&
+                    root.TryGetProperty("status", out var status))
+                {
+                    terminalStatuses.Add(status.GetString() ?? "unknown");
+                }
+            }
+
+            if (counts.Count == 0)
+            {
+                return null;
+            }
+
+            var parts = new List<string> { $"events={counts.Values.Sum()}" };
+            if (terminalStatuses.Count > 0)
+            {
+                parts.Add($"terminal={string.Join(",", terminalStatuses)}");
+            }
+
+            foreach (var (type, count) in counts.OrderBy(static item => item.Key, StringComparer.OrdinalIgnoreCase).Take(5))
+            {
+                parts.Add($"{type}={count}");
+            }
+
+            return string.Join(" | ", parts);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void AddJsonProperty(List<string> parts, JsonElement root, string name, string? label = null)
+    {
+        if (!root.TryGetProperty(name, out var property))
+        {
+            return;
+        }
+
+        var value = property.ValueKind switch
+        {
+            JsonValueKind.String => property.GetString(),
+            JsonValueKind.Number => property.GetRawText(),
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            _ => null
+        };
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            parts.Add($"{label ?? ToSnakeCase(name)}={value}");
+        }
+    }
+
+    private static string ToSnakeCase(string value)
+    {
+        var builder = new StringBuilder(value.Length + 4);
+        foreach (var ch in value)
+        {
+            if (char.IsUpper(ch) && builder.Length > 0)
+            {
+                builder.Append('_');
+            }
+
+            builder.Append(char.ToLowerInvariant(ch));
+        }
+
+        return builder.ToString();
+    }
+
     private static string EscapeMarkdownLink(string path) =>
         path.Replace("\\", "/", StringComparison.Ordinal).Replace(" ", "%20", StringComparison.Ordinal);
+
+    private static string EscapeHtmlLink(string path) =>
+        Uri.EscapeDataString(path.Replace("\\", "/", StringComparison.Ordinal)).Replace("%2F", "/", StringComparison.Ordinal);
+
+    private static string HtmlEncode(string value) => WebUtility.HtmlEncode(value);
+
+    private static string HtmlAttributeEncode(string value) => WebUtility.HtmlEncode(value);
 
     private static UiPollArtifactPolicy ParseUiPollArtifactPolicy(string? value)
     {

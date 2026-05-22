@@ -17,9 +17,14 @@ internal sealed class AppExecutionShell(AppExecutionShellDependencies dependenci
 
         var started = _dependencies.TimeProvider.GetUtcNow();
         var options = CliOptions.Parse(args);
+        if (string.Equals(options.Command, "help", StringComparison.OrdinalIgnoreCase))
+        {
+            return WriteHelp(options);
+        }
+
         if (options.Command is null || options.HasFlag("help") || options.HasFlag("h"))
         {
-            _dependencies.Console.WriteErrorLine(Help.Text);
+            _dependencies.Console.WriteErrorLine(options.Command is null ? Help.Text : Help.GetTopic(options.Command));
             return options.HasFlag("help") || options.HasFlag("h") ? 0 : 2;
         }
 
@@ -37,6 +42,25 @@ internal sealed class AppExecutionShell(AppExecutionShellDependencies dependenci
         {
             return await _dependencies.FailureResponder.WriteFailureAsync(options.Command, started, context, ex).ConfigureAwait(false);
         }
+    }
+
+    private int WriteHelp(CliOptions options)
+    {
+        if (options.Arguments.Count == 0)
+        {
+            _dependencies.Console.WriteErrorLine(Help.Text);
+            return 0;
+        }
+
+        var topic = options.Arguments[0];
+        if (!Help.TryGetTopic(topic, out var text))
+        {
+            _dependencies.Console.WriteErrorLine($"Unknown help topic '{topic}'. Available topics: {string.Join(", ", Help.Topics)}.");
+            return 2;
+        }
+
+        _dependencies.Console.WriteErrorLine(text);
+        return 0;
     }
 }
 

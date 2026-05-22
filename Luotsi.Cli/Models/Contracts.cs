@@ -330,6 +330,12 @@ public sealed record ScenarioLayoutMetadata(
 /// <param name="ExpectedSha256File">Host-local file containing the expected screenshot SHA-256.</param>
 /// <param name="BaselineFile">Host-local baseline screenshot path used for full-image visual assertions.</param>
 /// <param name="UpdateBaseline">Whether assertScreenshot should write the captured screenshot as the new baseline.</param>
+/// <param name="RegionX">Optional screenshot assertion region left coordinate.</param>
+/// <param name="RegionY">Optional screenshot assertion region top coordinate.</param>
+/// <param name="RegionWidth">Optional screenshot assertion region width.</param>
+/// <param name="RegionHeight">Optional screenshot assertion region height.</param>
+/// <param name="ExpectedRegionSha256">Expected SHA-256 of normalized RGBA pixels in the screenshot region.</param>
+/// <param name="ExpectedRegionSha256File">Host-local file containing the expected region SHA-256.</param>
 public sealed record ScenarioStep(
     string? Name,
     string Action,
@@ -370,7 +376,13 @@ public sealed record ScenarioStep(
     string? ExpectedSha256 = null,
     string? ExpectedSha256File = null,
     string? BaselineFile = null,
-    bool? UpdateBaseline = null);
+    bool? UpdateBaseline = null,
+    int? RegionX = null,
+    int? RegionY = null,
+    int? RegionWidth = null,
+    int? RegionHeight = null,
+    string? ExpectedRegionSha256 = null,
+    string? ExpectedRegionSha256File = null);
 
 /// <summary>
 /// JSON command envelope.

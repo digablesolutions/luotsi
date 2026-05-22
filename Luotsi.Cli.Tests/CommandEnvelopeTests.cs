@@ -39,6 +39,63 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_Help_Command_Writes_Command_Topic()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["help", "view"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(console.OutputLines);
+        Assert.Single(console.ErrorLines);
+        Assert.Contains("Luotsi help: view", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("luotsi view --device <adb serial>", console.ErrorLines[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_Command_Help_Flag_Writes_Command_Topic()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["run", "--help"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(console.OutputLines);
+        Assert.Single(console.ErrorLines);
+        Assert.Contains("Luotsi help: run", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("--events-jsonl <file>", console.ErrorLines[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_Unknown_Help_Topic_Returns_Usage_Exit_Code()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["help", "nope"]);
+
+        Assert.Equal(2, exitCode);
+        Assert.Empty(console.OutputLines);
+        Assert.Single(console.ErrorLines);
+        Assert.Contains("Unknown help topic 'nope'", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("view", console.ErrorLines[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Help_Topics_Cover_All_Known_Commands()
+    {
+        var missing = CliOptions.KnownCommandNames
+            .Where(static command => !string.Equals(command, "help", StringComparison.OrdinalIgnoreCase))
+            .Where(static command => !Help.TryGetTopic(command, out _))
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        Assert.Empty(missing);
+    }
+
+    [Fact]
     public async Task RunAsync_Invalid_Tap_Coordinates_Return_Usage_Error_Envelope()
     {
         var console = new FakeConsole();
@@ -60,6 +117,8 @@ public sealed partial class AppTests
         var host = new FakeDeviceHost();
         host.ConnectedDevices.Add(new DeviceInfo("usb-1", "device", "product:p model:Pixel_9 device:komodo usb:1-1"));
         host.ConnectedDevices.Add(new DeviceInfo("wifi-1:5555", "offline", "product:p model:Old_Box device:box"));
+        host.ForwardEntries.Add(new PortForwardEntry("usb-1", "tcp:37123", "localabstract:luotsi_view_old"));
+        host.ReverseEntries.Add(new PortReverseEntry("usb-1", "localabstract:device-e2e-old", "tcp:8080"));
         var app = new App(new AppDependencies
         {
             Console = console,
@@ -99,6 +158,39 @@ public sealed partial class AppTests
         Assert.Equal("attention_required", data.GetProperty("status").GetString());
         Assert.Contains("Multiple available devices", data.GetProperty("findings")[1].GetString(), StringComparison.Ordinal);
         Assert.Contains("adb reconnect offline", data.GetProperty("recommended_actions")[0].GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LabDoctor_Fix_Reconnects_Offline_Devices_And_Reports_Capabilities()
+    {
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("usb-1", "device", "product:p model:Pixel_9 device:komodo usb:1-1"));
+        host.ConnectedDevices.Add(new DeviceInfo("wifi-1:5555", "offline", "product:p model:Old_Box device:box"));
+        host.ForwardEntries.Add(new PortForwardEntry("usb-1", "tcp:37123", "localabstract:luotsi_view_old"));
+        host.ReverseEntries.Add(new PortReverseEntry("usb-1", "localabstract:device-e2e-old", "tcp:8080"));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var exitCode = await app.RunAsync(["lab", "doctor", "--fix"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["offline"], host.AdbReconnectTargets);
+        Assert.Equal(["tcp:37123"], host.ForwardRemoveRequests);
+        Assert.Equal(["localabstract:device-e2e-old"], host.ReverseRemoveRequests);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Contains("Ran `adb reconnect offline`", data.GetProperty("applied_fixes")[0].GetString(), StringComparison.Ordinal);
+        Assert.Contains("Removed stale Luotsi forward", data.GetProperty("applied_fixes")[1].GetString(), StringComparison.Ordinal);
+        Assert.Equal(4, data.GetProperty("probes").GetArrayLength());
+        Assert.Equal("server-status", data.GetProperty("probes")[0].GetProperty("name").GetString());
+        var capabilities = data.GetProperty("inventory").GetProperty("decisions")[0].GetProperty("capabilities").EnumerateArray().Select(static value => value.GetString()).ToArray();
+        Assert.Contains("adb", capabilities);
+        Assert.Contains("physical", capabilities);
+        Assert.Contains("model:Pixel_9", capabilities);
     }
 
 

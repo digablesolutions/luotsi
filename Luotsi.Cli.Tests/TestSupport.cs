@@ -469,7 +469,7 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public List<string> TakeScreenshotRequests { get; } = [];
 
-    public List<(string Label, int? ExpectedWidth, int? ExpectedHeight, string? ExpectedSha256, string? ExpectedSha256File, string? BaselineFile, bool UpdateBaseline)> AssertScreenshotRequests { get; } = [];
+    public List<(string Label, int? ExpectedWidth, int? ExpectedHeight, string? ExpectedSha256, string? ExpectedSha256File, string? BaselineFile, bool UpdateBaseline, ScreenshotAssertionRegion? Region, string? ExpectedRegionSha256, string? ExpectedRegionSha256File)> AssertScreenshotRequests { get; } = [];
 
     public List<string> RecordRequests { get; } = [];
 
@@ -510,10 +510,12 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
     public List<(string Local, string Remote, bool NoRebind)> ForwardRequests { get; } = [];
 
     public List<string> ForwardRemoveRequests { get; } = [];
+    public List<PortForwardEntry> ForwardEntries { get; } = [];
 
     public List<(string Remote, string Local, bool NoRebind)> ReverseRequests { get; } = [];
 
     public List<string> ReverseRemoveRequests { get; } = [];
+    public List<PortReverseEntry> ReverseEntries { get; } = [];
 
     public List<(string Package, string? Activity, bool Wait)> StartAppRequests { get; } = [];
 
@@ -681,9 +683,9 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
         return Task.FromResult(new TakeScreenshotResult(label, $"{label}.png"));
     }
 
-    public Task<ScreenshotAssertionResult> AssertScreenshotAsync(string label, int? expectedWidth, int? expectedHeight, string? expectedSha256, string? expectedSha256File = null, string? baselineFile = null, bool updateBaseline = false)
+    public Task<ScreenshotAssertionResult> AssertScreenshotAsync(string label, int? expectedWidth, int? expectedHeight, string? expectedSha256, string? expectedSha256File = null, string? baselineFile = null, bool updateBaseline = false, ScreenshotAssertionRegion? region = null, string? expectedRegionSha256 = null, string? expectedRegionSha256File = null)
     {
-        AssertScreenshotRequests.Add((label, expectedWidth, expectedHeight, expectedSha256, expectedSha256File, baselineFile, updateBaseline));
+        AssertScreenshotRequests.Add((label, expectedWidth, expectedHeight, expectedSha256, expectedSha256File, baselineFile, updateBaseline, region, expectedRegionSha256, expectedRegionSha256File));
         if (AssertScreenshotException is not null)
         {
             throw AssertScreenshotException;
@@ -699,7 +701,10 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
             expectedHeight,
             expectedSha256,
             baselineFile,
-            updateBaseline));
+            updateBaseline,
+            region,
+            null,
+            expectedRegionSha256));
     }
 
     public Task<CaptureArtifactsResult> CaptureArtifactsAsync(string label) => Task.FromResult(new CaptureArtifactsResult(label, $"{label}.png", $"{label}.txt", $"{label}.json", $"{label}.xml"));
@@ -833,7 +838,7 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
     }
 
     public Task<PortForwardListResult> ListForwardsAsync() =>
-        Task.FromResult(new PortForwardListResult([]));
+        Task.FromResult(new PortForwardListResult(ForwardEntries));
 
     public Task<PortForwardResult> ForwardAsync(string local, string remote, bool noRebind)
     {
@@ -848,7 +853,7 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
     }
 
     public Task<PortReverseListResult> ListReversesAsync() =>
-        Task.FromResult(new PortReverseListResult([]));
+        Task.FromResult(new PortReverseListResult(ReverseEntries));
 
     public Task<PortReverseResult> ReverseAsync(string remote, string local, bool noRebind)
     {

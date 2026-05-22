@@ -16,6 +16,7 @@ public sealed class CliOptions
     new[]
     {
         "adb",
+        "help",
         "devices",
         "device-status",
         "device-wait",
@@ -70,6 +71,8 @@ public sealed class CliOptions
         "record",
         "run"
     }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+
+    public static IReadOnlyCollection<string> KnownCommandNames => KnownCommands;
 
     private static readonly FrozenSet<string> KnownFlagOptions =
     new[]

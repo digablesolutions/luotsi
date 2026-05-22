@@ -107,7 +107,7 @@ internal sealed class AppCommandDispatcher(
         return action.ToLowerInvariant() switch
         {
             "status" => await LabCommandResolver.ReadStatusAsync(runner, options.Get("device-query")).ConfigureAwait(false),
-            "doctor" => await LabCommandResolver.DiagnoseAsync(runner, options.Get("device-query")).ConfigureAwait(false),
+            "doctor" => await LabCommandResolver.DiagnoseAsync(runner, options.Get("device-query"), options.HasFlag("fix")).ConfigureAwait(false),
             _ => throw new UsageException("lab requires subcommand status or doctor.")
         };
     }
