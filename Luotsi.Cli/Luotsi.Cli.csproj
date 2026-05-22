@@ -35,7 +35,7 @@
              ExcludeFromSingleFile="true"
              CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release.apk"
-             Condition="Exists('../Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release.apk')"
+             Condition="Exists('$(MSBuildProjectDirectory)/../Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release.apk')"
              Link="Luotsi.ViewServer.Android\app\build\outputs\apk\release\app-release.apk"
              ExcludeFromSingleFile="true"
              CopyToPublishDirectory="PreserveNewest" />
