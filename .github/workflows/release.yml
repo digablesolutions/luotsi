@@ -230,6 +230,24 @@ jobs:
             exit $LASTEXITCODE
           }
 
+          $releaseApkDir = Join-Path $PWD "Luotsi.ViewServer.Android/app/build/outputs/apk/release"
+          $canonicalApk = Join-Path $releaseApkDir "app-release.apk"
+          if (!(Test-Path -LiteralPath $canonicalApk)) {
+            $candidate = Get-ChildItem -LiteralPath $releaseApkDir -Filter "*.apk" -File -ErrorAction SilentlyContinue |
+              Sort-Object Name |
+              Select-Object -First 1
+            if ($null -eq $candidate) {
+              throw "Android view helper release APK was not produced under $releaseApkDir."
+            }
+
+            Copy-Item -LiteralPath $candidate.FullName -Destination $canonicalApk -Force
+            Write-Host "Normalized Android helper APK $($candidate.Name) to app-release.apk."
+          }
+
+          Get-ChildItem -LiteralPath $releaseApkDir | ForEach-Object {
+            Write-Host "Android helper output: $($_.FullName)"
+          }
+
       - name: Publish
         shell: pwsh
         run: >
