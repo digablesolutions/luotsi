@@ -42,7 +42,7 @@ internal static class LabDoctorRepairActions
                 fixes.Add($"Removed stale Luotsi forward `{entry.Local}` -> `{entry.Remote}`.");
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             fixes.Add($"Skipped stale forward cleanup: {ex.Message}");
         }
@@ -56,7 +56,7 @@ internal static class LabDoctorRepairActions
                 fixes.Add($"Removed stale Luotsi reverse `{entry.Remote}` -> `{entry.Local}`.");
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             fixes.Add($"Skipped stale reverse cleanup: {ex.Message}");
         }

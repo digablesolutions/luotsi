@@ -34,7 +34,7 @@ internal static class LabDoctorProbes
             var result = await runAsync().ConfigureAwait(false);
             return new LabDoctorProbe(name, result.Command.Succeeded, result.Command.ExitCode, result.Command.Invocation);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return new LabDoctorProbe(name, false, -1, ex.Message);
         }

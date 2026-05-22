@@ -185,6 +185,11 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         {
             using var document = JsonDocument.Parse(_fileSystem.ReadAllTextAsync(Path.Join(_root, path)).GetAwaiter().GetResult());
             var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
             if (!root.TryGetProperty("schema", out var schema) ||
                 !string.Equals(schema.GetString(), "luotsi-scenario-run-report.v1", StringComparison.Ordinal))
             {
@@ -200,7 +205,7 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
             AddJsonProperty(parts, root, "durationMs", "duration_ms");
             return parts.Count == 0 ? null : string.Join(" | ", parts);
         }
-        catch
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
             return null;
         }
@@ -212,26 +217,22 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         {
             var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             var terminalStatuses = new List<string>();
-            foreach (var line in _fileSystem.ReadAllTextAsync(Path.Join(_root, path)).GetAwaiter().GetResult().Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+            foreach (var (type, status) in _fileSystem
+                .ReadAllTextAsync(Path.Join(_root, path))
+                .GetAwaiter()
+                .GetResult()
+                .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+                .Select(ParseJsonlEvent))
             {
-                using var document = JsonDocument.Parse(line);
-                var root = document.RootElement;
-                if (!root.TryGetProperty("type", out var typeProperty))
-                {
-                    continue;
-                }
-
-                var type = typeProperty.GetString();
                 if (string.IsNullOrWhiteSpace(type))
                 {
                     continue;
                 }
 
                 counts[type] = counts.GetValueOrDefault(type) + 1;
-                if (string.Equals(type, "scenario_run_ended", StringComparison.OrdinalIgnoreCase) &&
-                    root.TryGetProperty("status", out var status))
+                if (status is not null)
                 {
-                    terminalStatuses.Add(status.GetString() ?? "unknown");
+                    terminalStatuses.Add(status);
                 }
             }
 
@@ -253,10 +254,32 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
 
             return string.Join(" | ", parts);
         }
-        catch
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
             return null;
         }
+    }
+
+    private static (string? Type, string? Status) ParseJsonlEvent(string line)
+    {
+        using var document = JsonDocument.Parse(line);
+        var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            return (null, null);
+        }
+
+        if (!root.TryGetProperty("type", out var typeProperty))
+        {
+            return (null, null);
+        }
+
+        var type = typeProperty.GetString();
+        var status = string.Equals(type, "scenario_run_ended", StringComparison.OrdinalIgnoreCase) &&
+            root.TryGetProperty("status", out var statusProperty)
+                ? statusProperty.GetString() ?? "unknown"
+                : null;
+        return (type, status);
     }
 
     private static void AddJsonProperty(List<string> parts, JsonElement root, string name, string? label = null)
