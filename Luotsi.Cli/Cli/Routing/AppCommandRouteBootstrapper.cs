@@ -68,14 +68,22 @@ internal sealed class AppCommandRouteBootstrapper(AppCommandRouteBootstrapperDep
     {
         if (string.Equals(options.Command, "replay", StringComparison.OrdinalIgnoreCase) &&
             options.Arguments.Count > 0 &&
-            string.Equals(options.Arguments[0], "summarize", StringComparison.OrdinalIgnoreCase))
+            IsExistingReplayArtifactCommand(options.Arguments[0]))
         {
-            var artifactRoot = options.Get("artifacts") ?? throw new UsageException("replay summarize requires --artifacts <directory> pointing to an existing artifact root.");
+            var artifactRoot = options.Get("artifacts") ?? throw new UsageException("replay requires --artifacts <directory> pointing to an existing artifact root.");
             return ArtifactSession.AttachExisting(artifactRoot, _dependencies.FileSystem, options.Get("poll-artifacts"));
         }
 
         return ArtifactSession.Create(options, _dependencies.FileSystem, _dependencies.TimeProvider);
     }
+
+    private static bool IsExistingReplayArtifactCommand(string replaySubcommand) =>
+        string.Equals(replaySubcommand, "summarize", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(replaySubcommand, "capsule", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(replaySubcommand, "open", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(replaySubcommand, "search", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(replaySubcommand, "scenario-draft", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(replaySubcommand, "draft-scenario", StringComparison.OrdinalIgnoreCase);
 }
 
 internal sealed class AppCommandRouteBootstrapperDependencies

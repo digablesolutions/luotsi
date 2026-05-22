@@ -69,6 +69,7 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
 
         _listener = listener;
         _acceptCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
         var bound = (IPEndPoint)listener.LocalEndpoint;
         BoundEndpoint = $"{bound.Address}:{bound.Port}";
         _acceptLoop = AcceptLoopAsync(listener, _acceptCancellation.Token);
@@ -189,7 +190,7 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
 
     private async Task RemoveConnectionAsync(ObserverConnection connection, string reason, bool disposeConnection, CancellationToken cancellationToken)
     {
-        var removed = false;
+        bool removed;
         lock (_gate)
         {
             removed = _connections.Remove(connection);
@@ -283,6 +284,7 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
                 }
                 catch
                 {
+                    // ignored
                 }
             }
 
@@ -310,6 +312,7 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
             }
             catch
             {
+                // ignored
             }
             finally
             {

@@ -16,8 +16,8 @@ public sealed class ArtifactSession
 {
     private readonly IFileSystem _fileSystem;
     private readonly ArtifactIndexRenderer _indexRenderer;
-    private const string ArtifactIndexFileName = "index.md";
-    private const string ArtifactHtmlIndexFileName = "index.html";
+    internal const string ArtifactIndexFileName = "index.md";
+    internal const string ArtifactHtmlIndexFileName = "index.html";
 
     private ArtifactSession(string root, IFileSystem fileSystem, UiPollArtifactPolicy uiPollArtifactPolicy, bool ensureDirectoryExists)
     {

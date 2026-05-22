@@ -48,7 +48,11 @@ internal static class AppHostedCommandCompositionBuilder
         var replayCommandHost = new ReplayCommandHost(new(
             envelopeWriter,
             jsonWriter,
-            replayCommandDispatcher));
+            replayCommandDispatcher,
+            dependencies.ProcessRunner,
+            new ReplayScenarioDraftService(dependencies.FileSystem),
+            new ReplaySearchService(dependencies.FileSystem),
+            new ReplayCapsuleService(dependencies.FileSystem)));
 
         return new(
             envelopeWriter,

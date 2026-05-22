@@ -141,15 +141,9 @@ internal sealed class AndroidArtifactOperations(
             return new ScreenshotArtifactInfo(fileName, null, null, null);
         }
 
-        int? width;
-        int? height;
-        await using (var dimensionsStream = _fileSystem.OpenRead(destination))
-        {
-            (width, height) = await ReadPngDimensionsAsync(dimensionsStream).ConfigureAwait(false);
-        }
-
-        await using var hashStream = _fileSystem.OpenRead(destination);
-        var hash = await SHA256.HashDataAsync(hashStream).ConfigureAwait(false);
+        var bytes = await _fileSystem.ReadAllBytesAsync(destination).ConfigureAwait(false);
+        var (width, height) = ReadPngDimensions(bytes);
+        var hash = SHA256.HashData(bytes);
         var sha256 = Convert.ToHexString(hash).ToLowerInvariant();
         return new ScreenshotArtifactInfo(fileName, width, height, sha256);
     }
@@ -241,23 +235,9 @@ internal sealed class AndroidArtifactOperations(
         return diffFile;
     }
 
-    private static async Task<(int? Width, int? Height)> ReadPngDimensionsAsync(Stream stream)
+    private static (int? Width, int? Height) ReadPngDimensions(byte[] bytes)
     {
-        var bytes = new byte[24];
-        var offset = 0;
-        while (offset < bytes.Length)
-        {
-            var read = await stream.ReadAsync(bytes.AsMemory(offset, bytes.Length - offset)).ConfigureAwait(false);
-            if (read == 0)
-            {
-                break;
-            }
-
-            offset += read;
-        }
-
         if (bytes.Length < 24 ||
-            offset < 24 ||
             bytes[0] != 0x89 ||
             bytes[1] != 0x50 ||
             bytes[2] != 0x4e ||

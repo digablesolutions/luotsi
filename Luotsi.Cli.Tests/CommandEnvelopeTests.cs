@@ -593,6 +593,193 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayOpen_DryRun_Refreshes_Index_And_Returns_Opener_Command()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var processRunner = new FakeProcessRunner();
+        var replayRoot = SeedReplaySummaryArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = processRunner,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "open", "--artifacts", replayRoot, "--dry-run"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(ResultSchemas.ReplayOpen, data.GetProperty("schema").GetString());
+        Assert.Equal(replayRoot, data.GetProperty("artifact_root").GetString());
+        Assert.False(data.GetProperty("opened").GetBoolean());
+        Assert.EndsWith("index.html", data.GetProperty("index_html_path").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.html")));
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.md")));
+        Assert.Empty(processRunner.Calls);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayOpen_Opens_Refreshed_Index_With_Platform_Opener()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var processRunner = new FakeProcessRunner();
+        var replayRoot = SeedReplaySummaryArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = processRunner,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "open", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.True(envelope.RootElement.GetProperty("data").GetProperty("opened").GetBoolean());
+        var call = Assert.Single(processRunner.Calls);
+        Assert.Contains(call.Args, arg => arg.EndsWith("index.html", StringComparison.OrdinalIgnoreCase));
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.html")));
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayScenarioDraft_Writes_Valid_Draft_From_Inspect_Timeline()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedInspectReplayDraftArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "scenario-draft", "--artifacts", replayRoot, "--output", "/tmp/draft.json", "--name", "draft smoke"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(ResultSchemas.ScenarioDraft, data.GetProperty("schema").GetString());
+        Assert.Equal("/tmp/draft.json", data.GetProperty("output").GetString());
+        Assert.Equal("draft smoke", data.GetProperty("scenario").GetProperty("name").GetString());
+        Assert.Equal(4, data.GetProperty("scenario").GetProperty("steps").GetArrayLength());
+        Assert.True(fileSystem.FileExists("/tmp/draft.json"));
+
+        var validateConsole = new FakeConsole();
+        var validateApp = new App(new AppDependencies
+        {
+            Console = validateConsole,
+            FileSystem = fileSystem
+        });
+        var validateExitCode = await validateApp.RunAsync(["scenario-validate", "--file", "/tmp/draft.json"]);
+
+        Assert.Equal(0, validateExitCode);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplaySearch_Returns_Text_Matches_From_Artifact_Root()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplaySearchArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "search", "--artifacts", replayRoot, "--contains", "not visible"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(ResultSchemas.ReplaySearch, data.GetProperty("schema").GetString());
+        Assert.Equal("not visible", data.GetProperty("query").GetString());
+        Assert.Equal(3, data.GetProperty("match_count").GetInt32());
+        Assert.False(data.GetProperty("truncated").GetBoolean());
+        var matches = data.GetProperty("matches").EnumerateArray().ToArray();
+        Assert.Contains(matches, match =>
+            match.GetProperty("path").GetString() == "failure-capsule.json" &&
+            match.GetProperty("kind").GetString() == "failure");
+        Assert.Contains(matches, match =>
+            match.GetProperty("path").GetString() == "session-timeline.jsonl" &&
+            match.GetProperty("kind").GetString() == "timeline");
+        Assert.Contains(matches, match =>
+            match.GetProperty("path").GetString() == "logs/failure-logcat.txt" &&
+            match.GetProperty("line").GetInt32() == 2);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplaySearch_Respects_Limit()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplaySearchArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "search", "--artifacts", replayRoot, "--contains", "not visible", "--limit", "1"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(1, data.GetProperty("match_count").GetInt32());
+        Assert.True(data.GetProperty("truncated").GetBoolean());
+        Assert.Single(data.GetProperty("matches").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayCapsule_Returns_Primary_Failure_And_Command_Hints()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "capsule", "--artifacts", replayRoot, "--write-readme"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(ResultSchemas.ReplayCapsule, data.GetProperty("schema").GetString());
+        Assert.Equal(1, data.GetProperty("session_count").GetInt32());
+        Assert.Equal(1, data.GetProperty("failure_count").GetInt32());
+        Assert.True(data.GetProperty("has_failure_capsule").GetBoolean());
+        Assert.Equal(Path.Join(replayRoot, "replay-capsule.md"), data.GetProperty("readme_path").GetString());
+        var primaryFailure = data.GetProperty("primary_failure");
+        Assert.Equal("login smoke", primaryFailure.GetProperty("scenario").GetString());
+        Assert.Equal("wait login button", primaryFailure.GetProperty("step").GetString());
+        Assert.Equal("waitVisible", primaryFailure.GetProperty("action").GetString());
+        Assert.Equal("not visible", primaryFailure.GetProperty("message").GetString());
+        Assert.Equal(1, data.GetProperty("artifact_counts").GetProperty("screenshots").GetInt32());
+        Assert.Equal(1, data.GetProperty("artifact_counts").GetProperty("logs").GetInt32());
+        Assert.Contains(data.GetProperty("suggested_commands").EnumerateArray(), command =>
+            command.GetProperty("command").GetString()!.Contains("replay search", StringComparison.Ordinal));
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-capsule.md")));
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.md")));
+        var readme = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-capsule.md"));
+        Assert.Contains("## Primary Failure", readme, StringComparison.Ordinal);
+        Assert.Contains("not visible", readme, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_ReplaySummarize_Invalid_Format_Returns_Usage_Error_Envelope()
     {
         var console = new FakeConsole();
@@ -1222,6 +1409,166 @@ public sealed partial class AppTests
           "timelineFileName": "session-timeline.jsonl",
           "eventCount": 8,
           "eventTypes": ["view_started", "view_share_started", "view_share_client_connected", "view_reconnect_requested", "view_reconnected", "view_stats", "view_error", "view_ended"]
+        }
+        """);
+        return replayRoot;
+    }
+
+    private static string SeedReplayCapsuleArtifacts(FakeFileSystem fileSystem)
+    {
+        var replayRoot = "/tmp/replay-capsule-root";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.CreateDirectory(Path.Join(replayRoot, "failures"));
+        fileSystem.CreateDirectory(Path.Join(replayRoot, "logs"));
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), """
+        {"type":"scenario_run_started","started_at":"2026-05-18T10:00:00Z"}
+        {"type":"scenario_step_failed","occurred_at":"2026-05-18T10:00:02Z","scenario":"login smoke","step":"wait login button","action":"waitVisible","error":{"message":"not visible"}}
+        {"type":"scenario_run_ended","ended_at":"2026-05-18T10:00:03Z","status":"failed"}
+        """);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-replay.json"), """
+        {
+          "schema": "luotsi-session-replay.v1",
+          "sessionKind": "run",
+          "sessionId": "run-20260518100000000",
+          "startedAt": "2026-05-18T10:00:00Z",
+          "endedAt": "2026-05-18T10:00:03Z",
+          "reason": "failed",
+          "exitCode": 1,
+          "target": "emulator-5554",
+          "timelineFileName": "session-timeline.jsonl",
+          "eventCount": 3,
+          "eventTypes": ["scenario_run_started", "scenario_step_failed", "scenario_run_ended"]
+        }
+        """);
+        fileSystem.AddFile(Path.Join(replayRoot, "failure-capsule.json"), """
+        {
+          "schema": "luotsi-failure-capsule.v1",
+          "generatedAt": "2026-05-18T10:00:03Z",
+          "path": "/tmp/replay-capsule-root",
+          "status": "failed",
+          "replayMetadataPath": "session-replay.json",
+          "replayTimelinePath": "session-timeline.jsonl",
+          "reports": {
+            "jsonPath": "scenario-results.json",
+            "junitPath": "junit.xml"
+          },
+          "scenarios": [
+            {
+              "scenario": "login smoke",
+              "scenarioId": "scenarios/login.json::login smoke",
+              "status": "failed",
+              "file": "scenarios/login.json",
+              "failedStep": {
+                "index": 1,
+                "name": "wait login button",
+                "action": "waitVisible",
+                "phase": "main"
+              },
+              "artifacts": [
+                {
+                  "kind": "screenshot",
+                  "path": "failures/wait-login-button.png",
+                  "stepIndex": 1,
+                  "stepName": "wait login button"
+                },
+                {
+                  "kind": "logcat",
+                  "path": "logs/failure-logcat.txt",
+                  "stepIndex": 1,
+                  "stepName": "wait login button"
+                }
+              ],
+              "error": {
+                "type": "System.InvalidOperationException",
+                "message": "not visible",
+                "category": "selector_or_screen_state"
+              }
+            }
+          ],
+          "screenshots": [
+            {
+              "kind": "screenshot",
+              "path": "failures/wait-login-button.png",
+              "stepIndex": 1,
+              "stepName": "wait login button"
+            }
+          ],
+          "logcat": [
+            {
+              "kind": "logcat",
+              "path": "logs/failure-logcat.txt",
+              "stepIndex": 1,
+              "stepName": "wait login button"
+            }
+          ],
+          "hierarchies": [],
+          "screenStates": [],
+          "failureBundles": []
+        }
+        """);
+        fileSystem.AddFile(Path.Join(replayRoot, "failures", "wait-login-button.png"), "png");
+        fileSystem.AddFile(Path.Join(replayRoot, "logs", "failure-logcat.txt"), "not visible");
+        fileSystem.AddFile(Path.Join(replayRoot, "scenario-results.json"), "{}");
+        fileSystem.AddFile(Path.Join(replayRoot, "junit.xml"), "<testsuite />");
+        return replayRoot;
+    }
+
+    private static string SeedReplaySearchArtifacts(FakeFileSystem fileSystem)
+    {
+        var replayRoot = "/tmp/replay-search-root";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.CreateDirectory(Path.Join(replayRoot, "logs"));
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), """
+        {"type":"scenario_step_failed","scenario":"login","step":"waitVisible","error":{"message":"not visible"}}
+        {"type":"scenario_run_ended","status":"failed"}
+        """);
+        fileSystem.AddFile(Path.Join(replayRoot, "failure-capsule.json"), """
+        {
+          "schema": "luotsi-failure-capsule.v1",
+          "scenarios": [
+            {
+              "scenario": "login",
+              "error": {
+                "message": "not visible"
+              }
+            }
+          ]
+        }
+        """);
+        fileSystem.AddFile(Path.Join(replayRoot, "logs", "failure-logcat.txt"), """
+        first line
+        E/App: button not visible yet
+        """);
+        fileSystem.AddFile(Path.Join(replayRoot, "screenshot.png"), "not visible but binary-like extension should not be searched");
+        return replayRoot;
+    }
+
+    private static string SeedInspectReplayDraftArtifacts(FakeFileSystem fileSystem)
+    {
+        var replayRoot = "/tmp/inspect-replay-root";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), """
+        {"type":"session_started","session_id":"inspect-session","started_at":"2026-05-18T10:00:00Z"}
+        {"type":"command_result","session_id":"inspect-session","id":"1","command":"wait_visible","ok":true,"started_at":"2026-05-18T10:00:01Z","ended_at":"2026-05-18T10:00:02Z","data":{"text":"Sign in"}}
+        {"type":"command_result","session_id":"inspect-session","id":"2","command":"tap_text","ok":true,"started_at":"2026-05-18T10:00:03Z","ended_at":"2026-05-18T10:00:04Z","data":{"text":"Sign in"}}
+        {"type":"command_result","session_id":"inspect-session","id":"3","command":"type_text","ok":true,"started_at":"2026-05-18T10:00:05Z","ended_at":"2026-05-18T10:00:06Z","data":{"text":"hello@example.com"}}
+        {"type":"command_result","session_id":"inspect-session","id":"4","command":"take_screenshot","ok":true,"started_at":"2026-05-18T10:00:07Z","ended_at":"2026-05-18T10:00:08Z","data":{"label":"after-login"}}
+        {"type":"scenario_step_passed","session_id":"inspect-session","action":"waitVisible","step":"original scenario event without args"}
+        {"type":"session_ended","session_id":"inspect-session","ended_at":"2026-05-18T10:00:09Z","reason":"client_exit"}
+        """);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-replay.json"), """
+        {
+          "schema": "luotsi-session-replay.v1",
+          "sessionKind": "inspect",
+          "sessionId": "inspect-session",
+          "startedAt": "2026-05-18T10:00:00Z",
+          "endedAt": "2026-05-18T10:00:09Z",
+          "reason": "client_exit",
+          "exitCode": 0,
+          "target": "emulator-5554",
+          "timelineFileName": "session-timeline.jsonl",
+          "eventCount": 6,
+          "eventTypes": ["session_started", "command_result", "session_ended"]
         }
         """);
         return replayRoot;

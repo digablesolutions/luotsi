@@ -140,6 +140,11 @@ internal sealed class FakeFileSystem : IFileSystem
     public Task<string> ReadAllTextAsync(string path, CancellationToken cancellationToken = default) =>
         Task.FromResult(_files.TryGetValue(path, out var text) ? text : System.Text.Encoding.UTF8.GetString(_binaryFiles[path]));
 
+    public Task<byte[]> ReadAllBytesAsync(string path, CancellationToken cancellationToken = default) =>
+        Task.FromResult(_files.TryGetValue(path, out var text)
+            ? System.Text.Encoding.UTF8.GetBytes(text)
+            : _binaryFiles[path]);
+
     public Stream OpenRead(string path)
     {
         if (_files.TryGetValue(path, out var text))

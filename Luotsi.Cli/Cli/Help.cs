@@ -173,11 +173,19 @@ Luotsi help: replay
 
 Usage:
   luotsi replay summarize --artifacts <artifact-root> [--format json|jsonl]
+  luotsi replay capsule --artifacts <artifact-root> [--write-readme]
+  luotsi replay open --artifacts <artifact-root> [--dry-run]
+  luotsi replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>]
+  luotsi replay search --artifacts <artifact-root> --contains <text> [--limit 50]
 
 Examples:
   luotsi replay summarize --artifacts artifacts/20260518-100000-view
   luotsi replay summarize --artifacts artifacts/20260518-100000-view --format json
   luotsi replay summarize --artifacts artifacts/20260518-100000-view --format jsonl
+  luotsi replay capsule --artifacts artifacts/20260518-100000-run --write-readme
+  luotsi replay open --artifacts artifacts/20260518-100000-view
+  luotsi replay scenario-draft --artifacts artifacts/20260518-100000-inspect --output scenarios/draft.json
+  luotsi replay search --artifacts artifacts/20260518-100000-run --contains "not visible"
 
 Notes:
   Replay summarize reads session-replay.json and session-timeline.jsonl from an
@@ -186,7 +194,16 @@ Notes:
   object, and `--format jsonl` writes one summary header line followed by one
   session line per replay session. Failed scenario runs also expose
   failure_capsule_path and an embedded failure_capsule summary with linked
-  reports and failure artifacts. Failures still use the normal error envelope.
+  reports and failure artifacts. Replay open refreshes index.html/index.md for
+  the artifact root and opens index.html in the local browser. Replay
+  scenario-draft turns inspect/replay action events into a conservative draft
+  scenario with warnings and suggestions for cleanup. Replay search scans
+  text-like replay artifacts, reports, logcat, hierarchies, screen-state JSON,
+  and timelines for a case-insensitive string. Replay capsule returns a compact
+  bundle manifest with artifact counts, primary failure, and suggested next
+  commands. With --write-readme, replay capsule writes replay-capsule.md into
+  the artifact root and refreshes the artifact index. Failures still use the
+  normal error envelope.
 """,
         ["update"] = """
 Luotsi help: update
@@ -428,6 +445,10 @@ Command groups:
 
   Artifact replay and triage
     replay summarize --artifacts <artifact-root> [--format json|jsonl]
+    replay capsule --artifacts <artifact-root> [--write-readme]
+    replay open --artifacts <artifact-root> [--dry-run]
+    replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>]
+    replay search --artifacts <artifact-root> --contains <text> [--limit 50]
 
   Install and update
     version

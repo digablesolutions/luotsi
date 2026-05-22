@@ -19,4 +19,8 @@ public static class ResultSchemas
     public const string SessionReplaySummary = "luotsi-session-replay-summary.v1";
     public const string FailureBundle = "luotsi-failure-bundle.v1";
     public const string FailureCapsule = "luotsi-failure-capsule.v1";
+    public const string ReplayOpen = "luotsi-replay-open.v1";
+    public const string ScenarioDraft = "luotsi-scenario-draft.v1";
+    public const string ReplaySearch = "luotsi-replay-search.v1";
+    public const string ReplayCapsule = "luotsi-replay-capsule.v1";
 }

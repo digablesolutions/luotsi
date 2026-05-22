@@ -14,7 +14,7 @@ internal sealed class AndroidScreenshotRegionArtifacts(ArtifactSession artifacts
 
     public async Task<string> ComputeRegionSha256Async(string path, ScreenshotAssertionRegion region)
     {
-        var image = PngRgbaImage.Decode(await ReadAllBytesAsync(path).ConfigureAwait(false));
+        var image = PngRgbaImage.Decode(await _fileSystem.ReadAllBytesAsync(path).ConfigureAwait(false));
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         for (var y = region.Y; y < region.Y + region.Height; y++)
         {
@@ -32,7 +32,7 @@ internal sealed class AndroidScreenshotRegionArtifacts(ArtifactSession artifacts
             return null;
         }
 
-        var preview = PngRgbaImage.Decode(await ReadAllBytesAsync(screenshotPath).ConfigureAwait(false)).Crop(region);
+        var preview = PngRgbaImage.Decode(await _fileSystem.ReadAllBytesAsync(screenshotPath).ConfigureAwait(false)).Crop(region);
         var previewFile = $"{Slugify(label)}-screenshot-region.png";
         await WritePngArtifactAsync(previewFile, preview).ConfigureAwait(false);
         return previewFile;
@@ -45,8 +45,8 @@ internal sealed class AndroidScreenshotRegionArtifacts(ArtifactSession artifacts
             return null;
         }
 
-        var currentImage = PngRgbaImage.Decode(await ReadAllBytesAsync(screenshotPath).ConfigureAwait(false));
-        var baselineImage = PngRgbaImage.Decode(await ReadAllBytesAsync(baselineFile).ConfigureAwait(false));
+        var currentImage = PngRgbaImage.Decode(await _fileSystem.ReadAllBytesAsync(screenshotPath).ConfigureAwait(false));
+        var baselineImage = PngRgbaImage.Decode(await _fileSystem.ReadAllBytesAsync(baselineFile).ConfigureAwait(false));
         if (!currentImage.CanCrop(region) || !baselineImage.CanCrop(region))
         {
             return null;
@@ -78,14 +78,6 @@ internal sealed class AndroidScreenshotRegionArtifacts(ArtifactSession artifacts
         await using var output = _fileSystem.OpenWrite(Path.Join(_artifacts.Root, fileName));
         await output.WriteAsync(image.EncodePng()).ConfigureAwait(false);
         await _artifacts.RefreshIndexAsync().ConfigureAwait(false);
-    }
-
-    private async Task<byte[]> ReadAllBytesAsync(string path)
-    {
-        await using var stream = _fileSystem.OpenRead(path);
-        using var memory = new MemoryStream();
-        await stream.CopyToAsync(memory).ConfigureAwait(false);
-        return memory.ToArray();
     }
 
     private static string Slugify(string value)

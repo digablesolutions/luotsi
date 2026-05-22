@@ -290,6 +290,77 @@ public sealed record ReplayFailureCapsuleBundleResult(
     IReadOnlyList<ReplayFailureCapsuleArtifactResult> Artifacts,
     ErrorInfo? Error);
 
+public sealed record ReplayOpenResult(
+    string Schema,
+    string ArtifactRoot,
+    string IndexHtmlPath,
+    string IndexMarkdownPath,
+    bool Opened,
+    string? Opener,
+    IReadOnlyList<string> OpenerArgs);
+
+public sealed record ReplayScenarioDraftResult(
+    string Schema,
+    string ArtifactRoot,
+    string? Output,
+    string Confidence,
+    IReadOnlyList<string> Warnings,
+    ScenarioFile Scenario,
+    IReadOnlyList<ReplayScenarioDraftSuggestion> Suggestions);
+
+public sealed record ReplayScenarioDraftSuggestion(
+    int StepIndex,
+    string Kind,
+    string Confidence,
+    string Message);
+
+public sealed record ReplaySearchResult(
+    string Schema,
+    string ArtifactRoot,
+    string Query,
+    int MatchCount,
+    int ScannedFileCount,
+    bool Truncated,
+    IReadOnlyList<ReplaySearchMatchResult> Matches);
+
+public sealed record ReplaySearchMatchResult(
+    string Path,
+    int Line,
+    string Kind,
+    string Preview);
+
+public sealed record ReplayCapsuleResult(
+    string Schema,
+    string ArtifactRoot,
+    int SessionCount,
+    int FailureCount,
+    bool HasFailureCapsule,
+    string? ReadmePath,
+    ReplayCapsulePrimaryFailureResult? PrimaryFailure,
+    ReplayCapsuleArtifactCounts ArtifactCounts,
+    IReadOnlyList<ReplayCapsuleCommandHint> SuggestedCommands);
+
+public sealed record ReplayCapsulePrimaryFailureResult(
+    string? Scenario,
+    string? Step,
+    string? Action,
+    string? Message,
+    string? FailureCapsulePath,
+    string? TimelinePath);
+
+public sealed record ReplayCapsuleArtifactCounts(
+    int Screenshots,
+    int Videos,
+    int Logs,
+    int Hierarchies,
+    int ScreenStates,
+    int Reports,
+    int Timelines);
+
+public sealed record ReplayCapsuleCommandHint(
+    string Command,
+    string Purpose);
+
 public sealed record DoctorCheck(
     string Name,
     bool Ok,
