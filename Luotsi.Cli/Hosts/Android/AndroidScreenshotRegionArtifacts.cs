@@ -12,9 +12,9 @@ internal sealed class AndroidScreenshotRegionArtifacts(ArtifactSession artifacts
     private readonly ArtifactSession _artifacts = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
 
-    public string ComputeRegionSha256(string path, ScreenshotAssertionRegion region)
+    public async Task<string> ComputeRegionSha256Async(string path, ScreenshotAssertionRegion region)
     {
-        var image = PngRgbaImage.Decode(ReadAllBytes(path));
+        var image = PngRgbaImage.Decode(await ReadAllBytesAsync(path).ConfigureAwait(false));
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         for (var y = region.Y; y < region.Y + region.Height; y++)
         {
@@ -32,7 +32,7 @@ internal sealed class AndroidScreenshotRegionArtifacts(ArtifactSession artifacts
             return null;
         }
 
-        var preview = PngRgbaImage.Decode(ReadAllBytes(screenshotPath)).Crop(region);
+        var preview = PngRgbaImage.Decode(await ReadAllBytesAsync(screenshotPath).ConfigureAwait(false)).Crop(region);
         var previewFile = $"{Slugify(label)}-screenshot-region.png";
         await WritePngArtifactAsync(previewFile, preview).ConfigureAwait(false);
         return previewFile;
@@ -45,8 +45,8 @@ internal sealed class AndroidScreenshotRegionArtifacts(ArtifactSession artifacts
             return null;
         }
 
-        var currentImage = PngRgbaImage.Decode(ReadAllBytes(screenshotPath));
-        var baselineImage = PngRgbaImage.Decode(ReadAllBytes(baselineFile));
+        var currentImage = PngRgbaImage.Decode(await ReadAllBytesAsync(screenshotPath).ConfigureAwait(false));
+        var baselineImage = PngRgbaImage.Decode(await ReadAllBytesAsync(baselineFile).ConfigureAwait(false));
         if (!currentImage.CanCrop(region) || !baselineImage.CanCrop(region))
         {
             return null;
@@ -80,11 +80,11 @@ internal sealed class AndroidScreenshotRegionArtifacts(ArtifactSession artifacts
         await _artifacts.RefreshIndexAsync().ConfigureAwait(false);
     }
 
-    private byte[] ReadAllBytes(string path)
+    private async Task<byte[]> ReadAllBytesAsync(string path)
     {
-        using var stream = _fileSystem.OpenRead(path);
+        await using var stream = _fileSystem.OpenRead(path);
         using var memory = new MemoryStream();
-        stream.CopyTo(memory);
+        await stream.CopyToAsync(memory).ConfigureAwait(false);
         return memory.ToArray();
     }
 
@@ -118,10 +118,7 @@ internal sealed class AndroidScreenshotRegionArtifacts(ArtifactSession artifacts
         }
 
         public bool CanCrop(ScreenshotAssertionRegion region) =>
-            region.X >= 0 &&
-            region.Y >= 0 &&
-            region.Width > 0 &&
-            region.Height > 0 &&
+            region is {X: >= 0, Y: >= 0, Width: > 0, Height: > 0} &&
             region.X <= Width - region.Width &&
             region.Y <= Height - region.Height;
 
@@ -165,7 +162,7 @@ internal sealed class AndroidScreenshotRegionArtifacts(ArtifactSession artifacts
             var colorType = bytes[25];
             var bitDepth = bytes[24];
             var interlace = bytes[28];
-            if (bitDepth != 8 || interlace != 0 || (colorType != 2 && colorType != 6 && colorType != 0 && colorType != 4 && colorType != 3))
+            if (bitDepth != 8 || interlace != 0 || colorType is not 2 and not 6 and not 0 and not 4 and not 3)
             {
                 throw new InvalidOperationException($"Screenshot region assertions support non-interlaced 8-bit grayscale, grayscale+alpha, indexed, RGB, or RGBA PNG files; got bit depth {bitDepth}, color type {colorType}, interlace {interlace}.");
             }

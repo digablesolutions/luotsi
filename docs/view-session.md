@@ -77,6 +77,7 @@ Every successful `view` launch refreshes the special `last` profile. `reconnect`
 | `F7` | Open artifact folder |
 | `F8` | Toggle fit / fill presentation mode |
 | `F9` | Toggle live stream recording |
+| `F10` | Toggle the in-window help legend |
 | `F11` / `Alt+Enter` | Toggle local fullscreen |
 | `F12` | Capture device screenshot to artifact root |
 | `Esc` | Exit fullscreen (back to windowed) |
@@ -86,9 +87,11 @@ Plain text input and common navigation/editing keys are forwarded to the device.
 
 **Drag and drop:** `.apk` files are installed on the device; other files are pushed to `/sdcard/Download`; `device:/sdcard/...` or `adb:/sdcard/...` path tokens pull from the device into the artifact root.
 
-**Toolbar and shelf.** The SDL window paints an in-window toolbar (screenshot, record, reconnect, navigation, rotate, pause, open-folder, fit, fullscreen) so all controls are clickable without memorizing hotkeys. When multiple adb-visible devices are present, a multi-device shelf appears and lets you switch the mirrored device by clicking.
+**Toolbar and shelf.** The SDL window paints an in-window toolbar (help, screenshot, record, reconnect, navigation, rotate, pause, open-folder, fit, fullscreen) so all controls are clickable without memorizing hotkeys. The help button and `F10` toggle a visible legend overlay with the main operator shortcuts. Hover tooltips mirror the keyboard shortcuts for those actions, and the share badge tooltip shows the active share endpoint plus observer count. When multiple adb-visible devices are present, a multi-device shelf appears and lets you switch the mirrored device by clicking.
 
-**Artifact paths.** F12/toolbar screenshot writes files such as `view-window-001-screenshot.png` to the artifact root. F9/toolbar record writes `view-window-record-001.h264` there by default. If `--record <file.h264|file.mp4|file.mkv>` is supplied, startup recording writes that exact path and subsequent operator recordings reuse its directory, base name, and extension with a numeric suffix. Container outputs (`.mp4`, `.mkv`) require an `ffmpeg` executable; raw `.h264` does not. F7/toolbar open-folder opens the artifact root.
+**Artifact paths.** F12/toolbar screenshot writes files such as `view-window-001-screenshot.png` to the artifact root. F9/toolbar record writes `view-window-record-001.h264` there by default. If `--record <file.h264|file.mp4|file.mkv>` is supplied, startup recording writes that exact path and subsequent operator recordings reuse its directory, base name, and extension with a numeric suffix. Container outputs (`.mp4`, `.mkv`) require an `ffmpeg` executable; raw `.h264` does not. F7/toolbar open-folder opens the artifact root. Each session also mirrors its JSONL operator/runtime events to `session-timeline.jsonl` and writes replay metadata to `session-replay.json` so failures can be triaged from artifacts without reattaching to a live stream. The generated `index.md` and `index.html` now surface those replay artifacts in a dedicated Replay Sessions section with direct metadata/timeline links, and when a failed scenario run leaves a `failure-capsule.json`, the report list includes a compact summary of the failed scenarios, failed steps, and linked failure artifacts.
+
+For CI and agent workflows, `luotsi replay summarize --artifacts <artifact-root>` reads that same replay metadata directly. By default it returns the condensed timeline as a normal JSON command envelope. `--format json` writes the bare summary object, and `--format jsonl` writes a summary header line followed by one session line per replay session. The summary includes reconnect/share churn and the latest `view_stats` snapshot when those events are present in the timeline. When the artifact root also contains a failed scenario run, the session summary exposes `failure_capsule_path` plus an embedded `failure_capsule` object that links reports, screenshots, logcat, hierarchy, screen-state captures, and failure bundles.
 
 The `view_started` JSONL event includes `artifacts.artifact_root`; `view_screenshot_captured`, `view_recording_started`, and `view_recording_stopped` include the file or record path that was written.
 

@@ -181,6 +181,7 @@ function Write-Manifest(
         current_root = (Join-Path $InstallDirectory "current")
         bin_directory = $BinDirectory
         command_path = $CommandPath
+        helper_apk_path = (Join-Path $InstallDirectory "current\Luotsi.ViewServer.Android\app\build\outputs\apk\release\app-release.apk")
         archive_name = $ArchiveName
         archive_url = $ArchiveUrl
         checksum_url = $ChecksumUrl
@@ -228,6 +229,7 @@ $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("luotsi-install-" + [Guid]::Ne
 $archivePath = Join-Path $tempRoot $archiveName
 $checksumPath = Join-Path $tempRoot "SHA256SUMS"
 $extractDirectory = Join-Path $tempRoot "payload"
+$installCommitted = $false
 
 try {
     Ensure-Directory $tempRoot
@@ -266,12 +268,14 @@ try {
     }
 
     Move-Item -LiteralPath $payloadRoot -Destination $currentDirectory
-    if (Test-Path -LiteralPath $previousDirectory) {
-        Remove-Item -LiteralPath $previousDirectory -Recurse -Force
-    }
 
     Write-CommandShim $commandPath
     Write-Manifest $manifestPath $resolvedInstallRoot $binDirectory $commandPath $resolvedTag $rid $archiveName $archiveUrl $checksumUrl
+    $installCommitted = $true
+
+    if (Test-Path -LiteralPath $previousDirectory) {
+        Remove-Item -LiteralPath $previousDirectory -Recurse -Force -ErrorAction SilentlyContinue
+    }
 
     $pathUpdated = $false
     if (-not $SkipPathUpdate) {
@@ -291,8 +295,14 @@ try {
     }
 }
 catch {
-    if (-not (Test-Path -LiteralPath $currentDirectory) -and (Test-Path -LiteralPath $previousDirectory)) {
-        Move-Item -LiteralPath $previousDirectory -Destination $currentDirectory
+    if (-not $installCommitted) {
+        if (Test-Path -LiteralPath $currentDirectory) {
+            Remove-Item -LiteralPath $currentDirectory -Recurse -Force -ErrorAction SilentlyContinue
+        }
+
+        if (Test-Path -LiteralPath $previousDirectory) {
+            Move-Item -LiteralPath $previousDirectory -Destination $currentDirectory
+        }
     }
 
     throw

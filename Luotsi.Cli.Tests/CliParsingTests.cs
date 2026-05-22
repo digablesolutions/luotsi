@@ -72,4 +72,14 @@ public sealed partial class AppTests
         Assert.Equal("abc", options.Get("device"));
     }
 
+    [Fact]
+    public void Parse_Captures_Replay_Subcommand_Arguments()
+    {
+        var options = CliOptions.Parse(["replay", "summarize", "--artifacts", "/tmp/replay-root"]);
+
+        Assert.Equal("replay", options.Command);
+        Assert.Equal(["summarize"], options.Arguments);
+        Assert.Equal("/tmp/replay-root", options.Get("artifacts"));
+    }
+
 }

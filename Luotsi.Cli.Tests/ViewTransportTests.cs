@@ -87,10 +87,10 @@ public sealed class ViewTransportTests
         Assert.Equal(["forward", "tcp:0", "localabstract:luotsi_view_session123"], adb.RunCommands[1]);
         Assert.Contains("CLASSPATH='/data/local/tmp/luotsi-view-server.apk' app_process / 'dev.luotsi.view.Main'", adb.ShellCommands[0], StringComparison.Ordinal);
         Assert.Contains("--codec 'h264'", adb.ShellCommands[0], StringComparison.Ordinal);
-        Assert.Contains(phases, phase => phase.Phase == "helper_resolve" && phase.Status == ViewStartupPhaseStatus.Succeeded);
-        Assert.Contains(phases, phase => phase.Phase == "helper_push" && phase.Status == ViewStartupPhaseStatus.Succeeded);
-        Assert.Contains(phases, phase => phase.Phase == "adb_forward" && phase.Status == ViewStartupPhaseStatus.Succeeded);
-        Assert.Contains(phases, phase => phase.Phase == "screenrecord_process" && phase.Status == ViewStartupPhaseStatus.Succeeded);
+        Assert.Contains(phases, phase => phase is {Phase: "helper_resolve", Status: ViewStartupPhaseStatus.Succeeded});
+        Assert.Contains(phases, phase => phase is {Phase: "helper_push", Status: ViewStartupPhaseStatus.Succeeded});
+        Assert.Contains(phases, phase => phase is {Phase: "adb_forward", Status: ViewStartupPhaseStatus.Succeeded});
+        Assert.Contains(phases, phase => phase is {Phase: "screenrecord_process", Status: ViewStartupPhaseStatus.Succeeded});
     }
 
     [Fact]
@@ -394,7 +394,7 @@ public sealed class ViewTransportTests
             new FakeEnvironmentVariables(new Dictionary<string, string>()),
             new FakeLibavNativeLibraryBinder());
 
-        var error = Assert.Throws<InvalidOperationException>(() => loader.EnsureLoaded());
+        var error = Assert.Throws<InvalidOperationException>(loader.EnsureLoaded);
 
         Assert.Contains("LUOTSI_FFMPEG_ROOT", error.Message, StringComparison.Ordinal);
         Assert.Contains("ffmpeg", error.Message, StringComparison.OrdinalIgnoreCase);
@@ -852,10 +852,12 @@ public sealed class ViewTransportTests
 
         var commandHit = Assert.IsType<ViewChromeCommandHitTarget>(ViewChromeLayout.HitTest(1280, 720, 20, 20, chrome));
         var rotateHit = Assert.IsType<ViewChromeCommandHitTarget>(ViewChromeLayout.HitTest(1280, 720, 260, 20, chrome));
+        var helpHit = Assert.IsType<ViewChromeLocalHitTarget>(ViewChromeLayout.HitTest(1280, 720, 460, 20, chrome));
         var switchHit = Assert.IsType<ViewChromeSwitchDeviceHitTarget>(ViewChromeLayout.HitTest(1280, 720, 140, 692, chrome));
 
         Assert.Equal(ViewWindowCommand.TakeScreenshot, commandHit.Command);
         Assert.Equal(ViewWindowCommand.Rotate, rotateHit.Command);
+        Assert.Equal(ViewChromeLocalAction.ToggleHelpOverlay, helpHit.Action);
         Assert.Equal("device-b", switchHit.DeviceSelector);
     }
 
@@ -902,18 +904,45 @@ public sealed class ViewTransportTests
         var screenshotTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 20, 20, idleChrome, ViewScaleMode.Fit, false));
         var recordTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 60, 20, idleChrome, ViewScaleMode.Fit, false));
         var activeRecordTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 60, 20, recordingChrome, ViewScaleMode.Fit, false));
+        var backTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 140, 20, idleChrome, ViewScaleMode.Fit, false));
+        var homeTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 180, 20, idleChrome, ViewScaleMode.Fit, false));
         var rotateTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 260, 20, idleChrome, ViewScaleMode.Fit, false));
         var openArtifactsTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 340, 20, idleChrome, ViewScaleMode.Fit, false));
         var scaleTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 380, 20, idleChrome, ViewScaleMode.Fit, false));
         var fullscreenTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 420, 20, idleChrome, ViewScaleMode.Fit, true));
+        var helpTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 460, 20, idleChrome, ViewScaleMode.Fit, false));
 
-        Assert.Equal("Screenshot", screenshotTooltip.Text);
-        Assert.Equal("Start Recording", recordTooltip.Text);
-        Assert.Equal("Stop Recording", activeRecordTooltip.Text);
-        Assert.Equal("Rotate", rotateTooltip.Text);
-        Assert.Equal("Open Artifacts", openArtifactsTooltip.Text);
-        Assert.Equal("Fill", scaleTooltip.Text);
-        Assert.Equal("Windowed", fullscreenTooltip.Text);
+        Assert.Equal("Screenshot F12", screenshotTooltip.Text);
+        Assert.Equal("Start Recording F9", recordTooltip.Text);
+        Assert.Equal("Stop Recording F9", activeRecordTooltip.Text);
+        Assert.Equal("Back F1", backTooltip.Text);
+        Assert.Equal("Home F2", homeTooltip.Text);
+        Assert.Equal("Rotate F4", rotateTooltip.Text);
+        Assert.Equal("Open Artifacts F7", openArtifactsTooltip.Text);
+        Assert.Equal("Fill F8", scaleTooltip.Text);
+        Assert.Equal("Windowed F11", fullscreenTooltip.Text);
+        Assert.Equal("Help F10", helpTooltip.Text);
+    }
+
+    [Fact]
+    public void ViewChromeLayout_ResolveTooltip_Describes_Share_Badge()
+    {
+        var chrome = new ViewChromeState(
+            "device-a",
+            [new ViewChromeDevice(1, "device-a", "device", "Primary", true)],
+            false,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            "127.0.0.1:4040",
+            3);
+
+        var tooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 1230, 20, chrome, ViewScaleMode.Fit, false));
+
+        Assert.Equal("Share 3 observers 127.0.0.1:4040", tooltip.Text);
     }
 
     [Fact]

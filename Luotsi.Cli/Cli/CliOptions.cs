@@ -17,6 +17,8 @@ public sealed class CliOptions
     {
         "adb",
         "help",
+        "version",
+        "update",
         "devices",
         "device-status",
         "device-wait",
@@ -55,6 +57,7 @@ public sealed class CliOptions
         "list-installed-packages",
         "grant-permission",
         "revoke-permission",
+        "replay",
         "telemetry-tail",
         "telemetry-watch",
         "wait-for-device",
@@ -78,6 +81,7 @@ public sealed class CliOptions
     new[]
     {
         "always-on-top",
+        "detach",
         "defaults",
         "dry-run",
         "fix",
@@ -90,8 +94,7 @@ public sealed class CliOptions
         "overlay-telemetry",
         "no-require-device-ready",
         "read-only",
-        "validate-only",
-        "version"
+        "validate-only"
     }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     private readonly Dictionary<string, string?> _values = new(StringComparer.OrdinalIgnoreCase);

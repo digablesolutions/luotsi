@@ -1,3 +1,4 @@
+using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
@@ -5,20 +6,39 @@ using Luotsi.Cli.Scenarios;
 
 namespace Luotsi.Cli.Cli.Inspect;
 
-internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIo console, TimeProvider timeProvider)
+internal sealed class InspectSession
 {
-    private readonly IDeviceHost _deviceHost = deviceHost ?? throw new ArgumentNullException(nameof(deviceHost));
-    private readonly InspectSessionProtocol _protocol = new(console ?? throw new ArgumentNullException(nameof(console)));
-    private readonly InspectSessionCommandDispatcher _commandDispatcher = new(deviceHost);
-    private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+    private readonly IDeviceHost _deviceHost;
+    private readonly ArtifactSession _artifacts;
+    private readonly InspectSessionProtocol _protocol;
+    private readonly InspectSessionCommandDispatcher _commandDispatcher;
+    private readonly TimeProvider _timeProvider;
+    private readonly string? _target;
+    private SessionReplayArtifacts? _replayArtifacts;
+
+    public InspectSession(IDeviceHost deviceHost, ArtifactSession artifacts, IConsoleIo console, TimeProvider timeProvider, string? target = null)
+    {
+        _deviceHost = deviceHost ?? throw new ArgumentNullException(nameof(deviceHost));
+        _artifacts = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
+        _commandDispatcher = new InspectSessionCommandDispatcher(deviceHost);
+        _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+        _target = target;
+        _protocol = new InspectSessionProtocol(console ?? throw new ArgumentNullException(nameof(console)), json => _replayArtifacts?.RecordSerializedEvent(json));
+    }
 
     public async Task<int> RunAsync()
     {
         var sessionId = Guid.NewGuid().ToString("N");
+        var sessionStartedAt = _timeProvider.GetUtcNow();
+        _replayArtifacts = new SessionReplayArtifacts(_artifacts, "inspect", sessionId, sessionStartedAt);
+        _replayArtifacts.SetTarget(_target);
+        var exitCode = 1;
+        var endReason = "error";
+        DateTimeOffset? endedAt = null;
 
         try
         {
-            _protocol.WriteSessionStarted(sessionId, _timeProvider.GetUtcNow());
+            _protocol.WriteSessionStarted(sessionId, sessionStartedAt);
 
             ScreenState? currentState = null;
             try
@@ -36,7 +56,10 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIo console,
                 var line = _protocol.ReadLine();
                 if (line is null)
                 {
-                    _protocol.WriteSessionEnded(sessionId, null, _timeProvider.GetUtcNow(), "stdin_closed");
+                    endedAt = _timeProvider.GetUtcNow();
+                    exitCode = 0;
+                    endReason = "stdin_closed";
+                    _protocol.WriteSessionEnded(sessionId, null, endedAt.Value, endReason);
                     return 0;
                 }
 
@@ -56,7 +79,10 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIo console,
                 var normalizedCommand = _commandDispatcher.Normalize(request.Command!);
                 if (_commandDispatcher.IsExit(normalizedCommand))
                 {
-                    _protocol.WriteSessionEnded(sessionId, request.Id, _timeProvider.GetUtcNow(), "client_exit");
+                    endedAt = _timeProvider.GetUtcNow();
+                    exitCode = 0;
+                    endReason = "client_exit";
+                    _protocol.WriteSessionEnded(sessionId, request.Id, endedAt.Value, endReason);
                     return 0;
                 }
 
@@ -102,8 +128,17 @@ internal sealed class InspectSession(IDeviceHost deviceHost, IConsoleIo console,
         }
         catch (Exception ex)
         {
-            _protocol.WriteSessionError(_timeProvider.GetUtcNow(), ex, sessionId);
+            endedAt = _timeProvider.GetUtcNow();
+            _protocol.WriteSessionError(endedAt.Value, ex, sessionId);
             return 1;
+        }
+        finally
+        {
+            if (_replayArtifacts is not null)
+            {
+                await _replayArtifacts.PersistAsync(endedAt ?? _timeProvider.GetUtcNow(), endReason, exitCode).ConfigureAwait(false);
+                _replayArtifacts = null;
+            }
         }
     }
 

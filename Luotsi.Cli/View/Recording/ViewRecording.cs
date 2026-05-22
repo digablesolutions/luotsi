@@ -126,7 +126,7 @@ public sealed class AnnexBViewRecorder(IFileSystem fileSystem, string outputPath
         ArgumentNullException.ThrowIfNull(packet);
 
         var output = _output ?? throw new InvalidOperationException("View recorder was not initialized.");
-        if (_completed || packet.Payload.IsEmpty || (packet.PacketType != ViewPacketType.Config && packet.PacketType != ViewPacketType.Frame))
+        if (_completed || packet.Payload.IsEmpty || packet.PacketType is not ViewPacketType.Config and not ViewPacketType.Frame)
         {
             return;
         }

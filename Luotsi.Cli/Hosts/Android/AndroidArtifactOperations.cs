@@ -63,7 +63,7 @@ internal sealed class AndroidArtifactOperations(
             ValidateScreenshotRegion(fileName, artifact, region);
             if (!string.IsNullOrWhiteSpace(expectedRegionSha256))
             {
-                regionSha256 = _screenshotRegionArtifacts.ComputeRegionSha256(ResolveArtifactDestination(fileName), region);
+                regionSha256 = await _screenshotRegionArtifacts.ComputeRegionSha256Async(ResolveArtifactDestination(fileName), region).ConfigureAwait(false);
             }
         }
 
@@ -131,22 +131,26 @@ internal sealed class AndroidArtifactOperations(
         await _adb.ShellAsync($"rm -f {remote}").ConfigureAwait(false);
         pull.EnsureSuccess("pull screenshot failed");
         await _artifacts.RefreshIndexAsync().ConfigureAwait(false);
-        return ReadScreenshotArtifact(fileName, destination);
+        return await ReadScreenshotArtifactAsync(fileName, destination).ConfigureAwait(false);
     }
 
-    private ScreenshotArtifactInfo ReadScreenshotArtifact(string fileName, string destination)
+    private async Task<ScreenshotArtifactInfo> ReadScreenshotArtifactAsync(string fileName, string destination)
     {
         if (!_fileSystem.FileExists(destination))
         {
             return new ScreenshotArtifactInfo(fileName, null, null, null);
         }
 
-        using var stream = _fileSystem.OpenRead(destination);
-        using var memory = new MemoryStream();
-        stream.CopyTo(memory);
-        var bytes = memory.ToArray();
-        var (width, height) = ReadPngDimensions(bytes);
-        var sha256 = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+        int? width;
+        int? height;
+        await using (var dimensionsStream = _fileSystem.OpenRead(destination))
+        {
+            (width, height) = await ReadPngDimensionsAsync(dimensionsStream).ConfigureAwait(false);
+        }
+
+        await using var hashStream = _fileSystem.OpenRead(destination);
+        var hash = await SHA256.HashDataAsync(hashStream).ConfigureAwait(false);
+        var sha256 = Convert.ToHexString(hash).ToLowerInvariant();
         return new ScreenshotArtifactInfo(fileName, width, height, sha256);
     }
 
@@ -184,7 +188,7 @@ internal sealed class AndroidArtifactOperations(
                 throw new FileNotFoundException($"Screenshot baseline file '{baselineFile}' was not found.", baselineFile);
             }
 
-            using var stream = _fileSystem.OpenRead(baselineFile);
+            await using var stream = _fileSystem.OpenRead(baselineFile);
             var hash = await SHA256.HashDataAsync(stream).ConfigureAwait(false);
             return Convert.ToHexString(hash).ToLowerInvariant();
         }
@@ -237,9 +241,23 @@ internal sealed class AndroidArtifactOperations(
         return diffFile;
     }
 
-    private static (int? Width, int? Height) ReadPngDimensions(byte[] bytes)
+    private static async Task<(int? Width, int? Height)> ReadPngDimensionsAsync(Stream stream)
     {
+        var bytes = new byte[24];
+        var offset = 0;
+        while (offset < bytes.Length)
+        {
+            var read = await stream.ReadAsync(bytes.AsMemory(offset, bytes.Length - offset)).ConfigureAwait(false);
+            if (read == 0)
+            {
+                break;
+            }
+
+            offset += read;
+        }
+
         if (bytes.Length < 24 ||
+            offset < 24 ||
             bytes[0] != 0x89 ||
             bytes[1] != 0x50 ||
             bytes[2] != 0x4e ||

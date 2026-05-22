@@ -21,7 +21,7 @@ internal sealed class AppCommandRouteBootstrapper(AppCommandRouteBootstrapperDep
         var adbExecutable = options.Get("adb")
             ?? _dependencies.Environment.GetEnvironmentVariable(CliDefaults.AdbExecutableEnvironmentVariable)
             ?? CliDefaults.DefaultAdbExecutable;
-        var artifacts = ArtifactSession.Create(options, _dependencies.FileSystem, _dependencies.TimeProvider);
+        var artifacts = CreateArtifacts(options);
         context.Artifacts = artifacts;
 
         return new AppCommandRouteSetup(adbExecutable, artifacts);
@@ -62,6 +62,19 @@ internal sealed class AppCommandRouteBootstrapper(AppCommandRouteBootstrapperDep
         {
             throw new UsageException($"Scenario file '{file}' does not exist.");
         }
+    }
+
+    private ArtifactSession CreateArtifacts(CliOptions options)
+    {
+        if (string.Equals(options.Command, "replay", StringComparison.OrdinalIgnoreCase) &&
+            options.Arguments.Count > 0 &&
+            string.Equals(options.Arguments[0], "summarize", StringComparison.OrdinalIgnoreCase))
+        {
+            var artifactRoot = options.Get("artifacts") ?? throw new UsageException("replay summarize requires --artifacts <directory> pointing to an existing artifact root.");
+            return ArtifactSession.AttachExisting(artifactRoot, _dependencies.FileSystem, options.Get("poll-artifacts"));
+        }
+
+        return ArtifactSession.Create(options, _dependencies.FileSystem, _dependencies.TimeProvider);
     }
 }
 

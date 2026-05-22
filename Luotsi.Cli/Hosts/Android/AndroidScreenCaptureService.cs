@@ -99,7 +99,7 @@ internal sealed class AndroidScreenCaptureService(
             document = XDocument.Parse(xml);
             CacheUiDump(xml);
         }
-        catch (Exception ex) when (ex is XmlException || ex is InvalidOperationException)
+        catch (Exception ex) when (ex is XmlException or InvalidOperationException)
         {
             InvalidateUiDumpCache();
             if (writeInvalidArtifact)
@@ -151,7 +151,7 @@ internal sealed class AndroidScreenCaptureService(
             CacheUiDump(xml);
             return document;
         }
-        catch (Exception ex) when (ex is XmlException || ex is InvalidOperationException)
+        catch (Exception ex) when (ex is XmlException or InvalidOperationException)
         {
             InvalidateUiDumpCache();
             await _artifacts.WriteTextAsync(DeviceArtifactNames.InvalidHierarchyXml, xml).ConfigureAwait(false);

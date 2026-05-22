@@ -1,7 +1,5 @@
-using System.Linq;
 using Luotsi.Cli.Hosts.Android.View;
 using Luotsi.Cli.Infrastructure.Contracts;
-using Luotsi.Cli.Models;
 using Luotsi.Cli.View.Contracts;
 
 namespace Luotsi.Cli.View.Diagnostics;

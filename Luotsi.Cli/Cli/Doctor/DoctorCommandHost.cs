@@ -1,4 +1,3 @@
-using System.Linq;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli.Envelope;
 using Luotsi.Cli.Cli.Hosting;
@@ -114,7 +113,7 @@ internal sealed class DoctorCommandHost(DoctorCommandHostDependencies dependenci
                 result.CurrentFocus));
             return result;
         }
-        catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or System.IO.IOException)
+        catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or IOException)
         {
             checks.Add(new DoctorCheck(
                 "package_preflight",

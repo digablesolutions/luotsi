@@ -17,7 +17,7 @@ internal sealed class AppExecutionShell(AppExecutionShellDependencies dependenci
 
         var started = _dependencies.TimeProvider.GetUtcNow();
         var options = CliOptions.Parse(args);
-        if (options.HasFlag("version"))
+        if (options.Command is null && options.HasFlag("version"))
         {
             _dependencies.Console.WriteLine($"luotsi {AppVersion.GetDisplayVersion()}");
             return 0;
@@ -61,7 +61,7 @@ internal sealed class AppExecutionShell(AppExecutionShellDependencies dependenci
         var topic = options.Arguments[0];
         if (!Help.TryGetTopic(topic, out var text))
         {
-            _dependencies.Console.WriteErrorLine($"Unknown help topic '{topic}'. Available topics: {string.Join(", ", Help.Topics)}.");
+            _dependencies.Console.WriteErrorLine($"Unknown help topic '{topic}'. Available topics: {string.Join(", ", Help.SuggestedTopics)}.");
             return 2;
         }
 

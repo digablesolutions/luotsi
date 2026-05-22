@@ -15,12 +15,12 @@ Luotsi is a host-driven CLI for Android device automation, inspection, and live 
 
 ## How it works
 
-1. **Run a command** — every command returns one JSON envelope with `ok`, `command`, `data`, `artifacts`, `provenance`, and `error`. No third-party device server required.
+1. **Run a command** — commands return one JSON envelope with `ok`, `command`, `data`, `artifacts`, `provenance`, and `error` by default. `replay summarize --format json|jsonl` can emit raw machine-readable replay summaries for CI without the envelope wrapper, and failed scenario runs now carry an embedded `failure_capsule` summary so replay consumers do not need a second artifact read just to discover linked reports and failure artifacts. No third-party device server required.
 2. **Run a scenario** — drive multi-step device flows from a small JSON playbook. Steps are validated, templated, and timed; failures produce artifact bundles automatically.
 3. **Inspect mode** — open a JSONL session for agent-driven exploration. Luotsi emits screen snapshots and diffs so an agent can reason about the UI and act without a scenario file.
 4. **Live view** — stream a mirrored device display to a local SDL window with an operator control layer, hotkeys, and JSONL events for agents consuming stream state.
 5. **Telemetry** — parse structured `LUOTSI_DEVICE_TELEMETRY` events from logcat for semantic waits and assertions.
-6. **CI-friendly** — same binary, same output shape for engineers, CI pipelines, and agent-driven flows.
+6. **CI-friendly** — same binary for engineers, CI pipelines, and agent-driven flows, with default envelopes plus optional raw replay summary output for CI consumers.
 
 ## Install
 
@@ -38,6 +38,7 @@ Verify the installed executable:
 
 ```powershell
 luotsi --version
+luotsi version
 luotsi devices
 ```
 
@@ -60,6 +61,7 @@ Verify the installed executable:
 
 ```bash
 luotsi --version
+luotsi version
 luotsi devices
 ```
 
@@ -95,6 +97,18 @@ dotnet build Luotsi.sln
 dotnet test Luotsi.sln
 ```
 
+**Update an installed Luotsi.** `luotsi update` reuses the same release installer and install manifest that the quick installers create. Stable updates target the latest non-prerelease GitHub release. Release candidates and other prereleases need an explicit tag for now.
+
+```bash
+luotsi version
+luotsi update --dry-run
+luotsi update --detach
+luotsi update --version v0.1.0-rc.4 --channel prerelease --dry-run
+luotsi update --version v0.1.0-rc.4 --channel prerelease --detach
+```
+
+Luotsi does not auto-update silently. Updates are explicit so CI and lab machines stay reproducible. If Luotsi was installed into a custom root and `luotsi version` cannot find its manifest, set `LUOTSI_INSTALL_ROOT` to that install root. On Windows, non-dry-run update requires `--detach` and returns `update_started` after launching a background updater that waits for the current `luotsi.exe` process to exit before replacing the installed `current` directory.
+
 **First run after install.** Point Luotsi at a connected device and ask it to diagnose or repair the local prerequisites it owns:
 
 ```bash
@@ -103,6 +117,42 @@ luotsi doctor --device <serial> --fix
 ```
 
 `doctor` reuses the existing adb, device preflight, and live-view readiness checks. With `--fix`, Luotsi stages FFmpeg native libraries when the selected decoder is missing them, then runs the same helper provisioning flow used by `view setup`. Published Luotsi bundles include the repair assets needed for those fixes, and source checkouts continue to use the repository layout.
+
+## Workflow quickstart
+
+If you already have a device connected, start from the workflow that matches what you are trying to do.
+
+1. First-time setup and repair:
+
+  ```bash
+  luotsi devices
+  luotsi doctor --device <serial>
+  luotsi doctor --device <serial> --fix
+  luotsi view setup --device <serial>
+  ```
+
+2. Manual live debugging:
+
+  ```bash
+  luotsi view --device <serial>
+  luotsi screen-state --device <serial>
+  luotsi inspect --device <serial>
+  ```
+
+3. Scenario authoring:
+
+  ```bash
+  luotsi scenario-init --file scenarios/smoke.json --name "smoke"
+  luotsi scenario-validate --path scenarios
+  ```
+
+4. CI execution and reports:
+
+  ```bash
+  luotsi run --path scenarios --device <serial> --report-junit junit.xml
+  ```
+
+The CLI also exposes this directly via `luotsi help quickstart`.
 
 ## Code layout
 
@@ -121,7 +171,7 @@ luotsi doctor --device <serial> --fix
 
 Quick reference. See [docs/commands.md](docs/commands.md) for flags, retry behavior, and wireless pairing details.
 
-`luotsi --version` prints the CLI version embedded at build or release time.
+`luotsi --version` prints the CLI version embedded at build or release time. `luotsi version` returns a JSON envelope with runtime version, installed release tag, install root, command path, helper APK path, and whether the bundled helper APK is present. `luotsi update` reruns the installer from the recorded install root; use `--dry-run` first to inspect the exact command.
 
 ### Device & ADB
 

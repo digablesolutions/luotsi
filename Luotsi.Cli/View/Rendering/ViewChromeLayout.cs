@@ -53,6 +53,7 @@ public static class ViewChromeLayout
                 ViewChromeButtonKind.OpenArtifacts => new ViewChromeCommandHitTarget(ViewWindowCommand.OpenArtifacts),
                 ViewChromeButtonKind.ScaleMode => new ViewChromeLocalHitTarget(ViewChromeLocalAction.ToggleScaleMode),
                 ViewChromeButtonKind.Fullscreen => new ViewChromeLocalHitTarget(ViewChromeLocalAction.ToggleFullscreen),
+                ViewChromeButtonKind.Help => new ViewChromeLocalHitTarget(ViewChromeLocalAction.ToggleHelpOverlay),
                 _ => null
             };
         }
@@ -85,6 +86,14 @@ public static class ViewChromeLayout
 
             var text = DescribeTooltip(button, scaleMode, isFullscreen);
             return text is null ? null : new ViewChromeTooltip(button.Bounds, text);
+        }
+
+        var shareTooltip = layout.ShareBadge is not null && layout.ShareBadge.Bounds.Contains(x, y)
+            ? new ViewChromeTooltip(layout.ShareBadge.Bounds, BuildShareBadgeTooltip(layout.ShareBadge))
+            : null;
+        if (shareTooltip is not null)
+        {
+            return shareTooltip;
         }
 
         return layout.DeviceSlots
@@ -125,6 +134,7 @@ public static class ViewChromeLayout
         AddButton(ViewChromeButtonKind.OpenArtifacts, true);
         AddButton(ViewChromeButtonKind.ScaleMode, true);
         AddButton(ViewChromeButtonKind.Fullscreen, true);
+        AddButton(ViewChromeButtonKind.Help, true);
 
         var deviceSlots = new List<ViewChromeDeviceSlotLayout>();
         if (chrome is {CanSwitchDevices: true, Devices.Count: > 1})
@@ -159,7 +169,7 @@ public static class ViewChromeLayout
 
         ViewChromeBadgeLayout? shareBadge = string.IsNullOrWhiteSpace(chrome.ShareEndpoint)
             ? null
-            : new ViewChromeBadgeLayout(new ViewChromeRect(Math.Max(Padding, clientWidth - ShareBadgeWidth - Padding), buttonTop, ShareBadgeWidth, ButtonSize), chrome.ObserverCount);
+            : new ViewChromeBadgeLayout(new ViewChromeRect(Math.Max(Padding, clientWidth - ShareBadgeWidth - Padding), buttonTop, ShareBadgeWidth, ButtonSize), chrome.ObserverCount, chrome.ShareEndpoint!);
 
         return new ViewChromeRenderLayout(buttons, deviceSlots, toolbarBounds, shelfBounds, shareBadge);
     }
@@ -167,19 +177,22 @@ public static class ViewChromeLayout
     private static string? DescribeTooltip(ViewChromeButtonLayout button, ViewScaleMode scaleMode, bool isFullscreen) =>
         button.Kind switch
         {
-            ViewChromeButtonKind.Screenshot => "Screenshot",
-            ViewChromeButtonKind.Record => button.Active ? "Stop Recording" : "Start Recording",
-            ViewChromeButtonKind.Reconnect => "Reconnect",
-            ViewChromeButtonKind.Back => "Back",
-            ViewChromeButtonKind.Home => "Home",
-            ViewChromeButtonKind.Recents => "Recents",
-            ViewChromeButtonKind.Rotate => "Rotate",
-            ViewChromeButtonKind.PauseStream => "Pause Stream",
-            ViewChromeButtonKind.OpenArtifacts => "Open Artifacts",
-            ViewChromeButtonKind.ScaleMode => scaleMode == ViewScaleMode.Fill ? "Fit" : "Fill",
-            ViewChromeButtonKind.Fullscreen => isFullscreen ? "Windowed" : "Fullscreen",
+            ViewChromeButtonKind.Screenshot => WithShortcut("Screenshot", "F12"),
+            ViewChromeButtonKind.Record => WithShortcut(button.Active ? "Stop Recording" : "Start Recording", "F9"),
+            ViewChromeButtonKind.Reconnect => WithShortcut("Reconnect", "F5"),
+            ViewChromeButtonKind.Back => WithShortcut("Back", "F1"),
+            ViewChromeButtonKind.Home => WithShortcut("Home", "F2"),
+            ViewChromeButtonKind.Recents => WithShortcut("Recents", "F3"),
+            ViewChromeButtonKind.Rotate => WithShortcut("Rotate", "F4"),
+            ViewChromeButtonKind.PauseStream => WithShortcut("Pause Stream", "F6"),
+            ViewChromeButtonKind.OpenArtifacts => WithShortcut("Open Artifacts", "F7"),
+            ViewChromeButtonKind.ScaleMode => WithShortcut(scaleMode == ViewScaleMode.Fill ? "Fit" : "Fill", "F8"),
+            ViewChromeButtonKind.Fullscreen => WithShortcut(isFullscreen ? "Windowed" : "Fullscreen", "F11"),
+            ViewChromeButtonKind.Help => WithShortcut("Help", "F10"),
             _ => null
         };
+
+    private static string WithShortcut(string label, string shortcut) => $"{label} {shortcut}";
 
     private static string BuildDeviceLabel(ViewChromeDevice device)
     {
@@ -212,6 +225,12 @@ public static class ViewChromeLayout
         var status = string.IsNullOrWhiteSpace(device.Status) ? "UNKNOWN" : device.Status.ToUpperInvariant();
         return status.Length <= 7 ? status : status[..7];
     }
+
+    private static string BuildShareBadgeTooltip(ViewChromeBadgeLayout shareBadge)
+    {
+        var observersLabel = shareBadge.ObserverCount == 1 ? "1 observer" : $"{shareBadge.ObserverCount} observers";
+        return $"Share {observersLabel} {shareBadge.Endpoint}";
+    }
 }
 
 /// <summary>
@@ -220,7 +239,8 @@ public static class ViewChromeLayout
 public enum ViewChromeLocalAction
 {
     ToggleScaleMode = 0,
-    ToggleFullscreen = 1
+    ToggleFullscreen = 1,
+    ToggleHelpOverlay = 2
 }
 
 /// <summary>
@@ -258,7 +278,8 @@ internal enum ViewChromeButtonKind
     Recents = 7,
     Rotate = 8,
     PauseStream = 9,
-    OpenArtifacts = 10
+    OpenArtifacts = 10,
+    Help = 11
 }
 
 internal sealed record ViewChromeRect(int Left, int Top, int Width, int Height)
@@ -274,7 +295,7 @@ internal sealed record ViewChromeButtonLayout(ViewChromeButtonKind Kind, ViewChr
 
 internal sealed record ViewChromeDeviceSlotLayout(string DeviceSelector, int Index, string Label, string StatusLabel, bool IsActive, ViewChromeRect Bounds, bool Enabled);
 
-internal sealed record ViewChromeBadgeLayout(ViewChromeRect Bounds, int ObserverCount);
+internal sealed record ViewChromeBadgeLayout(ViewChromeRect Bounds, int ObserverCount, string Endpoint);
 
 internal sealed record ViewChromeTooltip(ViewChromeRect AnchorBounds, string Text);
 

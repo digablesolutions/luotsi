@@ -15,5 +15,8 @@ public static class ResultSchemas
     public const string AdbDiagnostic = "luotsi-adb-diagnostic.v1";
     public const string AdbReadiness = "luotsi-adb-readiness.v1";
     public const string DeviceFingerprint = "device-fingerprint.v1";
+    public const string SessionReplay = "luotsi-session-replay.v1";
+    public const string SessionReplaySummary = "luotsi-session-replay-summary.v1";
     public const string FailureBundle = "luotsi-failure-bundle.v1";
+    public const string FailureCapsule = "luotsi-failure-capsule.v1";
 }

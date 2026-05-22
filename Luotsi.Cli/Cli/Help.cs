@@ -84,6 +84,46 @@ Failure modes:
   commands useful where possible; screen-state includes attempted strategies
   and raw output in artifacts when hierarchy capture fails.
 """,
+        ["quickstart"] = """
+Luotsi help: quickstart
+
+Goal:
+  Get from "device is attached" to a useful developer or CI workflow with the
+  fewest Luotsi commands.
+
+First run:
+  1. Confirm device visibility
+     luotsi devices
+
+  2. Run guided readiness checks and fixes
+     luotsi doctor --device <adb serial>
+     luotsi doctor --device <adb serial> --fix
+
+  3. Open a live mirror when you need operator feedback
+     luotsi view --device <adb serial>
+
+Common workflows:
+  Inspect a screen and gather artifacts
+    luotsi screen-state --device <adb serial>
+    luotsi inspect --device <adb serial>
+
+  Prepare live view prerequisites without opening a stream
+    luotsi view setup --device <adb serial>
+    luotsi view-doctor --device <adb serial>
+
+  Start authoring a scenario
+    luotsi scenario-init --file scenarios/smoke.json --name "smoke"
+    luotsi scenario-validate --path scenarios
+
+  Run scenarios for CI or local verification
+    luotsi run --path scenarios --device <adb serial> --report-junit junit.xml
+
+Tips:
+  Use --artifacts <directory> when you want a stable output location instead of
+  the default temp folder.
+  Use luotsi help view, luotsi help scenario, and luotsi help lab when you want
+  a deeper command family reference.
+""",
         ["lab"] = """
 Luotsi help: lab
 
@@ -127,6 +167,48 @@ Examples:
 Notes:
   Use reverse when an Android app needs to call a host-local dev server. Use
   forward when the host needs to reach a device-local service.
+""",
+        ["replay"] = """
+Luotsi help: replay
+
+Usage:
+  luotsi replay summarize --artifacts <artifact-root> [--format json|jsonl]
+
+Examples:
+  luotsi replay summarize --artifacts artifacts/20260518-100000-view
+  luotsi replay summarize --artifacts artifacts/20260518-100000-view --format json
+  luotsi replay summarize --artifacts artifacts/20260518-100000-view --format jsonl
+
+Notes:
+  Replay summarize reads session-replay.json and session-timeline.jsonl from an
+  existing artifact root. By default it returns the condensed failure timeline
+  as a normal JSON command envelope. `--format json` writes the bare summary
+  object, and `--format jsonl` writes one summary header line followed by one
+  session line per replay session. Failed scenario runs also expose
+  failure_capsule_path and an embedded failure_capsule summary with linked
+  reports and failure artifacts. Failures still use the normal error envelope.
+""",
+        ["update"] = """
+Luotsi help: update
+
+Usage:
+  luotsi version
+  luotsi update [--version <tag>] [--channel stable|prerelease] [--dry-run] [--detach]
+
+Examples:
+  luotsi version
+  luotsi update --dry-run
+  luotsi update --detach
+  luotsi update --version v0.1.0-rc.4 --dry-run
+  luotsi update --version v0.1.0-rc.4 --detach
+
+Notes:
+  Luotsi does not auto-update during normal commands. The update command uses
+  the existing installer manifest to reinstall the correct runtime archive for
+  this host. Stable updates can use the latest stable release. Prerelease
+  updates currently require an explicit --version tag. On Windows, non-dry-run
+  update requires --detach and returns `update_started` because the installer
+  continues after the current luotsi.exe process exits.
 """,
         ["run"] = """
 Luotsi help: run
@@ -222,6 +304,11 @@ Notes:
     public static IReadOnlyList<string> Topics { get; } = TopicTexts.Keys.Order(StringComparer.OrdinalIgnoreCase).ToArray();
 
     /// <summary>
+    /// Gets help topics ordered for user-facing suggestions.
+    /// </summary>
+    public static IReadOnlyList<string> SuggestedTopics { get; } = BuildSuggestedTopics();
+
+    /// <summary>
     /// Gets command-line help.
     /// </summary>
     public const string Text = """
@@ -238,11 +325,35 @@ Usage:
   luotsi help <topic>
   luotsi --version
 
-Fast paths:
-  luotsi devices
-  luotsi view --device <adb serial>
-  luotsi screen-state --device <adb serial>
-  luotsi run --path scenarios --device <adb serial> --report-junit junit.xml
+Start here:
+  luotsi help quickstart
+
+Workflow index:
+
+  First-time setup and repair
+    luotsi devices
+    luotsi doctor --device <adb serial>
+    luotsi view setup --device <adb serial>
+    luotsi help lab
+
+  Manual live debugging
+    luotsi view --device <adb serial>
+    luotsi screen-state --device <adb serial>
+    luotsi inspect --device <adb serial>
+    luotsi help view
+
+  Scenario authoring
+    luotsi scenario-init --file scenarios/smoke.json --name "smoke"
+    luotsi scenario-validate --path scenarios
+    luotsi help scenario
+
+  CI execution and reports
+    luotsi run --path scenarios --device <adb serial> --report-junit junit.xml
+    luotsi help run
+
+Help topics:
+  quickstart | lab | view | inspect | scenario | run | artifacts | replay | adb
+  wireless | ports | app | update
 
 From source:
   .\scripts\luotsi.ps1 <command> [options]
@@ -315,6 +426,13 @@ Command groups:
     wait-log --contains <text> [--timeout-sec 15]
     record --output <file.mp4> [--time-limit-sec 30]
 
+  Artifact replay and triage
+    replay summarize --artifacts <artifact-root> [--format json|jsonl]
+
+  Install and update
+    version
+    update [--version <tag>] [--channel stable|prerelease] [--dry-run] [--detach]
+
   Scenarios and CI reports
     scenario-init [--file <scenario.json>] [--name <name>] [--package <app.id>] [--activity <activity>] [--width <px>] [--height <px>] [--orientation <name>] [--force]
     scenario-list --path <scenario-file-or-directory-or-glob> [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>]
@@ -365,6 +483,9 @@ Design:
     {
         normalized = topic.ToLowerInvariant() switch
         {
+          "workflow" or "workflows" or "start" or "getting-started" or "gettingstarted" => "quickstart",
+            "replay-summarize" => "replay",
+            "version" => "update",
             "view-setup" or "view-doctor" or "reconnect" or "profile-list" or "profile-delete" => "view",
             "scenario-init" or "scenario-list" or "scenario-validate" or "scenario-explain" => "scenario",
             "wireless-scan" or "wireless-pair" or "wireless-connect" => "wireless",
@@ -377,4 +498,11 @@ Design:
 
         return normalized.Length > 0;
     }
+
+  private static IReadOnlyList<string> BuildSuggestedTopics()
+  {
+    var topics = Topics.Where(static topic => !string.Equals(topic, "quickstart", StringComparison.OrdinalIgnoreCase)).ToList();
+    topics.Insert(0, "quickstart");
+    return topics;
+  }
 }

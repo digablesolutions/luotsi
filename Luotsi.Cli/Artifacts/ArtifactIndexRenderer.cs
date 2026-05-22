@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Artifacts;
 
@@ -12,8 +13,9 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
     private readonly string _root = root ?? throw new ArgumentNullException(nameof(root));
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
 
-    public string BuildMarkdownIndex(IReadOnlyList<string> files)
+    public async Task<string> BuildMarkdownIndexAsync(IReadOnlyList<string> files)
     {
+        var replaySummaries = new SessionReplaySummaryReader(_root, _fileSystem).ReadSummaries(files);
         var builder = new StringBuilder();
         builder.AppendLine("# Luotsi Artifacts");
         builder.AppendLine();
@@ -25,6 +27,8 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
             return builder.ToString();
         }
 
+        AppendReplaySessionsMarkdown(builder, replaySummaries);
+
         foreach (var group in files.GroupBy(GetArtifactCategory))
         {
             builder.AppendLine($"## {group.Key}");
@@ -32,6 +36,11 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
             foreach (var file in group)
             {
                 builder.AppendLine($"- [{file}]({EscapeMarkdownLink(file)})");
+                var summary = await TryBuildArtifactSummaryAsync(file).ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(summary))
+                {
+                    builder.AppendLine($"  - {summary}");
+                }
             }
 
             builder.AppendLine();
@@ -42,6 +51,7 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
 
     public async Task<string> BuildHtmlIndexAsync(IReadOnlyList<string> files)
     {
+        var replaySummaries = new SessionReplaySummaryReader(_root, _fileSystem).ReadSummaries(files);
         var builder = new StringBuilder();
         builder.AppendLine("<!doctype html>");
         builder.AppendLine("<html lang=\"en\">");
@@ -64,6 +74,9 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         builder.AppendLine("    li:first-child { border-top: 0; }");
         builder.AppendLine("    a { color: var(--accent); text-decoration: none; overflow-wrap: anywhere; }");
         builder.AppendLine("    a:hover { text-decoration: underline; }");
+        builder.AppendLine("    .timeline-label { margin-top: 8px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }");
+        builder.AppendLine("    .timeline { list-style: none; margin: 6px 0 0; padding: 0; }");
+        builder.AppendLine("    .timeline li { display: block; padding: 4px 0 0; border-top: 0; }");
         builder.AppendLine("    .kind { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }");
         builder.AppendLine("    .empty { padding: 18px 16px; color: var(--muted); }");
         builder.AppendLine("  </style>");
@@ -81,6 +94,8 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         }
         else
         {
+            AppendReplaySessionsHtml(builder, replaySummaries);
+
             foreach (var group in files.GroupBy(GetArtifactCategory))
             {
                 builder.AppendLine("    <section>");
@@ -142,6 +157,13 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
             return "Recordings";
         }
 
+        if (fileName.Contains("session-replay", StringComparison.OrdinalIgnoreCase) ||
+            fileName.Contains("session-timeline", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(fileName, FailureCapsuleArtifactNames.FileName, StringComparison.OrdinalIgnoreCase))
+        {
+            return "Reports";
+        }
+
         if (fileName.Contains("report", StringComparison.OrdinalIgnoreCase) ||
             fileName.Contains("junit", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(extension, ".trx", StringComparison.OrdinalIgnoreCase))
@@ -192,25 +214,79 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
                 return null;
             }
 
-            if (!root.TryGetProperty("schema", out var schema) ||
-                !string.Equals(schema.GetString(), "luotsi-scenario-run-report.v1", StringComparison.Ordinal))
+            if (!root.TryGetProperty("schema", out var schema) || schema.ValueKind != JsonValueKind.String)
             {
                 return null;
             }
 
-            var parts = new List<string>();
-            AddJsonProperty(parts, root, "status");
-            AddJsonProperty(parts, root, "total");
-            AddJsonProperty(parts, root, "passed");
-            AddJsonProperty(parts, root, "failed");
-            AddJsonProperty(parts, root, "skipped");
-            AddJsonProperty(parts, root, "durationMs", "duration_ms");
-            return parts.Count == 0 ? null : string.Join(" | ", parts);
+            var schemaName = schema.GetString();
+            if (string.Equals(schemaName, "luotsi-scenario-run-report.v1", StringComparison.Ordinal))
+            {
+                return BuildScenarioRunReportSummary(root);
+            }
+
+            return string.Equals(schemaName, ResultSchemas.FailureCapsule, StringComparison.Ordinal)
+                ? BuildFailureCapsuleSummary(root)
+                : null;
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
             return null;
         }
+    }
+
+    private static string? BuildScenarioRunReportSummary(JsonElement root)
+    {
+        var parts = new List<string>();
+        AddJsonProperty(parts, root, "status");
+        AddJsonProperty(parts, root, "total");
+        AddJsonProperty(parts, root, "passed");
+        AddJsonProperty(parts, root, "failed");
+        AddJsonProperty(parts, root, "skipped");
+        AddJsonProperty(parts, root, "durationMs", "duration_ms");
+        return parts.Count == 0 ? null : string.Join(" | ", parts);
+    }
+
+    private static string? BuildFailureCapsuleSummary(JsonElement root)
+    {
+        var parts = new List<string>();
+        AddJsonProperty(parts, root, "status");
+
+        if (root.TryGetProperty("scenarios", out var scenarios) && scenarios.ValueKind == JsonValueKind.Array)
+        {
+            var scenarioItems = scenarios.EnumerateArray().ToArray();
+            parts.Add($"scenarios={scenarioItems.Length}");
+
+            var failedScenarioNames = scenarioItems
+                .Select(static scenario => TryGetString(scenario, "scenario"))
+                .Where(static name => !string.IsNullOrWhiteSpace(name))
+                .Take(2)
+                .Cast<string>()
+                .ToArray();
+            if (failedScenarioNames.Length > 0)
+            {
+                parts.Add($"failed_scenarios={string.Join(", ", failedScenarioNames)}");
+            }
+
+            var failedSteps = scenarioItems
+                .Select(static scenario => TryGetObjectString(scenario, "failedStep", "name"))
+                .Where(static name => !string.IsNullOrWhiteSpace(name))
+                .Take(2)
+                .Cast<string>()
+                .ToArray();
+            if (failedSteps.Length > 0)
+            {
+                parts.Add($"failed_steps={string.Join(", ", failedSteps)}");
+            }
+        }
+
+        AddArrayCount(parts, root, "screenshots");
+        AddArrayCount(parts, root, "logcat");
+        AddArrayCount(parts, root, "hierarchies");
+        AddArrayCount(parts, root, "screenStates", "screen_states");
+        AddArrayCount(parts, root, "failureBundles", "failure_bundles");
+
+        return parts.Count == 0 ? null : string.Join(" | ", parts);
     }
 
     private async Task<string?> TryBuildJsonlSummaryAsync(string path)
@@ -264,7 +340,7 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
     {
         using var stream = _fileSystem.OpenRead(Path.Join(_root, path));
         var truncatedByBytes = false;
-        if (stream.CanSeek && stream.Length > MaxJsonlSummaryBytes)
+        if (stream is {CanSeek: true, Length: > MaxJsonlSummaryBytes})
         {
             stream.Seek(-MaxJsonlSummaryBytes, SeekOrigin.End);
             truncatedByBytes = true;
@@ -329,6 +405,36 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         }
     }
 
+    private static void AddArrayCount(List<string> parts, JsonElement root, string name, string? label = null)
+    {
+        if (!root.TryGetProperty(name, out var property) || property.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        parts.Add($"{label ?? ToSnakeCase(name)}={property.GetArrayLength()}");
+    }
+
+    private static string? TryGetString(JsonElement root, string name)
+    {
+        if (!root.TryGetProperty(name, out var property) || property.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        return property.GetString();
+    }
+
+    private static string? TryGetObjectString(JsonElement root, string objectName, string propertyName)
+    {
+        if (!root.TryGetProperty(objectName, out var property) || property.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        return TryGetString(property, propertyName);
+    }
+
     private static string ToSnakeCase(string value)
     {
         var builder = new StringBuilder(value.Length + 4);
@@ -349,6 +455,135 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
     {
         var extension = Path.GetExtension(path);
         return string.IsNullOrWhiteSpace(extension) ? "file" : extension.TrimStart('.').ToUpperInvariant();
+    }
+
+    private void AppendReplaySessionsMarkdown(StringBuilder builder, IReadOnlyList<SessionReplaySummary> replaySummaries)
+    {
+        if (replaySummaries.Count == 0)
+        {
+            return;
+        }
+
+        builder.AppendLine("## Replay Sessions");
+        builder.AppendLine();
+        foreach (var summary in replaySummaries)
+        {
+            builder.AppendLine($"### {BuildReplayTitle(summary)}");
+            builder.AppendLine();
+            builder.Append($"- {BuildReplayOutcome(summary)}");
+            builder.Append($" | [metadata]({EscapeMarkdownLink(summary.MetadataPath)})");
+            if (summary.HasTimeline)
+            {
+                builder.Append($" | [timeline]({EscapeMarkdownLink(summary.TimelinePath)})");
+            }
+
+            if (!string.IsNullOrWhiteSpace(summary.FailureCapsulePath))
+            {
+                builder.Append($" | [failure capsule]({EscapeMarkdownLink(summary.FailureCapsulePath)})");
+            }
+
+            builder.AppendLine();
+            if (summary.TimelineHighlights.Count > 0)
+            {
+                builder.AppendLine(summary.HasFailureSignals ? "- Failure timeline:" : "- Session timeline:");
+                foreach (var entry in summary.TimelineHighlights)
+                {
+                    builder.AppendLine($"  - {FormatTimelineEntry(entry)}");
+                }
+            }
+
+            builder.AppendLine();
+        }
+    }
+
+    private void AppendReplaySessionsHtml(StringBuilder builder, IReadOnlyList<SessionReplaySummary> replaySummaries)
+    {
+        if (replaySummaries.Count == 0)
+        {
+            return;
+        }
+
+        builder.AppendLine("    <section>");
+        builder.AppendLine("      <h2>Replay Sessions</h2>");
+        builder.AppendLine("      <ul>");
+        foreach (var summary in replaySummaries)
+        {
+            builder.AppendLine("        <li>");
+            builder.AppendLine("          <div>");
+            builder.AppendLine($"            <div><strong>{HtmlEncode(BuildReplayTitle(summary))}</strong></div>");
+            builder.AppendLine($"            <div class=\"root\">{HtmlEncode(BuildReplayOutcome(summary))}</div>");
+            builder.Append($"            <div class=\"root\"><a href=\"{HtmlAttributeEncode(EscapeHtmlLink(summary.MetadataPath))}\">metadata</a>");
+            if (summary.HasTimeline)
+            {
+                builder.Append($" | <a href=\"{HtmlAttributeEncode(EscapeHtmlLink(summary.TimelinePath))}\">timeline</a>");
+            }
+
+            if (!string.IsNullOrWhiteSpace(summary.FailureCapsulePath))
+            {
+                builder.Append($" | <a href=\"{HtmlAttributeEncode(EscapeHtmlLink(summary.FailureCapsulePath))}\">failure capsule</a>");
+            }
+
+            builder.AppendLine("</div>");
+            if (summary.TimelineHighlights.Count > 0)
+            {
+                builder.AppendLine($"            <div class=\"timeline-label\">{HtmlEncode(summary.HasFailureSignals ? "Failure timeline" : "Session timeline")}</div>");
+                builder.AppendLine("            <ul class=\"timeline\">");
+                foreach (var entry in summary.TimelineHighlights)
+                {
+                    builder.AppendLine($"              <li>{HtmlEncode(FormatTimelineEntry(entry))}</li>");
+                }
+
+                builder.AppendLine("            </ul>");
+            }
+
+            builder.AppendLine("          </div>");
+            builder.AppendLine("          <span class=\"kind\">REPLAY</span>");
+            builder.AppendLine("        </li>");
+        }
+
+        builder.AppendLine("      </ul>");
+        builder.AppendLine("    </section>");
+    }
+
+    private static string BuildReplayTitle(SessionReplaySummary summary) =>
+        string.IsNullOrWhiteSpace(summary.Target)
+            ? summary.SessionKind
+            : $"{summary.SessionKind} {summary.Target}";
+
+    private static string BuildReplayOutcome(SessionReplaySummary summary)
+    {
+        var parts = new List<string>
+        {
+            $"reason={summary.Reason}",
+            $"exit_code={summary.ExitCode}",
+            $"events={summary.EventCount}"
+        };
+
+        if (!string.IsNullOrWhiteSpace(summary.Target))
+        {
+            parts.Add($"target={summary.Target}");
+        }
+
+        return string.Join(" | ", parts);
+    }
+
+    private static string FormatTimelineEntry(SessionReplayTimelineEntry entry)
+    {
+        var builder = new StringBuilder();
+        if (entry.Timestamp is not null)
+        {
+            builder.Append(entry.Timestamp.Value.ToString("O"));
+            builder.Append(" | ");
+        }
+
+        builder.Append(entry.Type);
+        if (!string.IsNullOrWhiteSpace(entry.Detail))
+        {
+            builder.Append(" | ");
+            builder.Append(entry.Detail);
+        }
+
+        return builder.ToString();
     }
 
     private static string EscapeMarkdownLink(string path) =>

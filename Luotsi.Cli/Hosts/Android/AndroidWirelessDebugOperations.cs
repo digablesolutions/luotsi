@@ -11,7 +11,7 @@ internal sealed class AndroidWirelessDebugOperations(IAdbClient adb)
 
     public async Task<WirelessConnectResult> EnableWirelessAsync(string? host, int port)
     {
-        if (port <= 0 || port > 65535)
+        if (port is <= 0 or > 65535)
         {
             throw new UsageException("wireless requires --port between 1 and 65535.");
         }

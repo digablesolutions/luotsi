@@ -12,6 +12,9 @@ namespace Luotsi.Cli.Hosts.Android;
 /// </summary>
 public sealed class AdbClient(string executable, string? serial, IProcessRunner processRunner, TimeSpan? commandTimeout = null) : IAdbClient
 {
+    private const int MaxCapturedLogChars = 2 * 1024 * 1024;
+    private const int MaxCapturedStreamChars = 512 * 1024;
+
     private readonly string _executable = string.IsNullOrWhiteSpace(executable) ? throw new ArgumentException("ADB executable is required.", nameof(executable)) : executable;
     private readonly string? _serial = string.IsNullOrWhiteSpace(serial) ? null : serial;
     private readonly IProcessRunner _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
@@ -82,7 +85,10 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
         }
 
         var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Failed to start '{_executable}'.");
-        return Task.FromResult<IAsyncDisposable>(new AdbShellProcess(process, process.StandardOutput.ReadToEndAsync(cancellationToken), process.StandardError.ReadToEndAsync(cancellationToken)));
+        return Task.FromResult<IAsyncDisposable>(new AdbShellProcess(
+            process,
+            ReadBoundedToEndAsync(process.StandardOutput, MaxCapturedStreamChars, cancellationToken),
+            ReadBoundedToEndAsync(process.StandardError, MaxCapturedStreamChars, cancellationToken)));
     }
 
     public Task<AdbLogStreamResult> MonitorLogAsync(string containsText, DateTimeOffset since, int timeoutSec, CancellationToken cancellationToken = default) =>
@@ -108,10 +114,10 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
         }
 
         using var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Failed to start '{_executable}'.");
-        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        var stderrTask = ReadBoundedToEndAsync(process.StandardError, MaxCapturedStreamChars, cancellationToken);
         var matchSignal = stopWhen is null ? null : new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
         var stdout = process.StandardOutput;
-        var readerTask = ReadLogOutputAsync(stdout, stopWhen, observeLine, matchSignal, cancellationToken);
+        var readerTask = ReadLogOutputAsync(stdout, stopWhen, observeLine, matchSignal, MaxCapturedLogChars, cancellationToken);
 
         var timeoutTask = Task.Delay(TimeSpan.FromSeconds(Math.Max(1, timeoutSec)), cancellationToken);
         Task completedTask;
@@ -167,16 +173,26 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
         Func<string, bool>? stopWhen,
         Action<string>? observeLine,
         TaskCompletionSource<string?>? matchSignal,
+        int maxCapturedChars,
         CancellationToken cancellationToken)
     {
-        var logBuilder = new StringBuilder();
+        var retainedLines = new Queue<string>();
+        var retainedCharCount = 0;
+        var truncatedLineCount = 0;
         var lineCount = 0;
         string? matchedLine = null;
 
         while (await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } rawLine)
         {
             var line = rawLine.TrimEnd('\r');
-            logBuilder.AppendLine(line);
+            retainedLines.Enqueue(line);
+            retainedCharCount += line.Length + 1;
+            while (retainedCharCount > maxCapturedChars && retainedLines.Count > 0)
+            {
+                retainedCharCount -= retainedLines.Dequeue().Length + 1;
+                truncatedLineCount++;
+            }
+
             lineCount++;
             observeLine?.Invoke(line);
             if (matchedLine is null && stopWhen?.Invoke(line) is true)
@@ -186,7 +202,59 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
             }
         }
 
-        return new LogReaderResult(logBuilder.ToString(), matchedLine, lineCount);
+        var output = BuildRetainedLogOutput(retainedLines, retainedCharCount, truncatedLineCount);
+        return new LogReaderResult(output, matchedLine, lineCount);
+    }
+
+    private static string BuildRetainedLogOutput(IEnumerable<string> retainedLines, int retainedCharCount, int truncatedLineCount)
+    {
+        var capacity = Math.Max(64, retainedCharCount + 64);
+        var builder = new StringBuilder(capacity);
+        if (truncatedLineCount > 0)
+        {
+            builder.AppendLine($"[truncated {truncatedLineCount} lines]");
+        }
+
+        foreach (var line in retainedLines)
+        {
+            builder.AppendLine(line);
+        }
+
+        return builder.ToString();
+    }
+
+    private static async Task<string> ReadBoundedToEndAsync(StreamReader reader, int maxChars, CancellationToken cancellationToken)
+    {
+        var buffer = new char[4096];
+        var builder = new StringBuilder(Math.Min(maxChars, 4096));
+        long truncatedChars = 0;
+        while (true)
+        {
+            var read = await reader.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false);
+            if (read == 0)
+            {
+                break;
+            }
+
+            if (builder.Length < maxChars)
+            {
+                var copyCount = Math.Min(read, maxChars - builder.Length);
+                builder.Append(buffer, 0, copyCount);
+                truncatedChars += read - copyCount;
+                continue;
+            }
+
+            truncatedChars += read;
+        }
+
+        if (truncatedChars == 0)
+        {
+            return builder.ToString();
+        }
+
+        builder.AppendLine();
+        builder.Append($"[truncated {truncatedChars} chars]");
+        return builder.ToString();
     }
 
     private sealed class AdbShellProcess(Process process, Task<string> stdoutTask, Task<string> stderrTask) : IAsyncDisposable

@@ -1,10 +1,12 @@
 # Command Reference
 
-All commands run on the host machine and return a single JSON envelope unless noted as a JSONL session.
+All commands run on the host machine and return a single JSON envelope unless noted as a JSONL session or as an explicit raw replay output mode.
 
 ```
 luotsi [--device <serial> | --device-query <query>] [--platform android] [--adb <path>] [--adb-timeout-sec <n>] <command> [flags]
 luotsi --version
+luotsi version
+luotsi update [--version <tag>] [--channel stable|prerelease] [--dry-run]
 ```
 
 **ADB path.** If `adb` is not on `PATH` (common in WSL), pass `--adb /path/to/adb` or set `LUOTSI_ADB`. Bounded ADB commands default to a 120-second timeout; override with `--adb-timeout-sec <n>` or `LUOTSI_ADB_TIMEOUT_SEC`. Use `0` to disable.
@@ -13,7 +15,29 @@ luotsi --version
 
 **Artifacts.** Use `--artifacts <directory>` to override the artifact root for the current command or session. Use `--poll-artifacts <final|per-attempt|none>` to control whether polling-style commands write artifacts only at the end, on each attempt, or not at all.
 
-**Version.** `luotsi --version` prints the CLI version. Release builds stamp this from the GitHub release tag via `/p:Version=<version>`; source builds use the assembly version produced by the local build.
+**Version and update.** `luotsi --version` prints the CLI version. `luotsi version` returns a JSON envelope with runtime version, installed tag/version, install root, command path, and bundled helper APK presence. `luotsi update` reruns the installer recorded in the installed manifest; use `--dry-run` to inspect the exact command. Stable updates target the latest non-prerelease release. Prerelease updates currently require `--version <tag>` and should use `--channel prerelease`. Luotsi does not auto-update silently. Custom install roots are discovered from `LUOTSI_INSTALL_ROOT`, the running `current` directory, or the platform default install root. On Windows, non-dry-run update requires `--detach` and returns `update_started` after launching a background updater so the running executable can exit before the install directory is replaced.
+
+## Workflow quickstart
+
+Use these entry points when you want the shortest path into a real Luotsi workflow instead of scanning the full command surface.
+
+For the same summary inside the CLI, run `luotsi help quickstart` or jump directly to a command family with `luotsi help <topic>`.
+
+| Goal | Command |
+|---|---|
+| Confirm Luotsi can see your device | `luotsi devices` |
+| Diagnose and repair first-run issues | `luotsi doctor --device <serial>` |
+| Prepare or repair live-view prerequisites | `luotsi view setup --device <serial>` |
+| Open a live mirror | `luotsi view --device <serial>` |
+| Snapshot current UI state | `luotsi screen-state --device <serial>` |
+| Start an agent-driven inspection session | `luotsi inspect --device <serial>` |
+| Generate a starter scenario | `luotsi scenario-init --file scenarios/smoke.json --name "smoke"` |
+| Validate scenarios without using a device | `luotsi scenario-validate --path scenarios` |
+| Run scenarios with CI output | `luotsi run --path scenarios --device <serial> --report-junit junit.xml` |
+| Check install metadata | `luotsi version` |
+| Update explicit install | `luotsi update --dry-run` then `luotsi update` |
+
+The CLI includes the same flow-oriented summary in `luotsi help quickstart`.
 
 ---
 
@@ -21,6 +45,8 @@ luotsi --version
 
 | Command | Description |
 |---|---|
+| `version` | Return Luotsi runtime/install metadata as a JSON envelope |
+| `update [--version <tag>] [--channel stable|prerelease] [--dry-run] [--detach]` | Re-run the release installer for the recorded install root |
 | `devices` | List adb-visible devices |
 | `lab status [--device-query <query>]` | Summarize attached-device availability and explain which devices match or are rejected by a selection query |
 | `lab doctor [--device-query <query>]` | Detect stale/offline/ambiguous lab state and return concrete remediation commands |
@@ -59,6 +85,16 @@ See [view-session.md](view-session.md) for the full view reference (presets, bac
 | `profile-delete --name <name>` | Delete a saved view profile |
 
 View screenshots and operator-triggered recordings are written to the artifact root. By default that root is a timestamped directory under the host temp folder, such as `%TEMP%\luotsi\<timestamp>-view` on Windows or `/tmp/luotsi/<timestamp>-view` on Linux/macOS. Pass `--artifacts <directory>` to choose it. F12/toolbar screenshot writes `view-window-001-screenshot.png`; F9/toolbar record writes `view-window-record-001.h264` unless `--record <file.h264|file.mp4|file.mkv>` supplies a preferred output path. F7/toolbar open-folder opens the artifact root.
+
+---
+
+## Replay & Artifact Triage
+
+| Command | Description |
+|---|---|
+| `replay summarize --artifacts <artifact-root> [--format json|jsonl]` | Read `session-replay.json` and `session-timeline.jsonl` under an existing artifact root and emit condensed replay summaries, including failure-capsule linkage for failed scenario runs |
+
+`replay summarize` returns the normal JSON command envelope by default. `--format json` writes only the replay summary object. `--format jsonl` writes a `type: summary` header line followed by one `type: session` line per replay session. Failed scenario runs expose `failure_capsule_path` plus an embedded `failure_capsule` summary with linked reports, grouped failure artifacts, and failure-bundle metadata. Failures continue to use the normal error envelope.
 
 ---
 
@@ -193,7 +229,7 @@ Scenario runner flags:
 
 ## Output Envelopes
 
-Normal command mode returns a single JSON envelope with `ok`, `command`, `data`, `artifacts`, `provenance`, and `error`. Long-lived `inspect` and `view` sessions are the exceptions: they stream JSONL events instead of a single final envelope.
+Normal command mode returns a single JSON envelope with `ok`, `command`, `data`, `artifacts`, `provenance`, and `error`. Long-lived `inspect` and `view` sessions are the main exceptions: they stream JSONL events instead of a single final envelope. `replay summarize --format json|jsonl` is the other intentional exception for CI-oriented replay export.
 
 Common `error.category` values currently include:
 

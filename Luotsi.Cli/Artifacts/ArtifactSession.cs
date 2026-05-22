@@ -19,13 +19,20 @@ public sealed class ArtifactSession
     private const string ArtifactIndexFileName = "index.md";
     private const string ArtifactHtmlIndexFileName = "index.html";
 
-    private ArtifactSession(string root, IFileSystem fileSystem, UiPollArtifactPolicy uiPollArtifactPolicy)
+    private ArtifactSession(string root, IFileSystem fileSystem, UiPollArtifactPolicy uiPollArtifactPolicy, bool ensureDirectoryExists)
     {
         Root = root;
         _fileSystem = fileSystem;
         _indexRenderer = new ArtifactIndexRenderer(root, fileSystem);
         UiPollArtifactPolicy = uiPollArtifactPolicy;
-        _fileSystem.CreateDirectory(root);
+        if (ensureDirectoryExists)
+        {
+            _fileSystem.CreateDirectory(root);
+        }
+        else if (!_fileSystem.DirectoryExists(root))
+        {
+            throw new UsageException($"Artifact root '{root}' does not exist.");
+        }
     }
 
     /// <summary>
@@ -51,7 +58,18 @@ public sealed class ArtifactSession
         var activeTimeProvider = timeProvider ?? TimeProvider.System;
         var baseDir = options.Get("artifacts") ?? Path.Combine(activeFileSystem.GetTempPath(), "luotsi");
         var name = $"{activeTimeProvider.GetUtcNow():yyyyMMdd-HHmmss}-{options.Command ?? "command"}";
-        return new ArtifactSession(Path.Combine(baseDir, name), activeFileSystem, ParseUiPollArtifactPolicy(options.Get("poll-artifacts")));
+        return new ArtifactSession(Path.Combine(baseDir, name), activeFileSystem, ParseUiPollArtifactPolicy(options.Get("poll-artifacts")), ensureDirectoryExists: true);
+    }
+
+    public static ArtifactSession AttachExisting(string root, IFileSystem? fileSystem = null, string? pollArtifacts = null)
+    {
+        if (string.IsNullOrWhiteSpace(root))
+        {
+            throw new UsageException("Artifact root must be a non-empty directory path.");
+        }
+
+        var activeFileSystem = fileSystem ?? new PhysicalFileSystem();
+        return new ArtifactSession(root, activeFileSystem, ParseUiPollArtifactPolicy(pollArtifacts), ensureDirectoryExists: false);
     }
 
     /// <summary>
@@ -73,8 +91,11 @@ public sealed class ArtifactSession
     public async Task WriteJsonAsync(string name, object value)
     {
         var path = GetArtifactPath(name);
-        await using var stream = _fileSystem.OpenWrite(path);
-        await JsonSerializer.SerializeAsync(stream, value, value.GetType(), AppJson.Options).ConfigureAwait(false);
+        await using (var stream = _fileSystem.OpenWrite(path))
+        {
+            await JsonSerializer.SerializeAsync(stream, value, value.GetType(), AppJson.Options).ConfigureAwait(false);
+        }
+
         await RefreshIndexAsync().ConfigureAwait(false);
     }
 
@@ -84,7 +105,8 @@ public sealed class ArtifactSession
     public async Task RefreshIndexAsync()
     {
         var files = GetIndexedFiles();
-        await _fileSystem.WriteAllTextAsync(GetArtifactPath(ArtifactIndexFileName), _indexRenderer.BuildMarkdownIndex(files), Encoding.UTF8).ConfigureAwait(false);
+        var markdownIndex = await _indexRenderer.BuildMarkdownIndexAsync(files).ConfigureAwait(false);
+        await _fileSystem.WriteAllTextAsync(GetArtifactPath(ArtifactIndexFileName), markdownIndex, Encoding.UTF8).ConfigureAwait(false);
         var htmlIndex = await _indexRenderer.BuildHtmlIndexAsync(files).ConfigureAwait(false);
         await _fileSystem.WriteAllTextAsync(GetArtifactPath(ArtifactHtmlIndexFileName), htmlIndex, Encoding.UTF8).ConfigureAwait(false);
     }

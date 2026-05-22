@@ -32,9 +32,10 @@ public sealed partial class AppTests
         var console = new FakeConsole();
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
         var backend = new FakeViewBackend("ffmpeg-native");
+        var artifacts = ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider);
         var session = CreateViewSession(
             host,
-            ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
+            artifacts,
             console,
             timeProvider,
             new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward")),
@@ -65,6 +66,22 @@ public sealed partial class AppTests
         Assert.Equal(SessionEventTypes.View.Ended, ended.RootElement.GetProperty("type").GetString());
         Assert.Equal("stream_ended", ended.RootElement.GetProperty("reason").GetString());
         Assert.Equal(2, backend.Packets.Count);
+
+        var replayPath = Path.Join(artifacts.Root, "session-replay.json");
+        var timelinePath = Path.Join(artifacts.Root, "session-timeline.jsonl");
+        Assert.True(fileSystem.FileExists(replayPath));
+        Assert.True(fileSystem.FileExists(timelinePath));
+
+        using var replay = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(replayPath));
+        Assert.Equal(ResultSchemas.SessionReplay, replay.RootElement.GetProperty("schema").GetString());
+        Assert.Equal("view", replay.RootElement.GetProperty("sessionKind").GetString());
+        Assert.Equal("192.168.0.134:5555", replay.RootElement.GetProperty("target").GetString());
+        Assert.Equal("session-timeline.jsonl", replay.RootElement.GetProperty("timelineFileName").GetString());
+        Assert.Equal(2, replay.RootElement.GetProperty("eventCount").GetInt32());
+
+        var timeline = await fileSystem.ReadAllTextAsync(timelinePath);
+        Assert.Contains(SessionEventTypes.View.Started, timeline, StringComparison.Ordinal);
+        Assert.Contains(SessionEventTypes.View.Ended, timeline, StringComparison.Ordinal);
     }
 
 
@@ -242,7 +259,7 @@ public sealed partial class AppTests
         var streamConnector = new FakeViewStreamConnector(
             new ViewPacketStreamHarness()
                 .WriteHeader("h264", 1080, 1920)
-                .WritePacket(ViewPacketType.ServerError, 1, 0, false, System.Text.Encoding.UTF8.GetBytes("MediaCodec preflight failed"))
+                .WritePacket(ViewPacketType.ServerError, 1, 0, false, "MediaCodec preflight failed"u8.ToArray())
                 .WritePacket(ViewPacketType.StreamEnd, 2, 0, false, [])
                 .Build(),
             new ViewPacketStreamHarness()

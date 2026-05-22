@@ -203,7 +203,18 @@ get_platform_rid() {
 resolve_release_tag() {
     requested_tag=$1
     if [ -n "$requested_tag" ]; then
-        printf '%s' "$requested_tag"
+        if ! json=$(github_api "https://api.github.com/repos/$OWNER/$REPOSITORY/releases/tags/$requested_tag"); then
+            printf 'GitHub release %s was not found for %s/%s.\n' "$requested_tag" "$OWNER" "$REPOSITORY" >&2
+            exit 1
+        fi
+
+        tag=$(json_get_string tag_name "$json")
+        if [ -z "$tag" ]; then
+            printf 'GitHub did not return a tag name for release %s.\n' "$requested_tag" >&2
+            exit 1
+        fi
+
+        printf '%s' "$tag"
         return
     fi
 
@@ -326,6 +337,7 @@ write_manifest() {
   "current_root": "$install_dir/current",
   "bin_directory": "$bin_dir",
   "command_path": "$command_path",
+  "helper_apk_path": "$install_dir/current/Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release.apk",
   "archive_name": "$archive_name",
   "archive_url": "$archive_url",
   "checksum_url": "$checksum_url",
@@ -372,8 +384,24 @@ archive_path="$temp_root/$ARCHIVE_NAME"
 checksum_path="$temp_root/SHA256SUMS"
 extract_dir="$temp_root/payload"
 payload_dir="$temp_root/current"
+install_committed=0
+
+restore_previous() {
+    if [ "$install_committed" -ne 0 ]; then
+        return
+    fi
+
+    if [ -e "$CURRENT_DIR" ]; then
+        rm -rf "$CURRENT_DIR"
+    fi
+
+    if [ -e "$PREVIOUS_DIR" ]; then
+        mv "$PREVIOUS_DIR" "$CURRENT_DIR"
+    fi
+}
 
 cleanup() {
+    restore_previous
     rm -rf "$temp_root"
 }
 trap cleanup EXIT INT TERM
@@ -422,12 +450,13 @@ if ! mv "$payload_dir" "$CURRENT_DIR"; then
     exit 1
 fi
 
-if [ -e "$PREVIOUS_DIR" ]; then
-    rm -rf "$PREVIOUS_DIR"
-fi
-
 write_command_shim "$COMMAND_PATH"
 write_manifest "$MANIFEST_PATH" "$RESOLVED_INSTALL_ROOT" "$BIN_DIR" "$COMMAND_PATH" "$RESOLVED_TAG" "$RID" "$ARCHIVE_NAME" "$ARCHIVE_URL" "$CHECKSUM_URL"
+install_committed=1
+
+if [ -e "$PREVIOUS_DIR" ]; then
+    rm -rf "$PREVIOUS_DIR" || true
+fi
 
 path_updated=0
 profile_file=''

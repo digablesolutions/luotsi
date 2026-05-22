@@ -1,4 +1,3 @@
-using Luotsi.Cli.Cli;
 using Luotsi.Cli.Cli.View;
 using Xunit;
 

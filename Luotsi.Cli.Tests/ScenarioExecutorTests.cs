@@ -716,7 +716,9 @@ public sealed partial class AppTests
         });
 
         var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json", "--events-jsonl", "/tmp/events.jsonl"]);
+        using var envelope = console.ParseSingleOutputAsJson();
         var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
+        var artifactRoot = envelope.RootElement.GetProperty("artifacts").GetProperty("artifact_root").GetString();
 
         Assert.Equal(0, exitCode);
         Assert.Equal([
@@ -736,6 +738,15 @@ public sealed partial class AppTests
         Assert.Equal(1, events[^1].GetProperty("metrics").GetProperty("step_count").GetInt32());
         Assert.Equal(1, events[^1].GetProperty("metrics").GetProperty("action.sleep.count").GetInt32());
         Assert.Equal(1, Assert.Single(events, static evt => evt.GetProperty("event").GetString() == "scenario_step_passed").GetProperty("metrics").GetProperty("configured_delay_ms").GetInt32());
+        Assert.NotNull(artifactRoot);
+        await AssertRunReplayArtifactsAsync(fileSystem, artifactRoot, "/tmp/scenario.json", [
+          "scenario_run_started",
+          "scenario_started",
+          "scenario_step_started",
+          "scenario_step_passed",
+          "scenario_ended",
+          "scenario_run_ended"
+        ]);
     }
 
     [Fact]
@@ -1208,7 +1219,9 @@ public sealed partial class AppTests
         });
 
         var exitCode = await app.RunAsync(["run", "--path", "/tmp/scenarios", "--events-jsonl", "/tmp/events.jsonl"]);
+        using var envelope = console.ParseSingleOutputAsJson();
         var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
+        var artifactRoot = envelope.RootElement.GetProperty("artifacts").GetProperty("artifact_root").GetString();
 
         Assert.Equal(0, exitCode);
         Assert.Equal("scenario_run_started", events[0].GetProperty("event").GetString());
@@ -1223,6 +1236,19 @@ public sealed partial class AppTests
         Assert.Equal(2, events[^1].GetProperty("metrics").GetProperty("passed_scenario_count").GetInt32());
         Assert.Equal(2, events[^1].GetProperty("metrics").GetProperty("action.sleep.count").GetInt32());
         Assert.All(events.Where(static evt => evt.TryGetProperty("scenario", out _)), evt => Assert.Contains("::", evt.GetProperty("scenario_id").GetString(), StringComparison.Ordinal));
+        Assert.NotNull(artifactRoot);
+        await AssertRunReplayArtifactsAsync(fileSystem, artifactRoot, "/tmp/scenarios", [
+          "scenario_run_started",
+          "scenario_started",
+          "scenario_step_started",
+          "scenario_step_passed",
+          "scenario_ended",
+          "scenario_started",
+          "scenario_step_started",
+          "scenario_step_passed",
+          "scenario_ended",
+          "scenario_run_ended"
+        ]);
     }
 
     [Fact]
@@ -1528,6 +1554,58 @@ public sealed partial class AppTests
         Assert.Equal("failure.png", artifacts[0].GetProperty("file_name").GetString());
         Assert.Equal("metadata", artifacts[1].GetProperty("kind").GetString());
     }
+
+      [Fact]
+      public async Task RunAsync_File_Failure_Writes_Failure_Capsule_Manifest()
+      {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+          { "action": "waitVisible", "text": "Target" }
+          ]
+        }
+        """);
+        var host = CreateFailingHostWithRichArtifacts();
+        var app = new App(new AppDependencies
+        {
+          TimeProvider = timeProvider,
+          FileSystem = fileSystem,
+          ProcessRunner = new DefaultProcessRunner(),
+          Delay = new FakeDelay(timeProvider),
+          DeviceHostFactory = new FakeDeviceHostFactory(host),
+          Console = console
+        });
+
+        var exitCode = await app.RunAsync([
+          "run",
+          "--file", "/tmp/scenario.json",
+          "--artifacts", "/tmp/test-artifacts",
+          "--report-json", "/tmp/report.json",
+          "--report-junit", "/tmp/junit.xml"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+        var artifactRoot = envelope.RootElement.GetProperty("artifacts").GetProperty("artifact_root").GetString();
+        using var manifest = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(Path.Join(artifactRoot!, "failure-capsule.json")));
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal(ResultSchemas.FailureCapsule, manifest.RootElement.GetProperty("schema").GetString());
+        Assert.Equal("failed", manifest.RootElement.GetProperty("status").GetString());
+        Assert.Equal("session-replay.json", manifest.RootElement.GetProperty("replayMetadataPath").GetString());
+        Assert.Equal("session-timeline.jsonl", manifest.RootElement.GetProperty("replayTimelinePath").GetString());
+        Assert.Equal("/tmp/report.json", manifest.RootElement.GetProperty("reports").GetProperty("jsonPath").GetString());
+        Assert.Equal("/tmp/junit.xml", manifest.RootElement.GetProperty("reports").GetProperty("junitPath").GetString());
+        Assert.Contains(manifest.RootElement.GetProperty("screenshots").EnumerateArray(), artifact => artifact.GetProperty("path").GetString() == "failure.png");
+        Assert.Contains(manifest.RootElement.GetProperty("logcat").EnumerateArray(), artifact => artifact.GetProperty("path").GetString() == "failure-logcat.txt");
+        Assert.Contains(manifest.RootElement.GetProperty("hierarchies").EnumerateArray(), artifact => artifact.GetProperty("path").GetString() == "failure-hierarchy.xml");
+        Assert.Contains(manifest.RootElement.GetProperty("screenStates").EnumerateArray(), artifact => artifact.GetProperty("path").GetString() == "failure-screen-state.json");
+
+        var failureBundle = Assert.Single(manifest.RootElement.GetProperty("failureBundles").EnumerateArray());
+        Assert.Equal("failure.json", failureBundle.GetProperty("path").GetString());
+        Assert.Contains(failureBundle.GetProperty("artifacts").EnumerateArray(), artifact => artifact.GetProperty("path").GetString() == "failure-logcat.txt");
+      }
 
     [Fact]
     public async Task RunAsync_File_JUnit_Report_Attaches_Failure_Artifacts_In_SystemOut()
@@ -2562,9 +2640,31 @@ public sealed partial class AppTests
 
     private static JsonElement[] ReadJsonlEvents(FakeFileSystem fileSystem, string path) =>
         fileSystem.ReadAllTextAsync(path).GetAwaiter().GetResult()
-            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+        .Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries)
             .Select(static line => JsonDocument.Parse(line).RootElement.Clone())
             .ToArray();
+
+    private static async Task AssertRunReplayArtifactsAsync(FakeFileSystem fileSystem, string artifactRoot, string target, string[] expectedTimelineTypes)
+    {
+      var timelinePath = Path.Join(artifactRoot, "session-timeline.jsonl");
+      var replayPath = Path.Join(artifactRoot, "session-replay.json");
+
+      Assert.True(fileSystem.FileExists(timelinePath));
+      Assert.True(fileSystem.FileExists(replayPath));
+
+      var timeline = ReadJsonlEvents(fileSystem, timelinePath);
+      using var replay = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(replayPath));
+
+      Assert.Equal(expectedTimelineTypes, timeline.Select(static evt => evt.GetProperty("type").GetString()!).ToArray());
+      Assert.Equal(ResultSchemas.SessionReplay, replay.RootElement.GetProperty("schema").GetString());
+      Assert.Equal("run", replay.RootElement.GetProperty("sessionKind").GetString());
+      Assert.Equal(target, replay.RootElement.GetProperty("target").GetString());
+      Assert.Equal("session-timeline.jsonl", replay.RootElement.GetProperty("timelineFileName").GetString());
+      Assert.Equal(expectedTimelineTypes.Length, replay.RootElement.GetProperty("eventCount").GetInt32());
+      Assert.Equal(
+        expectedTimelineTypes.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray(),
+        replay.RootElement.GetProperty("eventTypes").EnumerateArray().Select(static item => item.GetString()).ToArray());
+    }
 
     private static FakeDeviceHost CreateFailingHostWithArtifacts() =>
         new()
@@ -2587,6 +2687,33 @@ public sealed partial class AppTests
                 MetadataFile = "failure.json"
             }
         };
+
+        private static FakeDeviceHost CreateFailingHostWithRichArtifacts() =>
+          new()
+          {
+            WaitVisibleException = new InvalidOperationException("not visible"),
+            FailureArtifacts = new FailureArtifactBundle(
+              ResultSchemas.FailureBundle,
+              DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind),
+              "scenario",
+              "single",
+              "/tmp/scenario.json",
+              1,
+              "waitVisible",
+              "waitVisible",
+              typeof(InvalidOperationException).FullName!,
+              "not visible",
+              [
+                new FailureArtifact("screenshot", "failure.png"),
+                new FailureArtifact("logcat", "failure-logcat.txt"),
+                new FailureArtifact("hierarchy", "failure-hierarchy.xml"),
+                new FailureArtifact("screen_state", "failure-screen-state.json")
+              ],
+              [])
+            {
+              MetadataFile = "failure.json"
+            }
+          };
 
           private sealed class ThrowingScenarioEventSink(Exception exception) : IScenarioEventSink
           {

@@ -22,7 +22,7 @@ public sealed class ViewWindowIconTests
     [Fact]
     public void BitmapIconDecoder_Returns_Null_For_Invalid_Data()
     {
-        using var stream = new MemoryStream(Encoding.ASCII.GetBytes("not a bitmap"));
+        using var stream = new MemoryStream("not a bitmap"u8.ToArray());
 
         var icon = BitmapIconDecoder.Decode(stream);
 

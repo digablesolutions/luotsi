@@ -24,6 +24,9 @@ internal sealed record ViewShareObserverEvent(ViewShareObserverEventKind Kind, s
 
 internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
 {
+    private const int ListenerBacklog = 128;
+    private const int SocketBufferSize = 256 * 1024;
+
     private readonly string _bindEndpoint = string.IsNullOrWhiteSpace(bindEndpoint)
         ? throw new ArgumentException("Share bind endpoint is required.", nameof(bindEndpoint))
         : bindEndpoint;
@@ -61,7 +64,8 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
 
         var endpoint = ViewShareEndpointParser.ParseBindable(_bindEndpoint);
         var listener = new TcpListener(endpoint.Address, endpoint.Port);
-        listener.Start();
+        listener.Server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+        listener.Start(ListenerBacklog);
 
         _listener = listener;
         _acceptCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -151,6 +155,7 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
             try
             {
                 client = await listener.AcceptTcpClientAsync(cancellationToken).ConfigureAwait(false);
+                ConfigureObserverSocket(client);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -223,6 +228,21 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
         }
 
         return currentBootstrapPackets;
+    }
+
+    private static void ConfigureObserverSocket(TcpClient client)
+    {
+        client.NoDelay = true;
+        client.ReceiveBufferSize = SocketBufferSize;
+        client.SendBufferSize = SocketBufferSize;
+        try
+        {
+            client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+        }
+        catch (SocketException)
+        {
+            // Keep-alive can be unsupported on some platforms/transports.
+        }
     }
 
     private sealed class ObserverConnection(

@@ -1,3 +1,4 @@
+using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
 
@@ -9,7 +10,7 @@ internal sealed class ScenarioRunReportCoordinatorFactory(IFileSystem fileSystem
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     private readonly BuildProvenance _provenance = provenance ?? throw new ArgumentNullException(nameof(provenance));
 
-    public ScenarioRunReportCoordinator Create(ScenarioRunConfiguration configuration)
+    public ScenarioRunReportCoordinator Create(ScenarioRunConfiguration configuration, ArtifactSession? artifacts = null)
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
@@ -28,7 +29,10 @@ internal sealed class ScenarioRunReportCoordinatorFactory(IFileSystem fileSystem
             _timeProvider,
             new CompositeScenarioRunReportWriter(writers),
             configuration.ArtifactAttachmentPolicy,
-            _provenance);
+            _provenance,
+            artifacts is null ? null : new ScenarioFailureCapsuleWriter(_fileSystem, artifacts),
+            configuration.JsonReportPath,
+            configuration.JUnitReportPath);
     }
 }
 
@@ -36,11 +40,17 @@ internal sealed class ScenarioRunReportCoordinator(
     TimeProvider timeProvider,
     IScenarioRunReportWriter writer,
     ScenarioArtifactAttachmentPolicy attachmentPolicy,
-    BuildProvenance provenance)
+    BuildProvenance provenance,
+    ScenarioFailureCapsuleWriter? failureCapsuleWriter = null,
+    string? jsonReportPath = null,
+    string? junitReportPath = null)
 {
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     private readonly IScenarioRunReportWriter _writer = writer ?? throw new ArgumentNullException(nameof(writer));
     private readonly BuildProvenance _provenance = provenance ?? throw new ArgumentNullException(nameof(provenance));
+    private readonly ScenarioFailureCapsuleWriter? _failureCapsuleWriter = failureCapsuleWriter;
+    private readonly string? _jsonReportPath = jsonReportPath;
+    private readonly string? _junitReportPath = junitReportPath;
 
     public ScenarioRunReportScope BeginScope() => new(_timeProvider.GetUtcNow());
 
@@ -83,7 +93,14 @@ internal sealed class ScenarioRunReportCoordinator(
         return WriteAsync(ScenarioRunReportFactory.FromQueryFailure(query, exception, scope.StartedAt, _timeProvider.GetUtcNow(), _provenance));
     }
 
-    private Task WriteAsync(ScenarioRunReport report) => _writer.WriteAsync(report);
+    private async Task WriteAsync(ScenarioRunReport report)
+    {
+        await _writer.WriteAsync(report).ConfigureAwait(false);
+        if (_failureCapsuleWriter is not null)
+        {
+            await _failureCapsuleWriter.WriteAsync(report, _jsonReportPath, _junitReportPath).ConfigureAwait(false);
+        }
+    }
 }
 
 internal readonly record struct ScenarioRunReportScope(DateTimeOffset StartedAt);

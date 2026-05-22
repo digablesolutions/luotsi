@@ -1,3 +1,4 @@
+using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Scenarios;
@@ -41,15 +42,17 @@ internal sealed class ScenarioCommandDispatcher(
         return !options.HasFlag("validate-only") && !options.HasFlag("dry-run");
     }
 
-    public Task<object> ValidateAsync(CliOptions options)
+    public Task<object> ValidateAsync(CliOptions options, ArtifactSession artifacts)
     {
+        ArgumentNullException.ThrowIfNull(artifacts);
         ArgumentNullException.ThrowIfNull(options);
         options.ApplyDefaults(new Dictionary<string, string?> { ["validate-only"] = "true" });
-        return RunAsync(options, null);
+        return RunAsync(options, null, artifacts);
     }
 
-    public async Task<object> RunAsync(CliOptions options, IDeviceHost? runner)
+    public async Task<object> RunAsync(CliOptions options, IDeviceHost? runner, ArtifactSession artifacts)
     {
+        ArgumentNullException.ThrowIfNull(artifacts);
         ArgumentNullException.ThrowIfNull(options);
 
         var configuration = ScenarioRunConfiguration.Create(options);
@@ -67,7 +70,7 @@ internal sealed class ScenarioCommandDispatcher(
                 return await _scenarioRunOrchestrator.ValidateFileAsync(file, configuration).ConfigureAwait(false);
             }
 
-            return await _scenarioRunOrchestrator.RunFileAsync(file, RequireRunner(runner), configuration).ConfigureAwait(false);
+            return await _scenarioRunOrchestrator.RunFileAsync(file, RequireRunner(runner), configuration, artifacts).ConfigureAwait(false);
         }
 
         var query = ScenarioQueryFactory.CreateCatalogRunQuery(options);
@@ -97,7 +100,7 @@ internal sealed class ScenarioCommandDispatcher(
             return await _scenarioRunOrchestrator.ValidatePathAsync(query, configuration).ConfigureAwait(false);
         }
 
-        return await _scenarioRunOrchestrator.RunPathAsync(query, RequireRunner(runner), configuration).ConfigureAwait(false);
+        return await _scenarioRunOrchestrator.RunPathAsync(query, RequireRunner(runner), configuration, artifacts).ConfigureAwait(false);
     }
 
     private static IDeviceHost RequireRunner(IDeviceHost? runner) =>

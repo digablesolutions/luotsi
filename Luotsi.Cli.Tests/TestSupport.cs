@@ -1,7 +1,6 @@
 using System.IO.Enumeration;
 using System.Text.Json;
 using Luotsi.Cli.Artifacts;
-using Luotsi.Cli.Cli;
 using Luotsi.Cli.Cli.View;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Infrastructure.Time;
@@ -32,12 +31,11 @@ internal sealed class ManualTimeProvider(DateTimeOffset utcNow) : TimeProvider
 internal sealed class SteppingTimeProvider(DateTimeOffset utcNow, TimeSpan step) : TimeProvider
 {
     private DateTimeOffset _utcNow = utcNow;
-    private readonly TimeSpan _step = step;
 
     public override DateTimeOffset GetUtcNow()
     {
         var current = _utcNow;
-        _utcNow = _utcNow.Add(_step);
+        _utcNow = _utcNow.Add(step);
         return current;
     }
 

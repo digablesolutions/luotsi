@@ -10,6 +10,7 @@ namespace Luotsi.Cli.View.Transport;
 public sealed class LocalhostViewStreamConnector : IViewStreamConnector
 {
     private const int MaxAttempts = 20;
+    private const int SocketBufferSize = 256 * 1024;
     private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(100);
 
     /// <inheritdoc />
@@ -26,6 +27,7 @@ public sealed class LocalhostViewStreamConnector : IViewStreamConnector
         for (var attempt = 1; attempt <= MaxAttempts; attempt++)
         {
             var client = new TcpClient();
+            ConfigureSocket(client);
             try
             {
                 var host = string.IsNullOrWhiteSpace(connectionInfo.Host) ? IPAddress.Loopback.ToString() : connectionInfo.Host;
@@ -46,6 +48,21 @@ public sealed class LocalhostViewStreamConnector : IViewStreamConnector
         }
 
         throw new InvalidOperationException($"Failed to connect to view transport on localhost:{connectionInfo.LocalPort}", lastSocketException);
+    }
+
+    private static void ConfigureSocket(TcpClient client)
+    {
+        client.NoDelay = true;
+        client.ReceiveBufferSize = SocketBufferSize;
+        client.SendBufferSize = SocketBufferSize;
+        try
+        {
+            client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+        }
+        catch (SocketException)
+        {
+            // Keep-alive can be unsupported on some platforms/transports.
+        }
     }
 
     private sealed class TcpViewStreamConnection(TcpClient client) : IViewStreamConnection

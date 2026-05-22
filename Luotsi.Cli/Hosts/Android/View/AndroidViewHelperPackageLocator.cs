@@ -1,4 +1,3 @@
-using System.Linq;
 using System.Security.Cryptography;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.View;

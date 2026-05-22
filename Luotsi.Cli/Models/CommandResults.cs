@@ -214,6 +214,82 @@ public sealed record ViewProfileListResult(IReadOnlyList<string> Profiles);
 
 public sealed record ViewProfileDeleteResult(string Name, bool Deleted);
 
+public sealed record ReplaySummarizeResult(
+    string Schema,
+    string ArtifactRoot,
+    int SessionCount,
+    int FailureCount,
+    IReadOnlyList<ReplaySessionSummaryResult> Sessions);
+
+public sealed record ReplaySessionSummaryResult(
+    string MetadataPath,
+    string TimelinePath,
+    string? FailureCapsulePath,
+    ReplayFailureCapsuleResult? FailureCapsule,
+    string SessionKind,
+    string SessionId,
+    DateTimeOffset StartedAt,
+    DateTimeOffset EndedAt,
+    long DurationMs,
+    string Reason,
+    int ExitCode,
+    string? Target,
+    int EventCount,
+    IReadOnlyList<string> EventTypes,
+    bool HasTimeline,
+    bool HasFailureSignals,
+    IReadOnlyList<ReplayTimelineHighlightResult> TimelineHighlights);
+
+public sealed record ReplayTimelineHighlightResult(
+    DateTimeOffset? Timestamp,
+    string Type,
+    string Detail,
+    bool FailureRelevant);
+
+public sealed record ReplayFailureCapsuleResult(
+    string Path,
+    ReplayFailureCapsuleReportLinksResult Reports,
+    IReadOnlyList<ReplayFailureCapsuleScenarioResult> Scenarios,
+    IReadOnlyList<ReplayFailureCapsuleArtifactResult> Screenshots,
+    IReadOnlyList<ReplayFailureCapsuleArtifactResult> Logcat,
+    IReadOnlyList<ReplayFailureCapsuleArtifactResult> Hierarchies,
+    IReadOnlyList<ReplayFailureCapsuleArtifactResult> ScreenStates,
+    IReadOnlyList<ReplayFailureCapsuleBundleResult> FailureBundles);
+
+public sealed record ReplayFailureCapsuleReportLinksResult(
+    string? JsonPath,
+    string? JunitPath);
+
+public sealed record ReplayFailureCapsuleScenarioResult(
+    string Scenario,
+    string? ScenarioId,
+    string Status,
+    string? File,
+    ReplayFailureCapsuleFailedStepResult? FailedStep,
+    IReadOnlyList<ReplayFailureCapsuleArtifactResult> Artifacts,
+    ErrorInfo? Error);
+
+public sealed record ReplayFailureCapsuleFailedStepResult(
+    int Index,
+    string Name,
+    string Action,
+    string Phase);
+
+public sealed record ReplayFailureCapsuleArtifactResult(
+    string Kind,
+    string Path,
+    int? StepIndex,
+    string? StepName);
+
+public sealed record ReplayFailureCapsuleBundleResult(
+    string Path,
+    string? Scenario,
+    string? ScenarioId,
+    string? File,
+    ReplayFailureCapsuleFailedStepResult? FailedStep,
+    IReadOnlyList<ReplayFailureCapsuleArtifactResult> Artifacts,
+    ErrorInfo? Error);
+
 public sealed record DoctorCheck(
     string Name,
     bool Ok,
@@ -228,8 +304,8 @@ public sealed record DoctorResult(
     string? Package,
     IReadOnlyList<DoctorCheck> Checks,
     PreflightResult? PackagePreflight,
-    Luotsi.Cli.View.Diagnostics.ViewDoctorResult View,
-    IReadOnlyList<Luotsi.Cli.View.Diagnostics.ViewSetupStep> Repairs);
+    View.Diagnostics.ViewDoctorResult View,
+    IReadOnlyList<View.Diagnostics.ViewSetupStep> Repairs);
 
 // Wait not visible
 public sealed record WaitNotVisibleResult(string Text, int AttemptCount, bool Visible);
