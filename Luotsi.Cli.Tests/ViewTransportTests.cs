@@ -335,6 +335,19 @@ public sealed class ViewTransportTests
     }
 
     [Fact]
+    public void AndroidViewHelperPackageLocator_Missing_Helper_Message_Points_To_Setup_And_Release_Bundle()
+    {
+        var fileSystem = new FakeFileSystem();
+        var locator = new AndroidViewHelperPackageLocator(new FakeEnvironmentVariables(new Dictionary<string, string>()), fileSystem);
+
+        var error = Assert.Throws<InvalidOperationException>(locator.Resolve);
+
+        Assert.Contains("luotsi view setup --device <serial> --fix", error.Message, StringComparison.Ordinal);
+        Assert.Contains("LUOTSI_VIEW_HELPER_APK", error.Message, StringComparison.Ordinal);
+        Assert.Contains("release bundle", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void LibavNativeLibraryLoader_Prefers_Configured_Root_And_Caches_Result()
     {
         var binder = new FakeLibavNativeLibraryBinder();

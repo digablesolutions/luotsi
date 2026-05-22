@@ -10,6 +10,8 @@ luotsi view --last
 
 View writes screenshots, live-view recordings, JSONL events, and diagnostics under the current artifact root. By default that root is a timestamped directory under the host temp folder, for example `%TEMP%\luotsi\<timestamp>-view` on Windows or `/tmp/luotsi/<timestamp>-view` on Linux/macOS. Use `--artifacts <directory>` to choose a stable location.
 
+Published Luotsi bundles include the Android view helper APK used for MediaProjection and screenrecord startup. Source checkouts can build it with `luotsi view setup --device <serial> --fix`; if you keep a custom helper build elsewhere, set `LUOTSI_VIEW_HELPER_APK` to that `.apk`.
+
 ---
 
 ## Presets

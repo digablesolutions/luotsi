@@ -181,9 +181,25 @@ jobs:
             **/packages.lock.json
             global.json
 
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
       - name: Verify locked restore
         shell: pwsh
         run: dotnet restore $env:SOLUTION --locked-mode /bl:artifacts/binlogs/release-publish-restore-${{ matrix.rid }}.binlog
+
+      - name: Build Android view helper
+        shell: pwsh
+        run: |
+          $wrapper = if ($IsWindows) { ".\Luotsi.ViewServer.Android\gradlew.bat" } else { "./Luotsi.ViewServer.Android/gradlew" }
+          & $wrapper -p Luotsi.ViewServer.Android :app:assembleDebug
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
 
       - name: Publish
         shell: pwsh
@@ -196,6 +212,14 @@ jobs:
           /p:ContinuousIntegrationBuild=true
           /p:Version=${{ needs.validate-tag.outputs.version }}
           /bl:artifacts/binlogs/release-publish-${{ matrix.rid }}.binlog
+
+      - name: Verify helper APK was packaged
+        shell: pwsh
+        run: |
+          $helper = "artifacts/publish/${{ matrix.rid }}/Luotsi.ViewServer.Android/app/build/outputs/apk/debug/app-debug.apk"
+          if (!(Test-Path -LiteralPath $helper)) {
+            throw "Published Luotsi bundle is missing the Android view helper APK: $helper"
+          }
 
       - name: Normalize non-Windows apphost permissions
         if: matrix.archive_ext == 'tar.gz'

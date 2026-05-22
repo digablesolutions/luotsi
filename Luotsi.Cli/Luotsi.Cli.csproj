@@ -32,6 +32,9 @@
              Exclude="..\Luotsi.ViewServer.Android\**\bin\**;..\Luotsi.ViewServer.Android\**\obj\**;..\Luotsi.ViewServer.Android\**\.gradle\**;..\Luotsi.ViewServer.Android\**\build\**"
              Link="Luotsi.ViewServer.Android\%(RecursiveDir)%(Filename)%(Extension)"
              CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\Luotsi.ViewServer.Android\app\build\outputs\apk\debug\app-debug.apk"
+             Link="Luotsi.ViewServer.Android\app\build\outputs\apk\debug\app-debug.apk"
+             CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

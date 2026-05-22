@@ -224,6 +224,8 @@ The SDL window has a clickable toolbar, multi-device shelf, and hotkeys (F1–F1
 
 View screenshots and operator-triggered recordings go to the current artifact root. By default that is a timestamped directory under the host temp folder, for example `%TEMP%\luotsi\<timestamp>-view` on Windows or `/tmp/luotsi/<timestamp>-view` on Linux/macOS. Pass `--artifacts <directory>` to choose it. F12 writes files such as `view-window-001-screenshot.png`; F9 writes `view-window-record-001.h264` unless `--record <file.h264|file.mp4|file.mkv>` supplies a preferred recording path. Use F7 or the toolbar folder button to open the artifact root.
 
+Published Luotsi bundles include the Android view helper APK. Source checkouts can build/install it with `luotsi view setup --device <serial> --fix`; custom helper builds can be selected with `LUOTSI_VIEW_HELPER_APK`.
+
 ## Inspect mode
 
 `inspect` opens a JSONL session for agent-driven exploration without a scenario file. Startup emits `session_started` and an initial `screen_snapshot`; state-affecting commands emit `command_result` followed by a `screen_delta`.
