@@ -224,8 +224,11 @@ jobs:
           Write-Host "Using Luotsi Android release signing key from GitHub secrets."
           Write-Host "Stamping Android helper version $env:LUOTSI_ANDROID_VERSION_NAME ($env:LUOTSI_ANDROID_VERSION_CODE)."
 
-          $wrapper = if ($IsWindows) { ".\Luotsi.ViewServer.Android\gradlew.bat" } else { "./Luotsi.ViewServer.Android/gradlew" }
-          & $wrapper -p Luotsi.ViewServer.Android :app:assembleRelease
+          if ($IsWindows) {
+            & ".\Luotsi.ViewServer.Android\gradlew.bat" -p Luotsi.ViewServer.Android :app:assembleRelease
+          } else {
+            & bash "./Luotsi.ViewServer.Android/gradlew" -p Luotsi.ViewServer.Android :app:assembleRelease
+          }
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
           }
