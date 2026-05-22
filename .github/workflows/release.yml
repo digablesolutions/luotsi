@@ -37,6 +37,7 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
       prerelease: ${{ steps.version.outputs.prerelease }}
+      android_version_code: ${{ steps.version.outputs.android_version_code }}
 
     steps:
       - name: Checkout
@@ -64,10 +65,14 @@ jobs:
           if [[ "$version" == *-* ]]; then
             prerelease=true
           fi
+          core_version="${version%%-*}"
+          IFS='.' read -r major minor patch <<< "$core_version"
+          android_version_code=$((10#$major * 1000000 + 10#$minor * 1000 + 10#$patch))
 
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "android_version_code=$android_version_code" >> "$GITHUB_OUTPUT"
 
       - name: Verify tag is on default branch
         env:
@@ -199,15 +204,25 @@ jobs:
           LUOTSI_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.LUOTSI_ANDROID_KEYSTORE_PASSWORD }}
           LUOTSI_ANDROID_KEY_ALIAS: ${{ secrets.LUOTSI_ANDROID_KEY_ALIAS }}
           LUOTSI_ANDROID_KEY_PASSWORD: ${{ secrets.LUOTSI_ANDROID_KEY_PASSWORD }}
+          LUOTSI_ANDROID_VERSION_NAME: ${{ needs.validate-tag.outputs.version }}
+          LUOTSI_ANDROID_VERSION_CODE: ${{ needs.validate-tag.outputs.android_version_code }}
         run: |
-          if (![string]::IsNullOrWhiteSpace($env:LUOTSI_ANDROID_KEYSTORE_BASE64)) {
-            $keystore = Join-Path $env:RUNNER_TEMP "luotsi-view-helper-release.jks"
-            [IO.File]::WriteAllBytes($keystore, [Convert]::FromBase64String($env:LUOTSI_ANDROID_KEYSTORE_BASE64))
-            $env:LUOTSI_ANDROID_KEYSTORE_PATH = $keystore
-            Write-Host "Using Luotsi Android release signing key from GitHub secrets."
-          } else {
-            Write-Warning "LUOTSI_ANDROID_KEYSTORE_BASE64 is not configured; building helper with debug signing fallback."
+          $required = @(
+            "LUOTSI_ANDROID_KEYSTORE_BASE64",
+            "LUOTSI_ANDROID_KEYSTORE_PASSWORD",
+            "LUOTSI_ANDROID_KEY_ALIAS",
+            "LUOTSI_ANDROID_KEY_PASSWORD"
+          )
+          $missing = $required | Where-Object { [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) }
+          if ($missing.Count -gt 0) {
+            throw "Release packaging requires Android signing secrets: $($missing -join ', ')"
           }
+
+          $keystore = Join-Path $env:RUNNER_TEMP "luotsi-view-helper-release.jks"
+          [IO.File]::WriteAllBytes($keystore, [Convert]::FromBase64String($env:LUOTSI_ANDROID_KEYSTORE_BASE64))
+          $env:LUOTSI_ANDROID_KEYSTORE_PATH = $keystore
+          Write-Host "Using Luotsi Android release signing key from GitHub secrets."
+          Write-Host "Stamping Android helper version $env:LUOTSI_ANDROID_VERSION_NAME ($env:LUOTSI_ANDROID_VERSION_CODE)."
 
           $wrapper = if ($IsWindows) { ".\Luotsi.ViewServer.Android\gradlew.bat" } else { "./Luotsi.ViewServer.Android/gradlew" }
           & $wrapper -p Luotsi.ViewServer.Android :app:assembleRelease
@@ -234,6 +249,45 @@ jobs:
           if (!(Test-Path -LiteralPath $helper)) {
             throw "Published Luotsi bundle is missing the Android view helper APK: $helper"
           }
+
+      - name: Verify helper APK signature
+        shell: pwsh
+        env:
+          LUOTSI_ANDROID_CERT_SHA256: ${{ secrets.LUOTSI_ANDROID_CERT_SHA256 }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:LUOTSI_ANDROID_CERT_SHA256)) {
+            throw "Release packaging requires LUOTSI_ANDROID_CERT_SHA256 to verify the Android helper signing certificate."
+          }
+
+          $helper = "artifacts/publish/${{ matrix.rid }}/Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release.apk"
+          $buildToolsRoot = Join-Path $env:ANDROID_HOME "build-tools"
+          $apksignerName = if ($IsWindows) { "apksigner.bat" } else { "apksigner" }
+          $apksigner = Get-ChildItem -Path $buildToolsRoot -Filter $apksignerName -Recurse |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+          if ($null -eq $apksigner) {
+            throw "Android SDK apksigner was not found under $buildToolsRoot."
+          }
+
+          $output = & $apksigner.FullName verify --print-certs $helper 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            $output | ForEach-Object { Write-Host $_ }
+            throw "Android helper APK signature verification failed."
+          }
+
+          $actual = ($output | Select-String -Pattern "SHA-256 digest:" | Select-Object -First 1).Line
+          if ([string]::IsNullOrWhiteSpace($actual)) {
+            $output | ForEach-Object { Write-Host $_ }
+            throw "Could not read Android helper signing certificate SHA-256 digest."
+          }
+
+          $actual = ($actual -replace ".*SHA-256 digest:\s*", "").Trim().Replace(":", "").ToLowerInvariant()
+          $expected = $env:LUOTSI_ANDROID_CERT_SHA256.Trim().Replace(":", "").ToLowerInvariant()
+          if ($actual -ne $expected) {
+            throw "Android helper signing certificate mismatch. Expected $expected but got $actual."
+          }
+
+          Write-Host "Android helper signing certificate verified: $actual"
 
       - name: Normalize non-Windows apphost permissions
         if: matrix.archive_ext == 'tar.gz'

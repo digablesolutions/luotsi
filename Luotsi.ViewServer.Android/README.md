@@ -86,13 +86,28 @@ LUOTSI_ANDROID_KEYSTORE_PATH
 LUOTSI_ANDROID_KEYSTORE_PASSWORD
 LUOTSI_ANDROID_KEY_ALIAS
 LUOTSI_ANDROID_KEY_PASSWORD
+LUOTSI_ANDROID_VERSION_NAME
+LUOTSI_ANDROID_VERSION_CODE
 ```
 
 When they are absent, the release build falls back to Android's debug signing
 config so source checkouts can still run `luotsi view setup --fix` without a
-private keystore. GitHub release packaging can provide the same values from
-repository secrets; the workflow also supports `LUOTSI_ANDROID_KEYSTORE_BASE64`
-as the base64-encoded keystore payload.
+private keystore. Pull-request CI uses that fallback because PR packages are
+validation artifacts. GitHub release packaging is stricter: it requires
+`LUOTSI_ANDROID_KEYSTORE_BASE64`, `LUOTSI_ANDROID_KEYSTORE_PASSWORD`,
+`LUOTSI_ANDROID_KEY_ALIAS`, `LUOTSI_ANDROID_KEY_PASSWORD`, and
+`LUOTSI_ANDROID_CERT_SHA256`, then verifies the packaged APK certificate with
+`apksigner`.
+
+The helper version is stamped from the Luotsi release tag in release packaging.
+For example, `v1.2.3` becomes `versionName = "1.2.3"` and
+`versionCode = 1002003`. Local builds default to `0.1.0` and `1`.
+
+Keep an offline backup of the release keystore and credentials outside GitHub.
+GitHub Actions secrets are write-only; they can sign future releases, but they
+cannot be used to recover the original keystore. The backup record should
+include the keystore file, store password, key alias, key password, certificate
+SHA-256 digest, creation date, and rotation notes.
 
 The host resolves that default path automatically from the repository root. If
 you build to a different location, set `LUOTSI_VIEW_HELPER_APK` to the built

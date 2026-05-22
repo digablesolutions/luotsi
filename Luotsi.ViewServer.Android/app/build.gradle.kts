@@ -6,6 +6,13 @@ val luotsiReleaseKeystorePath = System.getenv("LUOTSI_ANDROID_KEYSTORE_PATH")
 val luotsiReleaseKeystorePassword = System.getenv("LUOTSI_ANDROID_KEYSTORE_PASSWORD")
 val luotsiReleaseKeyAlias = System.getenv("LUOTSI_ANDROID_KEY_ALIAS")
 val luotsiReleaseKeyPassword = System.getenv("LUOTSI_ANDROID_KEY_PASSWORD")
+val luotsiAndroidVersionName = System.getenv("LUOTSI_ANDROID_VERSION_NAME")
+    ?.takeIf { it.isNotBlank() }
+    ?: "0.1.0"
+val luotsiAndroidVersionCode = System.getenv("LUOTSI_ANDROID_VERSION_CODE")
+    ?.toIntOrNull()
+    ?.takeIf { it > 0 }
+    ?: 1
 val hasLuotsiReleaseSigning = listOf(
     luotsiReleaseKeystorePath,
     luotsiReleaseKeystorePassword,
@@ -21,8 +28,8 @@ android {
         applicationId = "dev.luotsi.view"
         minSdk = 21
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = luotsiAndroidVersionCode
+        versionName = luotsiAndroidVersionName
     }
 
     compileOptions {
