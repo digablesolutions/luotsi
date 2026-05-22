@@ -135,9 +135,25 @@ jobs:
             **/packages.lock.json
             global.json
 
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
       - name: Verify locked restore
         shell: pwsh
         run: dotnet restore $env:SOLUTION --locked-mode /bl:artifacts/binlogs/publish-restore-${{ matrix.rid }}.binlog
+
+      - name: Build Android view helper
+        shell: pwsh
+        run: |
+          $wrapper = ".\Luotsi.ViewServer.Android\gradlew.bat"
+          & $wrapper -p Luotsi.ViewServer.Android :app:assembleRelease
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
 
       - name: Publish CLI
         shell: pwsh

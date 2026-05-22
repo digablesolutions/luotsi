@@ -65,7 +65,7 @@ internal sealed class AndroidViewHelperSetupProvisioner(
         }
 
         reportStep(new ViewSetupStep("helper_build", ViewStartupPhaseStatus.Started, "Building Android view helper APK.", projectDirectory));
-        var build = await _processRunner.RunAsync(wrapper, ["-p", projectDirectory, ":app:assembleDebug"], cancellationToken).ConfigureAwait(false);
+        var build = await _processRunner.RunAsync(wrapper, ["-p", projectDirectory, ":app:assembleRelease"], cancellationToken).ConfigureAwait(false);
         if (build.ExitCode != 0)
         {
             reportStep(new ViewSetupStep("helper_build", ViewStartupPhaseStatus.Failed, "Android view helper build failed.", PreferError(build), "Fix the Gradle build, then rerun view setup --fix."));

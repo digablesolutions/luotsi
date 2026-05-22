@@ -34,6 +34,13 @@ iex (irm https://github.com/digablesolutions/luotsi/releases/latest/download/luo
 
 The installer downloads the latest published release, installs Luotsi under `%LOCALAPPDATA%\Luotsi`, writes a `luotsi` command shim to `%LOCALAPPDATA%\Luotsi\bin`, and adds that directory to your user `PATH`. Open a new terminal after the install finishes.
 
+Verify the installed executable:
+
+```powershell
+luotsi --version
+luotsi devices
+```
+
 To pass installer options, use the scriptblock form:
 
 ```powershell
@@ -49,6 +56,13 @@ curl -fsSL https://github.com/digablesolutions/luotsi/releases/latest/download/l
 
 The shell installer downloads the latest published release, installs Luotsi under `~/.local/share/luotsi`, writes a `luotsi` command shim to `~/.local/share/luotsi/bin`, and updates your shell profile unless you pass `--skip-path-update`. Open a new terminal after the install finishes.
 
+Verify the installed executable:
+
+```bash
+luotsi --version
+luotsi devices
+```
+
 To pass installer options:
 
 ```bash
@@ -61,9 +75,11 @@ curl -fsSL https://github.com/digablesolutions/luotsi/releases/latest/download/l
 ```bash
 # macOS / Linux
 ./luotsi devices
+./luotsi --version
 
 # Windows (PowerShell)
 ./luotsi.exe devices
+./luotsi.exe --version
 ```
 
 **Source builds.** The repo is pinned to .NET SDK `10.0.300` (see `global.json`):
@@ -105,11 +121,15 @@ luotsi doctor --device <serial> --fix
 
 Quick reference. See [docs/commands.md](docs/commands.md) for flags, retry behavior, and wireless pairing details.
 
+`luotsi --version` prints the CLI version embedded at build or release time.
+
 ### Device & ADB
 
 | Command | Description |
 |---|---|
 | `devices` | List adb-visible devices |
+| `lab status [--device-query <query>]` | Summarize attached-device availability and selection decisions |
+| `lab doctor [--device-query <query>] [--fix]` | Detect and repair safe lab-level issues such as offline transports and stale Luotsi port plumbing |
 | `device-status --device <serial>` | Read selected device readiness and inventory metadata |
 | `adb server-status` | Host ADB server status |
 | `adb version` | ADB binary version |
@@ -187,6 +207,9 @@ The full command reference also includes direct UI and capture commands such as 
 | Command | Description |
 |---|---|
 | `scenario-list --path <file-or-dir-or-glob>` | Discover scenario files and filters without executing them |
+| `scenario-init [--file <path>] [--name <name>]` | Generate a starter scenario with metadata, setup, screenshot steps, teardown, docs links, and next commands |
+| `scenario-validate (--file <path> | --path <path>)` | Validate scenarios without creating a device host |
+| `scenario-explain --file <path>` | Summarize metadata, actions, lifecycle steps, and suggested commands |
 | `run --device <serial> --file <path>` | Execute a JSON scenario playbook |
 | `run --device <serial> --path <file-or-dir-or-glob>` | Execute one or many scenario files resolved from a file, directory, or glob |
 | `inspect --device <serial>` | Open an agent-driven JSONL inspection session |
@@ -198,6 +221,11 @@ The full command reference also includes direct UI and capture commands such as 
 Key flags: `--preset <name>` (low-latency / balanced / high-quality / safe), `--capture-backend <auto|screenrecord|mediaprojection>`, `--save-profile <name>`, `--record <file>`, `--share-bind <host:port>`, `--read-only`.
 
 The SDL window has a clickable toolbar, multi-device shelf, and hotkeys (F1–F12, Ctrl+V, drag-and-drop). Full hotkey and JSONL event tables are in [docs/view-session.md](docs/view-session.md).
+
+View screenshots and operator-triggered recordings go to the current artifact root. By default that is a timestamped directory under the host temp folder, for example `%TEMP%\luotsi\<timestamp>-view` on Windows or `/tmp/luotsi/<timestamp>-view` on Linux/macOS. Pass `--artifacts <directory>` to choose it. F12 writes files such as `view-window-001-screenshot.png`; F9 writes `view-window-record-001.h264` unless `--record <file.h264|file.mp4|file.mkv>` supplies a preferred recording path. Use F7 or the toolbar folder button to open the artifact root.
+
+Published Luotsi bundles include the Android view helper APK. Source checkouts can build/install it with `luotsi view setup --device <serial> --fix`; custom helper builds can be selected with `LUOTSI_VIEW_HELPER_APK`.
+Release packaging signs the helper with `LUOTSI_ANDROID_KEYSTORE_*` secrets and verifies the certificate against `LUOTSI_ANDROID_CERT_SHA256`. Pull-request CI packages build the helper with the local/debug fallback because they are validation artifacts, not release artifacts. Local/source builds also use debug signing unless signing environment variables are set.
 
 ## Inspect mode
 
@@ -216,7 +244,7 @@ Send one JSON command per line:
 {"id":"4","command":"exit"}
 ```
 
-Available inspect commands: `refresh`, `tap`, `tap_text`, `wait_visible`, `type_text`, `keyevent`, `telemetry_tail`, `telemetry_watch`, `exit`.
+Available inspect commands: `refresh`, `screen_state`, `snapshot`, `tap`, `tap_text`, `wait_visible`, `type_text`, `keyevent`, `logcat`, `telemetry_tail`, `telemetry_watch`, `screenshot`, `take_screenshot`, `capture_artifacts`, `record`, `exit`.
 
 ## Scenarios
 

@@ -45,13 +45,15 @@ internal sealed class AndroidScreenshotRegionArtifacts(ArtifactSession artifacts
             return null;
         }
 
-        var current = PngRgbaImage.Decode(ReadAllBytes(screenshotPath)).Crop(region);
-        var baseline = PngRgbaImage.Decode(ReadAllBytes(baselineFile)).Crop(region);
-        if (current.Width != baseline.Width || current.Height != baseline.Height)
+        var currentImage = PngRgbaImage.Decode(ReadAllBytes(screenshotPath));
+        var baselineImage = PngRgbaImage.Decode(ReadAllBytes(baselineFile));
+        if (!currentImage.CanCrop(region) || !baselineImage.CanCrop(region))
         {
             return null;
         }
 
+        var current = currentImage.Crop(region);
+        var baseline = baselineImage.Crop(region);
         var overlay = new byte[current.Rgba.Length];
         for (var offset = 0; offset < overlay.Length; offset += 4)
         {
@@ -114,6 +116,14 @@ internal sealed class AndroidScreenshotRegionArtifacts(ArtifactSession artifacts
 
             return new PngRgbaImage(region.Width, region.Height, cropped);
         }
+
+        public bool CanCrop(ScreenshotAssertionRegion region) =>
+            region.X >= 0 &&
+            region.Y >= 0 &&
+            region.Width > 0 &&
+            region.Height > 0 &&
+            region.X <= Width - region.Width &&
+            region.Y <= Height - region.Height;
 
         public byte[] EncodePng()
         {

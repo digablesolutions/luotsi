@@ -196,22 +196,19 @@ public sealed class AndroidViewBootstrap(
             return;
         }
 
-        var staleLocals = ParseStaleViewForwardLocals(list.Stdout)
+        var otherLuotsiLocals = ParseStaleViewForwardLocals(list.Stdout)
             .Where(local => !string.Equals(local, currentLocal, StringComparison.OrdinalIgnoreCase))
             .ToArray();
-        foreach (var local in staleLocals)
-        {
-            await adbClient.RunAsync(["forward", "--remove", local], cancellationToken).ConfigureAwait(false);
-        }
 
         Report(
             reportPhase,
             "adb_forward_cleanup",
-            ViewStartupPhaseStatus.Succeeded,
-            staleLocals.Length == 0
-                ? "No stale Luotsi adb forwards were found."
-                : $"Removed {staleLocals.Length.ToString(System.Globalization.CultureInfo.InvariantCulture)} stale Luotsi adb forward(s).",
-            staleLocals.Length == 0 ? null : string.Join(", ", staleLocals));
+            otherLuotsiLocals.Length == 0 ? ViewStartupPhaseStatus.Succeeded : ViewStartupPhaseStatus.Skipped,
+            otherLuotsiLocals.Length == 0
+                ? "No other Luotsi adb forwards were found."
+                : "Other Luotsi adb forwards were found and left in place.",
+            otherLuotsiLocals.Length == 0 ? null : string.Join(", ", otherLuotsiLocals),
+            otherLuotsiLocals.Length == 0 ? null : "Use `luotsi lab doctor --fix` or restart adb when you know those forwards are stale.");
     }
 
     private static IReadOnlyList<string> ParseStaleViewForwardLocals(string stdout)
