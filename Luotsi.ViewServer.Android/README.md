@@ -79,6 +79,21 @@ The default output consumed by the host CLI is:
 Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release.apk
 ```
 
+Release builds use a real signing key when these environment variables are set:
+
+```text
+LUOTSI_ANDROID_KEYSTORE_PATH
+LUOTSI_ANDROID_KEYSTORE_PASSWORD
+LUOTSI_ANDROID_KEY_ALIAS
+LUOTSI_ANDROID_KEY_PASSWORD
+```
+
+When they are absent, the release build falls back to Android's debug signing
+config so source checkouts can still run `luotsi view setup --fix` without a
+private keystore. GitHub release packaging can provide the same values from
+repository secrets; the workflow also supports `LUOTSI_ANDROID_KEYSTORE_BASE64`
+as the base64-encoded keystore payload.
+
 The host resolves that default path automatically from the repository root. If
 you build to a different location, set `LUOTSI_VIEW_HELPER_APK` to the built
 APK path.

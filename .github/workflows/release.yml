@@ -194,7 +194,21 @@ jobs:
 
       - name: Build Android view helper
         shell: pwsh
+        env:
+          LUOTSI_ANDROID_KEYSTORE_BASE64: ${{ secrets.LUOTSI_ANDROID_KEYSTORE_BASE64 }}
+          LUOTSI_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.LUOTSI_ANDROID_KEYSTORE_PASSWORD }}
+          LUOTSI_ANDROID_KEY_ALIAS: ${{ secrets.LUOTSI_ANDROID_KEY_ALIAS }}
+          LUOTSI_ANDROID_KEY_PASSWORD: ${{ secrets.LUOTSI_ANDROID_KEY_PASSWORD }}
         run: |
+          if (![string]::IsNullOrWhiteSpace($env:LUOTSI_ANDROID_KEYSTORE_BASE64)) {
+            $keystore = Join-Path $env:RUNNER_TEMP "luotsi-view-helper-release.jks"
+            [IO.File]::WriteAllBytes($keystore, [Convert]::FromBase64String($env:LUOTSI_ANDROID_KEYSTORE_BASE64))
+            $env:LUOTSI_ANDROID_KEYSTORE_PATH = $keystore
+            Write-Host "Using Luotsi Android release signing key from GitHub secrets."
+          } else {
+            Write-Warning "LUOTSI_ANDROID_KEYSTORE_BASE64 is not configured; building helper with debug signing fallback."
+          }
+
           $wrapper = if ($IsWindows) { ".\Luotsi.ViewServer.Android\gradlew.bat" } else { "./Luotsi.ViewServer.Android/gradlew" }
           & $wrapper -p Luotsi.ViewServer.Android :app:assembleRelease
           if ($LASTEXITCODE -ne 0) {
