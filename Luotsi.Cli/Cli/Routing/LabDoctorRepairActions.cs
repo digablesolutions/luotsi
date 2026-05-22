@@ -13,6 +13,20 @@ internal static class LabDoctorRepairActions
             appliedFixes.Add(await ReconnectOfflineAsync(runner).ConfigureAwait(false));
         }
 
+        var hasMultipleAttachedDevices = status.Devices
+            .Select(static device => device.Serial)
+            .Where(static serial => !string.IsNullOrWhiteSpace(serial))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Skip(1)
+            .Any();
+        var hasExplicitQuerySelection = status.Decisions.Any(static decision =>
+            decision.Selected && decision.Reason.StartsWith("matched query", StringComparison.OrdinalIgnoreCase));
+        if (hasMultipleAttachedDevices && !hasExplicitQuerySelection)
+        {
+            appliedFixes.Add("Skipped stale Luotsi port cleanup because multiple devices are attached; rerun with --device or --device-query so adb remove commands are serial-scoped.");
+            return appliedFixes.Where(static fix => !string.IsNullOrWhiteSpace(fix)).ToArray();
+        }
+
         appliedFixes.AddRange(await RemoveStaleLuotsiPortPlumbingAsync(runner).ConfigureAwait(false));
         return appliedFixes.Where(static fix => !string.IsNullOrWhiteSpace(fix)).ToArray();
     }

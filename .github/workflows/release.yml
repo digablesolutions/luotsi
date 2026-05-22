@@ -216,7 +216,7 @@ jobs:
       - name: Verify helper APK was packaged
         shell: pwsh
         run: |
-          $helper = "artifacts/publish/${{ matrix.rid }}/Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release-unsigned.apk"
+          $helper = "artifacts/publish/${{ matrix.rid }}/Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release.apk"
           if (!(Test-Path -LiteralPath $helper)) {
             throw "Published Luotsi bundle is missing the Android view helper APK: $helper"
           }

@@ -13,6 +13,18 @@ namespace Luotsi.Cli.Tests;
 public sealed partial class AppTests
 {
     [Fact]
+    public void ViewRuntimeDiagnostic_Uses_JoinShare_Command_For_Share_Sessions()
+    {
+        var options = new ViewOptions("127.0.0.1:9000", "adb", "h264", "ffmpeg", true, null, 1600, 60, "8M", false, false, JoinShareEndpoint: "127.0.0.1:9000");
+
+        var diagnostic = ViewRuntimeDiagnostic.From(new InvalidOperationException("Unexpected end of stream"), options);
+
+        Assert.Equal("transport", diagnostic.Category);
+        Assert.Contains("--join-share 127.0.0.1:9000", diagnostic.NextCommand, StringComparison.Ordinal);
+        Assert.DoesNotContain("--device 127.0.0.1:9000", diagnostic.NextCommand, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_View_Streams_Scaffold_Events()
     {
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
@@ -324,7 +336,7 @@ public sealed partial class AppTests
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
         var backend = new FakeViewBackend();
         var bootstrap = new FakeViewTransportBootstrap([
-            new InvalidOperationException("Android view helper package was not found. Run `luotsi view setup --device <serial> --fix` to build/install it from source, set LUOTSI_VIEW_HELPER_APK, or reinstall Luotsi from a release bundle that includes Luotsi.ViewServer.Android\\app\\build\\outputs\\apk\\release\\app-release-unsigned.apk.")
+            new InvalidOperationException("Android view helper package was not found. Run `luotsi view setup --device <serial> --fix` to build/install it from source, set LUOTSI_VIEW_HELPER_APK, or reinstall Luotsi from a release bundle that includes Luotsi.ViewServer.Android\\app\\build\\outputs\\apk\\release\\app-release.apk.")
         ]);
         using var stream = new MemoryStream();
         var session = CreateViewSession(

@@ -70,13 +70,13 @@ capture is in progress.
 Run from this directory with the Gradle wrapper and Android SDK installed:
 
 ```powershell
-.\gradlew.bat assembleDebug
+.\gradlew.bat assembleRelease
 ```
 
 The default output consumed by the host CLI is:
 
 ```text
-Luotsi.ViewServer.Android/app/build/outputs/apk/debug/app-debug.apk
+Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release.apk
 ```
 
 The host resolves that default path automatically from the repository root. If

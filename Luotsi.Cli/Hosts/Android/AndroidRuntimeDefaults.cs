@@ -15,7 +15,7 @@ internal static class AndroidRuntimeDefaults
     public const int MinRecordTimeLimitSeconds = 1;
     public const int MaxRecordTimeLimitSeconds = 180;
     public const string ViewHelperPathEnvironmentVariable = "LUOTSI_VIEW_HELPER_APK";
-    public const string DefaultViewHelperRelativePath = "Luotsi.ViewServer.Android\\app\\build\\outputs\\apk\\release\\app-release-unsigned.apk";
+    public const string DefaultViewHelperRelativePath = "Luotsi.ViewServer.Android\\app\\build\\outputs\\apk\\release\\app-release.apk";
     public const string ViewHelperRemotePath = "/data/local/tmp/luotsi-view-server.apk";
     public const string ViewHelperMainClass = "dev.luotsi.view.Main";
     public const string ViewHelperPackageName = "dev.luotsi.view";

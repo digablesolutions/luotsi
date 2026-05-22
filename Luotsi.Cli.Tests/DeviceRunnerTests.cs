@@ -546,6 +546,41 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task AssertScreenshotAsync_Skips_Region_Diff_When_Baseline_Region_Is_Out_Of_Bounds()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.AttachFileSystem(fileSystem);
+        var idGenerator = new FakeUniqueIdGenerator("fixed-shot-id");
+        var png = CreatePngRgba(2, 2,
+        [
+            255, 0, 0, 255,
+            0, 255, 0, 255,
+            0, 0, 255, 255,
+            255, 255, 255, 255
+        ]);
+        var smallerBaseline = CreatePngRgba(1, 1, [255, 0, 0, 255]);
+        adb.AddRemoteFile("/sdcard/device-e2e-fixed-shot-id.png", png);
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        var artifacts = ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider);
+        var baselinePath = "/tmp/baselines/home.png";
+        await using (var baselineStream = fileSystem.OpenWrite(baselinePath))
+        {
+            await baselineStream.WriteAsync(smallerBaseline);
+        }
+        var runner = new DeviceRunner(adb, artifacts, timeProvider, new FakeDelay(timeProvider), fileSystem, idGenerator);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => runner.AssertScreenshotAsync("home", null, null, null, baselineFile: baselinePath, region: new ScreenshotAssertionRegion(0, 0, 2, 1), expectedRegionSha256: "not-the-hash"));
+        var diff = await fileSystem.ReadAllTextAsync(Path.Join(artifacts.Root, "home-screenshot-diff.json"));
+
+        Assert.Contains("region SHA-256", error.Message, StringComparison.Ordinal);
+        Assert.Contains("\"region_diff_file\": null", diff, StringComparison.Ordinal);
+        Assert.False(fileSystem.FileExists(Path.Join(artifacts.Root, "home-screenshot-region-diff.png")));
+    }
+
+    [Fact]
     public async Task AssertScreenshotAsync_Uses_Baseline_File_And_Can_Update_Baseline()
     {
         var fileSystem = new FakeFileSystem();

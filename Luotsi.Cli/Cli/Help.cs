@@ -254,7 +254,7 @@ Command groups:
   Device inventory and readiness
     devices
     lab status [--device-query <query>]
-    lab doctor [--device-query <query>]
+    lab doctor [--device-query <query>] [--fix]
     device-status [--device <adb serial> | --device-query <query>]
     wait-for-device [--timeout-sec 15]
     device-wait [--timeout-sec 15]

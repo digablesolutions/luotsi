@@ -728,14 +728,17 @@ internal sealed record ViewRuntimeDiagnostic(string Category, string Message, st
         ArgumentNullException.ThrowIfNull(options);
 
         var message = exception.Message;
-        var commandPrefix = $"luotsi view-doctor --device {options.DeviceSelector}";
+        var commandPrefix = BuildDiagnosticCommandPrefix(options);
+        var viewCommandPrefix = BuildViewCommandPrefix(options);
 
         if (exception is UsageException && message.Contains("decoder", StringComparison.OrdinalIgnoreCase))
         {
             return new ViewRuntimeDiagnostic(
                 "decoder",
                 "The requested host decoder is not available for live view.",
-                $"{commandPrefix} --decoder ffmpeg --fix");
+                string.IsNullOrWhiteSpace(options.JoinShareEndpoint)
+                    ? $"{commandPrefix} --decoder ffmpeg --fix"
+                    : $"{viewCommandPrefix} --decoder ffmpeg");
         }
 
         if (message.Contains("Android view helper package was not found", StringComparison.OrdinalIgnoreCase) ||
@@ -744,7 +747,9 @@ internal sealed record ViewRuntimeDiagnostic(string Category, string Message, st
             return new ViewRuntimeDiagnostic(
                 "helper",
                 "The Android view helper is missing or does not match the expected helper components.",
-                $"luotsi view setup --device {options.DeviceSelector} --capture-backend {options.CaptureBackend} --fix");
+                string.IsNullOrWhiteSpace(options.JoinShareEndpoint)
+                    ? $"luotsi view setup --device {options.DeviceSelector} --capture-backend {options.CaptureBackend} --fix"
+                    : $"{viewCommandPrefix} --capture-backend {options.CaptureBackend}");
         }
 
         if (exception is MediaProjectionConsentException ||
@@ -753,7 +758,7 @@ internal sealed record ViewRuntimeDiagnostic(string Category, string Message, st
             return new ViewRuntimeDiagnostic(
                 "mediaprojection_consent",
                 "MediaProjection could not start because Android screen-capture consent was not approved.",
-                $"luotsi view --device {options.DeviceSelector} --capture-backend auto");
+                $"{viewCommandPrefix} --capture-backend auto");
         }
 
         if (message.Contains("forward", StringComparison.OrdinalIgnoreCase) ||
@@ -763,7 +768,9 @@ internal sealed record ViewRuntimeDiagnostic(string Category, string Message, st
             return new ViewRuntimeDiagnostic(
                 "transport",
                 "The adb-forward view transport did not become readable.",
-                $"luotsi view-doctor --device {options.DeviceSelector} --capture-backend {options.CaptureBackend} --fix");
+                string.IsNullOrWhiteSpace(options.JoinShareEndpoint)
+                    ? $"{commandPrefix} --capture-backend {options.CaptureBackend} --fix"
+                    : $"{viewCommandPrefix} --capture-backend {options.CaptureBackend}");
         }
 
         return new ViewRuntimeDiagnostic(
@@ -771,6 +778,16 @@ internal sealed record ViewRuntimeDiagnostic(string Category, string Message, st
             "Live view failed before it reached a stable stream.",
             $"{commandPrefix} --capture-backend {options.CaptureBackend}");
     }
+
+    private static string BuildDiagnosticCommandPrefix(ViewOptions options) =>
+        string.IsNullOrWhiteSpace(options.JoinShareEndpoint)
+            ? $"luotsi view-doctor --device {options.DeviceSelector}"
+            : $"luotsi view --join-share {options.JoinShareEndpoint}";
+
+    private static string BuildViewCommandPrefix(ViewOptions options) =>
+        string.IsNullOrWhiteSpace(options.JoinShareEndpoint)
+            ? $"luotsi view --device {options.DeviceSelector}"
+            : $"luotsi view --join-share {options.JoinShareEndpoint}";
 }
 
 
