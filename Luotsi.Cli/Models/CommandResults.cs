@@ -460,7 +460,9 @@ public sealed record ReplayCapsuleScenarioDraftSummary(
     int StepCount,
     int WarningCount,
     int ReviewItemCount,
-    int NormalizationCount);
+    int NormalizationCount,
+    IReadOnlyList<string> Warnings,
+    IReadOnlyList<ReplayScenarioDraftReviewItem> ReviewItems);
 
 public sealed record ReplayCapsuleArtifactCounts(
     int Screenshots,

@@ -1068,8 +1068,19 @@ public sealed partial class AppTests
           },
           "warnings": ["Review selectors."],
           "reviewItems": [
-            { "severity": "info" },
-            { "severity": "warning" }
+            {
+              "severity": "info",
+              "category": "selector",
+              "stepIndex": 1,
+              "message": "Review wait selector.",
+              "command": "luotsi replay timeline --artifacts <artifact-root> --source-path session-timeline.jsonl --sequence 1 --context 2"
+            },
+            {
+              "severity": "warning",
+              "category": "coordinate",
+              "stepIndex": 2,
+              "message": "Coordinate tap needs layout metadata."
+            }
           ],
           "normalizations": [
             { "kind": "duplicate_wait" }
@@ -1100,6 +1111,11 @@ public sealed partial class AppTests
         Assert.Equal(1, draftSummary.GetProperty("warning_count").GetInt32());
         Assert.Equal(2, draftSummary.GetProperty("review_item_count").GetInt32());
         Assert.Equal(1, draftSummary.GetProperty("normalization_count").GetInt32());
+        Assert.Equal("Review selectors.", draftSummary.GetProperty("warnings")[0].GetString());
+        var reviewItems = draftSummary.GetProperty("review_items").EnumerateArray().ToArray();
+        Assert.Equal("selector", reviewItems[0].GetProperty("category").GetString());
+        Assert.Equal("Review wait selector.", reviewItems[0].GetProperty("message").GetString());
+        Assert.Contains("--source-path session-timeline.jsonl", reviewItems[0].GetProperty("command").GetString(), StringComparison.Ordinal);
         Assert.Contains(data.GetProperty("suggested_commands").EnumerateArray(), command =>
             command.GetProperty("command").GetString()!.Contains("Review Checklist", StringComparison.Ordinal));
         var readme = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-capsule.md"));
@@ -1108,6 +1124,10 @@ public sealed partial class AppTests
         Assert.Contains("Scenario draft file: `draft-scenario.json`", readme, StringComparison.Ordinal);
         Assert.Contains("Scenario draft confidence: `medium`", readme, StringComparison.Ordinal);
         Assert.Contains("Scenario draft review items: `2`", readme, StringComparison.Ordinal);
+        Assert.Contains("### Scenario Draft Warning Preview", readme, StringComparison.Ordinal);
+        Assert.Contains("Review selectors.", readme, StringComparison.Ordinal);
+        Assert.Contains("### Scenario Draft Review Preview", readme, StringComparison.Ordinal);
+        Assert.Contains("Review wait selector.", readme, StringComparison.Ordinal);
     }
 
     [Fact]

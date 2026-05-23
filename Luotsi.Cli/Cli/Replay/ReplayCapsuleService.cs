@@ -200,7 +200,9 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
                 CountScenarioSteps(root),
                 CountArray(root, "warnings"),
                 CountArray(root, "reviewItems"),
-                CountArray(root, "normalizations"));
+                CountArray(root, "normalizations"),
+                ReadStringArray(root, "warnings", 5),
+                ReadReviewItems(root, 5));
         }
         catch (JsonException)
         {
@@ -302,6 +304,39 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             builder.AppendLine($"- Scenario draft warnings: `{scenarioDraftSummary.WarningCount}`");
             builder.AppendLine($"- Scenario draft review items: `{scenarioDraftSummary.ReviewItemCount}`");
             builder.AppendLine($"- Scenario draft normalizations: `{scenarioDraftSummary.NormalizationCount}`");
+            if (scenarioDraftSummary.Warnings.Count > 0)
+            {
+                builder.AppendLine();
+                builder.AppendLine("### Scenario Draft Warning Preview");
+                builder.AppendLine();
+                foreach (var warning in scenarioDraftSummary.Warnings)
+                {
+                    builder.AppendLine("- " + EscapeMarkdown(warning));
+                }
+            }
+
+            if (scenarioDraftSummary.ReviewItems.Count > 0)
+            {
+                builder.AppendLine();
+                builder.AppendLine("### Scenario Draft Review Preview");
+                builder.AppendLine();
+                builder.AppendLine("| Severity | Category | Step | Message | Command |");
+                builder.AppendLine("|---|---|---|---|---|");
+                foreach (var item in scenarioDraftSummary.ReviewItems)
+                {
+                    builder.Append("| ");
+                    builder.Append(EscapeMarkdown(item.Severity));
+                    builder.Append(" | ");
+                    builder.Append(EscapeMarkdown(item.Category));
+                    builder.Append(" | ");
+                    builder.Append(EscapeMarkdown(item.StepIndex?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty));
+                    builder.Append(" | ");
+                    builder.Append(EscapeMarkdown(item.Message));
+                    builder.Append(" | ");
+                    builder.Append(EscapeMarkdown(item.Command ?? string.Empty));
+                    builder.AppendLine(" |");
+                }
+            }
         }
 
         builder.AppendLine();
@@ -474,6 +509,59 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         root.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.Array
             ? property.GetArrayLength()
             : 0;
+
+    private static IReadOnlyList<string> ReadStringArray(JsonElement root, string name, int limit)
+    {
+        if (!root.TryGetProperty(name, out var property) || property.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return property.EnumerateArray()
+            .Where(static item => item.ValueKind == JsonValueKind.String)
+            .Select(static item => item.GetString() ?? string.Empty)
+            .Where(static item => !string.IsNullOrWhiteSpace(item))
+            .Take(limit)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<ReplayScenarioDraftReviewItem> ReadReviewItems(JsonElement root, int limit)
+    {
+        if (!root.TryGetProperty("reviewItems", out var property) || property.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var items = new List<ReplayScenarioDraftReviewItem>();
+        foreach (var item in property.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            items.Add(new ReplayScenarioDraftReviewItem(
+                TryGetString(item, "severity", out var severity) ? severity : "info",
+                TryGetString(item, "category", out var category) ? category : "general",
+                TryGetInt(item, "stepIndex", out var stepIndex) ? stepIndex : null,
+                TryGetString(item, "message", out var message) ? message : string.Empty,
+                TryGetString(item, "command", out var command) ? command : null));
+            if (items.Count == limit)
+            {
+                break;
+            }
+        }
+
+        return items;
+    }
+
+    private static bool TryGetInt(JsonElement root, string name, out int value)
+    {
+        value = 0;
+        return root.TryGetProperty(name, out var property) &&
+            property.ValueKind == JsonValueKind.Number &&
+            property.TryGetInt32(out value);
+    }
 
     private static string Quote(string value) =>
         value.Contains(' ', StringComparison.Ordinal) ? "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"" : value;
