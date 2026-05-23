@@ -51,7 +51,10 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
                 step.EventType,
                 step.Command,
                 step.Detail,
-                step.Confidence))
+                step.Confidence,
+                step.SourcePath,
+                step.Sequence,
+                step.Timestamp))
             .ToArray();
         var sourceSummaries = BuildSourceSummaries(origins, normalizationNotes).ToArray();
         var reviewItems = BuildReviewItems(warnings, suggestions, origins, normalizationNotes).ToArray();
@@ -136,7 +139,10 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
             $"Dropped adjacent duplicate {candidate.Step.Action} for `{GetStepTarget(candidate.Step)}`.",
             candidate.Source,
             candidate.EventType,
-            candidate.Confidence);
+            candidate.Confidence,
+            candidate.SourcePath,
+            candidate.Sequence,
+            candidate.Timestamp);
         return true;
     }
 
@@ -296,21 +302,28 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
         {
             foreach (var normalization in result.Normalizations)
             {
-                builder.AppendLine($"- `{normalization.Kind}` ({normalization.Confidence}) from `{normalization.Source}`: {normalization.Detail}");
+                var location = string.IsNullOrWhiteSpace(normalization.SourcePath)
+                    ? string.Empty
+                    : $" at `{normalization.SourcePath}:{normalization.Sequence}`";
+                builder.AppendLine($"- `{normalization.Kind}` ({normalization.Confidence}) from `{normalization.Source}`{location}: {normalization.Detail}");
             }
         }
 
         builder.AppendLine();
         builder.AppendLine("## Step Origins");
         builder.AppendLine();
-        builder.AppendLine("| # | Source | Event | Command | Confidence | Detail |");
-        builder.AppendLine("|---:|---|---|---|---|---|");
+        builder.AppendLine("| # | Source | File | Seq | Event | Command | Confidence | Detail |");
+        builder.AppendLine("|---:|---|---|---:|---|---|---|---|");
         foreach (var origin in result.StepOrigins)
         {
             builder.Append("| ");
             builder.Append(origin.StepIndex);
             builder.Append(" | ");
             builder.Append(EscapeMarkdown(origin.Source));
+            builder.Append(" | ");
+            builder.Append(EscapeMarkdown(origin.SourcePath ?? string.Empty));
+            builder.Append(" | ");
+            builder.Append(origin.Sequence?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty);
             builder.Append(" | ");
             builder.Append(EscapeMarkdown(origin.EventType));
             builder.Append(" | ");
@@ -349,7 +362,7 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
             .Replace("\r", " ", StringComparison.Ordinal)
             .Replace("\n", " ", StringComparison.Ordinal);
 
-    private IReadOnlyList<JsonElement> ReadTimelineEvents(string artifactRoot)
+    private IReadOnlyList<DraftTimelineEvent> ReadTimelineEvents(string artifactRoot)
     {
         var files = _fileSystem.GetFiles(artifactRoot, SessionReplayArtifacts.TimelineFileName, SearchOption.AllDirectories);
         if (files.Count == 0)
@@ -358,16 +371,18 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
         }
 
         return files.Order(StringComparer.OrdinalIgnoreCase)
-            .SelectMany(ReadTimelineEventsFromFile)
+            .SelectMany(file => ReadTimelineEventsFromFile(artifactRoot, file))
             .ToArray();
     }
 
-    private IEnumerable<JsonElement> ReadTimelineEventsFromFile(string file)
+    private IEnumerable<DraftTimelineEvent> ReadTimelineEventsFromFile(string artifactRoot, string file)
     {
         using var stream = _fileSystem.OpenRead(file);
         using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 4096);
+        var sequence = 0;
         while (reader.ReadLine() is { } line)
         {
+            sequence++;
             if (string.IsNullOrWhiteSpace(line))
             {
                 continue;
@@ -376,7 +391,11 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
             var evt = ParseTimelineEvent(file, line);
             if (evt is not null)
             {
-                yield return evt.Value;
+                yield return new DraftTimelineEvent(
+                    Path.GetRelativePath(artifactRoot, file).Replace('\\', '/'),
+                    sequence,
+                    TryReadTimestamp(evt.Value),
+                    evt.Value);
             }
         }
     }
@@ -396,11 +415,12 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
         }
     }
 
-    private static IReadOnlyList<DraftStep> CreateSteps(IReadOnlyList<JsonElement> events)
+    private static IReadOnlyList<DraftStep> CreateSteps(IReadOnlyList<DraftTimelineEvent> events)
     {
         var steps = new List<DraftStep>();
-        foreach (var evt in events)
+        foreach (var timelineEvent in events)
         {
+            var evt = timelineEvent.Element;
             if (!TryGetString(evt, "type", out var type))
             {
                 continue;
@@ -408,13 +428,13 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
 
             if (string.Equals(type, "command_result", StringComparison.Ordinal))
             {
-                steps.AddRange(CreateInspectCommandSteps(evt));
+                steps.AddRange(CreateInspectCommandSteps(evt).Select(timelineEvent.Attach));
                 continue;
             }
 
             if (string.Equals(type, "screen_delta", StringComparison.Ordinal))
             {
-                steps.AddRange(CreateScreenDeltaSteps(evt));
+                steps.AddRange(CreateScreenDeltaSteps(evt).Select(timelineEvent.Attach));
                 continue;
             }
 
@@ -428,7 +448,7 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
 
             if (step is not null)
             {
-                steps.Add(step);
+                steps.Add(timelineEvent.Attach(step));
             }
         }
 
@@ -738,11 +758,43 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
         return property.GetBoolean();
     }
 
+    private static DateTimeOffset? TryReadTimestamp(JsonElement root)
+    {
+        foreach (var name in new[] { "occurred_at", "occurredAt", "started_at", "startedAt", "ended_at", "endedAt" })
+        {
+            if (TryGetString(root, name, out var value) &&
+                DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var timestamp))
+            {
+                return timestamp;
+            }
+        }
+
+        return null;
+    }
+
+    private sealed record DraftTimelineEvent(
+        string SourcePath,
+        int Sequence,
+        DateTimeOffset? Timestamp,
+        JsonElement Element)
+    {
+        public DraftStep Attach(DraftStep step) =>
+            step with
+            {
+                SourcePath = SourcePath,
+                Sequence = Sequence,
+                Timestamp = Timestamp
+            };
+    }
+
     private sealed record DraftStep(
         ScenarioStep Step,
         string Source,
         string EventType,
         string? Command,
         string? Detail,
-        string Confidence);
+        string Confidence,
+        string? SourcePath = null,
+        int? Sequence = null,
+        DateTimeOffset? Timestamp = null);
 }

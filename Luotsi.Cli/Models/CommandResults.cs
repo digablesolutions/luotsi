@@ -391,14 +391,20 @@ public sealed record ReplayScenarioDraftStepOrigin(
     string EventType,
     string? Command,
     string? Detail,
-    string Confidence);
+    string Confidence,
+    string? SourcePath,
+    int? Sequence,
+    DateTimeOffset? Timestamp);
 
 public sealed record ReplayScenarioDraftNormalization(
     string Kind,
     string Detail,
     string Source,
     string EventType,
-    string Confidence);
+    string Confidence,
+    string? SourcePath,
+    int? Sequence,
+    DateTimeOffset? Timestamp);
 
 public sealed record ReplaySearchResult(
     string Schema,
