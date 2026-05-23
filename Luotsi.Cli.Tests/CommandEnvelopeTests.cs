@@ -945,6 +945,20 @@ public sealed partial class AppTests
         Assert.Equal("not visible", primaryFailure.GetProperty("message").GetString());
         Assert.Equal(1, data.GetProperty("artifact_counts").GetProperty("screenshots").GetInt32());
         Assert.Equal(1, data.GetProperty("artifact_counts").GetProperty("logs").GetInt32());
+        var manifest = data.GetProperty("artifact_manifest").EnumerateArray().ToArray();
+        Assert.Contains(manifest, artifact =>
+            artifact.GetProperty("path").GetString() == "session-timeline.jsonl" &&
+            artifact.GetProperty("kind").GetString() == "timeline" &&
+            artifact.GetProperty("role").GetString() == "session");
+        Assert.Contains(manifest, artifact =>
+            artifact.GetProperty("path").GetString() == "failure-capsule.json" &&
+            artifact.GetProperty("kind").GetString() == "failure_capsule" &&
+            artifact.GetProperty("role").GetString() == "failure");
+        Assert.Contains(manifest, artifact =>
+            artifact.GetProperty("path").GetString() == "failures/wait-login-button.png" &&
+            artifact.GetProperty("kind").GetString() == "screenshot" &&
+            artifact.GetProperty("role").GetString() == "failure" &&
+            artifact.GetProperty("session").GetString() == "failures");
         Assert.Contains(data.GetProperty("suggested_commands").EnumerateArray(), command =>
             command.GetProperty("command").GetString()!.Contains("replay search", StringComparison.Ordinal));
         Assert.DoesNotContain(data.GetProperty("suggested_commands").EnumerateArray(), command =>
@@ -957,6 +971,8 @@ public sealed partial class AppTests
         Assert.Contains("not visible", readme, StringComparison.Ordinal);
         Assert.Contains("Scenario draft available: `False`", readme, StringComparison.Ordinal);
         Assert.Contains("Scenario draft reason:", readme, StringComparison.Ordinal);
+        Assert.Contains("## Artifact Manifest", readme, StringComparison.Ordinal);
+        Assert.Contains("failures/wait-login-button.png", readme, StringComparison.Ordinal);
         using var jsonSummary = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-capsule-summary.json")));
         Assert.Equal(ResultSchemas.ReplayCapsule, jsonSummary.RootElement.GetProperty("schema").GetString());
     }

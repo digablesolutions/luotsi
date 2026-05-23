@@ -419,6 +419,7 @@ public sealed record ReplayCapsuleResult(
     string? JsonPath,
     ReplayCapsulePrimaryFailureResult? PrimaryFailure,
     ReplayCapsuleArtifactCounts ArtifactCounts,
+    IReadOnlyList<ReplayCapsuleArtifactManifestEntry> ArtifactManifest,
     IReadOnlyList<ReplayCapsuleCommandHint> SuggestedCommands);
 
 public sealed record ReplayCapsulePrimaryFailureResult(
@@ -437,6 +438,12 @@ public sealed record ReplayCapsuleArtifactCounts(
     int ScreenStates,
     int Reports,
     int Timelines);
+
+public sealed record ReplayCapsuleArtifactManifestEntry(
+    string Path,
+    string Kind,
+    string Role,
+    string? Session);
 
 public sealed record ReplayCapsuleCommandHint(
     string Command,

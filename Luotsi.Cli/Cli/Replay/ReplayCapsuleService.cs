@@ -35,6 +35,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             ? null
             : CreatePrimaryFailure(primaryFailureSession);
         var artifactCounts = CountArtifacts(files);
+        var artifactManifest = ReplayCapsuleArtifactManifestBuilder.Build(files).ToArray();
         var scenarioDraft = InspectScenarioDraftReadiness(artifacts.Root, files);
         var commandHints = BuildCommandHints(artifacts.Root, primaryFailure, scenarioDraft.Available).ToArray();
         var readmePath = options.HasFlag("write-readme")
@@ -55,6 +56,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             jsonPath,
             primaryFailure,
             artifactCounts,
+            artifactManifest,
             commandHints);
 
         if (jsonPath is not null)
@@ -64,7 +66,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
 
         if (readmePath is not null)
         {
-            await artifacts.WriteTextAsync(CapsuleReadmeFileName, BuildReadme(artifacts.Root, summaries.Count, failureSessions.Length, scenarioDraft, primaryFailure, artifactCounts, commandHints)).ConfigureAwait(false);
+            await artifacts.WriteTextAsync(CapsuleReadmeFileName, BuildReadme(artifacts.Root, summaries.Count, failureSessions.Length, scenarioDraft, primaryFailure, artifactCounts, artifactManifest, commandHints)).ConfigureAwait(false);
         }
 
         return result;
@@ -188,6 +190,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         ReplayCapsuleScenarioDraftReadiness scenarioDraft,
         ReplayCapsulePrimaryFailureResult? primaryFailure,
         ReplayCapsuleArtifactCounts artifactCounts,
+        IReadOnlyList<ReplayCapsuleArtifactManifestEntry> artifactManifest,
         IReadOnlyList<ReplayCapsuleCommandHint> commandHints)
     {
         var builder = new StringBuilder();
@@ -225,6 +228,24 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         builder.AppendLine($"- Screen states: `{artifactCounts.ScreenStates}`");
         builder.AppendLine($"- Reports: `{artifactCounts.Reports}`");
         builder.AppendLine($"- Timelines: `{artifactCounts.Timelines}`");
+        builder.AppendLine();
+        builder.AppendLine("## Artifact Manifest");
+        builder.AppendLine();
+        builder.AppendLine("| Kind | Role | Session | Path |");
+        builder.AppendLine("|---|---|---|---|");
+        foreach (var artifact in artifactManifest)
+        {
+            builder.Append("| ");
+            builder.Append(EscapeMarkdown(artifact.Kind));
+            builder.Append(" | ");
+            builder.Append(EscapeMarkdown(artifact.Role));
+            builder.Append(" | ");
+            builder.Append(EscapeMarkdown(artifact.Session ?? string.Empty));
+            builder.Append(" | ");
+            builder.Append(EscapeMarkdown(artifact.Path));
+            builder.AppendLine(" |");
+        }
+
         builder.AppendLine();
         builder.AppendLine("## Next Commands");
         builder.AppendLine();
@@ -285,6 +306,11 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         return fileName.Contains("report", StringComparison.OrdinalIgnoreCase) ||
             fileName.Equals("junit.xml", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static string EscapeMarkdown(string value) =>
+        value.Replace("|", "\\|", StringComparison.Ordinal)
+            .Replace("\r", " ", StringComparison.Ordinal)
+            .Replace("\n", " ", StringComparison.Ordinal);
 
     private static string Quote(string value) =>
         value.Contains(' ', StringComparison.Ordinal) ? "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"" : value;
