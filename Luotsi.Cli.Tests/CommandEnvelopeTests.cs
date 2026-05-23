@@ -676,6 +676,10 @@ public sealed partial class AppTests
         Assert.Equal(4, data.GetProperty("step_origins").GetArrayLength());
         Assert.Equal("inspect_command", data.GetProperty("step_origins")[0].GetProperty("source").GetString());
         Assert.Equal("wait_visible", data.GetProperty("step_origins")[0].GetProperty("command").GetString());
+        var reviewItems = data.GetProperty("review_items").EnumerateArray().ToArray();
+        Assert.Contains(reviewItems, item =>
+            item.GetProperty("category").GetString() == "selector" &&
+            item.GetProperty("command").GetString() == "luotsi screen-state");
         var sourceSummary = Assert.Single(data.GetProperty("source_summaries").EnumerateArray());
         Assert.Equal("inspect_command", sourceSummary.GetProperty("source").GetString());
         Assert.Equal(4, sourceSummary.GetProperty("step_count").GetInt32());
@@ -687,6 +691,8 @@ public sealed partial class AppTests
         var review = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "scenario-draft.md"));
         Assert.Contains("# Luotsi Scenario Draft", review, StringComparison.Ordinal);
         Assert.Contains("draft smoke", review, StringComparison.Ordinal);
+        Assert.Contains("## Review Checklist", review, StringComparison.Ordinal);
+        Assert.Contains("luotsi screen-state", review, StringComparison.Ordinal);
         Assert.Contains("## Source Summary", review, StringComparison.Ordinal);
         Assert.Contains("## Step Origins", review, StringComparison.Ordinal);
         Assert.Contains("inspect_command", review, StringComparison.Ordinal);
@@ -780,8 +786,12 @@ public sealed partial class AppTests
         var normalizations = data.GetProperty("normalizations").EnumerateArray().ToArray();
         Assert.Equal(2, normalizations.Length);
         Assert.All(normalizations, normalization => Assert.Equal("duplicate_wait", normalization.GetProperty("kind").GetString()));
+        Assert.Contains(data.GetProperty("review_items").EnumerateArray(), item =>
+            item.GetProperty("category").GetString() == "normalization" &&
+            item.GetProperty("message").GetString()!.Contains("duplicate", StringComparison.OrdinalIgnoreCase));
         Assert.Contains("Welcome", normalizations[0].GetProperty("detail").GetString(), StringComparison.Ordinal);
         var review = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "scenario-draft.md"));
+        Assert.Contains("## Review Checklist", review, StringComparison.Ordinal);
         Assert.Contains("## Normalizations", review, StringComparison.Ordinal);
         Assert.Contains("duplicate_wait", review, StringComparison.Ordinal);
     }

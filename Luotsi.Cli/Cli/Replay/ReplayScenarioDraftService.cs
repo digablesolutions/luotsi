@@ -54,6 +54,7 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
                 step.Confidence))
             .ToArray();
         var sourceSummaries = BuildSourceSummaries(origins, normalizationNotes).ToArray();
+        var reviewItems = BuildReviewItems(warnings, suggestions, origins, normalizationNotes).ToArray();
         var result = new ReplayScenarioDraftResult(
             ResultSchemas.ScenarioDraft,
             artifacts.Root,
@@ -64,6 +65,7 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
             warnings,
             scenario,
             suggestions,
+            reviewItems,
             sourceSummaries,
             origins,
             normalizationNotes);
@@ -243,6 +245,23 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
             foreach (var suggestion in result.Suggestions)
             {
                 builder.AppendLine($"- Step {suggestion.StepIndex}: `{suggestion.Kind}` ({suggestion.Confidence}) - {suggestion.Message}");
+            }
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("## Review Checklist");
+        builder.AppendLine();
+        if (result.ReviewItems.Count == 0)
+        {
+            builder.AppendLine("- None");
+        }
+        else
+        {
+            foreach (var item in result.ReviewItems)
+            {
+                var step = item.StepIndex is null ? string.Empty : $" step {item.StepIndex}:";
+                var command = string.IsNullOrWhiteSpace(item.Command) ? string.Empty : $" `{item.Command}`";
+                builder.AppendLine($"- `{item.Severity}` `{item.Category}`{step} {item.Message}{command}");
             }
         }
 
@@ -628,6 +647,66 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
             }
         }
     }
+
+    private static IEnumerable<ReplayScenarioDraftReviewItem> BuildReviewItems(
+        IReadOnlyList<string> warnings,
+        IReadOnlyList<ReplayScenarioDraftSuggestion> suggestions,
+        IReadOnlyList<ReplayScenarioDraftStepOrigin> origins,
+        IReadOnlyList<ReplayScenarioDraftNormalization> normalizations)
+    {
+        foreach (var warning in warnings)
+        {
+            yield return new ReplayScenarioDraftReviewItem(
+                "warning",
+                "scenario",
+                null,
+                warning,
+                "luotsi scenario-validate --file <scenario.json>");
+        }
+
+        foreach (var suggestion in suggestions)
+        {
+            var severity = string.Equals(suggestion.Confidence, "low", StringComparison.OrdinalIgnoreCase)
+                ? "warning"
+                : "info";
+            yield return new ReplayScenarioDraftReviewItem(
+                severity,
+                suggestion.Kind,
+                suggestion.StepIndex,
+                suggestion.Message,
+                BuildReviewCommand(suggestion.Kind));
+        }
+
+        foreach (var origin in origins.Where(static origin => string.Equals(origin.Confidence, "low", StringComparison.OrdinalIgnoreCase)))
+        {
+            yield return new ReplayScenarioDraftReviewItem(
+                "warning",
+                "provenance",
+                origin.StepIndex,
+                $"Low-confidence generated step from {origin.Source}; review against the source timeline before committing.",
+                "luotsi replay timeline --artifacts <artifact-root> --context 3");
+        }
+
+        foreach (var normalization in normalizations)
+        {
+            yield return new ReplayScenarioDraftReviewItem(
+                "info",
+                "normalization",
+                null,
+                normalization.Detail,
+                null);
+        }
+    }
+
+    private static string? BuildReviewCommand(string kind) =>
+        kind switch
+        {
+            "selector" => "luotsi screen-state",
+            "coordinate" => "luotsi scenario-validate --file <scenario.json>",
+            "visual" => "luotsi replay open --artifacts <artifact-root>",
+            "telemetry" => "luotsi telemetry-tail",
+            _ => null
+        };
 
     private static bool TryGetString(JsonElement root, string name, out string value)
     {

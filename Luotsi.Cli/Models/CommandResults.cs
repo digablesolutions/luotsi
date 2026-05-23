@@ -360,6 +360,7 @@ public sealed record ReplayScenarioDraftResult(
     IReadOnlyList<string> Warnings,
     ScenarioFile Scenario,
     IReadOnlyList<ReplayScenarioDraftSuggestion> Suggestions,
+    IReadOnlyList<ReplayScenarioDraftReviewItem> ReviewItems,
     IReadOnlyList<ReplayScenarioDraftSourceSummary> SourceSummaries,
     IReadOnlyList<ReplayScenarioDraftStepOrigin> StepOrigins,
     IReadOnlyList<ReplayScenarioDraftNormalization> Normalizations);
@@ -369,6 +370,13 @@ public sealed record ReplayScenarioDraftSuggestion(
     string Kind,
     string Confidence,
     string Message);
+
+public sealed record ReplayScenarioDraftReviewItem(
+    string Severity,
+    string Category,
+    int? StepIndex,
+    string Message,
+    string? Command);
 
 public sealed record ReplayScenarioDraftSourceSummary(
     string Source,
