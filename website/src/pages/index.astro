@@ -1,129 +1,116 @@
 ---
 import '../styles/site.css';
 
-const base = import.meta.env.BASE_URL;
+const base = import.meta.env.BASE_URL.endsWith('/')
+	? import.meta.env.BASE_URL
+	: `${import.meta.env.BASE_URL}/`;
 
 const heroImage = `${base}images/buggy-commands.png`;
 const docsHref = `${base}docs/`;
 const installHref = `${base}docs/getting-started/installation/`;
 const quickstartHref = `${base}docs/getting-started/quickstart/`;
 
-const workflows = [
+const installPaths = [
 	{
-		title: 'Live view that stays operator-friendly',
-		body: 'Mirror a real Android device into a local SDL window, keep the hotkeys and toolbar local, and emit JSONL events that agents or CI can consume without scraping the screen.',
+		title: 'Windows',
+		body: 'Run the release installer, then let doctor verify the device path before you burn time on setup drift.',
+		command: `iex (irm https://github.com/digablesolutions/luotsi/releases/latest/download/luotsi-install.ps1)
+luotsi doctor --device <serial> --fix`,
 	},
 	{
-		title: 'Inspect sessions for agent loops',
-		body: 'Use structured JSONL screen snapshots and deltas to explore a device interactively without inventing a second control plane or bolting on a fragile remote browser stack.',
-	},
-	{
-		title: 'Scenario runs with durable artifacts',
-		body: 'Drive multi-step flows from plain JSON playbooks and leave behind screenshots, hierarchy dumps, telemetry, reports, and replay metadata when something fails.',
-	},
-	{
-		title: 'Boring ADB first, on purpose',
-		body: 'Luotsi keeps orchestration on the host and leans on adb, structured envelopes, and thin helper logic instead of requiring a heavy always-on device service.',
+		title: 'macOS / Linux',
+		body: 'Use the shell installer, then validate the same first-run path against the attached device.',
+		command: `curl -fsSL https://github.com/digablesolutions/luotsi/releases/latest/download/luotsi-install.sh | sh
+luotsi doctor --device <serial> --fix`,
 	},
 ];
 
-const docsSections = [
-	{
-		href: installHref,
-		title: 'Installation',
-		summary: 'Release installers, source builds, and the first-run doctor flow.',
-		cta: 'Install Luotsi',
-	},
-	{
-		href: quickstartHref,
-		title: 'Quickstart',
-		summary: 'Connect a device, run doctor, open live view, and execute a first scenario.',
-		cta: 'Start here',
-	},
-	{
-		href: `${base}docs/getting-started/device-readiness/`,
-		title: 'Device Readiness',
-		summary: 'Doctor, preflight, lab status, adb health, and how to select the right device transport.',
-		cta: 'Validate lab',
-	},
-	{
-		href: `${base}docs/getting-started/troubleshooting/`,
-		title: 'Troubleshooting',
-		summary: 'Offline devices, wireless pairing friction, view setup failures, and old-device hierarchy limits.',
-		cta: 'Fix first-run issues',
-	},
+const workflowRoutes = [
 	{
 		href: `${base}docs/core-workflows/live-view/`,
-		title: 'Live View',
-		summary: 'Presets, profiles, share mode, artifacts, hotkeys, and operator controls.',
-		cta: 'Open workflow',
+		title: 'Operate the device',
+		summary: 'Open live view when you need the SDL window, hotkeys, screenshots, or a shareable observer session.',
+		cta: 'Use live view',
+		command: 'luotsi view --device <serial>',
 	},
 	{
 		href: `${base}docs/core-workflows/inspect-and-scenarios/`,
-		title: 'Inspect And Scenarios',
-		summary: 'When to use JSONL inspection loops versus repeatable JSON playbooks.',
-		cta: 'Read workflow',
+		title: 'Explore the UI',
+		summary: 'Use inspect when an engineer or agent needs structured JSONL snapshots and command results instead of a window.',
+		cta: 'Use inspect',
+		command: 'luotsi inspect --device <serial>',
 	},
 	{
 		href: `${base}docs/core-workflows/replay-and-artifacts/`,
-		title: 'Replay And Artifacts',
-		summary: 'Use artifact roots, replay summaries, and search tools to debug failures after the run ends.',
-		cta: 'Triage failures',
-	},
-	{
-		href: `${base}docs/reference/cli-command-groups/`,
-		title: 'CLI Command Groups',
-		summary: 'The quickest way to understand Luotsi command families before diving into flags.',
-		cta: 'Browse reference',
-	},
-	{
-		href: `${base}docs/reference/scenario-playbooks/`,
-		title: 'Scenario Playbooks',
-		summary: 'JSON format, lifecycle phases, metadata, step actions, timing defaults, and validation rules.',
-		cta: 'Author scenarios',
-	},
-	{
-		href: `${base}docs/reference/wireless-and-port-forwarding/`,
-		title: 'Wireless And Port Forwarding',
-		summary: 'Modern wireless debugging, legacy TCP/IP mode, and adb forward or reverse helpers.',
-		cta: 'Connect over network',
-	},
-	{
-		href: `${base}docs/concepts/architecture/`,
-		title: 'Architecture',
-		summary: 'A host-first view of how commands, view sessions, helpers, and artifacts fit together.',
-		cta: 'See architecture',
-	},
-	{
-		href: `${base}docs/concepts/subsystems/`,
-		title: 'Subsystems',
-		summary: 'The boundary map for CLI routing, host automation, scenarios, telemetry, artifacts, and view transport.',
-		cta: 'Map the codebase',
-	},
-	{
-		href: `${base}docs/contributing/guide/`,
-		title: 'Contributing',
-		summary: 'Workflow, validation, design constraints, and where to look before changing a Luotsi behavior.',
-		cta: 'Contribute safely',
-	},
-	{
-		href: `${base}docs/tutorials/buggy-controller-live-demo/`,
-		title: 'Buggy Controller Demo',
-		summary: 'A concrete end-to-end walkthrough against an older Android 6 device with real artifacts.',
-		cta: 'Run the demo',
-	},
-	{
-		href: 'https://github.com/digablesolutions/luotsi',
-		title: 'GitHub Repo',
-		summary: 'Source, releases, examples, Android helper project, and the full repo docs.',
-		cta: 'Open GitHub',
+		title: 'Replay the failure',
+		summary: 'Use scenarios plus replay when the flow needs durable artifacts, reports, and a post-run triage trail.',
+		cta: 'Use replay',
+		command: 'luotsi run --path scenarios --device <serial>',
 	},
 ];
 
-const signals = [
-	{ title: 'JSON envelopes', copy: 'Single-command results stay machine-readable by default.' },
-	{ title: 'JSONL sessions', copy: 'Inspect and view stream structured events instead of terminal prose.' },
-	{ title: 'Replay artifacts', copy: 'Failures keep the context needed to debug without re-running blind.' },
+const docsBuckets = [
+	{
+		title: 'Start Here',
+		intro: 'Get from install to a stable device session before you debug the app.',
+		items: [
+			{ label: 'Installation', href: installHref },
+			{ label: 'Quickstart', href: quickstartHref },
+			{ label: 'Device Readiness', href: `${base}docs/getting-started/device-readiness/` },
+			{ label: 'Troubleshooting', href: `${base}docs/getting-started/troubleshooting/` },
+		],
+	},
+	{
+		title: 'Run Workflows',
+		intro: 'Choose the surface that matches the job: operator control, structured exploration, or repeatable runs.',
+		items: [
+			{ label: 'Live View', href: `${base}docs/core-workflows/live-view/` },
+			{ label: 'Inspect and Scenarios', href: `${base}docs/core-workflows/inspect-and-scenarios/` },
+			{ label: 'Scenario Playbooks', href: `${base}docs/reference/scenario-playbooks/` },
+			{ label: 'Wireless and Port Forwarding', href: `${base}docs/reference/wireless-and-port-forwarding/` },
+		],
+	},
+	{
+		title: 'Debug And Integrate',
+		intro: 'Use the artifact layer and command surface when the question is no longer just how to start.',
+		items: [
+			{ label: 'Replay and Artifacts', href: `${base}docs/core-workflows/replay-and-artifacts/` },
+			{ label: 'CLI Command Groups', href: `${base}docs/reference/cli-command-groups/` },
+			{ label: 'Output Envelopes', href: `${base}docs/reference/output-envelopes/` },
+		],
+	},
+];
+
+const proofStatus = [
+	{ label: 'Device', value: 'Physical Android' },
+	{ label: 'Transport', value: 'ADB + JSONL' },
+	{ label: 'Artifacts', value: 'Replay-ready' },
+];
+
+const utilityLinks = [
+	{ label: 'Architecture', href: `${base}docs/concepts/architecture/` },
+	{ label: 'Subsystems', href: `${base}docs/concepts/subsystems/` },
+	{ label: 'Contribution Guide', href: `${base}docs/contributing/guide/` },
+	{ label: 'Releases', href: 'https://github.com/digablesolutions/luotsi/releases' },
+	{ label: 'GitHub', href: 'https://github.com/digablesolutions/luotsi' },
+];
+
+const proofBadges = [
+	{ title: 'Real device', copy: 'A physical Android screen under test, not a browser mock.' },
+	{ title: 'Structured sessions', copy: 'Inspect and view emit machine-readable state instead of terminal prose.' },
+	{ title: 'Replay artifacts', copy: 'Every run leaves behind a trail you can inspect after the session ends.' },
+];
+
+const inspectSnippet = [
+	'{"type":"screen_snapshot","activity":"fi.systam.visit.MainActivity"}',
+	'{"id":"2","command":"tap_text","text":"Sign in"}',
+	'{"type":"command_result","ok":true,"artifact":"after-tap.png"}',
+];
+
+const replaySnippet = [
+	'artifact_root: ./artifacts/smoke-run',
+	'timeline: session-timeline.jsonl',
+	'summary: session-replay.json',
 ];
 ---
 
@@ -152,49 +139,68 @@ const signals = [
 					</a>
 					<nav class="nav-links" aria-label="Primary navigation">
 						<a href={docsHref}>Docs</a>
+						<a href={quickstartHref}>Quickstart</a>
 						<a href="https://github.com/digablesolutions/luotsi/releases">Releases</a>
 						<a href="https://github.com/digablesolutions/luotsi">GitHub</a>
 					</nav>
 				</header>
 
 				<section class="hero">
-					<div>
+					<div class="hero-copy">
 						<div class="eyebrow">ADB-first tooling for real Android labs</div>
-						<h1 class="display">Live view, inspect loops, and reproducible device runs from one CLI.</h1>
+						<h1 class="display">Mirror the device. Inspect the UI. Replay the failure.</h1>
 						<p class="lede">
-							Luotsi keeps orchestration, policy, and diagnostics on the engineer or CI machine while the on-device helper stays thin. Use it to mirror a device, drive scenarios, inspect UI state through JSONL, and preserve the artifacts that explain what actually happened.
+							Luotsi keeps orchestration, policy, and diagnostics on the engineer or CI machine while the Android helper stays thin. Use it when you need a real-device workflow with operator control up front and durable artifacts at the end.
 						</p>
 						<div class="hero-actions">
 							<a class="button-link button-link--primary" href={installHref}>Install Luotsi</a>
 							<a class="button-link button-link--secondary" href={quickstartHref}>Read the quickstart</a>
 						</div>
-						<div class="signal-grid">
-							{signals.map((signal) => (
-								<div class="signal-card">
-									<strong>{signal.title}</strong>
-									<span>{signal.copy}</span>
-								</div>
-							))}
+						<div class="hero-support">
+							<div class="support-card">
+								<strong>One tool</strong>
+								<span>Live view, inspect, scenarios, and replay all stay in the same host-side runtime.</span>
+							</div>
+							<div class="support-card">
+								<strong>One first command</strong>
+								<span><code>luotsi doctor --device &lt;serial&gt; --fix</code> is the fastest way to prove the device path is ready.</span>
+							</div>
 						</div>
 					</div>
 
-					<div class="hero-visual">
-						<div class="hero-visual__frame">
-							<img src={heroImage} alt="Luotsi scenario demo running against a real Android device screen." />
+					<div class="proof-composite">
+						<div class="proof-device">
+							<div class="proof-window-bar">
+								<span>Live mirror</span>
+								<span>Physical Android device</span>
+							</div>
+							<img src={heroImage} alt="Buggy Controller running on a real Android device during a Luotsi session." />
 						</div>
-						<div class="hero-visual__caption">
-							<div>
-								<strong>Operator loop</strong>
-								<span>SDL window, hotkeys, toolbar, screenshot and recording controls.</span>
-							</div>
-							<div>
-								<strong>Automation loop</strong>
-								<span>Scenario JSON, inspect JSONL, and semantic waits from the same host runtime.</span>
-							</div>
-							<div>
-								<strong>Failure loop</strong>
-								<span>Replay metadata, screenshots, hierarchy, logcat, and reports under one artifact root.</span>
-							</div>
+						<div class="proof-status">
+							{proofStatus.map((item) => (
+								<div class="proof-status-pill">
+									<span>{item.label}</span>
+									<strong>{item.value}</strong>
+								</div>
+							))}
+						</div>
+						<div class="proof-grid">
+							<article class="proof-card">
+								<div class="proof-card__label">Inspect JSONL</div>
+								<pre><code>{inspectSnippet.join('\n')}</code></pre>
+							</article>
+							<article class="proof-card proof-card--replay">
+								<div class="proof-card__label">Replay bundle</div>
+								<pre><code>{replaySnippet.join('\n')}</code></pre>
+							</article>
+						</div>
+						<div class="proof-badges">
+							{proofBadges.map((badge) => (
+								<div class="proof-badge">
+									<strong>{badge.title}</strong>
+									<span>{badge.copy}</span>
+								</div>
+							))}
 						</div>
 					</div>
 				</section>
@@ -202,19 +208,53 @@ const signals = [
 				<section class="section">
 					<div class="section-header">
 						<div>
-							<div class="section-kicker">Core workflows</div>
-							<h2 class="section-title">Designed around the work you actually do with devices.</h2>
+							<div class="section-kicker">Start fast</div>
+							<h2 class="section-title">Get to a real device workflow in five minutes.</h2>
 						</div>
 						<p class="section-copy">
-							Luotsi is strongest when an operator, a test harness, and an agent all need the same ground truth from a real Android device without standing up a second control service.
+							Install from releases, run doctor once, then jump into the workflow that matches the job.
 						</p>
 					</div>
-					<div class="workflow-grid">
-						{workflows.map((workflow) => (
-							<div class="workflow-card">
-								<strong>{workflow.title}</strong>
-								<span>{workflow.body}</span>
-							</div>
+					<div class="launch-grid">
+						{installPaths.map((path) => (
+							<article class="launch-card">
+								<div class="launch-card__meta">{path.title}</div>
+								<p>{path.body}</p>
+								<pre><code>{path.command}</code></pre>
+							</article>
+						))}
+						<article class="launch-card launch-card--command">
+							<div class="launch-card__meta">First useful command</div>
+							<p>Run the environment check before you spend time on adb, helper, or decoder edge cases.</p>
+							<pre><code>{`luotsi doctor --device <serial> --fix`}</code></pre>
+							<ul>
+								<li>Verifies adb visibility and device readiness.</li>
+								<li>Checks live-view prerequisites.</li>
+								<li>Stages helper and decoder assets Luotsi owns when possible.</li>
+							</ul>
+							<a class="inline-link" href={quickstartHref}>Open the quickstart -&gt;</a>
+						</article>
+					</div>
+				</section>
+
+				<section class="section">
+					<div class="section-header">
+						<div>
+							<div class="section-kicker">Choose a workflow</div>
+							<h2 class="section-title">Pick the route that matches the job.</h2>
+						</div>
+						<p class="section-copy">
+							Once a device is attached, most work falls into one of these three paths.
+						</p>
+					</div>
+					<div class="route-grid">
+						{workflowRoutes.map((route) => (
+							<a class="route-card" href={route.href}>
+								<div class="route-card__eyebrow">{route.cta}</div>
+								<strong>{route.title}</strong>
+								<span>{route.summary}</span>
+								<code>{route.command}</code>
+							</a>
 						))}
 					</div>
 				</section>
@@ -222,87 +262,36 @@ const signals = [
 				<section class="section">
 					<div class="section-header">
 						<div>
-							<div class="section-kicker">Quick install</div>
-							<h2 class="section-title">Start from releases, then let doctor verify the rest.</h2>
+							<div class="section-kicker">Go deeper</div>
+							<h2 class="section-title">Docs organized by intent, not by dump.</h2>
 						</div>
 						<p class="section-copy">
-							The fastest path is the per-user release installer. After that, use <code>doctor</code> or <code>view setup</code> to validate adb, helper provisioning, and live-view prerequisites against a real device.
+							Start from the bucket that matches the moment: setup, run, or debug.
 						</p>
 					</div>
-					<div class="architecture">
-						<div class="terminal-card">
-							<pre><code>{`# Windows
-iex (irm https://github.com/digablesolutions/luotsi/releases/latest/download/luotsi-install.ps1)
-luotsi doctor --device <serial> --fix
-
-# macOS / Linux
-curl -fsSL https://github.com/digablesolutions/luotsi/releases/latest/download/luotsi-install.sh | sh
-luotsi doctor --device <serial> --fix`}</code></pre>
-						</div>
-						<div class="architecture-card">
-							<strong>What happens next</strong>
-							<ul>
-								<li>Luotsi checks adb visibility, package readiness, and live-view prerequisites.</li>
-								<li>With <code>--fix</code>, it can stage helper and decoder assets Luotsi owns.</li>
-								<li>The same install works for engineers, CI jobs, and agent-driven flows.</li>
-							</ul>
-						</div>
+					<div class="bucket-grid">
+						{docsBuckets.map((bucket) => (
+							<section class="bucket-card">
+								<div class="bucket-card__eyebrow">{bucket.title}</div>
+								<p>{bucket.intro}</p>
+								<ul class="bucket-list">
+									{bucket.items.map((item) => (
+										<li><a href={item.href}>{item.label}</a></li>
+									))}
+								</ul>
+							</section>
+						))}
 					</div>
-				</section>
-
-				<section class="section">
-					<div class="section-header">
-						<div>
-							<div class="section-kicker">Architecture</div>
-							<h2 class="section-title">Host-first orchestration, thin helper, durable artifacts.</h2>
-						</div>
-						<p class="section-copy">
-							The command layer, scenario runtime, inspect sessions, and live view all converge on the same Android host abstractions. That keeps behavior consistent and failure reporting useful instead of fragmented by transport.
-						</p>
-					</div>
-					<div class="architecture">
-						<div class="architecture-card">
-							<strong>Data path</strong>
-							<ul>
-								<li>CLI commands and long-lived sessions stay on the host machine.</li>
-								<li>Android helper startup, device shell calls, and live stream transport run over adb.</li>
-								<li>Scenario runs and sessions keep writing screenshots, telemetry, logs, and replay metadata into artifact roots for later triage.</li>
-							</ul>
-						</div>
-						<div class="architecture-card">
-							<strong>Why it matters</strong>
-							<ul>
-								<li>No heavyweight device server is required to get structured outputs.</li>
-								<li>Operators, CI pipelines, and agents can use the same runtime without maintaining separate workflows.</li>
-								<li>Replay artifacts shorten the debug loop when a scenario or live session goes sideways.</li>
-							</ul>
-						</div>
-					</div>
-				</section>
-
-				<section class="section">
-					<div class="section-header">
-						<div>
-							<div class="section-kicker">Docs</div>
-							<h2 class="section-title">A real public docs surface, not just a landing page.</h2>
-						</div>
-						<p class="section-copy">
-							The site now covers onboarding, device readiness, core workflows, scenario authoring, replay triage, networking helpers, and architecture. The remaining repo docs still stay close at hand in GitHub while the public IA keeps tightening.
-						</p>
-					</div>
-					<div class="docs-grid">
-						{docsSections.map((section) => (
-							<a class="docs-card" href={section.href}>
-								<strong>{section.title}</strong>
-								<span>{section.summary}</span>
-								<small>{section.cta} -></small>
-							</a>
+					<div class="utility-strip">
+						{utilityLinks.map((link) => (
+							<a class="utility-link" href={link.href}>{link.label}</a>
 						))}
 					</div>
 				</section>
 
 				<footer class="site-footer">
 					<p>Luotsi is built in the open at <a href="https://github.com/digablesolutions/luotsi">digablesolutions/luotsi</a>.</p>
+					<p>Use the docs hub for onboarding and workflows, then GitHub for releases, source, and contributor detail.</p>
 				</footer>
 			</div>
 		</main>
