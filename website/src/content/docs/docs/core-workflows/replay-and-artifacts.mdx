@@ -40,6 +40,21 @@ luotsi replay cluster --artifacts ./artifacts/my-run
 
 Use `replay graph` when you want a stable node or edge model across sessions, failures, artifacts, actions, and telemetry signals. Use `replay cluster` when you need repeated failure shapes grouped into triage buckets.
 
+## Explore to scenario
+
+`replay scenario-draft` is intentionally conservative. It promotes replay evidence into a starter scenario and keeps review data next to the generated steps:
+
+- `source_summaries` shows how many steps came from inspect commands, screen deltas, view events, telemetry, or existing scenario events.
+- `step_origins` maps every generated step back to its source event and confidence.
+- `normalizations` records cleanup decisions such as dropping adjacent duplicate inferred waits.
+
+```bash
+luotsi replay scenario-draft --artifacts ./artifacts/my-inspect --output ./scenarios/draft.json --write-json --write-markdown
+luotsi scenario-validate --file ./scenarios/draft.json
+```
+
+Use the generated markdown review before committing a draft. Coordinate taps and visual assertions are especially device-specific and should be tightened before CI use.
+
 ## Practical workflow
 
 1. Run the command or scenario with an explicit artifact root if you want a stable location.

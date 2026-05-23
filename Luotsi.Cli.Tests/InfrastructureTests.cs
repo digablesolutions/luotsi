@@ -319,6 +319,7 @@ public sealed partial class AppTests
         {
             schema = ResultSchemas.ScenarioDraft,
             confidence = "medium",
+            source_summaries = new[] { new { source = "inspect_command", step_count = 2, normalization_count = 0 } },
             warnings = new[] { "Review generated selectors before CI use." },
             normalizations = new[] { new { kind = "duplicate_wait" } },
             scenario = new
@@ -339,10 +340,10 @@ public sealed partial class AppTests
         Assert.Contains("- [replay-capsule-summary.json](replay-capsule-summary.json)", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("- [scenario-draft-summary.json](scenario-draft-summary.json)", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("session_count=2 | failure_count=1 | scenario_draft_available=true | scenario_draft_reason=Found command_result:tap_text source in inspect/session-timeline.jsonl.", markdownIndex, StringComparison.Ordinal);
-        Assert.Contains("confidence=medium | steps=2 | warnings=1 | normalizations=1", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("confidence=medium | source_summaries=1 | steps=2 | warnings=1 | normalizations=1", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("<h2>Replay</h2>", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("session_count=2 | failure_count=1 | scenario_draft_available=true | scenario_draft_reason=Found command_result:tap_text source in inspect/session-timeline.jsonl.", htmlIndex, StringComparison.Ordinal);
-        Assert.Contains("confidence=medium | steps=2 | warnings=1 | normalizations=1", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("confidence=medium | source_summaries=1 | steps=2 | warnings=1 | normalizations=1", htmlIndex, StringComparison.Ordinal);
     }
 
     [Fact]

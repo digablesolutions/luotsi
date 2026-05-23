@@ -53,6 +53,7 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
                 step.Detail,
                 step.Confidence))
             .ToArray();
+        var sourceSummaries = BuildSourceSummaries(origins, normalizationNotes).ToArray();
         var result = new ReplayScenarioDraftResult(
             ResultSchemas.ScenarioDraft,
             artifacts.Root,
@@ -63,6 +64,7 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
             warnings,
             scenario,
             suggestions,
+            sourceSummaries,
             origins,
             normalizationNotes);
 
@@ -149,6 +151,61 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
     private static string GetStepTarget(ScenarioStep step) =>
         step.Text ?? step.Step ?? step.Event ?? step.Code ?? step.Label ?? step.Action;
 
+    private static IEnumerable<ReplayScenarioDraftSourceSummary> BuildSourceSummaries(
+        IReadOnlyList<ReplayScenarioDraftStepOrigin> origins,
+        IReadOnlyList<ReplayScenarioDraftNormalization> normalizations)
+    {
+        var sources = origins
+            .Select(static origin => origin.Source)
+            .Concat(normalizations.Select(static normalization => normalization.Source))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static source => source, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var source in sources)
+        {
+            var sourceOrigins = origins
+                .Where(origin => string.Equals(origin.Source, source, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            var sourceNormalizations = normalizations.Count(normalization =>
+                string.Equals(normalization.Source, source, StringComparison.OrdinalIgnoreCase));
+            var eventTypes = sourceOrigins
+                .Select(static origin => origin.EventType)
+                .Concat(normalizations
+                    .Where(normalization => string.Equals(normalization.Source, source, StringComparison.OrdinalIgnoreCase))
+                    .Select(static normalization => normalization.EventType))
+                .Where(static eventType => !string.IsNullOrWhiteSpace(eventType))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static eventType => eventType, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            yield return new ReplayScenarioDraftSourceSummary(
+                source,
+                sourceOrigins.Length,
+                sourceNormalizations,
+                eventTypes,
+                SummarizeConfidence(sourceOrigins.Select(static origin => origin.Confidence)
+                    .Concat(normalizations
+                        .Where(normalization => string.Equals(normalization.Source, source, StringComparison.OrdinalIgnoreCase))
+                        .Select(static normalization => normalization.Confidence))));
+        }
+    }
+
+    private static string SummarizeConfidence(IEnumerable<string> confidenceValues)
+    {
+        var values = confidenceValues.ToArray();
+        if (values.Any(static value => string.Equals(value, "low", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "low";
+        }
+
+        if (values.Any(static value => string.Equals(value, "medium", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "medium";
+        }
+
+        return values.Length == 0 ? "unknown" : "high";
+    }
+
     private static string BuildMarkdown(ReplayScenarioDraftResult result)
     {
         var builder = new StringBuilder();
@@ -187,6 +244,26 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
             {
                 builder.AppendLine($"- Step {suggestion.StepIndex}: `{suggestion.Kind}` ({suggestion.Confidence}) - {suggestion.Message}");
             }
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("## Source Summary");
+        builder.AppendLine();
+        builder.AppendLine("| Source | Steps | Normalizations | Events | Confidence |");
+        builder.AppendLine("|---|---:|---:|---|---|");
+        foreach (var summary in result.SourceSummaries)
+        {
+            builder.Append("| ");
+            builder.Append(EscapeMarkdown(summary.Source));
+            builder.Append(" | ");
+            builder.Append(summary.StepCount);
+            builder.Append(" | ");
+            builder.Append(summary.NormalizationCount);
+            builder.Append(" | ");
+            builder.Append(EscapeMarkdown(string.Join(", ", summary.EventTypes)));
+            builder.Append(" | ");
+            builder.Append(EscapeMarkdown(summary.Confidence));
+            builder.AppendLine(" |");
         }
 
         builder.AppendLine();

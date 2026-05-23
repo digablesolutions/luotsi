@@ -279,6 +279,7 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
     {
         var parts = new List<string>();
         AddJsonProperty(parts, root, "confidence");
+        AddArrayCount(parts, root, "source_summaries");
         if (root.TryGetProperty("scenario", out var scenario) &&
             scenario.ValueKind == JsonValueKind.Object &&
             scenario.TryGetProperty("steps", out var steps) &&

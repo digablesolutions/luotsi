@@ -223,7 +223,10 @@ Notes:
   reports and failure artifacts. Replay open refreshes index.html/index.md for
   the artifact root and opens index.html in the local browser. Replay
   scenario-draft turns inspect/replay action events into a conservative draft
-  scenario with warnings and suggestions for cleanup. With --write-json and
+  scenario with warnings and suggestions for cleanup. The result includes
+  source_summaries, step_origins, and normalizations so reviewers can see
+  which steps came from inspect commands, screen deltas, view events,
+  telemetry, or existing scenario events. With --write-json and
   --write-markdown, it writes review artifacts into the replay root. Replay search scans
   text-like replay artifacts, reports, logcat, hierarchies, screen-state JSON,
   and timelines for a case-insensitive string. Replay capsule returns a compact
