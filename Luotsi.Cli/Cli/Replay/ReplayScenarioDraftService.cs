@@ -778,16 +778,15 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
 
     private static DateTimeOffset? TryReadTimestamp(JsonElement root)
     {
-        foreach (var name in new[] { "occurred_at", "occurredAt", "started_at", "startedAt", "ended_at", "endedAt" })
-        {
-            if (TryGetString(root, name, out var value) &&
-                DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var timestamp))
-            {
-                return timestamp;
-            }
-        }
-
-        return null;
+        return new[] { "occurred_at", "occurredAt", "started_at", "startedAt", "ended_at", "endedAt" }
+            .Select(name =>
+                TryGetString(root, name, out var value) &&
+                DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var timestamp)
+                    ? (DateTimeOffset?)timestamp
+                    : null)
+            .Where(timestamp => timestamp.HasValue)
+            .Select(timestamp => timestamp!.Value)
+            .FirstOrDefault();
     }
 
     private sealed record DraftTimelineEvent(
