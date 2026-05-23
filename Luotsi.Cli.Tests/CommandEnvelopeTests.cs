@@ -1237,6 +1237,45 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task LabRelease_BySerial_Removes_Lease_And_Unblocks_Plan()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("usb-1", "device", "product:p model:Pixel_9 device:komodo usb:1-1"));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var claimExitCode = await app.RunAsync(["lab", "claim", "--device-query", "model=Pixel_9", "--owner", "ci-job-1", "--ttl-sec", "60"]);
+        var blockedPlanExitCode = await app.RunAsync(["lab", "plan", "--device-query", "model=Pixel_9"]);
+        using var blockedPlanEnvelope = JsonDocument.Parse(console.OutputLines[1]);
+
+        Assert.Equal(0, claimExitCode);
+        Assert.Equal(0, blockedPlanExitCode);
+        var blockedPlan = blockedPlanEnvelope.RootElement.GetProperty("data");
+        Assert.Equal("blocked", blockedPlan.GetProperty("status").GetString());
+        Assert.Equal("luotsi lab release --serial <serial>", blockedPlan.GetProperty("recommended_commands")[1].GetString());
+
+        var releaseExitCode = await app.RunAsync(["lab", "release", "--serial", "usb-1"]);
+        using var releaseEnvelope = JsonDocument.Parse(console.OutputLines[2]);
+
+        Assert.Equal(0, releaseExitCode);
+        var release = releaseEnvelope.RootElement.GetProperty("data");
+        Assert.True(release.GetProperty("released").GetBoolean());
+        Assert.Equal("usb-1", release.GetProperty("serial").GetString());
+
+        var readyPlanExitCode = await app.RunAsync(["lab", "plan", "--device-query", "model=Pixel_9"]);
+        using var readyPlanEnvelope = JsonDocument.Parse(console.OutputLines[3]);
+
+        Assert.Equal(0, readyPlanExitCode);
+        Assert.Equal("ready", readyPlanEnvelope.RootElement.GetProperty("data").GetProperty("status").GetString());
+    }
+
+    [Fact]
     public async Task LabQuarantine_Marks_Device_Unallocatable_Until_Unquarantined()
     {
         var console = new FakeConsole();
@@ -1315,7 +1354,7 @@ public sealed partial class AppTests
         Assert.False(blockedPlan.TryGetProperty("selected_serial", out _));
         Assert.Contains("leased by ci-job-1", blockedPlan.GetRawText(), StringComparison.Ordinal);
         Assert.Equal("luotsi lab leases", blockedPlan.GetProperty("recommended_commands")[0].GetString());
-        Assert.Equal("luotsi lab release --lease <lease-id>", blockedPlan.GetProperty("recommended_commands")[1].GetString());
+        Assert.Equal("luotsi lab release --serial <serial>", blockedPlan.GetProperty("recommended_commands")[1].GetString());
     }
 
 

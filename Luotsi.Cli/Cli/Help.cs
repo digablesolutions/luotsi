@@ -139,7 +139,7 @@ Usage:
   luotsi lab plan [--device-query <query>]
   luotsi lab claim [--device-query <query>] [--owner <name>] [--ttl-sec 3600]
   luotsi lab leases
-  luotsi lab release --lease <lease-id>
+  luotsi lab release (--lease <lease-id> | --serial <adb serial>)
   luotsi lab quarantine [--device-query <query>] --reason <text> [--owner <name>]
   luotsi lab quarantines
   luotsi lab unquarantine --serial <adb serial>
@@ -431,7 +431,7 @@ Command groups:
     lab plan [--device-query <query>]
     lab claim [--device-query <query>] [--owner <name>] [--ttl-sec 3600]
     lab leases
-    lab release --lease <lease-id>
+    lab release (--lease <lease-id> | --serial <adb serial>)
     lab quarantine [--device-query <query>] --reason <text> [--owner <name>]
     lab quarantines
     lab unquarantine --serial <adb serial>

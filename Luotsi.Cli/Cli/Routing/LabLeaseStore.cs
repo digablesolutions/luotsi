@@ -46,7 +46,21 @@ internal sealed class LabLeaseStore(IFileSystem fileSystem, TimeProvider timePro
         }
 
         _fileSystem.DeleteFile(lease.LeaseFile);
-        return Task.FromResult(new LabLeaseReleaseResult(leaseId, true, lease.LeaseFile));
+        return Task.FromResult(new LabLeaseReleaseResult(leaseId, true, lease.LeaseFile, lease.Serial));
+    }
+
+    public Task<LabLeaseReleaseResult> ReleaseSerialAsync(string serial)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(serial);
+
+        var lease = ReadActiveLeases().FirstOrDefault(lease => string.Equals(lease.Serial, serial, StringComparison.OrdinalIgnoreCase));
+        if (lease is null)
+        {
+            return Task.FromResult(new LabLeaseReleaseResult(string.Empty, false, null, serial));
+        }
+
+        _fileSystem.DeleteFile(lease.LeaseFile);
+        return Task.FromResult(new LabLeaseReleaseResult(lease.LeaseId, true, lease.LeaseFile, lease.Serial));
     }
 
     public Task<LabLeasesResult> ListAsync()

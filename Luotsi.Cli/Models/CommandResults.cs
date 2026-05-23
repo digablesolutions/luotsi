@@ -50,7 +50,8 @@ public sealed record LabLeaseResult(
 public sealed record LabLeaseReleaseResult(
     string LeaseId,
     bool Released,
-    string? LeaseFile);
+    string? LeaseFile,
+    string? Serial = null);
 
 public sealed record LabLeasesResult(
     int Count,

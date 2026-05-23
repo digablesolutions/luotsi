@@ -78,7 +78,7 @@ internal static class LabCommandResolver
         {
             findings.Add($"Device query '{query}' selected no devices.");
             actions.Add(status.Decisions.Any(static decision => decision.Reason.Contains("leased by", StringComparison.OrdinalIgnoreCase))
-                ? "Run `luotsi lab leases` or `luotsi lab release --lease <lease-id>` if the lease is stale."
+                ? "Run `luotsi lab leases` or `luotsi lab release --serial <serial>` if the lease is stale."
                 : status.Decisions.Any(static decision => decision.Reason.Contains("quarantined by", StringComparison.OrdinalIgnoreCase))
                     ? "Run `luotsi lab quarantines` or `luotsi lab unquarantine --serial <serial>` after the device is healthy."
                 : "Run `luotsi lab status` and refine --device-query clauses.");
@@ -138,7 +138,7 @@ internal static class LabCommandResolver
             "ready" => [BuildLabCommand("claim", query)],
             "ambiguous" => ["luotsi lab status", "luotsi lab plan --device-query state=online,type=physical,model=<model>"],
             "blocked" when decisions.Any(static decision => decision.Reason.Contains("leased by", StringComparison.OrdinalIgnoreCase)) =>
-                ["luotsi lab leases", "luotsi lab release --lease <lease-id>"],
+                ["luotsi lab leases", "luotsi lab release --serial <serial>"],
             "blocked" when decisions.Any(static decision => decision.Reason.Contains("quarantined by", StringComparison.OrdinalIgnoreCase)) =>
                 ["luotsi lab quarantines", "luotsi lab unquarantine --serial <serial>"],
             _ => ["luotsi lab status"]

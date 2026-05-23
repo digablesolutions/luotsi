@@ -123,13 +123,30 @@ internal sealed class AppCommandDispatcher(
             "doctor" => await LabCommandResolver.DiagnoseAsync(runner, options.Get("device-query"), options.HasFlag("fix"), _labLeaseStore, _labQuarantineStore).ConfigureAwait(false),
             "plan" => await LabCommandResolver.PlanAsync(runner, options.Get("device-query"), _labLeaseStore, _labQuarantineStore).ConfigureAwait(false),
             "claim" => await LabCommandResolver.ClaimAsync(runner, options.Get("device-query"), options.Get("owner"), options.Int("ttl-sec", 3600), _labLeaseStore, _labQuarantineStore).ConfigureAwait(false),
-            "release" => await _labLeaseStore.ReleaseAsync(options.Require("lease")).ConfigureAwait(false),
+            "release" => await ReleaseLabLeaseAsync(options).ConfigureAwait(false),
             "leases" => await _labLeaseStore.ListAsync().ConfigureAwait(false),
             "quarantine" => await LabCommandResolver.QuarantineAsync(runner, options.Get("device-query"), options.Require("reason"), options.Get("owner"), _labQuarantineStore).ConfigureAwait(false),
             "unquarantine" => await _labQuarantineStore.ReleaseAsync(options.Require("serial")).ConfigureAwait(false),
             "quarantines" => await _labQuarantineStore.ListAsync().ConfigureAwait(false),
             _ => throw new UsageException("lab requires subcommand status, doctor, plan, claim, release, leases, quarantine, unquarantine, or quarantines.")
         };
+    }
+
+    private async Task<LabLeaseReleaseResult> ReleaseLabLeaseAsync(CliOptions options)
+    {
+        var leaseId = options.Get("lease");
+        var serial = options.Get("serial");
+        if (!string.IsNullOrWhiteSpace(leaseId) && !string.IsNullOrWhiteSpace(serial))
+        {
+            throw new UsageException("lab release accepts either --lease or --serial, not both.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(serial))
+        {
+            return await _labLeaseStore.ReleaseSerialAsync(serial).ConfigureAwait(false);
+        }
+
+        return await _labLeaseStore.ReleaseAsync(options.Require("lease")).ConfigureAwait(false);
     }
 
     private static IWirelessDebugHost GetWirelessHost(IDeviceHost? runner, string command) =>
