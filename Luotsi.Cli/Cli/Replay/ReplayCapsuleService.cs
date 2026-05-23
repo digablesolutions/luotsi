@@ -104,6 +104,12 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
     {
         yield return new ReplayCapsuleCommandHint($"luotsi replay open --artifacts {Quote(artifactRoot)}", "Open the local artifact browser.");
         yield return new ReplayCapsuleCommandHint($"luotsi replay summarize --artifacts {Quote(artifactRoot)}", "Read session summaries and failure capsule links.");
+        yield return new ReplayCapsuleCommandHint(
+            $"luotsi replay timeline --artifacts {Quote(artifactRoot)} --failures --context 3 --write-json --write-markdown",
+            "Write the failure-focused timeline with nearby context for offline triage.");
+        yield return new ReplayCapsuleCommandHint(
+            $"luotsi replay graph --artifacts {Quote(artifactRoot)} --write-json --write-markdown",
+            "Write the semantic debug graph for agents and local inspection.");
 
         if (!string.IsNullOrWhiteSpace(primaryFailure?.Message))
         {
