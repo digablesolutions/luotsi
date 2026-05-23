@@ -18,6 +18,7 @@ Artifacts are part of the Luotsi contract. Commands, scenario runs, inspect sess
 ```bash
 luotsi replay summarize --artifacts ./artifacts/my-run
 luotsi replay timeline --artifacts ./artifacts/my-run --failures
+luotsi replay timeline --artifacts ./artifacts/my-run --source-path session-timeline.jsonl --sequence 1
 luotsi replay search --artifacts ./artifacts/my-run --contains "timeout"
 luotsi replay open --artifacts ./artifacts/my-run
 ```
@@ -25,7 +26,7 @@ luotsi replay open --artifacts ./artifacts/my-run
 ## What each command is for
 
 - `replay summarize`: condensed session-level overview, including failure capsule linkage
-- `replay timeline`: ordered timeline events with type, timestamps, detail text, and filtering
+- `replay timeline`: ordered timeline events with type, timestamps, detail text, and filters for failures, time windows, or exact source path/sequence
 - `replay search`: text search across timelines and text-like artifacts
 - `replay open`: regenerate and open the artifact browser locally
 - `replay capsule`: compact manifest with primary failure, failure timeline, artifact manifest, and suggested next commands

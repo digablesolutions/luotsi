@@ -382,7 +382,6 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
         var sequence = 0;
         while (reader.ReadLine() is { } line)
         {
-            sequence++;
             if (string.IsNullOrWhiteSpace(line))
             {
                 continue;
@@ -397,6 +396,8 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
                     TryReadTimestamp(evt.Value),
                     evt.Value);
             }
+
+            sequence++;
         }
     }
 

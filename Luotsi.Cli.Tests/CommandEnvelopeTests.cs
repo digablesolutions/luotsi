@@ -677,7 +677,7 @@ public sealed partial class AppTests
         Assert.Equal("inspect_command", data.GetProperty("step_origins")[0].GetProperty("source").GetString());
         Assert.Equal("wait_visible", data.GetProperty("step_origins")[0].GetProperty("command").GetString());
         Assert.Equal("session-timeline.jsonl", data.GetProperty("step_origins")[0].GetProperty("source_path").GetString());
-        Assert.Equal(2, data.GetProperty("step_origins")[0].GetProperty("sequence").GetInt32());
+        Assert.Equal(1, data.GetProperty("step_origins")[0].GetProperty("sequence").GetInt32());
         Assert.Equal(DateTimeOffset.Parse("2026-05-18T10:00:01Z", System.Globalization.CultureInfo.InvariantCulture), data.GetProperty("step_origins")[0].GetProperty("timestamp").GetDateTimeOffset());
         var reviewItems = data.GetProperty("review_items").EnumerateArray().ToArray();
         Assert.Contains(reviewItems, item =>
@@ -791,7 +791,7 @@ public sealed partial class AppTests
         Assert.Equal(2, normalizations.Length);
         Assert.All(normalizations, normalization => Assert.Equal("duplicate_wait", normalization.GetProperty("kind").GetString()));
         Assert.All(normalizations, normalization => Assert.Equal("session-timeline.jsonl", normalization.GetProperty("source_path").GetString()));
-        Assert.Equal(2, normalizations[0].GetProperty("sequence").GetInt32());
+        Assert.Equal(1, normalizations[0].GetProperty("sequence").GetInt32());
         Assert.Contains(data.GetProperty("review_items").EnumerateArray(), item =>
             item.GetProperty("category").GetString() == "normalization" &&
             item.GetProperty("message").GetString()!.Contains("duplicate", StringComparison.OrdinalIgnoreCase));
@@ -1093,6 +1093,30 @@ public sealed partial class AppTests
         var evt = Assert.Single(data.GetProperty("events").EnumerateArray());
         Assert.Equal("scenario_step_failed", evt.GetProperty("type").GetString());
         Assert.Contains("step=wait login button", evt.GetProperty("detail").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayTimeline_Filters_By_Source_Path_And_Sequence()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "timeline", "--artifacts", replayRoot, "--source-path", "session-timeline.jsonl", "--sequence", "1"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        var evt = Assert.Single(data.GetProperty("events").EnumerateArray());
+        Assert.Equal("session-timeline.jsonl", evt.GetProperty("path").GetString());
+        Assert.Equal(1, evt.GetProperty("sequence").GetInt32());
+        Assert.Equal("scenario_step_failed", evt.GetProperty("type").GetString());
     }
 
     [Fact]

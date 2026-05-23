@@ -46,6 +46,8 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
 
         var typeFilter = options.Get("type");
         var containsFilter = options.Get("contains");
+        var sourcePathFilter = options.Get("source-path");
+        var sequenceFilter = ParseSequenceOption(options.Get("sequence"));
         var since = ParseTimestampOption(options.Get("since"), "since");
         var until = ParseTimestampOption(options.Get("until"), "until");
         var failuresOnly = options.HasFlag("failures");
@@ -67,7 +69,7 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
         foreach (var file in files)
         {
             var fileEvents = await ReadFileAsync(artifacts.Root, file).ConfigureAwait(false);
-            foreach (var evt in SelectEvents(fileEvents, typeFilter, containsFilter, since, until, failuresOnly, contextCount))
+            foreach (var evt in SelectEvents(fileEvents, typeFilter, containsFilter, sourcePathFilter, sequenceFilter, since, until, failuresOnly, contextCount))
             {
                 if (events.Count >= limit)
                 {
@@ -236,6 +238,8 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
         ReplayTimelineEventResult evt,
         string? typeFilter,
         string? containsFilter,
+        string? sourcePathFilter,
+        int? sequenceFilter,
         DateTimeOffset? since,
         DateTimeOffset? until,
         bool failuresOnly)
@@ -258,6 +262,17 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
             return false;
         }
 
+        if (!string.IsNullOrWhiteSpace(sourcePathFilter) &&
+            !string.Equals(evt.Path, sourcePathFilter.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (sequenceFilter is not null && evt.Sequence != sequenceFilter)
+        {
+            return false;
+        }
+
         if (since is not null && (evt.Timestamp is null || evt.Timestamp < since))
         {
             return false;
@@ -270,6 +285,8 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
         IReadOnlyList<ReplayTimelineEventResult> events,
         string? typeFilter,
         string? containsFilter,
+        string? sourcePathFilter,
+        int? sequenceFilter,
         DateTimeOffset? since,
         DateTimeOffset? until,
         bool failuresOnly,
@@ -277,13 +294,13 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
     {
         if (contextCount == 0)
         {
-            return events.Where(evt => Matches(evt, typeFilter, containsFilter, since, until, failuresOnly));
+            return events.Where(evt => Matches(evt, typeFilter, containsFilter, sourcePathFilter, sequenceFilter, since, until, failuresOnly));
         }
 
         var selected = new SortedSet<int>();
         for (var i = 0; i < events.Count; i++)
         {
-            if (!Matches(events[i], typeFilter, containsFilter, since, until, failuresOnly))
+            if (!Matches(events[i], typeFilter, containsFilter, sourcePathFilter, sequenceFilter, since, until, failuresOnly))
             {
                 continue;
             }
@@ -297,6 +314,22 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
         }
 
         return selected.Select(index => events[index]);
+    }
+
+    private static int? ParseSequenceOption(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        if (int.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var sequence) &&
+            sequence >= 0)
+        {
+            return sequence;
+        }
+
+        throw new UsageException("replay timeline --sequence must be zero or greater.");
     }
 
     private static DateTimeOffset? ParseTimestampOption(string? value, string optionName)
