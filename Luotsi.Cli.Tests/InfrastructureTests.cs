@@ -299,6 +299,53 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task ArtifactSession_Index_Summarizes_Replay_Capsule_And_Scenario_Draft()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-18T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var session = ArtifactSession.Create(CliOptions.Parse(["replay"]), fileSystem, timeProvider);
+
+        await session.WriteJsonAsync("replay-capsule-summary.json", new
+        {
+            schema = ResultSchemas.ReplayCapsule,
+            artifactRoot = session.Root,
+            sessionCount = 2,
+            failureCount = 1,
+            hasFailureCapsule = true,
+            scenarioDraftAvailable = true,
+            scenarioDraftReason = "Found command_result:tap_text source in inspect/session-timeline.jsonl."
+        });
+        await session.WriteJsonAsync("scenario-draft-summary.json", new
+        {
+            schema = ResultSchemas.ScenarioDraft,
+            confidence = "medium",
+            warnings = new[] { "Review generated selectors before CI use." },
+            normalizations = new[] { new { kind = "duplicate_wait" } },
+            scenario = new
+            {
+                name = "draft",
+                steps = new object[]
+                {
+                    new { action = "tapText", text = "Sign in" },
+                    new { action = "waitVisible", text = "Welcome" }
+                }
+            }
+        });
+
+        var markdownIndex = await fileSystem.ReadAllTextAsync(Path.Join(session.Root, "index.md"));
+        var htmlIndex = await fileSystem.ReadAllTextAsync(Path.Join(session.Root, "index.html"));
+
+        Assert.Contains("## Replay", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("- [replay-capsule-summary.json](replay-capsule-summary.json)", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("- [scenario-draft-summary.json](scenario-draft-summary.json)", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("session_count=2 | failure_count=1 | scenario_draft_available=true | scenario_draft_reason=Found command_result:tap_text source in inspect/session-timeline.jsonl.", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("confidence=medium | steps=2 | warnings=1 | normalizations=1", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("<h2>Replay</h2>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("session_count=2 | failure_count=1 | scenario_draft_available=true | scenario_draft_reason=Found command_result:tap_text source in inspect/session-timeline.jsonl.", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("confidence=medium | steps=2 | warnings=1 | normalizations=1", htmlIndex, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ArtifactSession_RefreshIndex_Includes_Pulled_Media_Files()
     {
         var fileSystem = new FakeFileSystem();

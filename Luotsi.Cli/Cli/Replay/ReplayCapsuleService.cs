@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
@@ -34,7 +35,8 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             ? null
             : CreatePrimaryFailure(primaryFailureSession);
         var artifactCounts = CountArtifacts(files);
-        var commandHints = BuildCommandHints(artifacts.Root, primaryFailure).ToArray();
+        var scenarioDraft = InspectScenarioDraftReadiness(artifacts.Root, files);
+        var commandHints = BuildCommandHints(artifacts.Root, primaryFailure, scenarioDraft.Available).ToArray();
         var readmePath = options.HasFlag("write-readme")
             ? Path.Join(artifacts.Root, CapsuleReadmeFileName)
             : null;
@@ -47,6 +49,8 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             summaries.Count,
             failureSessions.Length,
             summaries.Any(static summary => summary.FailureCapsule is not null),
+            scenarioDraft.Available,
+            scenarioDraft.Reason,
             readmePath,
             jsonPath,
             primaryFailure,
@@ -60,7 +64,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
 
         if (readmePath is not null)
         {
-            await artifacts.WriteTextAsync(CapsuleReadmeFileName, BuildReadme(artifacts.Root, summaries.Count, failureSessions.Length, primaryFailure, artifactCounts, commandHints)).ConfigureAwait(false);
+            await artifacts.WriteTextAsync(CapsuleReadmeFileName, BuildReadme(artifacts.Root, summaries.Count, failureSessions.Length, scenarioDraft, primaryFailure, artifactCounts, commandHints)).ConfigureAwait(false);
         }
 
         return result;
@@ -91,7 +95,10 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             Count(files, IsReport),
             Count(files, static path => Path.GetFileName(path).Equals(SessionReplayArtifacts.TimelineFileName, StringComparison.OrdinalIgnoreCase)));
 
-    private static IEnumerable<ReplayCapsuleCommandHint> BuildCommandHints(string artifactRoot, ReplayCapsulePrimaryFailureResult? primaryFailure)
+    private IEnumerable<ReplayCapsuleCommandHint> BuildCommandHints(
+        string artifactRoot,
+        ReplayCapsulePrimaryFailureResult? primaryFailure,
+        bool scenarioDraftAvailable)
     {
         yield return new ReplayCapsuleCommandHint($"luotsi replay open --artifacts {Quote(artifactRoot)}", "Open the local artifact browser.");
         yield return new ReplayCapsuleCommandHint($"luotsi replay summarize --artifacts {Quote(artifactRoot)}", "Read session summaries and failure capsule links.");
@@ -103,9 +110,72 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
                 "Find the primary failure message across timeline, reports, and logs.");
         }
 
-        yield return new ReplayCapsuleCommandHint(
-            $"luotsi replay scenario-draft --artifacts {Quote(artifactRoot)} --output draft-scenario.json",
-            "Create a starter scenario from captured inspect/action history when available.");
+        if (scenarioDraftAvailable)
+        {
+            yield return new ReplayCapsuleCommandHint(
+                $"luotsi replay scenario-draft --artifacts {Quote(artifactRoot)} --output draft-scenario.json --write-json --write-markdown",
+                "Create a starter scenario from captured inspect, screen-delta, view, or telemetry history.");
+        }
+    }
+
+    private ReplayCapsuleScenarioDraftReadiness InspectScenarioDraftReadiness(string artifactRoot, IReadOnlyList<string> files)
+    {
+        var timelineCount = 0;
+        foreach (var file in files.Where(static file => Path.GetFileName(file).Equals(SessionReplayArtifacts.TimelineFileName, StringComparison.OrdinalIgnoreCase)))
+        {
+            timelineCount++;
+            var path = Path.Join(artifactRoot, file.Replace('/', Path.DirectorySeparatorChar));
+            using var stream = _fileSystem.OpenRead(path);
+            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 4096);
+            while (reader.ReadLine() is { } line)
+            {
+                var source = TryReadScenarioDraftSource(line);
+                if (source is not null)
+                {
+                    return new ReplayCapsuleScenarioDraftReadiness(true, $"Found {source} source in {file}.");
+                }
+            }
+        }
+
+        return timelineCount == 0
+            ? new ReplayCapsuleScenarioDraftReadiness(false, "No session-timeline.jsonl files were found for scenario draft generation.")
+            : new ReplayCapsuleScenarioDraftReadiness(false, "No inspect/view action, screen-delta, or telemetry events were found for scenario draft generation.");
+    }
+
+    private static string? TryReadScenarioDraftSource(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(line);
+            var root = document.RootElement;
+            if (!TryGetString(root, "type", out var type))
+            {
+                return null;
+            }
+
+            if (type is "screen_delta" or "view_screenshot_captured" or "view_key_command_sent")
+            {
+                return type;
+            }
+
+            if (string.Equals(type, "command_result", StringComparison.Ordinal) &&
+                TryGetString(root, "command", out var command) &&
+                command is "tap_text" or "wait_visible" or "type_text" or "keyevent" or "screenshot" or "take_screenshot" or "telemetry_tail" or "telemetry_watch")
+            {
+                return "command_result:" + command;
+            }
+
+            return null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private static int Count(IEnumerable<string> files, Func<string, bool> predicate) =>
@@ -115,6 +185,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         string artifactRoot,
         int sessionCount,
         int failureCount,
+        ReplayCapsuleScenarioDraftReadiness scenarioDraft,
         ReplayCapsulePrimaryFailureResult? primaryFailure,
         ReplayCapsuleArtifactCounts artifactCounts,
         IReadOnlyList<ReplayCapsuleCommandHint> commandHints)
@@ -125,6 +196,8 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         builder.AppendLine($"Artifact root: `{artifactRoot}`");
         builder.AppendLine($"Sessions: `{sessionCount}`");
         builder.AppendLine($"Failures: `{failureCount}`");
+        builder.AppendLine($"Scenario draft available: `{scenarioDraft.Available}`");
+        builder.AppendLine($"Scenario draft reason: `{scenarioDraft.Reason}`");
         builder.AppendLine();
         builder.AppendLine("## Primary Failure");
         builder.AppendLine();
@@ -215,4 +288,6 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
 
     private static string Quote(string value) =>
         value.Contains(' ', StringComparison.Ordinal) ? "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"" : value;
+
+    private sealed record ReplayCapsuleScenarioDraftReadiness(bool Available, string Reason);
 }

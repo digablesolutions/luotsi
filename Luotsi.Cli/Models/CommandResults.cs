@@ -359,13 +359,30 @@ public sealed record ReplayScenarioDraftResult(
     string Confidence,
     IReadOnlyList<string> Warnings,
     ScenarioFile Scenario,
-    IReadOnlyList<ReplayScenarioDraftSuggestion> Suggestions);
+    IReadOnlyList<ReplayScenarioDraftSuggestion> Suggestions,
+    IReadOnlyList<ReplayScenarioDraftStepOrigin> StepOrigins,
+    IReadOnlyList<ReplayScenarioDraftNormalization> Normalizations);
 
 public sealed record ReplayScenarioDraftSuggestion(
     int StepIndex,
     string Kind,
     string Confidence,
     string Message);
+
+public sealed record ReplayScenarioDraftStepOrigin(
+    int StepIndex,
+    string Source,
+    string EventType,
+    string? Command,
+    string? Detail,
+    string Confidence);
+
+public sealed record ReplayScenarioDraftNormalization(
+    string Kind,
+    string Detail,
+    string Source,
+    string EventType,
+    string Confidence);
 
 public sealed record ReplaySearchResult(
     string Schema,
@@ -388,6 +405,8 @@ public sealed record ReplayCapsuleResult(
     int SessionCount,
     int FailureCount,
     bool HasFailureCapsule,
+    bool ScenarioDraftAvailable,
+    string ScenarioDraftReason,
     string? ReadmePath,
     string? JsonPath,
     ReplayCapsulePrimaryFailureResult? PrimaryFailure,

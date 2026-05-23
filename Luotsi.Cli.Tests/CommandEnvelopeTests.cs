@@ -673,6 +673,9 @@ public sealed partial class AppTests
         Assert.Equal(Path.Join(replayRoot, "scenario-draft.md"), data.GetProperty("markdown_path").GetString());
         Assert.Equal("draft smoke", data.GetProperty("scenario").GetProperty("name").GetString());
         Assert.Equal(4, data.GetProperty("scenario").GetProperty("steps").GetArrayLength());
+        Assert.Equal(4, data.GetProperty("step_origins").GetArrayLength());
+        Assert.Equal("inspect_command", data.GetProperty("step_origins")[0].GetProperty("source").GetString());
+        Assert.Equal("wait_visible", data.GetProperty("step_origins")[0].GetProperty("command").GetString());
         Assert.True(fileSystem.FileExists("/tmp/draft.json"));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "scenario-draft-summary.json")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "scenario-draft.md")));
@@ -680,6 +683,8 @@ public sealed partial class AppTests
         var review = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "scenario-draft.md"));
         Assert.Contains("# Luotsi Scenario Draft", review, StringComparison.Ordinal);
         Assert.Contains("draft smoke", review, StringComparison.Ordinal);
+        Assert.Contains("## Step Origins", review, StringComparison.Ordinal);
+        Assert.Contains("inspect_command", review, StringComparison.Ordinal);
 
         var validateConsole = new FakeConsole();
         var validateApp = new App(new AppDependencies
@@ -690,6 +695,89 @@ public sealed partial class AppTests
         var validateExitCode = await validateApp.RunAsync(["scenario-validate", "--file", "/tmp/draft.json"]);
 
         Assert.Equal(0, validateExitCode);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayScenarioDraft_Promotes_ScreenDelta_Text_Into_Waits()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = "/tmp/inspect-screen-delta-replay-root";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), """
+        {"type":"session_started","session_id":"inspect-session","started_at":"2026-05-18T10:00:00Z"}
+        {"type":"command_result","session_id":"inspect-session","id":"1","command":"tap_text","ok":true,"started_at":"2026-05-18T10:00:01Z","ended_at":"2026-05-18T10:00:02Z","data":{"text":"Sign in"}}
+        {"type":"screen_delta","session_id":"inspect-session","delta":{"added":[{"text":"Welcome"},{"content_description":"Open menu"}]}}
+        {"type":"session_ended","session_id":"inspect-session","ended_at":"2026-05-18T10:00:09Z","reason":"client_exit"}
+        """);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "scenario-draft", "--artifacts", replayRoot, "--output", "/tmp/screen-delta-draft.json"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var steps = envelope.RootElement.GetProperty("data").GetProperty("scenario").GetProperty("steps").EnumerateArray().ToArray();
+        Assert.Equal("tapText", steps[0].GetProperty("action").GetString());
+        Assert.Equal("Sign in", steps[0].GetProperty("text").GetString());
+        Assert.Equal("waitVisible", steps[1].GetProperty("action").GetString());
+        Assert.Equal("Welcome", steps[1].GetProperty("text").GetString());
+        Assert.Equal("waitVisible", steps[2].GetProperty("action").GetString());
+        Assert.Equal("Open menu", steps[2].GetProperty("text").GetString());
+
+        var validateConsole = new FakeConsole();
+        var validateApp = new App(new AppDependencies
+        {
+            Console = validateConsole,
+            FileSystem = fileSystem
+        });
+        var validateExitCode = await validateApp.RunAsync(["scenario-validate", "--file", "/tmp/screen-delta-draft.json"]);
+
+        Assert.Equal(0, validateExitCode);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayScenarioDraft_Deduplicates_Adjacent_Inferred_Waits()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = "/tmp/inspect-duplicate-waits-replay-root";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), """
+        {"type":"command_result","session_id":"inspect-session","id":"1","command":"wait_visible","ok":true,"started_at":"2026-05-18T10:00:01Z","ended_at":"2026-05-18T10:00:02Z","data":{"text":"Welcome"}}
+        {"type":"screen_delta","session_id":"inspect-session","delta":{"added":[{"text":"Welcome"}]}}
+        {"type":"command_result","session_id":"inspect-session","id":"2","command":"telemetry_tail","ok":true,"started_at":"2026-05-18T10:00:03Z","ended_at":"2026-05-18T10:00:04Z","data":{"events":[{"event":"step","step":"STEP_IDLE"},{"event":"step","step":"STEP_IDLE"}]}}
+        """);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "scenario-draft", "--artifacts", replayRoot, "--output", "/tmp/dedup-draft.json", "--write-markdown"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        var steps = data.GetProperty("scenario").GetProperty("steps").EnumerateArray().ToArray();
+        Assert.Equal(2, steps.Length);
+        Assert.Equal("waitVisible", steps[0].GetProperty("action").GetString());
+        Assert.Equal("Welcome", steps[0].GetProperty("text").GetString());
+        Assert.Equal("waitStep", steps[1].GetProperty("action").GetString());
+        Assert.Equal("STEP_IDLE", steps[1].GetProperty("step").GetString());
+        Assert.Equal(2, data.GetProperty("step_origins").GetArrayLength());
+        var normalizations = data.GetProperty("normalizations").EnumerateArray().ToArray();
+        Assert.Equal(2, normalizations.Length);
+        Assert.All(normalizations, normalization => Assert.Equal("duplicate_wait", normalization.GetProperty("kind").GetString()));
+        Assert.Contains("Welcome", normalizations[0].GetProperty("detail").GetString(), StringComparison.Ordinal);
+        var review = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "scenario-draft.md"));
+        Assert.Contains("## Normalizations", review, StringComparison.Ordinal);
+        Assert.Contains("duplicate_wait", review, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -840,6 +928,8 @@ public sealed partial class AppTests
         Assert.Equal(1, data.GetProperty("session_count").GetInt32());
         Assert.Equal(1, data.GetProperty("failure_count").GetInt32());
         Assert.True(data.GetProperty("has_failure_capsule").GetBoolean());
+        Assert.False(data.GetProperty("scenario_draft_available").GetBoolean());
+        Assert.Contains("No inspect/view action", data.GetProperty("scenario_draft_reason").GetString(), StringComparison.Ordinal);
         Assert.Equal(Path.Join(replayRoot, "replay-capsule.md"), data.GetProperty("readme_path").GetString());
         Assert.Equal(Path.Join(replayRoot, "replay-capsule-summary.json"), data.GetProperty("json_path").GetString());
         var primaryFailure = data.GetProperty("primary_failure");
@@ -851,14 +941,52 @@ public sealed partial class AppTests
         Assert.Equal(1, data.GetProperty("artifact_counts").GetProperty("logs").GetInt32());
         Assert.Contains(data.GetProperty("suggested_commands").EnumerateArray(), command =>
             command.GetProperty("command").GetString()!.Contains("replay search", StringComparison.Ordinal));
+        Assert.DoesNotContain(data.GetProperty("suggested_commands").EnumerateArray(), command =>
+            command.GetProperty("command").GetString()!.Contains("scenario-draft", StringComparison.Ordinal));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-capsule.md")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-capsule-summary.json")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.md")));
         var readme = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-capsule.md"));
         Assert.Contains("## Primary Failure", readme, StringComparison.Ordinal);
         Assert.Contains("not visible", readme, StringComparison.Ordinal);
+        Assert.Contains("Scenario draft available: `False`", readme, StringComparison.Ordinal);
+        Assert.Contains("Scenario draft reason:", readme, StringComparison.Ordinal);
         using var jsonSummary = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-capsule-summary.json")));
         Assert.Equal(ResultSchemas.ReplayCapsule, jsonSummary.RootElement.GetProperty("schema").GetString());
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayCapsule_Suggests_ScenarioDraft_When_Action_Timeline_Exists()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var inspectRoot = Path.Join(replayRoot, "inspect");
+        fileSystem.CreateDirectory(inspectRoot);
+        fileSystem.AddFile(Path.Join(inspectRoot, "session-timeline.jsonl"), """
+        {"type":"command_result","session_id":"inspect-session","id":"1","command":"tap_text","ok":true,"data":{"text":"Sign in"}}
+        """);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "capsule", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.True(data.GetProperty("scenario_draft_available").GetBoolean());
+        Assert.Contains("command_result:tap_text", data.GetProperty("scenario_draft_reason").GetString(), StringComparison.Ordinal);
+        Assert.Contains(data.GetProperty("suggested_commands").EnumerateArray(), command =>
+        {
+            var value = command.GetProperty("command").GetString();
+            return value is not null &&
+                value.Contains("scenario-draft", StringComparison.Ordinal) &&
+                value.Contains("--write-json --write-markdown", StringComparison.Ordinal);
+        });
     }
 
     [Fact]

@@ -133,11 +133,12 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         {
             "Screenshots" => 0,
             "Recordings" => 1,
-            "Reports" => 2,
-            "Logs" => 3,
-            "Screen State" => 4,
-            "Hierarchy" => 5,
-            _ => 6
+            "Replay" => 2,
+            "Reports" => 3,
+            "Logs" => 4,
+            "Screen State" => 5,
+            "Hierarchy" => 6,
+            _ => 7
         };
 
     private static string GetArtifactCategory(string path)
@@ -155,6 +156,13 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
             string.Equals(extension, ".webm", StringComparison.OrdinalIgnoreCase))
         {
             return "Recordings";
+        }
+
+        if (fileName.Contains("replay", StringComparison.OrdinalIgnoreCase) ||
+            fileName.Contains("scenario-draft", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(fileName, SessionReplayArtifacts.TimelineFileName, StringComparison.OrdinalIgnoreCase))
+        {
+            return "Replay";
         }
 
         if (fileName.Contains("session-replay", StringComparison.OrdinalIgnoreCase) ||
@@ -220,6 +228,16 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
             }
 
             var schemaName = schema.GetString();
+            if (string.Equals(schemaName, ResultSchemas.ReplayCapsule, StringComparison.Ordinal))
+            {
+                return BuildReplayCapsuleSummary(root);
+            }
+
+            if (string.Equals(schemaName, ResultSchemas.ScenarioDraft, StringComparison.Ordinal))
+            {
+                return BuildScenarioDraftSummary(root);
+            }
+
             if (string.Equals(schemaName, "luotsi-scenario-run-report.v1", StringComparison.Ordinal))
             {
                 return BuildScenarioRunReportSummary(root);
@@ -244,6 +262,33 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         AddJsonProperty(parts, root, "failed");
         AddJsonProperty(parts, root, "skipped");
         AddJsonProperty(parts, root, "durationMs", "duration_ms");
+        return parts.Count == 0 ? null : string.Join(" | ", parts);
+    }
+
+    private static string? BuildReplayCapsuleSummary(JsonElement root)
+    {
+        var parts = new List<string>();
+        AddJsonProperty(parts, root, "session_count");
+        AddJsonProperty(parts, root, "failure_count");
+        AddJsonProperty(parts, root, "scenario_draft_available");
+        AddJsonProperty(parts, root, "scenario_draft_reason");
+        return parts.Count == 0 ? null : string.Join(" | ", parts);
+    }
+
+    private static string? BuildScenarioDraftSummary(JsonElement root)
+    {
+        var parts = new List<string>();
+        AddJsonProperty(parts, root, "confidence");
+        if (root.TryGetProperty("scenario", out var scenario) &&
+            scenario.ValueKind == JsonValueKind.Object &&
+            scenario.TryGetProperty("steps", out var steps) &&
+            steps.ValueKind == JsonValueKind.Array)
+        {
+            parts.Add($"steps={steps.GetArrayLength()}");
+        }
+
+        AddArrayCount(parts, root, "warnings");
+        AddArrayCount(parts, root, "normalizations");
         return parts.Count == 0 ? null : string.Join(" | ", parts);
     }
 
