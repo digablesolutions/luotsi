@@ -31,6 +31,23 @@ public sealed record LabDoctorResult(
 
 public sealed record LabDoctorProbe(string Name, bool Succeeded, int ExitCode, string Invocation);
 
+public sealed record LabLeaseResult(
+    string LeaseId,
+    string Serial,
+    string Owner,
+    DateTimeOffset ClaimedAt,
+    DateTimeOffset ExpiresAt,
+    string LeaseFile);
+
+public sealed record LabLeaseReleaseResult(
+    string LeaseId,
+    bool Released,
+    string? LeaseFile);
+
+public sealed record LabLeasesResult(
+    int Count,
+    IReadOnlyList<LabLeaseResult> Leases);
+
 public sealed record DeviceState(
     string? Serial,
     string State,
@@ -303,6 +320,8 @@ public sealed record ReplayScenarioDraftResult(
     string Schema,
     string ArtifactRoot,
     string? Output,
+    string? JsonPath,
+    string? MarkdownPath,
     string Confidence,
     IReadOnlyList<string> Warnings,
     ScenarioFile Scenario,
@@ -379,7 +398,74 @@ public sealed record ReplayTimelineEventResult(
     DateTimeOffset? Timestamp,
     string Type,
     bool FailureRelevant,
-    string Detail);
+    string Detail,
+    IReadOnlyDictionary<string, string?> Properties);
+
+public sealed record ReplayGraphResult(
+    string Schema,
+    string ArtifactRoot,
+    int NodeCount,
+    int EdgeCount,
+    IReadOnlyDictionary<string, int> NodeKinds,
+    IReadOnlyDictionary<string, int> EdgeKinds,
+    string? JsonPath,
+    string? MarkdownPath,
+    IReadOnlyList<ReplayGraphNodeResult> Nodes,
+    IReadOnlyList<ReplayGraphEdgeResult> Edges);
+
+public sealed record ReplayGraphNodeResult(
+    string Id,
+    string Kind,
+    string Label,
+    IReadOnlyDictionary<string, string?> Properties);
+
+public sealed record ReplayGraphEdgeResult(
+    string From,
+    string To,
+    string Kind,
+    IReadOnlyDictionary<string, string?> Properties);
+
+public sealed record ReplayClustersResult(
+    string Schema,
+    string ArtifactRoot,
+    int SessionCount,
+    int FailureCount,
+    int ClusterCount,
+    string? JsonPath,
+    string? MarkdownPath,
+    IReadOnlyList<ReplayFailureClusterResult> Clusters);
+
+public sealed record ReplayFailureClusterResult(
+    string Id,
+    string Signature,
+    int Count,
+    string? Category,
+    string? Message,
+    string? Action,
+    string? Step,
+    IReadOnlyList<ReplayFailureClusterHintResult> Hints,
+    IReadOnlyList<ReplayFailureClusterInstanceResult> Instances);
+
+public sealed record ReplayFailureClusterHintResult(
+    string Kind,
+    string Message,
+    string? Command);
+
+public sealed record ReplayFailureClusterInstanceResult(
+    string SessionId,
+    string SessionKind,
+    DateTimeOffset StartedAt,
+    string? Target,
+    string MetadataPath,
+    string? FailureCapsulePath,
+    string? ScenarioId,
+    string? Scenario,
+    string? File,
+    int? StepIndex,
+    string? Step,
+    string? Action,
+    string? ErrorCategory,
+    string? ErrorMessage);
 
 public sealed record DoctorCheck(
     string Name,

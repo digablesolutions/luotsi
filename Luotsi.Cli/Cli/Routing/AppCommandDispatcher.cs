@@ -12,12 +12,14 @@ internal sealed class AppCommandDispatcher(
     AdbSubcommandDispatcher adbSubcommandDispatcher,
     ScenarioCommandDispatcher scenarioCommandDispatcher,
     ISelfUpdateService selfUpdateService,
-    ViewProfileCoordinator profileCoordinator)
+    ViewProfileCoordinator profileCoordinator,
+    LabLeaseStore labLeaseStore)
 {
     private readonly AdbSubcommandDispatcher _adbSubcommandDispatcher = adbSubcommandDispatcher ?? throw new ArgumentNullException(nameof(adbSubcommandDispatcher));
     private readonly ScenarioCommandDispatcher _scenarioCommandDispatcher = scenarioCommandDispatcher ?? throw new ArgumentNullException(nameof(scenarioCommandDispatcher));
     private readonly ISelfUpdateService _selfUpdateService = selfUpdateService ?? throw new ArgumentNullException(nameof(selfUpdateService));
     private readonly ViewProfileCoordinator _profileCoordinator = profileCoordinator ?? throw new ArgumentNullException(nameof(profileCoordinator));
+    private readonly LabLeaseStore _labLeaseStore = labLeaseStore ?? throw new ArgumentNullException(nameof(labLeaseStore));
 
     public bool RequiresRunner(CliOptions options)
     {
@@ -110,14 +112,17 @@ internal sealed class AppCommandDispatcher(
         return result;
     }
 
-    private static async Task<object> ExecuteLabAsync(CliOptions options, IDeviceHost runner)
+    private async Task<object> ExecuteLabAsync(CliOptions options, IDeviceHost runner)
     {
         var action = options.Arguments.FirstOrDefault() ?? "status";
         return action.ToLowerInvariant() switch
         {
-            "status" => await LabCommandResolver.ReadStatusAsync(runner, options.Get("device-query")).ConfigureAwait(false),
-            "doctor" => await LabCommandResolver.DiagnoseAsync(runner, options.Get("device-query"), options.HasFlag("fix")).ConfigureAwait(false),
-            _ => throw new UsageException("lab requires subcommand status or doctor.")
+            "status" => await LabCommandResolver.ReadStatusAsync(runner, options.Get("device-query"), _labLeaseStore).ConfigureAwait(false),
+            "doctor" => await LabCommandResolver.DiagnoseAsync(runner, options.Get("device-query"), options.HasFlag("fix"), _labLeaseStore).ConfigureAwait(false),
+            "claim" => await LabCommandResolver.ClaimAsync(runner, options.Get("device-query"), options.Get("owner"), options.Int("ttl-sec", 3600), _labLeaseStore).ConfigureAwait(false),
+            "release" => await _labLeaseStore.ReleaseAsync(options.Require("lease")).ConfigureAwait(false),
+            "leases" => await _labLeaseStore.ListAsync().ConfigureAwait(false),
+            _ => throw new UsageException("lab requires subcommand status, doctor, claim, release, or leases.")
         };
     }
 

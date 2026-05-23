@@ -44,7 +44,9 @@ internal static class AppHostedCommandCompositionBuilder
             new AdbSubcommandDispatcher(),
             new ScenarioCommandDispatcher(scenarioRunPlanner, scenarioRunOrchestrator, scenarioAuthoring),
             selfUpdateService,
-            dependencies.ProfileCoordinator);
+            dependencies.ProfileCoordinator,
+            new LabLeaseStore(dependencies.FileSystem, dependencies.TimeProvider));
+        var replayTimelineService = new ReplayTimelineService(dependencies.FileSystem);
         var replayCommandHost = new ReplayCommandHost(new(
             envelopeWriter,
             jsonWriter,
@@ -53,7 +55,9 @@ internal static class AppHostedCommandCompositionBuilder
             new ReplayScenarioDraftService(dependencies.FileSystem),
             new ReplaySearchService(dependencies.FileSystem),
             new ReplayCapsuleService(dependencies.FileSystem),
-            new ReplayTimelineService(dependencies.FileSystem)));
+            replayTimelineService,
+            new ReplayGraphService(dependencies.FileSystem, replayTimelineService),
+            new ReplayClusterService(dependencies.FileSystem)));
 
         return new(
             envelopeWriter,

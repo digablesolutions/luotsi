@@ -1,0 +1,297 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.RegularExpressions;
+using Luotsi.Cli.Artifacts;
+using Luotsi.Cli.Errors;
+using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.Models;
+
+namespace Luotsi.Cli.Cli.Replay;
+
+internal sealed class ReplayClusterService(IFileSystem fileSystem)
+{
+    private const string ClusterJsonFileName = "replay-clusters.json";
+    private const string ClusterMarkdownFileName = "replay-clusters.md";
+    private static readonly Regex VolatileNumber = new(@"\b\d+\b", RegexOptions.Compiled);
+    private static readonly Regex VolatileHex = new(@"\b0x[0-9a-fA-F]+\b", RegexOptions.Compiled);
+    private static readonly Regex Whitespace = new(@"\s+", RegexOptions.Compiled);
+    private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+
+    public async Task<ReplayClustersResult> ClusterAsync(CliOptions options, ArtifactSession artifacts)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(artifacts);
+
+        var allFiles = _fileSystem.GetFiles(artifacts.Root, "*", SearchOption.AllDirectories)
+            .Select(path => Path.GetRelativePath(artifacts.Root, path))
+            .ToArray();
+        var summaries = new SessionReplaySummaryReader(artifacts.Root, _fileSystem).ReadSummaries(allFiles);
+        if (summaries.Count == 0)
+        {
+            throw new UsageException($"No session replay metadata was found under artifact root '{artifacts.Root}'.");
+        }
+
+        var failures = summaries
+            .SelectMany(CreateFailureInstances)
+            .ToArray();
+        var clusters = failures
+            .GroupBy(static failure => failure.Signature, StringComparer.Ordinal)
+            .Select(group => CreateCluster(artifacts.Root, group.Key, group.ToArray()))
+            .OrderByDescending(static cluster => cluster.Count)
+            .ThenBy(static cluster => cluster.Signature, StringComparer.Ordinal)
+            .ToArray();
+
+        var jsonPath = options.HasFlag("write-json")
+            ? Path.Join(artifacts.Root, ClusterJsonFileName)
+            : null;
+        var markdownPath = options.HasFlag("write-markdown")
+            ? Path.Join(artifacts.Root, ClusterMarkdownFileName)
+            : null;
+        var result = new ReplayClustersResult(
+            ResultSchemas.ReplayClusters,
+            artifacts.Root,
+            summaries.Count,
+            failures.Length,
+            clusters.Length,
+            jsonPath,
+            markdownPath,
+            clusters);
+
+        if (jsonPath is not null)
+        {
+            await artifacts.WriteJsonAsync(ClusterJsonFileName, result).ConfigureAwait(false);
+        }
+
+        if (markdownPath is not null)
+        {
+            await artifacts.WriteTextAsync(ClusterMarkdownFileName, BuildMarkdown(result)).ConfigureAwait(false);
+        }
+
+        return result;
+    }
+
+    private static IEnumerable<FailureInstance> CreateFailureInstances(SessionReplaySummary summary)
+    {
+        if (summary.FailureCapsule?.Scenarios.Count > 0)
+        {
+            foreach (var scenario in summary.FailureCapsule.Scenarios.Where(static scenario => scenario.Error is not null || string.Equals(scenario.Status, "failed", StringComparison.OrdinalIgnoreCase)))
+            {
+                var category = scenario.Error?.Category;
+                var message = scenario.Error?.Message;
+                var action = scenario.FailedStep?.Action;
+                var step = scenario.FailedStep?.Name;
+                yield return new FailureInstance(
+                    BuildSignature(category, message, action, step),
+                    ToResult(summary, scenario, category, message, action, step));
+            }
+
+            yield break;
+        }
+
+        foreach (var highlight in summary.TimelineHighlights.Where(static entry => entry.IsFailureRelevant))
+        {
+            yield return new FailureInstance(
+                BuildSignature(null, highlight.Detail, null, null),
+                new ReplayFailureClusterInstanceResult(
+                    summary.SessionId,
+                    summary.SessionKind,
+                    summary.StartedAt,
+                    summary.Target,
+                    summary.MetadataPath,
+                    summary.FailureCapsulePath,
+                    highlight.ScenarioId,
+                    highlight.Scenario,
+                    null,
+                    highlight.StepIndex,
+                    null,
+                    null,
+                    null,
+                    highlight.Detail));
+        }
+    }
+
+    private static ReplayFailureClusterResult CreateCluster(string artifactRoot, string signature, IReadOnlyList<FailureInstance> failures)
+    {
+        var instances = failures
+            .Select(static failure => failure.Instance)
+            .OrderByDescending(static instance => instance.StartedAt)
+            .ThenBy(static instance => instance.MetadataPath, StringComparer.Ordinal)
+            .ToArray();
+        var representative = instances[0];
+        return new ReplayFailureClusterResult(
+            "cluster:" + ShortHash(signature),
+            signature,
+            instances.Length,
+            representative.ErrorCategory,
+            representative.ErrorMessage,
+            representative.Action,
+            representative.Step,
+            CreateHints(artifactRoot, instances),
+            instances);
+    }
+
+    private static IReadOnlyList<ReplayFailureClusterHintResult> CreateHints(string artifactRoot, IReadOnlyList<ReplayFailureClusterInstanceResult> instances)
+    {
+        var hints = new List<ReplayFailureClusterHintResult>();
+        var latest = instances[0];
+        var latestRoot = ResolveInstanceArtifactRoot(artifactRoot, latest.MetadataPath);
+        if (instances.Count > 1)
+        {
+            hints.Add(new ReplayFailureClusterHintResult(
+                "same_failure_shape",
+                $"This failure shape appears in {instances.Count} replay sessions.",
+                null));
+        }
+
+        if (instances.Count > 1 && string.Equals(latest.ErrorCategory, "selector_or_screen_state", StringComparison.OrdinalIgnoreCase))
+        {
+            hints.Add(new ReplayFailureClusterHintResult(
+                "likely_repeated_selector_or_screen_state_failure",
+                "Repeated selector or screen-state failures usually deserve a stronger wait, alternate selector, or visual fallback.",
+                $"luotsi replay graph --artifacts {Quote(latestRoot)} --write-json --write-markdown"));
+        }
+
+        hints.Add(new ReplayFailureClusterHintResult(
+            "open_latest_replay",
+            "Open the latest matching replay bundle locally.",
+            $"luotsi replay open --artifacts {Quote(latestRoot)}"));
+
+        if (!string.IsNullOrWhiteSpace(latest.ErrorMessage))
+        {
+            hints.Add(new ReplayFailureClusterHintResult(
+                "search_latest_failure_text",
+                "Search the latest replay bundle for the representative failure text.",
+                $"luotsi replay search --artifacts {Quote(latestRoot)} --contains {Quote(latest.ErrorMessage)}"));
+        }
+
+        return hints;
+    }
+
+    private static ReplayFailureClusterInstanceResult ToResult(
+        SessionReplaySummary summary,
+        FailureCapsuleScenario scenario,
+        string? category,
+        string? message,
+        string? action,
+        string? step) =>
+        new(
+            summary.SessionId,
+            summary.SessionKind,
+            summary.StartedAt,
+            summary.Target,
+            summary.MetadataPath,
+            summary.FailureCapsulePath,
+            scenario.ScenarioId,
+            scenario.Scenario,
+            scenario.File,
+            scenario.FailedStep?.Index,
+            step,
+            action,
+            category,
+            message);
+
+    private static string BuildSignature(string? category, string? message, string? action, string? step)
+    {
+        var parts = new[]
+        {
+            Normalize(category),
+            Normalize(action),
+            Normalize(step),
+            Normalize(message)
+        };
+        return string.Join("|", parts);
+    }
+
+    private static string Normalize(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "";
+        }
+
+        var normalized = value.Trim().ToLowerInvariant();
+        normalized = VolatileHex.Replace(normalized, "<hex>");
+        normalized = VolatileNumber.Replace(normalized, "<n>");
+        normalized = Whitespace.Replace(normalized, " ");
+        return normalized;
+    }
+
+    private static string ShortHash(string value)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(value));
+        return Convert.ToHexString(hash.AsSpan(0, 6)).ToLowerInvariant();
+    }
+
+    private static string ResolveInstanceArtifactRoot(string artifactRoot, string metadataPath)
+    {
+        var directory = Path.GetDirectoryName(metadataPath);
+        return string.IsNullOrWhiteSpace(directory)
+            ? artifactRoot
+            : Path.Join(artifactRoot, directory);
+    }
+
+    private static string Quote(string value) =>
+        value.Contains(' ', StringComparison.Ordinal) ? "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"" : value;
+
+    private static string BuildMarkdown(ReplayClustersResult result)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("# Luotsi Replay Failure Clusters");
+        builder.AppendLine();
+        builder.AppendLine($"Artifact root: `{result.ArtifactRoot}`");
+        builder.AppendLine($"Sessions: `{result.SessionCount}`");
+        builder.AppendLine($"Failures: `{result.FailureCount}`");
+        builder.AppendLine($"Clusters: `{result.ClusterCount}`");
+        builder.AppendLine();
+        builder.AppendLine("| Cluster | Count | Category | Action | Step | Message |");
+        builder.AppendLine("|---|---:|---|---|---|---|");
+        foreach (var cluster in result.Clusters)
+        {
+            builder.AppendLine($"| {EscapeMarkdown(cluster.Id)} | {cluster.Count} | {EscapeMarkdown(cluster.Category)} | {EscapeMarkdown(cluster.Action)} | {EscapeMarkdown(cluster.Step)} | {EscapeMarkdown(cluster.Message)} |");
+        }
+
+        foreach (var cluster in result.Clusters)
+        {
+            builder.AppendLine();
+            builder.AppendLine($"## {cluster.Id}");
+            builder.AppendLine();
+            builder.AppendLine($"Signature: `{EscapeMarkdown(cluster.Signature)}`");
+            builder.AppendLine();
+            builder.AppendLine("### Hints");
+            builder.AppendLine();
+            foreach (var hint in cluster.Hints)
+            {
+                builder.Append("- ");
+                builder.Append(EscapeMarkdown(hint.Message));
+                if (!string.IsNullOrWhiteSpace(hint.Command))
+                {
+                    builder.Append(" `");
+                    builder.Append(EscapeMarkdown(hint.Command));
+                    builder.Append('`');
+                }
+
+                builder.AppendLine();
+            }
+
+            builder.AppendLine();
+            builder.AppendLine("| Started | Session | Target | Scenario | Metadata | Failure Capsule |");
+            builder.AppendLine("|---|---|---|---|---|---|");
+            foreach (var instance in cluster.Instances)
+            {
+                builder.AppendLine($"| {EscapeMarkdown(instance.StartedAt.ToString("O"))} | {EscapeMarkdown(instance.SessionId)} | {EscapeMarkdown(instance.Target)} | {EscapeMarkdown(instance.Scenario)} | {MarkdownLink(instance.MetadataPath)} | {MarkdownLink(instance.FailureCapsulePath)} |");
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    private static string MarkdownLink(string? path) =>
+        string.IsNullOrWhiteSpace(path) ? "" : $"[{EscapeMarkdown(path)}]({path.Replace(" ", "%20", StringComparison.Ordinal)})";
+
+    private static string EscapeMarkdown(string? value) =>
+        (value ?? string.Empty).Replace("|", "\\|", StringComparison.Ordinal)
+            .Replace("\r", " ", StringComparison.Ordinal)
+            .Replace("\n", " ", StringComparison.Ordinal);
+
+    private sealed record FailureInstance(string Signature, ReplayFailureClusterInstanceResult Instance);
+}

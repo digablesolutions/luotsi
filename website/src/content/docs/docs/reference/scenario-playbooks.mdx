@@ -1,0 +1,83 @@
+---
+title: Scenario Playbooks
+description: Author repeatable JSON playbooks with setup, steps, teardown, metadata, waits, assertions, and artifact capture.
+---
+
+Scenarios are JSON files that drive a sequence of device actions. The format stays intentionally simple: plain JSON, explicit step actions, and no extra DSL layer.
+
+## Minimal shape
+
+```json
+{
+  "name": "android-home-smoke",
+  "variables": {
+    "appPackage": "com.example.app"
+  },
+  "setup": [
+    { "name": "start app", "action": "startApp", "package": "${var:appPackage}" }
+  ],
+  "steps": [
+    { "name": "go home", "action": "keyevent", "code": "KEYCODE_HOME" },
+    { "name": "capture screenshot", "action": "takeScreenshot", "label": "android-home-smoke" }
+  ],
+  "teardown": [
+    { "name": "stop app", "action": "forceStop", "package": "${var:appPackage}" }
+  ]
+}
+```
+
+## Lifecycle
+
+- `setup` is optional and runs before main steps
+- `steps` is required and is the main execution phase
+- `teardown` is optional and still runs after main-step failures
+
+Step results include a `phase` field so reports can separate setup, main flow, and cleanup.
+
+## Template syntax
+
+Scenario strings support lightweight substitution before execution:
+
+- `${env:NAME}` for a required environment variable
+- `${env:NAME|fallback}` for an optional variable with fallback
+- `${var:name}` for a root variable
+- `${now:HHmmss}` for a timestamp fragment
+
+## Metadata and calibration
+
+Use the optional `metadata` block when a scenario is calibrated against a known app, device, or layout. Luotsi can surface non-fatal `metadata_warnings` if the live run does not match the scenario's expected context.
+
+This matters most for coordinate-heavy steps where the wrong device or orientation can invalidate taps.
+
+## Action families
+
+- Interaction: `waitVisible`, `waitNotVisible`, `tapText`, `tapPoint`, `typeText`, `typePin`, `keyevent`
+- Waits and assertions: `waitLog`, `waitStep`, `waitActionReady`, `assertEvent`, `assertScreenshot`, `assertTextInputReady`, `assertBelow`, `assertAligned`, `assertAppVersion`
+- App and package: `startApp`, `startUri`, `forceStop`, `clear`, `waitForActivity`, `waitForNotActivity`, `grantPermission`, `revokePermission`
+- Artifacts and utility: `takeScreenshot`, `captureArtifacts`, `screenState`, `sleep`
+
+## Defaults and validation
+
+Common omitted values default intentionally, for example `timeoutSec` to `15`, `postTapDelayMs` to `300`, and `milliseconds` to `1000` for `sleep`.
+
+Validation rejects unsupported shapes such as:
+
+- `tapPoint` without coordinates or ratios
+- negative coordinates
+- `typePin` with non-digits
+- `startApp` with `wait: true` but no activity
+- screenshot region hash checks without a full region definition
+
+## Authoring flow
+
+```bash
+luotsi scenario-init --file scenarios/smoke.json --name "smoke"
+luotsi scenario-validate --path scenarios
+luotsi scenario-explain --file scenarios/smoke.json
+luotsi run --path scenarios --device <serial>
+```
+
+## Read more
+
+- [Inspect and scenarios](../core-workflows/inspect-and-scenarios/)
+- Full [scenario guide in the repository](https://github.com/digablesolutions/luotsi/blob/main/docs/scenarios.md)

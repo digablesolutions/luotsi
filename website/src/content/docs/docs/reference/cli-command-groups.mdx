@@ -1,0 +1,70 @@
+---
+title: CLI Command Groups
+description: A curated map of the Luotsi command surface before you dive into the full reference.
+---
+
+Luotsi exposes a broad CLI surface, but most workflows start in a small number of command families.
+
+## Device and adb
+
+Use these commands to discover devices, validate readiness, and inspect the host adb environment.
+
+```bash
+luotsi devices
+luotsi device-status --device <serial>
+luotsi adb version
+luotsi doctor --device <serial>
+```
+
+## View and profiles
+
+Use these when you want a live mirrored device session.
+
+```bash
+luotsi view --device <serial>
+luotsi view setup --device <serial>
+luotsi view-doctor --device <serial>
+luotsi profile-list
+```
+
+## Interaction, logs, and capture
+
+Use direct commands when you need a one-shot action outside a scenario file.
+
+```bash
+luotsi wait-visible --device <serial> --text "Sign in"
+luotsi tap --device <serial> --x 640 --y 360
+luotsi logcat --device <serial> --tail 200
+luotsi record --device <serial> --output capture.mp4
+```
+
+## Telemetry and semantic waits
+
+These commands rely on structured `LUOTSI_DEVICE_TELEMETRY` events from the app under test.
+
+```bash
+luotsi telemetry-tail --device <serial> --tail 200
+luotsi wait-step --device <serial> --step printing-succeeded
+luotsi wait-action-ready --device <serial> --action sign-in
+```
+
+## Scenarios and replay
+
+Use scenario files when you want a repeatable run, and replay commands when you need to triage artifacts after the fact.
+
+```bash
+luotsi scenario-list --path scenarios
+luotsi run --path scenarios --device <serial> --report-junit junit.xml
+luotsi replay summarize --artifacts ./artifacts/my-run
+luotsi replay open --artifacts ./artifacts/my-run
+```
+
+## Full reference
+
+Pair this overview with the next focused reference pages:
+
+- [Scenario playbooks](./scenario-playbooks/)
+- [Wireless and port forwarding](./wireless-and-port-forwarding/)
+- [Output envelopes](./output-envelopes/)
+
+For the exhaustive command list and flags, read the full [command reference in the repository](https://github.com/digablesolutions/luotsi/blob/main/docs/commands.md).

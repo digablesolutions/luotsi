@@ -1,0 +1,74 @@
+---
+title: Output Envelopes
+description: Understand when Luotsi emits a single JSON envelope versus a long-lived JSONL stream and how error categories surface runtime failures.
+---
+
+Luotsi uses two output contracts on purpose.
+
+## One-shot command mode
+
+Most commands return a single final JSON envelope with:
+
+- `schema`
+- `ok`
+- `command`
+- `started_at`
+- `ended_at`
+- `data`
+- `artifacts`
+- `provenance`
+- `error`
+
+This is the default contract for CLI commands, including scenario execution unless you explicitly request raw replay output modes.
+
+## Long-lived session mode
+
+`inspect` and `view` are JSONL sessions instead of one final object.
+
+Typical inspect events:
+
+- `session_started`
+- `screen_snapshot`
+- `screen_delta`
+- `command_result`
+- `session_ended`
+- `protocol_error`
+- `session_error`
+
+Typical view events:
+
+- `view_started`
+- `view_stats`
+- `view_reconnect_requested`
+- `view_reconnected`
+- `view_error`
+- `view_ended`
+
+## Replay export exception
+
+`replay summarize --format json|jsonl` is the other intentional exception. It can emit raw replay output for CI-oriented consumers instead of the normal envelope.
+
+## Error categories
+
+The current public error categories include:
+
+- `usage_error`
+- `log_wait_timeout`
+- `oracle_timeout`
+- `configuration_error`
+- `selector_or_screen_state`
+- `scenario_error`
+
+Treat these as current API-visible values derived from the active failure paths rather than as a permanently closed enum.
+
+## Why this split matters
+
+- One-shot commands are easy to consume from scripts and CI
+- JSONL sessions are better for agents and long-lived operator loops
+- Keeping the split explicit prevents ambiguous mixed-output contracts
+
+## Related pages
+
+- [CLI command groups](./cli-command-groups/)
+- [Replay and artifacts](../core-workflows/replay-and-artifacts/)
+- [Live view](../core-workflows/live-view/)

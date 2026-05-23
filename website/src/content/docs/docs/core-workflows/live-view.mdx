@@ -1,0 +1,56 @@
+---
+title: Live View
+description: Mirror a real Android device into a local SDL window and keep stream state machine-readable over JSONL.
+---
+
+`luotsi view` opens a long-lived session that mirrors a connected Android device into a local SDL window while also emitting structured JSONL events on stdout.
+
+```bash
+luotsi view --device <serial> --preset safe
+luotsi view --profile desk
+luotsi view --last
+```
+
+## What it is good at
+
+- Local operator control with toolbar buttons and hotkeys
+- Shared stream state for agents and CI via JSONL events such as `view_started`, `view_stats`, and `view_ended`
+- Presets and profiles for repeatable view setups
+- Artifact capture for screenshots, recordings, diagnostics, and replay metadata
+
+## Defaults that matter
+
+- `--preset safe` is the conservative launch tuning
+- `--capture-backend auto` prefers MediaProjection and falls back to `screenrecord`
+- `--stats-interval-ms 1000` controls JSONL stats cadence
+- Artifact roots default to a timestamped temp directory unless you pass `--artifacts`
+
+## Useful commands
+
+```bash
+luotsi view setup --device <serial>
+luotsi view-doctor --device <serial>
+luotsi view --device <serial> --save-profile kiosk
+luotsi reconnect --profile kiosk
+```
+
+## Sharing and observer sessions
+
+Source sessions can relay the live stream over TCP:
+
+```bash
+luotsi view --device <serial> --share-bind 0.0.0.0:9000
+luotsi view --join-share 192.168.0.10:9000
+```
+
+Joined share sessions are forced into read-only observer mode. The stream renders, but input is blocked intentionally.
+
+## When to use something else
+
+- Use `inspect` when you need structured JSONL snapshots and command loops instead of a live window.
+- Use scenario runs when you need repeatability, reports, and versioned playbooks.
+
+## Next steps
+
+- Read [Inspect and scenarios](./inspect-and-scenarios/)
+- Read the full [view session reference](https://github.com/digablesolutions/luotsi/blob/main/docs/view-session.md)

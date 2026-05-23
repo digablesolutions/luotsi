@@ -1,0 +1,57 @@
+---
+title: Buggy Controller Live Demo
+description: A concrete Luotsi walkthrough against an older Android 6 device, including scenario artifacts and hierarchy limitations.
+---
+
+This tutorial condenses the repo's end-to-end Buggy Controller walkthrough into the parts that matter when you want to see Luotsi on a real device.
+
+## What it demonstrates
+
+- Device discovery and readiness checks
+- App lifecycle verification
+- Host-side recording and screenshot capture
+- Scenario execution with JSONL events, JSON reports, and JUnit output
+- Failure-friendly behavior on an older Android 6 device with weak hierarchy support
+
+## Device and app context
+
+The captured run targeted:
+
+```text
+com.digablesolutions.buggycontroller/.MainActivity
+0123456789ABCDEF
+model=PDA3505
+android_release=6.0
+sdk=23
+```
+
+## Minimal walkthrough
+
+```powershell
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- devices
+
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- preflight `
+  --device 0123456789ABCDEF `
+  --package com.digablesolutions.buggycontroller
+
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- run `
+  --file .\examples\scenarios\buggy-controller-live-demo.json `
+  --device 0123456789ABCDEF `
+  --package com.digablesolutions.buggycontroller `
+  --events-jsonl .\artifacts\buggy-demo-events.jsonl `
+  --report-json .\artifacts\buggy-demo-report.json `
+  --report-junit .\artifacts\buggy-demo-junit.xml `
+  --artifacts .\artifacts\buggy-demo
+```
+
+The checked-in sample run passed with ten steps, five coordinate taps, one screenshot assertion, and four captured screenshots.
+
+## Why this tutorial matters
+
+The device is old enough to expose weak `uiautomator dump` behavior. That makes it a good example of Luotsi's operating model: even when hierarchy extraction is rough, the tool still records the device, runs the scenario, emits structured reports, and keeps artifacts that explain what happened.
+
+## Follow the full walkthrough
+
+- Full tutorial: [docs/tutorials/buggy-controller-live-demo.md](https://github.com/digablesolutions/luotsi/blob/main/docs/tutorials/buggy-controller-live-demo.md)
+- Scenario file: [examples/scenarios/buggy-controller-live-demo.json](https://github.com/digablesolutions/luotsi/blob/main/examples/scenarios/buggy-controller-live-demo.json)
+- Tutorial assets: [docs/assets/tutorials/buggy-controller-live-demo](https://github.com/digablesolutions/luotsi/tree/main/docs/assets/tutorials/buggy-controller-live-demo)

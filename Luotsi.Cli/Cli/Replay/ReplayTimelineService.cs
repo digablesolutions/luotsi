@@ -19,6 +19,16 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
 
     public async Task<ReplayTimelineResult> ReadAsync(CliOptions options, ArtifactSession artifacts)
     {
+        return await ReadAsync(options, artifacts, writeArtifacts: true).ConfigureAwait(false);
+    }
+
+    public async Task<ReplayTimelineResult> ReadEventsAsync(CliOptions options, ArtifactSession artifacts)
+    {
+        return await ReadAsync(options, artifacts, writeArtifacts: false).ConfigureAwait(false);
+    }
+
+    private async Task<ReplayTimelineResult> ReadAsync(CliOptions options, ArtifactSession artifacts, bool writeArtifacts)
+    {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(artifacts);
 
@@ -74,13 +84,13 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
             }
         }
 
-        var jsonPath = options.HasFlag("write-json")
+        var jsonPath = writeArtifacts && options.HasFlag("write-json")
             ? Path.Join(artifacts.Root, TimelineJsonFileName)
             : null;
-        var jsonlPath = options.HasFlag("write-jsonl")
+        var jsonlPath = writeArtifacts && options.HasFlag("write-jsonl")
             ? Path.Join(artifacts.Root, TimelineJsonlFileName)
             : null;
-        var markdownPath = options.HasFlag("write-markdown")
+        var markdownPath = writeArtifacts && options.HasFlag("write-markdown")
             ? Path.Join(artifacts.Root, TimelineMarkdownFileName)
             : null;
         var result = new ReplayTimelineResult(
@@ -213,7 +223,8 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
                 TryGetTimestamp(root),
                 type,
                 IsFailureRelevant(root, type),
-                BuildDetail(root));
+                BuildDetail(root),
+                ExtractProperties(root));
         }
         catch (JsonException)
         {
@@ -359,6 +370,71 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
         AddBool(parts, root, "ok", includeWhenTrue: false);
         AddError(parts, root);
         return string.Join(" | ", parts);
+    }
+
+    private static IReadOnlyDictionary<string, string?> ExtractProperties(JsonElement root)
+    {
+        var properties = new Dictionary<string, string?>(StringComparer.Ordinal);
+        AddScalarProperty(properties, root, "session_id");
+        AddScalarProperty(properties, root, "scenario_id");
+        AddScalarProperty(properties, root, "scenario");
+        AddScalarProperty(properties, root, "step_index");
+        AddScalarProperty(properties, root, "phase");
+        AddScalarProperty(properties, root, "step");
+        AddScalarProperty(properties, root, "action");
+        AddScalarProperty(properties, root, "command");
+        AddScalarProperty(properties, root, "status");
+        AddScalarProperty(properties, root, "reason");
+        AddScalarProperty(properties, root, "category");
+        AddScalarProperty(properties, root, "message");
+        AddScalarProperty(properties, root, "ok");
+
+        if (root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in data.EnumerateObject())
+            {
+                AddScalarProperty(properties, "data." + property.Name, property.Value);
+            }
+        }
+
+        if (root.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.Object)
+        {
+            AddScalarProperty(properties, error, "category", "error.category");
+            AddScalarProperty(properties, error, "message", "error.message");
+        }
+
+        if (root.TryGetProperty("metrics", out var metrics) && metrics.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in metrics.EnumerateObject())
+            {
+                AddScalarProperty(properties, "metrics." + property.Name, property.Value);
+            }
+        }
+
+        return properties;
+    }
+
+    private static void AddScalarProperty(Dictionary<string, string?> properties, JsonElement root, string name, string? targetName = null)
+    {
+        if (root.TryGetProperty(name, out var property))
+        {
+            AddScalarProperty(properties, targetName ?? name, property);
+        }
+    }
+
+    private static void AddScalarProperty(Dictionary<string, string?> properties, string name, JsonElement property)
+    {
+        switch (property.ValueKind)
+        {
+            case JsonValueKind.String:
+                properties[name] = property.GetString();
+                break;
+            case JsonValueKind.Number:
+            case JsonValueKind.True:
+            case JsonValueKind.False:
+                properties[name] = property.ToString();
+                break;
+        }
     }
 
     private static void AddString(List<string> parts, JsonElement root, string name)

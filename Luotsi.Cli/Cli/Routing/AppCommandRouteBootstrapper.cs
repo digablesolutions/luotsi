@@ -81,6 +81,8 @@ internal sealed class AppCommandRouteBootstrapper(AppCommandRouteBootstrapperDep
         string.Equals(replaySubcommand, "summarize", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(replaySubcommand, "capsule", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(replaySubcommand, "timeline", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(replaySubcommand, "graph", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(replaySubcommand, "cluster", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(replaySubcommand, "open", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(replaySubcommand, "search", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(replaySubcommand, "scenario-draft", StringComparison.OrdinalIgnoreCase) ||

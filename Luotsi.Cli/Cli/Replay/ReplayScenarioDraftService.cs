@@ -10,6 +10,8 @@ namespace Luotsi.Cli.Cli.Replay;
 
 internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
 {
+    private const string ScenarioDraftSummaryFileName = "scenario-draft-summary.json";
+    private const string ScenarioDraftReviewFileName = "scenario-draft.md";
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
 
     public async Task<ReplayScenarioDraftResult> CreateAsync(CliOptions options, ArtifactSession artifacts)
@@ -26,6 +28,12 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
         }
 
         var warnings = BuildWarnings(steps).ToArray();
+        var jsonPath = options.HasFlag("write-json")
+            ? Path.Join(artifacts.Root, ScenarioDraftSummaryFileName)
+            : null;
+        var markdownPath = options.HasFlag("write-markdown")
+            ? Path.Join(artifacts.Root, ScenarioDraftReviewFileName)
+            : null;
         var scenario = new ScenarioFile(
             options.Get("name") ?? "draft from replay",
             steps,
@@ -37,6 +45,8 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
             ResultSchemas.ScenarioDraft,
             artifacts.Root,
             output,
+            jsonPath,
+            markdownPath,
             warnings.Length == 0 ? "medium" : "low",
             warnings,
             scenario,
@@ -53,8 +63,85 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
             await _fileSystem.WriteAllTextAsync(output, JsonSerializer.Serialize(scenario, AppJson.Options) + Environment.NewLine, new UTF8Encoding(false)).ConfigureAwait(false);
         }
 
+        if (jsonPath is not null)
+        {
+            await artifacts.WriteJsonAsync(ScenarioDraftSummaryFileName, result).ConfigureAwait(false);
+        }
+
+        if (markdownPath is not null)
+        {
+            await artifacts.WriteTextAsync(ScenarioDraftReviewFileName, BuildMarkdown(result)).ConfigureAwait(false);
+        }
+
         return result;
     }
+
+    private static string BuildMarkdown(ReplayScenarioDraftResult result)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("# Luotsi Scenario Draft");
+        builder.AppendLine();
+        builder.AppendLine($"Artifact root: `{result.ArtifactRoot}`");
+        builder.AppendLine($"Scenario: `{result.Scenario.Name}`");
+        builder.AppendLine($"Output: `{result.Output ?? "(not written)"}`");
+        builder.AppendLine($"Confidence: `{result.Confidence}`");
+        builder.AppendLine($"Steps: `{result.Scenario.Steps.Count}`");
+        builder.AppendLine();
+        builder.AppendLine("## Warnings");
+        builder.AppendLine();
+        if (result.Warnings.Count == 0)
+        {
+            builder.AppendLine("- None");
+        }
+        else
+        {
+            foreach (var warning in result.Warnings)
+            {
+                builder.AppendLine("- " + warning);
+            }
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("## Suggestions");
+        builder.AppendLine();
+        if (result.Suggestions.Count == 0)
+        {
+            builder.AppendLine("- None");
+        }
+        else
+        {
+            foreach (var suggestion in result.Suggestions)
+            {
+                builder.AppendLine($"- Step {suggestion.StepIndex}: `{suggestion.Kind}` ({suggestion.Confidence}) - {suggestion.Message}");
+            }
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("## Draft Steps");
+        builder.AppendLine();
+        builder.AppendLine("| # | Action | Name | Text/Code/Label |");
+        builder.AppendLine("|---:|---|---|---|");
+        for (var i = 0; i < result.Scenario.Steps.Count; i++)
+        {
+            var step = result.Scenario.Steps[i];
+            builder.Append("| ");
+            builder.Append(i + 1);
+            builder.Append(" | ");
+            builder.Append(EscapeMarkdown(step.Action));
+            builder.Append(" | ");
+            builder.Append(EscapeMarkdown(step.Name ?? string.Empty));
+            builder.Append(" | ");
+            builder.Append(EscapeMarkdown(step.Text ?? step.Code ?? step.Label ?? string.Empty));
+            builder.AppendLine(" |");
+        }
+
+        return builder.ToString();
+    }
+
+    private static string EscapeMarkdown(string value) =>
+        value.Replace("|", "\\|", StringComparison.Ordinal)
+            .Replace("\r", " ", StringComparison.Ordinal)
+            .Replace("\n", " ", StringComparison.Ordinal);
 
     private IReadOnlyList<JsonElement> ReadTimelineEvents(string artifactRoot)
     {

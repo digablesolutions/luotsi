@@ -13,6 +13,8 @@
 
 Luotsi is a host-driven CLI for Android device automation, inspection, and live view. It runs on the engineer or CI machine, talks to real devices over ADB, and returns structured JSON results plus artifacts. Orchestration, policy, and diagnostics stay on the host; the on-device helper stays thin and purpose-built.
 
+Docs site: [https://digablesolutions.github.io/luotsi/](https://digablesolutions.github.io/luotsi/)
+
 ## How it works
 
 1. **Run a command** — commands return one JSON envelope with `schema`, `ok`, `command`, `started_at`, `ended_at`, `data`, `artifacts`, `provenance`, and `error` by default. `replay summarize --format json|jsonl` can emit raw machine-readable replay summaries for CI without the envelope wrapper, `replay capsule` describes a replay bundle and suggests next commands, `replay open` opens the local artifact browser, `replay search` finds text across replay timelines and artifacts, `replay scenario-draft` turns inspect action history into a starter scenario, and failed scenario runs now carry an embedded `failure_capsule` summary so replay consumers do not need a second artifact read just to discover linked reports and failure artifacts. No third-party device server required.

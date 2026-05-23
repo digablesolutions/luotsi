@@ -136,18 +136,25 @@ Usage:
   luotsi doctor --device <adb serial> [--package <app.id>] [--fix]
   luotsi lab status [--device-query <query>]
   luotsi lab doctor [--device-query <query>] [--fix]
+  luotsi lab claim [--device-query <query>] [--owner <name>] [--ttl-sec 3600]
+  luotsi lab leases
+  luotsi lab release --lease <lease-id>
 
 Examples:
   luotsi devices
   luotsi device-status --device emulator-5554
   luotsi lab status
   luotsi lab status --device-query state=device,type=physical
+  luotsi lab claim --device-query model=Pixel_9 --owner ci-job-1 --ttl-sec 1800
+  luotsi lab leases
   luotsi lab doctor --fix
 
 Output:
   Lab status explains which attached devices match a query. Lab doctor reports
   ambiguous selection, offline devices, stale devices, and recommended repair
-  commands. With --fix, Luotsi may run safe host-side recovery actions.
+  commands. With --fix, Luotsi may run safe host-side recovery actions. Lab
+  claim creates a host-side lease token so CI and agents can avoid selecting a
+  device already claimed by another workflow.
 """,
         ["ports"] = """
 Luotsi help: ports
@@ -175,8 +182,10 @@ Usage:
   luotsi replay summarize --artifacts <artifact-root> [--format json|jsonl]
   luotsi replay capsule --artifacts <artifact-root> [--write-readme] [--write-json]
   luotsi replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
+  luotsi replay graph --artifacts <artifact-root> [--write-json] [--write-markdown]
+  luotsi replay cluster --artifacts <artifact-root> [--write-json] [--write-markdown]
   luotsi replay open --artifacts <artifact-root> [--dry-run]
-  luotsi replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>]
+  luotsi replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>] [--write-json] [--write-markdown]
   luotsi replay search --artifacts <artifact-root> --contains <text> [--limit 50]
 
 Examples:
@@ -185,8 +194,10 @@ Examples:
   luotsi replay summarize --artifacts artifacts/20260518-100000-view --format jsonl
   luotsi replay capsule --artifacts artifacts/20260518-100000-run --write-readme --write-json
   luotsi replay timeline --artifacts artifacts/20260518-100000-run --failures --format jsonl --write-jsonl --write-markdown
+  luotsi replay graph --artifacts artifacts/20260518-100000-run --write-json --write-markdown
+  luotsi replay cluster --artifacts artifacts/ci-runs --write-json --write-markdown
   luotsi replay open --artifacts artifacts/20260518-100000-view
-  luotsi replay scenario-draft --artifacts artifacts/20260518-100000-inspect --output scenarios/draft.json
+  luotsi replay scenario-draft --artifacts artifacts/20260518-100000-inspect --output scenarios/draft.json --write-markdown
   luotsi replay search --artifacts artifacts/20260518-100000-run --contains "not visible"
 
 Notes:
@@ -199,7 +210,8 @@ Notes:
   reports and failure artifacts. Replay open refreshes index.html/index.md for
   the artifact root and opens index.html in the local browser. Replay
   scenario-draft turns inspect/replay action events into a conservative draft
-  scenario with warnings and suggestions for cleanup. Replay search scans
+  scenario with warnings and suggestions for cleanup. With --write-json and
+  --write-markdown, it writes review artifacts into the replay root. Replay search scans
   text-like replay artifacts, reports, logcat, hierarchies, screen-state JSON,
   and timelines for a case-insensitive string. Replay capsule returns a compact
   bundle manifest with artifact counts, primary failure, and suggested next
@@ -214,7 +226,14 @@ Notes:
   output instead of the normal command envelope. With --write-json or
   --write-jsonl, it persists normalized timeline artifacts. With
   --write-markdown, it writes replay-timeline.md for artifact browsing. These
-  write options refresh the artifact index.
+  write options refresh the artifact index. Replay graph emits a stable node
+  and edge model over sessions, timeline events, failures, scenarios,
+  artifacts, actions, text selectors, screen observations, and telemetry
+  signals. Its result includes node_kinds and edge_kinds counts so agents can
+  quickly understand what semantic material is available before traversing the
+  graph. Replay cluster groups failed replay sessions by normalized failure
+  shape and returns triage hints plus replay/search commands for the latest
+  matching bundle.
   Failures still use the normal error envelope.
 """,
         ["update"] = """
@@ -395,6 +414,9 @@ Command groups:
     devices
     lab status [--device-query <query>]
     lab doctor [--device-query <query>] [--fix]
+    lab claim [--device-query <query>] [--owner <name>] [--ttl-sec 3600]
+    lab leases
+    lab release --lease <lease-id>
     device-status [--device <adb serial> | --device-query <query>]
     wait-for-device [--timeout-sec 15]
     device-wait [--timeout-sec 15]
@@ -459,8 +481,10 @@ Command groups:
     replay summarize --artifacts <artifact-root> [--format json|jsonl]
     replay capsule --artifacts <artifact-root> [--write-readme] [--write-json]
     replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
+    replay graph --artifacts <artifact-root> [--write-json] [--write-markdown]
+    replay cluster --artifacts <artifact-root> [--write-json] [--write-markdown]
     replay open --artifacts <artifact-root> [--dry-run]
-    replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>]
+    replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>] [--write-json] [--write-markdown]
     replay search --artifacts <artifact-root> --contains <text> [--limit 50]
 
   Install and update

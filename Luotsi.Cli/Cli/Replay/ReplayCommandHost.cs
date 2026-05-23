@@ -63,6 +63,20 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             return 0;
         }
 
+        if (IsGraphCommand(options))
+        {
+            var graphResult = await _dependencies.GraphService.CreateAsync(options, artifacts).ConfigureAwait(false);
+            _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, graphResult, artifacts.ToData());
+            return 0;
+        }
+
+        if (IsClusterCommand(options))
+        {
+            var clusterResult = await _dependencies.ClusterService.ClusterAsync(options, artifacts).ConfigureAwait(false);
+            _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, clusterResult, artifacts.ToData());
+            return 0;
+        }
+
         var outputMode = ParseOutputMode(options, "replay summarize");
         var result = await _dependencies.CommandDispatcher.ExecuteAsync(options).ConfigureAwait(false);
 
@@ -155,6 +169,14 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         options.Arguments.Count > 0 &&
         string.Equals(options.Arguments[0], "timeline", StringComparison.OrdinalIgnoreCase);
 
+    private static bool IsGraphCommand(CliOptions options) =>
+        options.Arguments.Count > 0 &&
+        string.Equals(options.Arguments[0], "graph", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsClusterCommand(CliOptions options) =>
+        options.Arguments.Count > 0 &&
+        string.Equals(options.Arguments[0], "cluster", StringComparison.OrdinalIgnoreCase);
+
     private static ReplayOpenCommand BuildOpenCommand(string indexHtmlPath)
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -218,4 +240,6 @@ internal sealed record ReplayCommandHostDependencies(
     ReplayScenarioDraftService ScenarioDraftService,
     ReplaySearchService SearchService,
     ReplayCapsuleService CapsuleService,
-    ReplayTimelineService TimelineService);
+    ReplayTimelineService TimelineService,
+    ReplayGraphService GraphService,
+    ReplayClusterService ClusterService);
