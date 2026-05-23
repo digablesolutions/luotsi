@@ -94,12 +94,12 @@ View screenshots and operator-triggered recordings are written to the artifact r
 |---|---|
 | `replay summarize --artifacts <artifact-root> [--format json|jsonl]` | Read `session-replay.json` and `session-timeline.jsonl` under an existing artifact root and emit condensed replay summaries, including failure-capsule linkage for failed scenario runs |
 | `replay capsule --artifacts <artifact-root> [--write-readme] [--write-json]` | Return a compact capsule manifest with session counts, primary failure, artifact counts, and suggested next commands |
-| `replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]` | Read ordered replay timeline events with stable details and optional failure/type/text filtering |
+| `replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]` | Read ordered replay timeline events with stable details and optional failure/type/text/time filtering |
 | `replay open --artifacts <artifact-root> [--dry-run]` | Refresh the artifact browser index and open `index.html` locally |
 | `replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>]` | Convert inspect/replay action events into a conservative starter scenario with warnings and cleanup suggestions |
 | `replay search --artifacts <artifact-root> --contains <text> [--limit 50]` | Search replay timelines and text-like artifacts for errors, labels, telemetry, or log lines |
 
-`replay summarize` returns the normal JSON command envelope by default. `--format json` writes only the replay summary object. `--format jsonl` writes a `type: summary` header line followed by one `type: session` line per replay session. Failed scenario runs expose `failure_capsule_path` plus an embedded `failure_capsule` summary with linked reports, grouped failure artifacts, and failure-bundle metadata. `replay capsule` is the higher-level entry point for a bundle: it identifies the primary failure, counts screenshots/videos/logs/reports/timelines, and returns suggested follow-up commands. With `--write-readme`, it writes `replay-capsule.md` into the artifact root; with `--write-json`, it writes `replay-capsule-summary.json`. Both write options refresh the artifact index. `replay timeline` reads `session-timeline.jsonl` files directly and returns ordered events with path, sequence, timestamp, type, failure relevance, and detail text; `--contains` filters normalized event type/detail text, `--format json|jsonl` writes raw timeline output instead of the command envelope, and `--write-json`, `--write-jsonl`, and `--write-markdown` persist `replay-timeline.json`, `replay-timeline.jsonl`, and `replay-timeline.md` into the artifact root. `replay open` attaches the existing artifact root, regenerates `index.md` and `index.html`, and opens the HTML index with the platform default opener; `--dry-run` returns the opener command without launching it. `replay scenario-draft` reads timeline action events from inspect/view/replay artifacts and writes a valid JSON scenario draft when enough action data is available. `replay search` scans JSON, JSONL, XML, text, log, Markdown, HTML, and CSV artifacts and returns relative file paths with line numbers and previews. Failures continue to use the normal error envelope.
+`replay summarize` returns the normal JSON command envelope by default. `--format json` writes only the replay summary object. `--format jsonl` writes a `type: summary` header line followed by one `type: session` line per replay session. Failed scenario runs expose `failure_capsule_path` plus an embedded `failure_capsule` summary with linked reports, grouped failure artifacts, and failure-bundle metadata. `replay capsule` is the higher-level entry point for a bundle: it identifies the primary failure, counts screenshots/videos/logs/reports/timelines, and returns suggested follow-up commands. With `--write-readme`, it writes `replay-capsule.md` into the artifact root; with `--write-json`, it writes `replay-capsule-summary.json`. Both write options refresh the artifact index. `replay timeline` reads `session-timeline.jsonl` files directly and returns ordered events with path, sequence, timestamp, type, failure relevance, and detail text; `--contains` filters normalized event type/detail text, `--since` and `--until` filter by event timestamp, `--context` includes neighboring events around filtered matches, `--format json|jsonl` writes raw timeline output instead of the command envelope, and `--write-json`, `--write-jsonl`, and `--write-markdown` persist `replay-timeline.json`, `replay-timeline.jsonl`, and `replay-timeline.md` into the artifact root. `replay open` attaches the existing artifact root, regenerates `index.md` and `index.html`, and opens the HTML index with the platform default opener; `--dry-run` returns the opener command without launching it. `replay scenario-draft` reads timeline action events from inspect/view/replay artifacts and writes a valid JSON scenario draft when enough action data is available. `replay search` scans JSON, JSONL, XML, text, log, Markdown, HTML, and CSV artifacts and returns relative file paths with line numbers and previews. Failures continue to use the normal error envelope.
 
 ---
 
@@ -217,7 +217,31 @@ Luotsi reads the `LUOTSI_DEVICE_TELEMETRY` logcat marker to parse structured sem
 | `inspect --device <serial>` | Open an agent-driven JSONL inspection session |
 
 See [scenarios.md](scenarios.md) for the playbook format and full action reference.
-`inspect` is described in the README [Inspect mode](../README.md#inspect-mode) section.
+
+### Inspect mode protocol
+
+`inspect` is a JSONL request/response session.
+
+- Client writes one JSON command object per line.
+- Luotsi writes JSONL events with snake_case keys.
+
+Primary inspect events:
+
+- `session_started`
+- `screen_snapshot`
+- `screen_delta`
+- `command_result`
+- `session_ended`
+- `protocol_error`
+- `session_error`
+
+For command examples, see README [Inspect mode](../README.md#inspect-mode).
+
+### View mode events
+
+`view` is also a JSONL session. Core lifecycle events include `view_started`, `view_stats`, `view_reconnect_requested`, `view_reconnected`, `view_error`, and `view_ended`, with additional operational events for recording/share/input blocking.
+
+See [view-session.md](view-session.md) for the complete event table and operator controls.
 
 `scenario-list` and `run --path` share the same discovery filters: `--include-tag`, `--exclude-tag`, `--name`, and `--action`. `run --path` also supports `--shard-count`, `--shard-index`, and `--shard-strategy` for parallel execution.
 
@@ -234,7 +258,9 @@ Scenario runner flags:
 
 ## Output Envelopes
 
-Normal command mode returns a single JSON envelope with `ok`, `command`, `data`, `artifacts`, `provenance`, and `error`. Long-lived `inspect` and `view` sessions are the main exceptions: they stream JSONL events instead of a single final envelope. `replay summarize --format json|jsonl` is the other intentional exception for CI-oriented replay export.
+Normal command mode returns a single JSON envelope with `schema`, `ok`, `command`, `started_at`, `ended_at`, `data`, `artifacts`, `provenance`, and `error`.
+
+Long-lived `inspect` and `view` sessions are the main exceptions: they stream JSONL events instead of a single final envelope. `replay summarize --format json|jsonl` is the other intentional exception for CI-oriented replay export.
 
 Common `error.category` values currently include:
 

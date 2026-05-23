@@ -73,7 +73,7 @@ Every successful `view` launch refreshes the special `last` profile. `reconnect`
 | `F3` | Android Recents |
 | `F4` | Rotate device |
 | `F5` | Reconnect stream |
-| `F6` | Toggle stream pause marker |
+| `F6` | Toggle local stream pause marker |
 | `F7` | Open artifact folder |
 | `F8` | Toggle fit / fill presentation mode |
 | `F9` | Toggle live stream recording |
@@ -86,6 +86,8 @@ Every successful `view` launch refreshes the special `last` profile. `reconnect`
 Plain text input and common navigation/editing keys are forwarded to the device. Mouse-wheel scrolling is also routed through the session.
 
 **Drag and drop:** `.apk` files are installed on the device; other files are pushed to `/sdcard/Download`; `device:/sdcard/...` or `adb:/sdcard/...` path tokens pull from the device into the artifact root.
+
+`F6` only toggles the local renderer pause marker (`view_stream_paused` / `view_stream_resumed`). It does not stop the upstream device stream.
 
 **Toolbar and shelf.** The SDL window paints an in-window toolbar (help, screenshot, record, reconnect, navigation, rotate, pause, open-folder, fit, fullscreen) so all controls are clickable without memorizing hotkeys. The help button and `F10` toggle a visible legend overlay with the main operator shortcuts. Hover tooltips mirror the keyboard shortcuts for those actions, and the share badge tooltip shows the active share endpoint plus observer count. When multiple adb-visible devices are present, a multi-device shelf appears and lets you switch the mirrored device by clicking.
 
@@ -102,12 +104,14 @@ The `view_started` JSONL event includes `artifacts.artifact_root`; `view_screens
 | Event | When |
 |---|---|
 | `view_started` | Session established |
+| `view_startup_phase` | Structured startup progress emitted during bring-up and diagnostics |
+| `view_diagnostic` | Startup/doctor diagnostic detail emitted with status and message |
 | `view_stats` | Rolling decode/present FPS and latency (see `--stats-interval-ms`) |
 | `view_error` | Unrecoverable stream error |
 | `view_ended` | Session closed |
 | `view_capture_backend_fallback` | `auto` backend fell back from MediaProjection to screenrecord |
 | `view_recording_started` | Recording began (F9 or API) |
-| `view_recording_stopped` | Recording ended |
+| `view_recording_stopped` | Recording ended (includes reconnect-triggered stop reason when applicable) |
 | `view_stream_paused` | Stream pause marker toggled on (F6) |
 | `view_stream_resumed` | Stream pause marker toggled off (F6) |
 | `view_reconnect_requested` | Reconnect triggered (F5 or API) |
@@ -125,7 +129,7 @@ The `view_started` JSONL event includes `artifacts.artifact_root`; `view_screens
 | `view_share_started` | Share endpoint bound and ready |
 | `view_share_client_connected` | A share client joined |
 | `view_share_client_disconnected` | A share client left |
-| `view_input_blocked` | `--read-only` suppressed an interactive request |
+| `view_input_blocked` | Interaction suppressed by policy (for example `read_only` or observer-session-only restrictions) |
 
 ---
 
@@ -145,11 +149,15 @@ The host session relays the private binary packet protocol and reports the bound
 
 Joined share sessions are forced into read-only observer mode. They reconnect to the shared TCP source rather than talking to adb directly.
 
+**Security note:** share relay is intended for trusted lab/dev networks. The current transport is raw TCP without TLS or authentication, so stream traffic is not encrypted and observers are not identity-verified.
+
 ---
 
 ## Read-only Mode
 
-`--read-only` turns any view window into an observer surface. The stream renders and screenshots/reconnect/record controls work, but tap, typing, wheel-scroll, clipboard paste, and drag/drop are blocked and surfaced as `view_input_blocked` events.
+`--read-only` turns any view window into an observer surface. The stream renders, reconnect works, and screenshot/record controls remain available, but tap, typing, wheel-scroll, clipboard paste, and drag/drop are blocked and surfaced as `view_input_blocked` events.
+
+`--join-share` sessions are always observer sessions. They use the read-only interaction blocks above and also block screenshot/record controls with `view_input_blocked` (`reason: observer_session`).
 
 ---
 

@@ -15,9 +15,9 @@ Luotsi is a host-driven CLI for Android device automation, inspection, and live 
 
 ## How it works
 
-1. **Run a command** — commands return one JSON envelope with `ok`, `command`, `data`, `artifacts`, `provenance`, and `error` by default. `replay summarize --format json|jsonl` can emit raw machine-readable replay summaries for CI without the envelope wrapper, `replay capsule` describes a replay bundle and suggests next commands, `replay open` opens the local artifact browser, `replay search` finds text across replay timelines and artifacts, `replay scenario-draft` turns inspect action history into a starter scenario, and failed scenario runs now carry an embedded `failure_capsule` summary so replay consumers do not need a second artifact read just to discover linked reports and failure artifacts. No third-party device server required.
+1. **Run a command** — commands return one JSON envelope with `schema`, `ok`, `command`, `started_at`, `ended_at`, `data`, `artifacts`, `provenance`, and `error` by default. `replay summarize --format json|jsonl` can emit raw machine-readable replay summaries for CI without the envelope wrapper, `replay capsule` describes a replay bundle and suggests next commands, `replay open` opens the local artifact browser, `replay search` finds text across replay timelines and artifacts, `replay scenario-draft` turns inspect action history into a starter scenario, and failed scenario runs now carry an embedded `failure_capsule` summary so replay consumers do not need a second artifact read just to discover linked reports and failure artifacts. No third-party device server required.
 2. **Run a scenario** — drive multi-step device flows from a small JSON playbook. Steps are validated, templated, and timed; failures produce artifact bundles automatically.
-3. **Inspect mode** — open a JSONL session for agent-driven exploration. Luotsi emits screen snapshots and diffs so an agent can reason about the UI and act without a scenario file.
+3. **Inspect mode** — open a JSONL session for agent-driven exploration. Luotsi emits structured JSONL events (`session_started`, `screen_snapshot`, `screen_delta`, `command_result`, `session_ended`, `protocol_error`, `session_error`) so an agent can reason about the UI and act without a scenario file.
 4. **Live view** — stream a mirrored device display to a local SDL window with an operator control layer, hotkeys, and JSONL events for agents consuming stream state.
 5. **Telemetry** — parse structured `LUOTSI_DEVICE_TELEMETRY` events from logcat for semantic waits and assertions.
 6. **CI-friendly** — same binary for engineers, CI pipelines, and agent-driven flows, with default envelopes plus optional raw replay summary output for CI consumers.
@@ -270,6 +270,10 @@ The full command reference also includes direct UI and capture commands such as 
 
 Key flags: `--preset <name>` (low-latency / balanced / high-quality / safe), `--capture-backend <auto|screenrecord|mediaprojection>`, `--save-profile <name>`, `--record <file>`, `--share-bind <host:port>`, `--read-only`.
 
+`--join-share <host:port>` attaches as a read-only observer. Observer sessions can reconnect and render stream state, but interactive input plus screenshot/record controls are intentionally blocked and emitted as `view_input_blocked` events.
+
+Share relay is lab-oriented: `--share-bind`/`--join-share` currently uses an unauthenticated, unencrypted TCP stream (no TLS, no auth token). Do not expose it on untrusted networks.
+
 The SDL window has a clickable toolbar, multi-device shelf, and hotkeys (F1–F12, Ctrl+V, drag-and-drop). Full hotkey and JSONL event tables are in [docs/view-session.md](docs/view-session.md).
 
 View screenshots and operator-triggered recordings go to the current artifact root. By default that is a timestamped directory under the host temp folder, for example `%TEMP%\luotsi\<timestamp>-view` on Windows or `/tmp/luotsi/<timestamp>-view` on Linux/macOS. Pass `--artifacts <directory>` to choose it. F12 writes files such as `view-window-001-screenshot.png`; F9 writes `view-window-record-001.h264` unless `--record <file.h264|file.mp4|file.mkv>` supplies a preferred recording path. Use F7 or the toolbar folder button to open the artifact root.
@@ -279,7 +283,7 @@ Release packaging signs the helper with `LUOTSI_ANDROID_KEYSTORE_*` secrets and 
 
 ## Inspect mode
 
-`inspect` opens a JSONL session for agent-driven exploration without a scenario file. Startup emits `session_started` and an initial `screen_snapshot`; state-affecting commands emit `command_result` followed by a `screen_delta`.
+`inspect` opens a JSONL session for agent-driven exploration without a scenario file. Startup emits `session_started` and an initial `screen_snapshot`; state-affecting commands emit `command_result` followed by a `screen_delta`. Parse failures emit `protocol_error`, command/runtime failures emit `session_error`, and shutdown emits `session_ended`.
 
 ```bash
 luotsi inspect --device 192.168.0.134:5555
@@ -326,6 +330,8 @@ Every command returns a single JSON envelope:
   "schema": "luotsi-command.v1",
   "ok": true,
   "command": "screen-state",
+  "started_at": "2026-05-20T17:54:49.2529673+00:00",
+  "ended_at": "2026-05-20T17:55:17.584933+00:00",
   "data": {},
   "artifacts": {
     "artifact_root": "/tmp/luotsi/..."
