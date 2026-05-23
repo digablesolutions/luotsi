@@ -37,7 +37,14 @@ internal sealed class AppCommandRouteBootstrapper(AppCommandRouteBootstrapperDep
             setup.AdbExecutable,
             setup.Artifacts,
             options.Command,
-            _dependencies.DeviceHostLauncher).ConfigureAwait(false);
+            _dependencies.DeviceHostLauncher,
+            new LabLeaseStore(_dependencies.FileSystem, _dependencies.TimeProvider),
+            new LabQuarantineStore(_dependencies.FileSystem, _dependencies.TimeProvider)).ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(deviceSelector) && string.IsNullOrWhiteSpace(options.Get("device")))
+        {
+            options.ApplyDefaults(new Dictionary<string, string?> { ["device"] = deviceSelector });
+        }
+
         return _dependencies.DeviceHostLauncher.Create(options, setup.AdbExecutable, setup.Artifacts, deviceSelector);
     }
 

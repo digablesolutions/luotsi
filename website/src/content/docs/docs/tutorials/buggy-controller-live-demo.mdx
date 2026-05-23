@@ -3,6 +3,12 @@ title: Buggy Controller Live Demo
 description: A concrete Luotsi walkthrough against an older Android 6 device, including scenario artifacts and hierarchy limitations.
 ---
 
+import commandsScreenshot from '../../../../assets/tutorials/buggy-controller-live-demo/commands-final.png';
+import telemetryScreenshot from '../../../../assets/tutorials/buggy-controller-live-demo/telemetry-final.png';
+import mapScreenshot from '../../../../assets/tutorials/buggy-controller-live-demo/map.png';
+import visionScreenshot from '../../../../assets/tutorials/buggy-controller-live-demo/vision.png';
+import fallbackScreenshot from '../../../../assets/tutorials/buggy-controller-live-demo/screen-state-fallback.png';
+
 This tutorial condenses the repo's end-to-end Buggy Controller walkthrough into the parts that matter when you want to see Luotsi on a real device.
 
 ## What it demonstrates
@@ -46,12 +52,54 @@ dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- run `
 
 The checked-in sample run passed with ten steps, five coordinate taps, one screenshot assertion, and four captured screenshots.
 
+## What the run looked like
+
+<figure>
+  <img src={commandsScreenshot.src} alt="Buggy Controller Commands tab captured during the Luotsi walkthrough." />
+  <figcaption>The scenario starts on the Commands tab and uses coordinate taps because this Android 6 device exposes weak hierarchy output.</figcaption>
+</figure>
+
+<figure>
+  <img src={telemetryScreenshot.src} alt="Buggy Controller Telemetry tab captured during the Luotsi walkthrough." />
+  <figcaption>The Telemetry tab is useful here because it shows the app state Luotsi is preserving even when semantic telemetry events are absent.</figcaption>
+</figure>
+
+<figure>
+  <img src={mapScreenshot.src} alt="Buggy Controller Map tab captured during the Luotsi walkthrough." />
+  <figcaption>The Map tab demonstrates a stable screenshot artifact even on a legacy device where selector-driven flows are not reliable.</figcaption>
+</figure>
+
+<figure>
+  <img src={visionScreenshot.src} alt="Buggy Controller Vision tab captured during the Luotsi walkthrough." />
+  <figcaption>The Vision tab is one of the slower capture points in the sample report, which makes it a useful artifact for replay-oriented triage.</figcaption>
+</figure>
+
+## Why screenshot-first scenarios were the right fit
+
+This device is old enough that `uiautomator dump` can fail instead of returning usable XML. In that environment, Luotsi still gives you a workable automation loop: coordinate taps, screenshot assertions, JSON and JUnit reports, replay metadata, and failure bundles that explain what broke.
+
+<figure>
+  <img src={fallbackScreenshot.src} alt="Fallback screenshot captured when screen-state and hierarchy extraction failed on an older Android device." />
+  <figcaption>Even the hierarchy failure path leaves behind a structured error and a screenshot artifact, which is exactly the kind of evidence you want in CI or while debugging remotely.</figcaption>
+</figure>
+
+## After the run
+
+Follow the sample run with the artifact-oriented commands that make Luotsi useful after the device session is over:
+
+```bash
+luotsi scenario-list --path examples/scenarios/buggy-controller-live-demo.json
+luotsi replay summarize --artifacts ./artifacts/buggy-demo
+luotsi replay open --artifacts ./artifacts/buggy-demo
+```
+
 ## Why this tutorial matters
 
 The device is old enough to expose weak `uiautomator dump` behavior. That makes it a good example of Luotsi's operating model: even when hierarchy extraction is rough, the tool still records the device, runs the scenario, emits structured reports, and keeps artifacts that explain what happened.
 
-## Follow the full walkthrough
+## Related pages
 
-- Full tutorial: [docs/tutorials/buggy-controller-live-demo.md](https://github.com/digablesolutions/luotsi/blob/main/docs/tutorials/buggy-controller-live-demo.md)
+- [Scenario playbooks](../reference/scenario-playbooks/)
+- [Replay and artifacts](../core-workflows/replay-and-artifacts/)
+- [Troubleshooting](../getting-started/troubleshooting/)
 - Scenario file: [examples/scenarios/buggy-controller-live-demo.json](https://github.com/digablesolutions/luotsi/blob/main/examples/scenarios/buggy-controller-live-demo.json)
-- Tutorial assets: [docs/assets/tutorials/buggy-controller-live-demo](https://github.com/digablesolutions/luotsi/tree/main/docs/assets/tutorials/buggy-controller-live-demo)

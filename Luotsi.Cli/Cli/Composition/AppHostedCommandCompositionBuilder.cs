@@ -40,12 +40,15 @@ internal static class AppHostedCommandCompositionBuilder
         var selfUpdateService = dependencies.SelfUpdateService
             ?? new SelfUpdateService(dependencies.FileSystem, dependencies.Environment, dependencies.ProcessRunner);
         var replayCommandDispatcher = new ReplayCommandDispatcher(dependencies.FileSystem);
+        var labLeaseStore = new LabLeaseStore(dependencies.FileSystem, dependencies.TimeProvider);
+        var labQuarantineStore = new LabQuarantineStore(dependencies.FileSystem, dependencies.TimeProvider);
         var commandDispatcher = new AppCommandDispatcher(
             new AdbSubcommandDispatcher(),
-            new ScenarioCommandDispatcher(scenarioRunPlanner, scenarioRunOrchestrator, scenarioAuthoring),
+            new ScenarioCommandDispatcher(scenarioRunPlanner, scenarioRunOrchestrator, scenarioAuthoring, labLeaseStore),
             selfUpdateService,
             dependencies.ProfileCoordinator,
-            new LabLeaseStore(dependencies.FileSystem, dependencies.TimeProvider));
+            labLeaseStore,
+            labQuarantineStore);
         var replayTimelineService = new ReplayTimelineService(dependencies.FileSystem);
         var replayCommandHost = new ReplayCommandHost(new(
             envelopeWriter,

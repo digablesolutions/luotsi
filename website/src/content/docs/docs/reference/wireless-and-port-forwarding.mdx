@@ -22,6 +22,8 @@ Notes:
 - `wireless-pair` without `--code` returns a structured error instead of trying to drive an interactive prompt
 - `wireless-connect --service` can resolve the mDNS service directly and save a profile in one step
 
+If the device is visible over USB but not yet stable over Wi-Fi, validate it first with the readiness commands before you debug pairing itself.
+
 ## Legacy TCP/IP mode
 
 For older Android versions, Luotsi can switch a USB-connected device into TCP/IP mode:
@@ -49,4 +51,5 @@ Endpoints follow adb syntax such as `tcp:8080`, `tcp:0`, and `localabstract:serv
 
 - [Device readiness](../getting-started/device-readiness/)
 - [Live view](../core-workflows/live-view/)
-- Full [wireless and forwarding reference](https://github.com/digablesolutions/luotsi/blob/main/docs/commands.md)
+- [CLI command groups](./cli-command-groups/#wireless-and-port-forwarding)
+- [Troubleshooting](../getting-started/troubleshooting/)

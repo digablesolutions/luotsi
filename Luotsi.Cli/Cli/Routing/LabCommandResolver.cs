@@ -7,15 +7,20 @@ namespace Luotsi.Cli.Cli.Routing;
 
 internal static class LabCommandResolver
 {
-    public static async Task<LabStatusResult> ReadStatusAsync(IDeviceHost runner, string? query, LabLeaseStore? leaseStore = null)
+    public static async Task<LabStatusResult> ReadStatusAsync(
+        IDeviceHost runner,
+        string? query,
+        LabLeaseStore? leaseStore = null,
+        LabQuarantineStore? quarantineStore = null)
     {
         ArgumentNullException.ThrowIfNull(runner);
 
         var inventory = DeviceInventory.FromDeviceList(await runner.GetDevicesAsync().ConfigureAwait(false));
         var selector = string.IsNullOrWhiteSpace(query) ? null : new DeviceQuery(query);
         var leases = leaseStore?.ReadActiveLeasesBySerial() ?? new Dictionary<string, LabLeaseResult>(StringComparer.OrdinalIgnoreCase);
+        var quarantines = quarantineStore?.ReadBySerial() ?? new Dictionary<string, LabQuarantineResult>(StringComparer.OrdinalIgnoreCase);
         var decisions = inventory.Devices
-            .Select(device => ToDecision(device, selector, leases))
+            .Select(device => ToDecision(device, selector, leases, quarantines))
             .ToArray();
 
         return new LabStatusResult(
@@ -26,9 +31,14 @@ internal static class LabCommandResolver
             decisions);
     }
 
-    public static async Task<LabDoctorResult> DiagnoseAsync(IDeviceHost runner, string? query, bool fix = false, LabLeaseStore? leaseStore = null)
+    public static async Task<LabDoctorResult> DiagnoseAsync(
+        IDeviceHost runner,
+        string? query,
+        bool fix = false,
+        LabLeaseStore? leaseStore = null,
+        LabQuarantineStore? quarantineStore = null)
     {
-        var status = await ReadStatusAsync(runner, query, leaseStore).ConfigureAwait(false);
+        var status = await ReadStatusAsync(runner, query, leaseStore, quarantineStore).ConfigureAwait(false);
         var findings = new List<string>();
         var actions = new List<string>();
         var appliedFixes = new List<string>();
@@ -67,7 +77,11 @@ internal static class LabCommandResolver
         if (!string.IsNullOrWhiteSpace(query) && status.Decisions.All(static decision => !decision.Selected))
         {
             findings.Add($"Device query '{query}' selected no devices.");
-            actions.Add("Run `luotsi lab status` and refine --device-query clauses.");
+            actions.Add(status.Decisions.Any(static decision => decision.Reason.Contains("leased by", StringComparison.OrdinalIgnoreCase))
+                ? "Run `luotsi lab leases` or `luotsi lab release --lease <lease-id>` if the lease is stale."
+                : status.Decisions.Any(static decision => decision.Reason.Contains("quarantined by", StringComparison.OrdinalIgnoreCase))
+                    ? "Run `luotsi lab quarantines` or `luotsi lab unquarantine --serial <serial>` after the device is healthy."
+                : "Run `luotsi lab status` and refine --device-query clauses.");
         }
 
         return new LabDoctorResult(
@@ -79,11 +93,82 @@ internal static class LabCommandResolver
             probes);
     }
 
-    public static async Task<LabLeaseResult> ClaimAsync(IDeviceHost runner, string? query, string? owner, int ttlSec, LabLeaseStore leaseStore)
+    public static async Task<LabPlanResult> PlanAsync(
+        IDeviceHost runner,
+        string? query,
+        LabLeaseStore? leaseStore = null,
+        LabQuarantineStore? quarantineStore = null)
+    {
+        var status = await ReadStatusAsync(runner, query, leaseStore, quarantineStore).ConfigureAwait(false);
+        var selected = status.Decisions.Where(static decision => decision.Selected).ToArray();
+        return selected.Length switch
+        {
+            1 => new LabPlanResult(
+                "ready",
+                query,
+                selected[0].Serial,
+                $"Device `{selected[0].Serial}` would be selected.",
+                BuildPlanCommands("ready", query, selected, status.Decisions),
+                status.Decisions),
+            0 => new LabPlanResult(
+                "blocked",
+                query,
+                null,
+                "No device would be selected. Inspect decisions for rejection reasons.",
+                BuildPlanCommands("blocked", query, selected, status.Decisions),
+                status.Decisions),
+            _ => new LabPlanResult(
+                "ambiguous",
+                query,
+                null,
+                $"Multiple devices would be selected: {string.Join(", ", selected.Select(static decision => decision.Serial ?? "<unknown>"))}.",
+                BuildPlanCommands("ambiguous", query, selected, status.Decisions),
+                status.Decisions)
+        };
+    }
+
+    private static IReadOnlyList<string> BuildPlanCommands(
+        string status,
+        string? query,
+        IReadOnlyList<LabDeviceDecision> selected,
+        IReadOnlyList<LabDeviceDecision> decisions)
+    {
+        return status switch
+        {
+            "ready" => [BuildLabCommand("claim", query)],
+            "ambiguous" => ["luotsi lab status", "luotsi lab plan --device-query state=online,type=physical,model=<model>"],
+            "blocked" when decisions.Any(static decision => decision.Reason.Contains("leased by", StringComparison.OrdinalIgnoreCase)) =>
+                ["luotsi lab leases", "luotsi lab release --lease <lease-id>"],
+            "blocked" when decisions.Any(static decision => decision.Reason.Contains("quarantined by", StringComparison.OrdinalIgnoreCase)) =>
+                ["luotsi lab quarantines", "luotsi lab unquarantine --serial <serial>"],
+            _ => ["luotsi lab status"]
+        };
+    }
+
+    private static string BuildLabCommand(string subcommand, string? query)
+    {
+        var command = "luotsi lab " + subcommand;
+        return string.IsNullOrWhiteSpace(query)
+            ? command
+            : command + " --device-query " + Quote(query);
+    }
+
+    private static string Quote(string value) =>
+        value.Contains(' ', StringComparison.Ordinal) || value.Contains(',', StringComparison.Ordinal)
+            ? "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\""
+            : value;
+
+    public static async Task<LabLeaseResult> ClaimAsync(
+        IDeviceHost runner,
+        string? query,
+        string? owner,
+        int ttlSec,
+        LabLeaseStore leaseStore,
+        LabQuarantineStore? quarantineStore = null)
     {
         ArgumentNullException.ThrowIfNull(leaseStore);
 
-        var status = await ReadStatusAsync(runner, query, leaseStore).ConfigureAwait(false);
+        var status = await ReadStatusAsync(runner, query, leaseStore, quarantineStore).ConfigureAwait(false);
         var selected = status.Decisions
             .Where(static decision => decision.Selected && string.Equals(decision.Status, "online", StringComparison.OrdinalIgnoreCase))
             .ToArray();
@@ -100,21 +185,63 @@ internal static class LabCommandResolver
         return await leaseStore.ClaimAsync(selected[0].Serial!, owner, ttlSec).ConfigureAwait(false);
     }
 
-    private static LabDeviceDecision ToDecision(DeviceState device, DeviceQuery? selector, IReadOnlyDictionary<string, LabLeaseResult> leases)
+    public static async Task<LabQuarantineResult> QuarantineAsync(
+        IDeviceHost runner,
+        string? query,
+        string reason,
+        string? owner,
+        LabQuarantineStore quarantineStore)
+    {
+        ArgumentNullException.ThrowIfNull(quarantineStore);
+
+        var inventory = DeviceInventory.FromDeviceList(await runner.GetDevicesAsync().ConfigureAwait(false));
+        var selected = string.IsNullOrWhiteSpace(query)
+            ? inventory.Devices.Where(static device => string.Equals(device.Availability, "available", StringComparison.OrdinalIgnoreCase)).ToArray()
+            : inventory.Devices.Where(new DeviceQuery(query).Matches).ToArray();
+        if (selected.Length == 0)
+        {
+            throw new UsageException("lab quarantine selected no devices.");
+        }
+
+        if (selected.Length > 1)
+        {
+            throw new UsageException("lab quarantine selected multiple devices. Add --device-query clauses to quarantine exactly one device.");
+        }
+
+        if (string.IsNullOrWhiteSpace(selected[0].Serial))
+        {
+            throw new UsageException("lab quarantine selected a device without a serial.");
+        }
+
+        return await quarantineStore.QuarantineAsync(selected[0].Serial!, reason, owner).ConfigureAwait(false);
+    }
+
+    private static LabDeviceDecision ToDecision(
+        DeviceState device,
+        DeviceQuery? selector,
+        IReadOnlyDictionary<string, LabLeaseResult> leases,
+        IReadOnlyDictionary<string, LabQuarantineResult> quarantines)
     {
         LabLeaseResult? lease = null;
         var leased = device.Serial is not null && leases.TryGetValue(device.Serial, out lease);
         var leaseReason = lease is null ? null : $"leased by {lease.Owner} until {lease.ExpiresAt:O}";
-        var selected = !leased && (selector?.Matches(device) ?? string.Equals(device.Availability, "available", StringComparison.OrdinalIgnoreCase));
+        LabQuarantineResult? quarantine = null;
+        var quarantined = device.Serial is not null && quarantines.TryGetValue(device.Serial, out quarantine);
+        var quarantineReason = quarantine is null ? null : $"quarantined by {quarantine.Owner} at {quarantine.QuarantinedAt:O}: {quarantine.Reason}";
+        var selected = !leased && !quarantined && (selector?.Matches(device) ?? string.Equals(device.Availability, "available", StringComparison.OrdinalIgnoreCase));
         var reason = selector is null
-            ? leased
+            ? quarantined
+                ? quarantineReason!
+                : leased
                 ? leaseReason!
                 : string.Equals(device.Availability, "available", StringComparison.OrdinalIgnoreCase)
                 ? "available for implicit allocation"
                 : device.RecommendedFix ?? $"not allocatable because state is {device.State}"
             : selected
                 ? $"matched query '{selector.RawQuery}'"
-                : leased
+                : quarantined
+                    ? $"matched query '{selector.RawQuery}' but {quarantineReason}"
+                    : leased
                     ? $"matched query '{selector.RawQuery}' but {leaseReason}"
                     : $"rejected by query '{selector.RawQuery}'";
 

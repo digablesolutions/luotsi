@@ -171,7 +171,7 @@ The CLI also exposes this directly via `luotsi help quickstart`.
 
 ## Commands
 
-Quick reference. See [docs/commands.md](docs/commands.md) for flags, retry behavior, and wireless pairing details.
+Quick reference. Start with the public [CLI command groups](https://digablesolutions.github.io/luotsi/docs/reference/cli-command-groups/), [Live View](https://digablesolutions.github.io/luotsi/docs/core-workflows/live-view/), and [Scenario Playbooks](https://digablesolutions.github.io/luotsi/docs/reference/scenario-playbooks/).
 
 `luotsi --version` prints the CLI version embedded at build or release time. `luotsi version` returns a JSON envelope with runtime version, installed release tag, install root, command path, helper APK path, and whether the bundled helper APK is present. `luotsi update` reruns the installer from the recorded install root; use `--dry-run` first to inspect the exact command.
 
@@ -252,7 +252,7 @@ Quick reference. See [docs/commands.md](docs/commands.md) for flags, retry behav
 | `wait-step --device <serial> --step <name>` | Wait for a semantic step telemetry event |
 | `wait-action-ready --device <serial> --action <name> [--step <name>]` | Wait for a semantic action-ready telemetry event |
 
-The full command reference also includes direct UI and capture commands such as `wait-visible`, `tap`, `type-text`, `keyevent`, `logcat`, and `record`. See [docs/commands.md](docs/commands.md) for the complete surface.
+The public [CLI command groups](https://digablesolutions.github.io/luotsi/docs/reference/cli-command-groups/) also cover the direct UI and capture commands such as `wait-visible`, `tap`, `type-text`, `keyevent`, `logcat`, and `record`.
 
 ### Scenarios & Inspect
 
@@ -268,7 +268,7 @@ The full command reference also includes direct UI and capture commands such as 
 
 ## View session
 
-`view` is a long-lived JSONL session that mirrors a connected device to a local SDL window. See [docs/view-session.md](docs/view-session.md) for the full reference.
+`view` is a long-lived JSONL session that mirrors a connected device to a local SDL window. See the public [Live View guide](https://digablesolutions.github.io/luotsi/docs/core-workflows/live-view/) for the main operator-facing reference.
 
 Key flags: `--preset <name>` (low-latency / balanced / high-quality / safe), `--capture-backend <auto|screenrecord|mediaprojection>`, `--save-profile <name>`, `--record <file>`, `--share-bind <host:port>`, `--read-only`.
 
@@ -276,7 +276,7 @@ Key flags: `--preset <name>` (low-latency / balanced / high-quality / safe), `--
 
 Share relay is lab-oriented: `--share-bind`/`--join-share` currently uses an unauthenticated, unencrypted TCP stream (no TLS, no auth token). Do not expose it on untrusted networks.
 
-The SDL window has a clickable toolbar, multi-device shelf, and hotkeys (F1–F12, Ctrl+V, drag-and-drop). Full hotkey and JSONL event tables are in [docs/view-session.md](docs/view-session.md).
+The SDL window has a clickable toolbar, multi-device shelf, and hotkeys (F1–F12, Ctrl+V, drag-and-drop). The public [Live View guide](https://digablesolutions.github.io/luotsi/docs/core-workflows/live-view/) covers the main controls and workflow shape.
 
 View screenshots and operator-triggered recordings go to the current artifact root. By default that is a timestamped directory under the host temp folder, for example `%TEMP%\luotsi\<timestamp>-view` on Windows or `/tmp/luotsi/<timestamp>-view` on Linux/macOS. Pass `--artifacts <directory>` to choose it. F12 writes files such as `view-window-001-screenshot.png`; F9 writes `view-window-record-001.h264` unless `--record <file.h264|file.mp4|file.mkv>` supplies a preferred recording path. Use F7 or the toolbar folder button to open the artifact root.
 
@@ -304,7 +304,7 @@ Available inspect commands: `refresh`, `screen_state`, `snapshot`, `tap`, `tap_t
 
 ## Scenarios
 
-Scenarios are JSON playbooks. See [docs/scenarios.md](docs/scenarios.md) for the full format, template syntax, and action reference.
+Scenarios are JSON playbooks. See the public [Scenario Playbooks guide](https://digablesolutions.github.io/luotsi/docs/reference/scenario-playbooks/) for the format, template syntax, and supported action families.
 
 ```json
 {
@@ -321,7 +321,7 @@ Template syntax: `${env:NAME}`, `${env:NAME|fallback}`, `${var:name}`, `${now:HH
 
 Generic examples: [`examples/scenarios/android-home-smoke.json`](examples/scenarios/android-home-smoke.json), [`examples/scenarios/android-navigation-smoke.json`](examples/scenarios/android-navigation-smoke.json).
 
-For a full device walkthrough with screenshots, video, reports, and troubleshooting notes, see [Guides And Tutorials](docs/tutorials.md).
+For a full device walkthrough with screenshots, reports, and troubleshooting notes, see the public [Buggy Controller Live Demo](https://digablesolutions.github.io/luotsi/docs/tutorials/buggy-controller-live-demo/).
 
 ## Output format
 
@@ -354,7 +354,7 @@ Every command returns a single JSON envelope:
 }
 ```
 
-Failure envelopes include `error.type`, `error.message`, and `error.category`. The current category values are documented in [docs/commands.md](docs/commands.md).
+Failure envelopes include `error.type`, `error.message`, and `error.category`. The current category values are documented in the public [Output Envelopes guide](https://digablesolutions.github.io/luotsi/docs/reference/output-envelopes/).
 
 Scenario `run` commands return the scenario result inside `data`, including per-step timing and top-level overhead:
 
@@ -386,8 +386,10 @@ Every command that reaches the device writes artifacts to a dedicated artifact r
 
 | Doc | Contents |
 |---|---|
-| [docs/commands.md](docs/commands.md) | Full command reference with flags, retry behavior, wireless pairing |
-| [docs/view-session.md](docs/view-session.md) | Presets, backends, profiles, hotkeys, JSONL events, sharing |
-| [docs/scenarios.md](docs/scenarios.md) | Playbook format, template syntax, all actions |
-| [docs/architecture.md](docs/architecture.md) | System architecture and component flow |
-| [docs/subsystems.md](docs/subsystems.md) | CLI, host automation, scenario, view, and telemetry subsystems |
+| [Luotsi docs](https://digablesolutions.github.io/luotsi/docs/) | Public docs hub for installation, workflows, reference, and tutorials |
+| [CLI command groups](https://digablesolutions.github.io/luotsi/docs/reference/cli-command-groups/) | Command families and first-stop command surface |
+| [Live View](https://digablesolutions.github.io/luotsi/docs/core-workflows/live-view/) | Presets, profiles, artifacts, hotkeys, and sharing |
+| [Scenario Playbooks](https://digablesolutions.github.io/luotsi/docs/reference/scenario-playbooks/) | Playbook format, template syntax, and supported action families |
+| [Architecture](https://digablesolutions.github.io/luotsi/docs/concepts/architecture/) | System architecture and component flow |
+| [Subsystems](https://digablesolutions.github.io/luotsi/docs/concepts/subsystems/) | CLI, host automation, scenario, view, and telemetry subsystems |
+| [Troubleshooting](https://digablesolutions.github.io/luotsi/docs/getting-started/troubleshooting/) | First-run failure shapes, pairing friction, and hierarchy limits |

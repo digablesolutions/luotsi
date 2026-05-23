@@ -31,6 +31,14 @@ public sealed record LabDoctorResult(
 
 public sealed record LabDoctorProbe(string Name, bool Succeeded, int ExitCode, string Invocation);
 
+public sealed record LabPlanResult(
+    string Status,
+    string? Query,
+    string? SelectedSerial,
+    string Summary,
+    IReadOnlyList<string> RecommendedCommands,
+    IReadOnlyList<LabDeviceDecision> Decisions);
+
 public sealed record LabLeaseResult(
     string LeaseId,
     string Serial,
@@ -47,6 +55,22 @@ public sealed record LabLeaseReleaseResult(
 public sealed record LabLeasesResult(
     int Count,
     IReadOnlyList<LabLeaseResult> Leases);
+
+public sealed record LabQuarantineResult(
+    string Serial,
+    string Reason,
+    string Owner,
+    DateTimeOffset QuarantinedAt,
+    string QuarantineFile);
+
+public sealed record LabQuarantineReleaseResult(
+    string Serial,
+    bool Released,
+    string? QuarantineFile);
+
+public sealed record LabQuarantinesResult(
+    int Count,
+    IReadOnlyList<LabQuarantineResult> Quarantines);
 
 public sealed record DeviceState(
     string? Serial,

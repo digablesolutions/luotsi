@@ -46,7 +46,12 @@ Use them when you want a checked-in flow with validation, timing, artifacts, and
 
 Use `inspect` first when the flow is still changing. Once you know the sequence and the assertions you care about, move that behavior into a scenario JSON file and run it under `luotsi run`.
 
+## Where replay fits
+
+Scenario runs and long-lived sessions write artifact roots on purpose. Once a flow has been codified, use `luotsi replay summarize`, `replay timeline`, or `replay open` to debug the run after the device session ends instead of reconnecting blindly.
+
 ## Next steps
 
 - Read [CLI command groups](../reference/cli-command-groups/)
-- Read the full [scenario guide](https://github.com/digablesolutions/luotsi/blob/main/docs/scenarios.md)
+- Read [Scenario playbooks](../reference/scenario-playbooks/)
+- Read [Replay and artifacts](./replay-and-artifacts/)

@@ -68,6 +68,10 @@ Validation rejects unsupported shapes such as:
 - `startApp` with `wait: true` but no activity
 - screenshot region hash checks without a full region definition
 
+## When screenshot-first scenarios are the right call
+
+On older Android builds or screens with weak hierarchy output, prefer explicit `tapPoint`, `takeScreenshot`, `assertScreenshot`, and `captureArtifacts` steps over brittle selector assumptions. Pair those steps with `metadata` so Luotsi can emit non-fatal warnings when the device or layout no longer matches the scenario's calibrated target.
+
 ## Authoring flow
 
 ```bash
@@ -80,4 +84,5 @@ luotsi run --path scenarios --device <serial>
 ## Read more
 
 - [Inspect and scenarios](../core-workflows/inspect-and-scenarios/)
-- Full [scenario guide in the repository](https://github.com/digablesolutions/luotsi/blob/main/docs/scenarios.md)
+- [Replay and artifacts](../core-workflows/replay-and-artifacts/)
+- [Buggy Controller demo](../tutorials/buggy-controller-live-demo/)

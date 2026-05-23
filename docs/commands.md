@@ -50,9 +50,13 @@ The CLI includes the same flow-oriented summary in `luotsi help quickstart`.
 | `devices` | List adb-visible devices |
 | `lab status [--device-query <query>]` | Summarize attached-device availability and explain which devices match or are rejected by a selection query |
 | `lab doctor [--device-query <query>]` | Detect stale/offline/ambiguous lab state and return concrete remediation commands |
+| `lab plan [--device-query <query>]` | Dry-run lab allocation and explain the selected or rejected devices, including recommended next commands |
 | `lab claim [--device-query <query>] [--owner <name>] [--ttl-sec 3600]` | Claim exactly one selected device with a host-side lease token |
 | `lab leases` | List active host-side device leases |
 | `lab release --lease <lease-id>` | Release a host-side device lease |
+| `lab quarantine [--device-query <query>] --reason <text> [--owner <name>]` | Mark exactly one selected device unavailable until explicitly unquarantined |
+| `lab quarantines` | List quarantined lab devices |
+| `lab unquarantine --serial <adb serial>` | Remove a device quarantine |
 | `device-status (--device <serial> | --device-query <query>)` | Read selected device inventory metadata plus current readiness details |
 | `adb server-status` | Host ADB server status |
 | `adb version` | ADB binary version |
@@ -66,6 +70,8 @@ The CLI includes the same flow-oriented summary in `luotsi help quickstart`.
 | `screen-state --device <serial>` | Dump current screen state |
 
 `wait-for-device` is also available as `device-wait` or `adb wait-for-device`.
+Active `lab claim` leases are honored by `--device-query` selection so CI and agent workflows do not accidentally target an already claimed device.
+Active quarantines are also honored by `--device-query`; use them for unhealthy hardware that should stay out of local and CI allocation until repaired.
 
 `doctor` is the first-run entry point. It reuses the existing adb/version checks, optional package-specific preflight, and the same live-view readiness report exposed by `view-doctor`. `doctor --fix` stages Luotsi-owned FFmpeg native libraries when the requested decoder is missing them, then routes through the same helper/install readiness path as `view setup`. Published Luotsi bundles include those repair assets; source checkouts continue to resolve them from the repository layout.
 
@@ -258,6 +264,7 @@ Scenario runner flags:
 - `--events-jsonl`, `--report-json`, and `--report-junit` write machine-readable run outputs for validation and execution flows.
 - `--capture-on failure|never` controls runtime failure capture during scenario execution.
 - `--attach-artifacts never|on-failure|always` controls whether report outputs include artifact references.
+- `--claim-device` creates a host-side lab lease for the selected `--device` or `--device-query` serial and releases it in a `finally` path after the scenario run. Use `--owner <name>` and `--ttl-sec <seconds>` to identify the run and set the safety expiry.
 
 ---
 

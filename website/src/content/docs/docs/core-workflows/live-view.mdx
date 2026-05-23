@@ -34,6 +34,13 @@ luotsi view --device <serial> --save-profile kiosk
 luotsi reconnect --profile kiosk
 ```
 
+## Operator controls that matter
+
+- `F7` opens the current artifact root so screenshots, recordings, and replay metadata are one shortcut away.
+- `F9` toggles local recording and reuses the `--record` directory and naming pattern when you supplied one at startup.
+- `F10` or the help button reveals the in-window legend, which is the fastest way to teach a new operator the local shortcuts.
+- The toolbar mirrors the main hotkeys, and the multi-device shelf appears automatically when more than one adb-visible transport is available.
+
 ## Sharing and observer sessions
 
 Source sessions can relay the live stream over TCP:
@@ -53,4 +60,5 @@ Joined share sessions are forced into read-only observer mode. The stream render
 ## Next steps
 
 - Read [Inspect and scenarios](./inspect-and-scenarios/)
-- Read the full [view session reference](https://github.com/digablesolutions/luotsi/blob/main/docs/view-session.md)
+- Read [Replay and artifacts](./replay-and-artifacts/)
+- Read [Troubleshooting](../getting-started/troubleshooting/)

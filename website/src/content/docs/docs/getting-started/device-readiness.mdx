@@ -38,6 +38,8 @@ luotsi doctor --device <serial> --package <app.id> --fix
 
 `doctor` is the broader onboarding entry point. It reuses adb checks, optional package preflight, and the same live-view readiness flow exposed by `view setup` and `view-doctor`.
 
+If selection itself is ambiguous, start with `lab status` or `lab doctor`. If the selected device is known but the workflow still is not ready, switch to `doctor`, `view-doctor`, or `view setup --fix` so Luotsi can explain the missing prerequisite.
+
 ## When each command matters
 
 - `devices`: raw inventory of adb-visible transports
@@ -51,4 +53,5 @@ luotsi doctor --device <serial> --package <app.id> --fix
 
 - Continue to [Quickstart](./quickstart/)
 - Read [Wireless and port forwarding](../reference/wireless-and-port-forwarding/)
-- Browse the full [device and adb reference](https://github.com/digablesolutions/luotsi/blob/main/docs/commands.md)
+- Read [Troubleshooting](./troubleshooting/)
+- Browse [CLI command groups](../reference/cli-command-groups/#device-and-adb)

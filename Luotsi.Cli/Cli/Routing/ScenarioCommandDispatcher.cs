@@ -8,11 +8,13 @@ namespace Luotsi.Cli.Cli.Routing;
 internal sealed class ScenarioCommandDispatcher(
     ScenarioRunPlanner runPlanner,
     ScenarioRunOrchestrator scenarioRunOrchestrator,
-    ScenarioAuthoringService authoringService)
+    ScenarioAuthoringService authoringService,
+    LabLeaseStore? labLeaseStore = null)
 {
     private readonly ScenarioRunPlanner _runPlanner = runPlanner ?? throw new ArgumentNullException(nameof(runPlanner));
     private readonly ScenarioRunOrchestrator _scenarioRunOrchestrator = scenarioRunOrchestrator ?? throw new ArgumentNullException(nameof(scenarioRunOrchestrator));
     private readonly ScenarioAuthoringService _authoringService = authoringService ?? throw new ArgumentNullException(nameof(authoringService));
+    private readonly LabLeaseStore? _labLeaseStore = labLeaseStore;
 
     public async Task<ScenarioListResult> ListAsync(CliOptions options)
     {
@@ -70,7 +72,7 @@ internal sealed class ScenarioCommandDispatcher(
                 return await _scenarioRunOrchestrator.ValidateFileAsync(file, configuration).ConfigureAwait(false);
             }
 
-            return await _scenarioRunOrchestrator.RunFileAsync(file, RequireRunner(runner), configuration, artifacts).ConfigureAwait(false);
+            return await RunWithOptionalClaimAsync(options, () => _scenarioRunOrchestrator.RunFileAsync(file, RequireRunner(runner), configuration, artifacts)).ConfigureAwait(false);
         }
 
         var query = ScenarioQueryFactory.CreateCatalogRunQuery(options);
@@ -100,7 +102,36 @@ internal sealed class ScenarioCommandDispatcher(
             return await _scenarioRunOrchestrator.ValidatePathAsync(query, configuration).ConfigureAwait(false);
         }
 
-        return await _scenarioRunOrchestrator.RunPathAsync(query, RequireRunner(runner), configuration, artifacts).ConfigureAwait(false);
+        return await RunWithOptionalClaimAsync(options, () => _scenarioRunOrchestrator.RunPathAsync(query, RequireRunner(runner), configuration, artifacts)).ConfigureAwait(false);
+    }
+
+    private async Task<T> RunWithOptionalClaimAsync<T>(CliOptions options, Func<Task<T>> runAsync)
+    {
+        if (!options.HasFlag("claim-device"))
+        {
+            return await runAsync().ConfigureAwait(false);
+        }
+
+        if (_labLeaseStore is null)
+        {
+            throw new InvalidOperationException("Scenario device claiming is not available in this command host.");
+        }
+
+        var serial = options.Get("device");
+        if (string.IsNullOrWhiteSpace(serial))
+        {
+            throw new UsageException("run --claim-device requires --device or --device-query so Luotsi can claim the selected serial.");
+        }
+
+        var lease = await _labLeaseStore.ClaimAsync(serial, options.Get("owner") ?? "luotsi-run", options.Int("ttl-sec", 3600)).ConfigureAwait(false);
+        try
+        {
+            return await runAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            await _labLeaseStore.ReleaseAsync(lease.LeaseId).ConfigureAwait(false);
+        }
     }
 
     private static IDeviceHost RequireRunner(IDeviceHost? runner) =>

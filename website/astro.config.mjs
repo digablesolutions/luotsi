@@ -25,6 +25,7 @@ export default defineConfig({
 						{ label: 'Installation', slug: 'docs/getting-started/installation' },
 						{ label: 'Quickstart', slug: 'docs/getting-started/quickstart' },
 						{ label: 'Device Readiness', slug: 'docs/getting-started/device-readiness' },
+						{ label: 'Troubleshooting', slug: 'docs/getting-started/troubleshooting' },
 					],
 				},
 				{
@@ -50,6 +51,10 @@ export default defineConfig({
 						{ label: 'Architecture', slug: 'docs/concepts/architecture' },
 						{ label: 'Subsystems', slug: 'docs/concepts/subsystems' },
 					],
+				},
+				{
+					label: 'Contributing',
+					items: [{ label: 'Contribution Guide', slug: 'docs/contributing/guide' }],
 				},
 				{
 					label: 'Tutorials',

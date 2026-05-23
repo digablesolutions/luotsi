@@ -803,6 +803,88 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_File_ClaimDevice_Releases_Lease_After_Run()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "name": "pause", "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var host = new FakeDeviceHost
+        {
+            PreflightTemplate = new PreflightResult("Pixel 7", "16", "36", "focus", null, null, "fingerprint", "arm64-v8a", "SER123")
+        };
+        host.ConnectedDevices.Add(new DeviceInfo("SER123", "device", "product:panther model:Pixel_7 device:panther"));
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync([
+            "run",
+            "--file", "/tmp/scenario.json",
+            "--device-query", "model=Pixel_7",
+            "--claim-device",
+            "--owner", "ci-job-1",
+            "--no-require-device-ready"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.False(fileSystem.FileExists(Path.Join("/tmp", "luotsi", "lab-leases", "SER123.json")));
+    }
+
+    [Fact]
+    public async Task RunAsync_File_ClaimDevice_Releases_Lease_After_Failure()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "name": "broken", "action": "tapText" }
+          ]
+        }
+        """);
+        var host = new FakeDeviceHost
+        {
+            PreflightTemplate = new PreflightResult("Pixel 7", "16", "36", "focus", null, null, "fingerprint", "arm64-v8a", "SER123")
+        };
+        host.ConnectedDevices.Add(new DeviceInfo("SER123", "device", "product:panther model:Pixel_7 device:panther"));
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync([
+            "run",
+            "--file", "/tmp/scenario.json",
+            "--device-query", "model=Pixel_7",
+            "--claim-device",
+            "--owner", "ci-job-1",
+            "--no-require-device-ready"]);
+
+        Assert.Equal(2, exitCode);
+        Assert.False(fileSystem.FileExists(Path.Join("/tmp", "luotsi", "lab-leases", "SER123.json")));
+    }
+
+    [Fact]
     public async Task RunAsync_File_NoRequireDeviceReady_Skips_Wait_But_Records_Readiness()
     {
         var fileSystem = new FakeFileSystem();

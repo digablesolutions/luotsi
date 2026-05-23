@@ -1218,16 +1218,104 @@ public sealed partial class AppTests
         Assert.Equal(0, leasesExitCode);
         Assert.Equal(1, leasesEnvelope.RootElement.GetProperty("data").GetProperty("count").GetInt32());
 
+        var doctorExitCode = await app.RunAsync(["lab", "doctor", "--device-query", "model=Pixel_9"]);
+        using var doctorEnvelope = JsonDocument.Parse(console.OutputLines[3]);
+
+        Assert.Equal(0, doctorExitCode);
+        Assert.Contains("lab leases", doctorEnvelope.RootElement.GetProperty("data").GetProperty("recommended_actions")[0].GetString(), StringComparison.Ordinal);
+
         var releaseExitCode = await app.RunAsync(["lab", "release", "--lease", leaseId]);
-        using var releaseEnvelope = JsonDocument.Parse(console.OutputLines[3]);
+        using var releaseEnvelope = JsonDocument.Parse(console.OutputLines[4]);
 
         Assert.Equal(0, releaseExitCode);
         Assert.True(releaseEnvelope.RootElement.GetProperty("data").GetProperty("released").GetBoolean());
         var leasesAfterReleaseExitCode = await app.RunAsync(["lab", "leases"]);
-        using var leasesAfterReleaseEnvelope = JsonDocument.Parse(console.OutputLines[4]);
+        using var leasesAfterReleaseEnvelope = JsonDocument.Parse(console.OutputLines[5]);
 
         Assert.Equal(0, leasesAfterReleaseExitCode);
         Assert.Equal(0, leasesAfterReleaseEnvelope.RootElement.GetProperty("data").GetProperty("count").GetInt32());
+    }
+
+    [Fact]
+    public async Task LabQuarantine_Marks_Device_Unallocatable_Until_Unquarantined()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("usb-1", "device", "product:p model:Pixel_9 device:komodo usb:1-1"));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var quarantineExitCode = await app.RunAsync(["lab", "quarantine", "--device-query", "model=Pixel_9", "--reason", "screen flickers", "--owner", "lab-admin"]);
+        using var quarantineEnvelope = JsonDocument.Parse(console.OutputLines[0]);
+
+        Assert.Equal(0, quarantineExitCode);
+        var quarantine = quarantineEnvelope.RootElement.GetProperty("data");
+        Assert.Equal("usb-1", quarantine.GetProperty("serial").GetString());
+        Assert.Equal("screen flickers", quarantine.GetProperty("reason").GetString());
+        Assert.True(fileSystem.FileExists(quarantine.GetProperty("quarantine_file").GetString()!));
+
+        var statusExitCode = await app.RunAsync(["lab", "status", "--device-query", "model=Pixel_9"]);
+        using var statusEnvelope = JsonDocument.Parse(console.OutputLines[1]);
+
+        Assert.Equal(0, statusExitCode);
+        var decision = statusEnvelope.RootElement.GetProperty("data").GetProperty("decisions")[0];
+        Assert.False(decision.GetProperty("selected").GetBoolean());
+        Assert.Contains("quarantined by lab-admin", decision.GetProperty("reason").GetString(), StringComparison.Ordinal);
+
+        var doctorExitCode = await app.RunAsync(["lab", "doctor", "--device-query", "model=Pixel_9"]);
+        using var doctorEnvelope = JsonDocument.Parse(console.OutputLines[2]);
+
+        Assert.Equal(0, doctorExitCode);
+        Assert.Contains("lab quarantines", doctorEnvelope.RootElement.GetProperty("data").GetProperty("recommended_actions")[0].GetString(), StringComparison.Ordinal);
+
+        var unquarantineExitCode = await app.RunAsync(["lab", "unquarantine", "--serial", "usb-1"]);
+        using var unquarantineEnvelope = JsonDocument.Parse(console.OutputLines[3]);
+
+        Assert.Equal(0, unquarantineExitCode);
+        Assert.True(unquarantineEnvelope.RootElement.GetProperty("data").GetProperty("released").GetBoolean());
+    }
+
+    [Fact]
+    public async Task LabPlan_Explains_Selected_And_Blocked_Device()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("usb-1", "device", "product:p model:Pixel_9 device:komodo usb:1-1"));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var planExitCode = await app.RunAsync(["lab", "plan", "--device-query", "model=Pixel_9"]);
+        using var planEnvelope = JsonDocument.Parse(console.OutputLines[0]);
+
+        Assert.Equal(0, planExitCode);
+        var plan = planEnvelope.RootElement.GetProperty("data");
+        Assert.Equal("ready", plan.GetProperty("status").GetString());
+        Assert.Equal("usb-1", plan.GetProperty("selected_serial").GetString());
+        Assert.Contains("would be selected", plan.GetProperty("summary").GetString(), StringComparison.Ordinal);
+        Assert.Contains("luotsi lab claim", plan.GetProperty("recommended_commands")[0].GetString(), StringComparison.Ordinal);
+
+        var claimExitCode = await app.RunAsync(["lab", "claim", "--device-query", "model=Pixel_9", "--owner", "ci-job-1"]);
+        var blockedPlanExitCode = await app.RunAsync(["lab", "plan", "--device-query", "model=Pixel_9"]);
+        using var blockedPlanEnvelope = JsonDocument.Parse(console.OutputLines[2]);
+
+        Assert.Equal(0, claimExitCode);
+        Assert.True(blockedPlanExitCode == 0, string.Join(Environment.NewLine, console.OutputLines.Concat(console.ErrorLines)));
+        var blockedPlan = blockedPlanEnvelope.RootElement.GetProperty("data");
+        Assert.Equal("blocked", blockedPlan.GetProperty("status").GetString());
+        Assert.False(blockedPlan.TryGetProperty("selected_serial", out _));
+        Assert.Contains("leased by ci-job-1", blockedPlan.GetRawText(), StringComparison.Ordinal);
+        Assert.Equal("luotsi lab leases", blockedPlan.GetProperty("recommended_commands")[0].GetString());
+        Assert.Equal("luotsi lab release --lease <lease-id>", blockedPlan.GetProperty("recommended_commands")[1].GetString());
     }
 
 

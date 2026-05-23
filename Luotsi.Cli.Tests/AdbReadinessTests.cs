@@ -359,6 +359,59 @@ public sealed class AdbReadinessTests
     }
 
     [Fact]
+    public async Task RunAsync_DeviceQuery_Does_Not_Select_Leased_Device()
+    {
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("USB123", "device", "product:oriole model:Pixel_6 device:oriole"));
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var factory = new FakeDeviceHostFactory(host);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            TimeProvider = DateTimeOffset.Parse("2026-05-15T12:00:00Z").ToTimeProvider(),
+            DeviceHostFactory = factory
+        });
+
+        var claimExitCode = await app.RunAsync(["lab", "claim", "--device-query", "model=Pixel_6", "--owner", "ci-job-1"]);
+        var preflightExitCode = await app.RunAsync(["preflight", "--device-query", "model=Pixel_6"]);
+        using var output = JsonDocument.Parse(console.OutputLines[1]);
+
+        Assert.Equal(0, claimExitCode);
+        Assert.Equal(2, preflightExitCode);
+        Assert.Contains("matched only leased devices", output.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("leased by ci-job-1", output.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Equal(2, factory.CreateCallCount);
+    }
+
+    [Fact]
+    public async Task RunAsync_DeviceQuery_Does_Not_Select_Quarantined_Device()
+    {
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("USB123", "device", "product:oriole model:Pixel_6 device:oriole"));
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var factory = new FakeDeviceHostFactory(host);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            TimeProvider = DateTimeOffset.Parse("2026-05-15T12:00:00Z").ToTimeProvider(),
+            DeviceHostFactory = factory
+        });
+
+        var quarantineExitCode = await app.RunAsync(["lab", "quarantine", "--device-query", "model=Pixel_6", "--reason", "bad battery", "--owner", "lab-admin"]);
+        var preflightExitCode = await app.RunAsync(["preflight", "--device-query", "model=Pixel_6"]);
+        using var output = JsonDocument.Parse(console.OutputLines[1]);
+
+        Assert.Equal(0, quarantineExitCode);
+        Assert.Equal(2, preflightExitCode);
+        Assert.Contains("matched only quarantined devices", output.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("bad battery", output.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_DeviceQuery_Can_Select_MultiWord_State()
     {
         var host = new FakeDeviceHost();

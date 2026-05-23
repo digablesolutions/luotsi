@@ -1,9 +1,9 @@
 ---
 title: CLI Command Groups
-description: A curated map of the Luotsi command surface before you dive into the full reference.
+description: A practical map of the Luotsi command surface, including the main command families most users reach for first.
 ---
 
-Luotsi exposes a broad CLI surface, but most workflows start in a small number of command families.
+Luotsi exposes a broad CLI surface, but most workflows still collapse into a handful of command families. Start with the family that matches the question you are trying to answer: which device, which transport, which workflow, or which artifact root.
 
 ## Device and adb
 
@@ -16,6 +16,12 @@ luotsi adb version
 luotsi doctor --device <serial>
 ```
 
+Also in this family:
+
+- `lab status`, `lab doctor`, `lab claim`, `lab leases`, `lab quarantine`
+- `adb server-status`, `adb features`, `adb mdns check`, `adb reconnect offline`
+- `wait-for-device`, `preflight`, `screen-state`
+
 ## View and profiles
 
 Use these when you want a live mirrored device session.
@@ -26,6 +32,43 @@ luotsi view setup --device <serial>
 luotsi view-doctor --device <serial>
 luotsi profile-list
 ```
+
+Also in this family:
+
+- `reconnect` and `reconnect --profile <name>`
+- `view --join-share <host:port>` for observer sessions
+- `profile-delete --name <name>` for saved view profiles
+
+## Wireless and port forwarding
+
+Use these when the transport itself is the problem or when the app under test needs a host or device socket.
+
+```bash
+luotsi wireless-scan
+luotsi wireless-pair --endpoint <host:port> --code <code>
+luotsi wireless-connect --service <name> --save-profile desk-wifi
+luotsi forward --local tcp:8080 --remote tcp:8080
+luotsi reverse --remote tcp:7000 --local tcp:7000
+```
+
+Use `wireless` for legacy Android TCP/IP mode over USB, and `forward-list` or `reverse-list` when you need to inspect existing adb plumbing.
+
+## App lifecycle
+
+Use these when you need to prepare the target app before a view session, scenario run, or manual diagnostic command.
+
+```bash
+luotsi start-app --device <serial> --package <app.id> --activity .MainActivity --wait
+luotsi wait-for-activity --device <serial> --activity <pattern>
+luotsi force-stop --device <serial> --package <app.id>
+luotsi clear --device <serial> --package <app.id>
+```
+
+Also in this family:
+
+- `start-uri` for deep links and explicit intents
+- `wait-for-not-activity` when you need to prove the app left the foreground
+- `grant-permission`, `revoke-permission`, `is-app-installed`, `list-installed-packages`
 
 ## Interaction, logs, and capture
 
@@ -38,6 +81,8 @@ luotsi logcat --device <serial> --tail 200
 luotsi record --device <serial> --output capture.mp4
 ```
 
+Direct commands are best when you need a single action, a host-side capture, or a quick sanity check before you codify the behavior into a scenario.
+
 ## Telemetry and semantic waits
 
 These commands rely on structured `LUOTSI_DEVICE_TELEMETRY` events from the app under test.
@@ -48,23 +93,31 @@ luotsi wait-step --device <serial> --step printing-succeeded
 luotsi wait-action-ready --device <serial> --action sign-in
 ```
 
+This family is strongest when the app under test emits structured `LUOTSI_DEVICE_TELEMETRY` lines and you need waits that survive UI churn.
+
 ## Scenarios and replay
 
 Use scenario files when you want a repeatable run, and replay commands when you need to triage artifacts after the fact.
 
 ```bash
 luotsi scenario-list --path scenarios
+luotsi scenario-explain --file scenarios/smoke.json
 luotsi run --path scenarios --device <serial> --report-junit junit.xml
 luotsi replay summarize --artifacts ./artifacts/my-run
+luotsi replay timeline --artifacts ./artifacts/my-run --failures
+luotsi replay search --artifacts ./artifacts/my-run --contains timeout
 luotsi replay open --artifacts ./artifacts/my-run
 ```
 
-## Full reference
+Use `scenario-validate` or `scenario-explain` before you run. Reach for `replay` commands after a failure when the device is gone but the artifact root remains.
 
-Pair this overview with the next focused reference pages:
+## Related pages
 
+Pair this overview with the focused docs that explain the workflows behind each family:
+
+- [Troubleshooting](../getting-started/troubleshooting/)
+- [Device readiness](../getting-started/device-readiness/)
+- [Live view](../core-workflows/live-view/)
 - [Scenario playbooks](./scenario-playbooks/)
 - [Wireless and port forwarding](./wireless-and-port-forwarding/)
 - [Output envelopes](./output-envelopes/)
-
-For the exhaustive command list and flags, read the full [command reference in the repository](https://github.com/digablesolutions/luotsi/blob/main/docs/commands.md).
