@@ -164,11 +164,36 @@ internal sealed class ReplayScrubService(ReplayTimelineService timelineService)
         builder.AppendLine($"- Type: `{evt.Type}`");
         builder.AppendLine($"- Failure: `{evt.FailureRelevant.ToString().ToLowerInvariant()}`");
         builder.AppendLine($"- Detail: `{evt.Detail}`");
+        builder.AppendLine($"- Reopen: `{BuildPortableTimelineCommand(evt, 5)}`");
+        AppendProperties(builder, evt);
         builder.AppendLine();
+    }
+
+    private static void AppendProperties(StringBuilder builder, ReplayTimelineEventResult evt)
+    {
+        if (evt.Properties.Count == 0)
+        {
+            return;
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("| Property | Value |");
+        builder.AppendLine("|---|---|");
+        foreach (var property in evt.Properties.OrderBy(static property => property.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            builder.Append("| ");
+            builder.Append(EscapeMarkdown(property.Key));
+            builder.Append(" | ");
+            builder.Append(EscapeMarkdown(property.Value ?? string.Empty));
+            builder.AppendLine(" |");
+        }
     }
 
     private static string BuildTimelineCommand(string artifactRoot, ReplayTimelineEventResult evt, int context) =>
         $"luotsi replay timeline --artifacts {Quote(artifactRoot)} --source-path {Quote(evt.Path)} --sequence {evt.Sequence} --context {context.ToString(CultureInfo.InvariantCulture)}";
+
+    private static string BuildPortableTimelineCommand(ReplayTimelineEventResult evt, int context) =>
+        $"luotsi replay timeline --artifacts <artifact-root> --source-path {Quote(evt.Path)} --sequence {evt.Sequence} --context {context.ToString(CultureInfo.InvariantCulture)}";
 
     private static string Quote(string value) =>
         value.Contains(' ', StringComparison.Ordinal) ? "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"" : value;

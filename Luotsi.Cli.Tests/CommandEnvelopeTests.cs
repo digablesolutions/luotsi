@@ -1199,6 +1199,9 @@ public sealed partial class AppTests
         var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-scrub.md"));
         Assert.Contains("## Focused Event", markdown, StringComparison.Ordinal);
         Assert.Contains("scenario_step_failed", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay timeline --artifacts <artifact-root> --source-path session-timeline.jsonl --sequence 1 --context 5", markdown, StringComparison.Ordinal);
+        Assert.Contains("| Property | Value |", markdown, StringComparison.Ordinal);
+        Assert.Contains("| error.message | not visible |", markdown, StringComparison.Ordinal);
         Assert.Contains("## Scrub Window", markdown, StringComparison.Ordinal);
     }
 
