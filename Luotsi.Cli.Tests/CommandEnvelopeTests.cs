@@ -679,6 +679,7 @@ public sealed partial class AppTests
         Assert.Equal("session-timeline.jsonl", data.GetProperty("step_origins")[0].GetProperty("source_path").GetString());
         Assert.Equal(1, data.GetProperty("step_origins")[0].GetProperty("sequence").GetInt32());
         Assert.Equal(DateTimeOffset.Parse("2026-05-18T10:00:01Z", System.Globalization.CultureInfo.InvariantCulture), data.GetProperty("step_origins")[0].GetProperty("timestamp").GetDateTimeOffset());
+        Assert.Equal("luotsi replay timeline --artifacts <artifact-root> --source-path session-timeline.jsonl --sequence 1 --context 2", data.GetProperty("step_origins")[0].GetProperty("source_command").GetString());
         var reviewItems = data.GetProperty("review_items").EnumerateArray().ToArray();
         Assert.Contains(reviewItems, item =>
             item.GetProperty("category").GetString() == "selector" &&
@@ -699,6 +700,7 @@ public sealed partial class AppTests
         Assert.Contains("## Source Summary", review, StringComparison.Ordinal);
         Assert.Contains("## Step Origins", review, StringComparison.Ordinal);
         Assert.Contains("session-timeline.jsonl", review, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay timeline --artifacts", review, StringComparison.Ordinal);
         Assert.Contains("inspect_command", review, StringComparison.Ordinal);
 
         var validateConsole = new FakeConsole();
@@ -792,8 +794,10 @@ public sealed partial class AppTests
         Assert.All(normalizations, normalization => Assert.Equal("duplicate_wait", normalization.GetProperty("kind").GetString()));
         Assert.All(normalizations, normalization => Assert.Equal("session-timeline.jsonl", normalization.GetProperty("source_path").GetString()));
         Assert.Equal(1, normalizations[0].GetProperty("sequence").GetInt32());
+        Assert.Equal("luotsi replay timeline --artifacts <artifact-root> --source-path session-timeline.jsonl --sequence 1 --context 2", normalizations[0].GetProperty("source_command").GetString());
         Assert.Contains(data.GetProperty("review_items").EnumerateArray(), item =>
             item.GetProperty("category").GetString() == "normalization" &&
+            item.GetProperty("command").GetString()!.Contains("--source-path session-timeline.jsonl --sequence 1", StringComparison.Ordinal) &&
             item.GetProperty("message").GetString()!.Contains("duplicate", StringComparison.OrdinalIgnoreCase));
         Assert.Contains("Welcome", normalizations[0].GetProperty("detail").GetString(), StringComparison.Ordinal);
         var review = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "scenario-draft.md"));

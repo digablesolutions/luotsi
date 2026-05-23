@@ -54,7 +54,8 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
                 step.Confidence,
                 step.SourcePath,
                 step.Sequence,
-                step.Timestamp))
+                step.Timestamp,
+                BuildSourceCommand(step.SourcePath, step.Sequence)))
             .ToArray();
         var sourceSummaries = BuildSourceSummaries(origins, normalizationNotes).ToArray();
         var reviewItems = BuildReviewItems(warnings, suggestions, origins, normalizationNotes).ToArray();
@@ -142,7 +143,8 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
             candidate.Confidence,
             candidate.SourcePath,
             candidate.Sequence,
-            candidate.Timestamp);
+            candidate.Timestamp,
+            BuildSourceCommand(candidate.SourcePath, candidate.Sequence));
         return true;
     }
 
@@ -312,8 +314,8 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
         builder.AppendLine();
         builder.AppendLine("## Step Origins");
         builder.AppendLine();
-        builder.AppendLine("| # | Source | File | Seq | Event | Command | Confidence | Detail |");
-        builder.AppendLine("|---:|---|---|---:|---|---|---|---|");
+        builder.AppendLine("| # | Source | File | Seq | Event | Command | Confidence | Detail | Reopen |");
+        builder.AppendLine("|---:|---|---|---:|---|---|---|---|---|");
         foreach (var origin in result.StepOrigins)
         {
             builder.Append("| ");
@@ -332,6 +334,8 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
             builder.Append(EscapeMarkdown(origin.Confidence));
             builder.Append(" | ");
             builder.Append(EscapeMarkdown(origin.Detail ?? string.Empty));
+            builder.Append(" | ");
+            builder.Append(EscapeMarkdown(origin.SourceCommand ?? string.Empty));
             builder.AppendLine(" |");
         }
 
@@ -705,7 +709,7 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
                 "provenance",
                 origin.StepIndex,
                 $"Low-confidence generated step from {origin.Source}; review against the source timeline before committing.",
-                "luotsi replay timeline --artifacts <artifact-root> --context 3");
+                origin.SourceCommand ?? "luotsi replay timeline --artifacts <artifact-root> --context 3");
         }
 
         foreach (var normalization in normalizations)
@@ -715,9 +719,22 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
                 "normalization",
                 null,
                 normalization.Detail,
-                null);
+                normalization.SourceCommand);
         }
     }
+
+    private static string? BuildSourceCommand(string? sourcePath, int? sequence)
+    {
+        if (string.IsNullOrWhiteSpace(sourcePath) || sequence is null)
+        {
+            return null;
+        }
+
+        return $"luotsi replay timeline --artifacts <artifact-root> --source-path {Quote(sourcePath)} --sequence {sequence.Value} --context 2";
+    }
+
+    private static string Quote(string value) =>
+        value.Contains(' ', StringComparison.Ordinal) ? "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"" : value;
 
     private static string? BuildReviewCommand(string kind) =>
         kind switch
