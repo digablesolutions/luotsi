@@ -420,6 +420,7 @@ public sealed record ReplayCapsuleResult(
     ReplayCapsulePrimaryFailureResult? PrimaryFailure,
     ReplayCapsuleArtifactCounts ArtifactCounts,
     IReadOnlyList<ReplayCapsuleArtifactManifestEntry> ArtifactManifest,
+    IReadOnlyList<ReplayCapsuleTimelineHighlightResult> FailureTimeline,
     IReadOnlyList<ReplayCapsuleCommandHint> SuggestedCommands);
 
 public sealed record ReplayCapsulePrimaryFailureResult(
@@ -444,6 +445,18 @@ public sealed record ReplayCapsuleArtifactManifestEntry(
     string Kind,
     string Role,
     string? Session);
+
+public sealed record ReplayCapsuleTimelineHighlightResult(
+    string MetadataPath,
+    string TimelinePath,
+    int Sequence,
+    DateTimeOffset? Timestamp,
+    string Type,
+    string Detail,
+    bool FailureRelevant,
+    string? ScenarioId,
+    string? Scenario,
+    int? StepIndex);
 
 public sealed record ReplayCapsuleCommandHint(
     string Command,

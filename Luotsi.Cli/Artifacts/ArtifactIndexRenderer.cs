@@ -273,6 +273,7 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         AddJsonProperty(parts, root, "scenarioDraftAvailable", "scenario_draft_available");
         AddJsonProperty(parts, root, "scenarioDraftReason", "scenario_draft_reason");
         AddArrayCount(parts, root, "artifactManifest", "artifact_manifest");
+        AddArrayCount(parts, root, "failureTimeline", "failure_timeline");
         return parts.Count == 0 ? null : string.Join(" | ", parts);
     }
 

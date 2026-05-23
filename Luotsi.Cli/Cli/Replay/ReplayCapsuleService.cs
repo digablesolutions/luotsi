@@ -36,6 +36,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             : CreatePrimaryFailure(primaryFailureSession);
         var artifactCounts = CountArtifacts(files);
         var artifactManifest = ReplayCapsuleArtifactManifestBuilder.Build(files).ToArray();
+        var failureTimeline = BuildFailureTimeline(failureSessions).ToArray();
         var scenarioDraft = InspectScenarioDraftReadiness(artifacts.Root, files);
         var commandHints = BuildCommandHints(artifacts.Root, primaryFailure, scenarioDraft.Available).ToArray();
         var readmePath = options.HasFlag("write-readme")
@@ -57,6 +58,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             primaryFailure,
             artifactCounts,
             artifactManifest,
+            failureTimeline,
             commandHints);
 
         if (jsonPath is not null)
@@ -66,7 +68,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
 
         if (readmePath is not null)
         {
-            await artifacts.WriteTextAsync(CapsuleReadmeFileName, BuildReadme(artifacts.Root, summaries.Count, failureSessions.Length, scenarioDraft, primaryFailure, artifactCounts, artifactManifest, commandHints)).ConfigureAwait(false);
+            await artifacts.WriteTextAsync(CapsuleReadmeFileName, BuildReadme(artifacts.Root, summaries.Count, failureSessions.Length, scenarioDraft, primaryFailure, artifactCounts, artifactManifest, failureTimeline, commandHints)).ConfigureAwait(false);
         }
 
         return result;
@@ -96,6 +98,27 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             Count(files, IsScreenState),
             Count(files, IsReport),
             Count(files, static path => Path.GetFileName(path).Equals(SessionReplayArtifacts.TimelineFileName, StringComparison.OrdinalIgnoreCase)));
+
+    private static IEnumerable<ReplayCapsuleTimelineHighlightResult> BuildFailureTimeline(IEnumerable<SessionReplaySummary> failureSessions)
+    {
+        foreach (var summary in failureSessions)
+        {
+            foreach (var highlight in summary.TimelineHighlights.Where(static highlight => highlight.IsFailureRelevant))
+            {
+                yield return new ReplayCapsuleTimelineHighlightResult(
+                    summary.MetadataPath,
+                    summary.TimelinePath,
+                    highlight.Sequence,
+                    highlight.Timestamp,
+                    highlight.Type,
+                    highlight.Detail,
+                    highlight.IsFailureRelevant,
+                    highlight.ScenarioId,
+                    highlight.Scenario,
+                    highlight.StepIndex);
+            }
+        }
+    }
 
     private IEnumerable<ReplayCapsuleCommandHint> BuildCommandHints(
         string artifactRoot,
@@ -197,6 +220,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         ReplayCapsulePrimaryFailureResult? primaryFailure,
         ReplayCapsuleArtifactCounts artifactCounts,
         IReadOnlyList<ReplayCapsuleArtifactManifestEntry> artifactManifest,
+        IReadOnlyList<ReplayCapsuleTimelineHighlightResult> failureTimeline,
         IReadOnlyList<ReplayCapsuleCommandHint> commandHints)
     {
         var builder = new StringBuilder();
@@ -222,6 +246,33 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             AppendField(builder, "Message", primaryFailure.Message);
             AppendField(builder, "Failure capsule", primaryFailure.FailureCapsulePath);
             AppendField(builder, "Timeline", primaryFailure.TimelinePath);
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("## Failure Timeline");
+        builder.AppendLine();
+        if (failureTimeline.Count == 0)
+        {
+            builder.AppendLine("No failure-relevant timeline events were found.");
+        }
+        else
+        {
+            builder.AppendLine("| Time | Type | Scenario | Step | Detail |");
+            builder.AppendLine("|---|---|---|---|---|");
+            foreach (var entry in failureTimeline)
+            {
+                builder.Append("| ");
+                builder.Append(EscapeMarkdown(entry.Timestamp?.ToString("O") ?? string.Empty));
+                builder.Append(" | ");
+                builder.Append(EscapeMarkdown(entry.Type));
+                builder.Append(" | ");
+                builder.Append(EscapeMarkdown(entry.Scenario ?? string.Empty));
+                builder.Append(" | ");
+                builder.Append(EscapeMarkdown(entry.StepIndex?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty));
+                builder.Append(" | ");
+                builder.Append(EscapeMarkdown(entry.Detail));
+                builder.AppendLine(" |");
+            }
         }
 
         builder.AppendLine();
