@@ -73,7 +73,7 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
     private static IEnumerable<FailureInstance> CreateFailureInstances(SessionReplaySummary summary)
     {
         var failureCapsule = summary.FailureCapsule;
-        if (failureCapsule?.Scenarios.Count > 0)
+        if (failureCapsule is not null && failureCapsule.Scenarios.Count > 0)
         {
             foreach (var scenario in failureCapsule.Scenarios.Where(static scenario => scenario.Error is not null || string.Equals(scenario.Status, "failed", StringComparison.OrdinalIgnoreCase)))
             {

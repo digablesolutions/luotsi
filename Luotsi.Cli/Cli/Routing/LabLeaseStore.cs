@@ -96,6 +96,26 @@ internal sealed class LabLeaseStore(IFileSystem fileSystem, TimeProvider timePro
         return Task.FromResult(new LabLeaseReleaseResult(lease.LeaseId, true, lease.LeaseFile, lease.Serial));
     }
 
+    public async Task<LabLeaseExtendResult> ExtendAsync(string leaseId, int? ttlSec)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(leaseId);
+
+        var lease = ReadActiveLeases().FirstOrDefault(lease => string.Equals(lease.LeaseId, leaseId, StringComparison.OrdinalIgnoreCase));
+        return lease is null
+            ? new LabLeaseExtendResult(leaseId, string.Empty, false, null, null, null)
+            : await ExtendLeaseAsync(lease, ttlSec).ConfigureAwait(false);
+    }
+
+    public async Task<LabLeaseExtendResult> ExtendSerialAsync(string serial, int? ttlSec)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(serial);
+
+        var lease = ReadActiveLeases().FirstOrDefault(lease => string.Equals(lease.Serial, serial, StringComparison.OrdinalIgnoreCase));
+        return lease is null
+            ? new LabLeaseExtendResult(string.Empty, serial, false, null, null, null)
+            : await ExtendLeaseAsync(lease, ttlSec).ConfigureAwait(false);
+    }
+
     public Task<LabLeasesResult> ListAsync()
     {
         var leases = ReadActiveLeases();
@@ -138,6 +158,16 @@ internal sealed class LabLeaseStore(IFileSystem fileSystem, TimeProvider timePro
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
             {
+                if (ex is JsonException)
+                {
+                    try
+                    {
+                        _fileSystem.DeleteFile(file);
+                    }
+                    catch (Exception cleanupEx) when (cleanupEx is IOException or UnauthorizedAccessException)
+                    {
+                    }
+                }
             }
         }
 
@@ -149,6 +179,21 @@ internal sealed class LabLeaseStore(IFileSystem fileSystem, TimeProvider timePro
 
     private string GetLeaseRoot() =>
         Path.Join(_fileSystem.GetTempPath(), "luotsi", "lab-leases");
+
+    private async Task<LabLeaseExtendResult> ExtendLeaseAsync(LabLeaseResult lease, int? ttlSec)
+    {
+        var ttl = ttlSec.GetValueOrDefault(DefaultLeaseTtlSeconds);
+        if (ttl <= 0)
+        {
+            throw new Errors.UsageException("lab extend --ttl-sec must be greater than zero.");
+        }
+
+        var previousExpiresAt = lease.ExpiresAt;
+        var updated = lease with { ExpiresAt = _timeProvider.GetUtcNow().AddSeconds(ttl) };
+        await using var stream = _fileSystem.OpenWrite(updated.LeaseFile, overwrite: true);
+        await JsonSerializer.SerializeAsync(stream, updated, AppJson.Options).ConfigureAwait(false);
+        return new LabLeaseExtendResult(updated.LeaseId, updated.Serial, true, previousExpiresAt, updated.ExpiresAt, updated.LeaseFile);
+    }
 
     private LabLeaseResult? TryReadLease(string path)
     {
