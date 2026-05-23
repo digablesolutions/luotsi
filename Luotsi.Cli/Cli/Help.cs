@@ -232,7 +232,7 @@ Notes:
   text-like replay artifacts, reports, logcat, hierarchies, screen-state JSON,
   and timelines for a case-insensitive string. Replay capsule returns a compact
   bundle manifest with artifact counts, an artifact_manifest, primary failure,
-  and suggested next commands. With --write-readme, replay capsule writes replay-capsule.md into
+  existing scenario draft artifact paths, and suggested next commands. With --write-readme, replay capsule writes replay-capsule.md into
   the artifact root. With --write-json, it writes replay-capsule-summary.json.
   Both options refresh the artifact index. Replay timeline returns ordered
   session-timeline.jsonl events with stable detail text for CI and agents.

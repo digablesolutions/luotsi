@@ -1047,6 +1047,44 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayCapsule_Links_Existing_Scenario_Draft_Artifacts()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        fileSystem.AddFile(Path.Join(replayRoot, "scenario-draft-summary.json"), """
+        {
+          "schema": "luotsi-scenario-draft.v1",
+          "confidence": "medium"
+        }
+        """);
+        fileSystem.AddFile(Path.Join(replayRoot, "scenario-draft.md"), "# Luotsi Scenario Draft\n\n## Review Checklist\n");
+        fileSystem.AddFile(Path.Join(replayRoot, "draft-scenario.json"), "{}");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "capsule", "--artifacts", replayRoot, "--write-readme"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        var draftArtifacts = data.GetProperty("scenario_draft_artifacts");
+        Assert.Equal("scenario-draft-summary.json", draftArtifacts.GetProperty("summary_path").GetString());
+        Assert.Equal("scenario-draft.md", draftArtifacts.GetProperty("markdown_path").GetString());
+        Assert.Equal("draft-scenario.json", draftArtifacts.GetProperty("scenario_path").GetString());
+        Assert.Contains(data.GetProperty("suggested_commands").EnumerateArray(), command =>
+            command.GetProperty("command").GetString()!.Contains("Review Checklist", StringComparison.Ordinal));
+        var readme = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-capsule.md"));
+        Assert.Contains("Scenario draft summary: `scenario-draft-summary.json`", readme, StringComparison.Ordinal);
+        Assert.Contains("Scenario draft review: `scenario-draft.md`", readme, StringComparison.Ordinal);
+        Assert.Contains("Scenario draft file: `draft-scenario.json`", readme, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayTimeline_Returns_Filtered_Failure_Events()
     {
         var console = new FakeConsole();
