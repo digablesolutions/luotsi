@@ -992,6 +992,9 @@ public sealed partial class AppTests
             command.GetProperty("command").GetString()!.Contains("replay timeline", StringComparison.Ordinal) &&
             command.GetProperty("command").GetString()!.Contains("--failures --context 3", StringComparison.Ordinal));
         Assert.Contains(data.GetProperty("suggested_commands").EnumerateArray(), command =>
+            command.GetProperty("command").GetString()!.Contains("replay scrub", StringComparison.Ordinal) &&
+            command.GetProperty("command").GetString()!.Contains("--failures --context 3", StringComparison.Ordinal));
+        Assert.Contains(data.GetProperty("suggested_commands").EnumerateArray(), command =>
             command.GetProperty("command").GetString()!.Contains("replay graph", StringComparison.Ordinal) &&
             command.GetProperty("command").GetString()!.Contains("--write-json --write-markdown", StringComparison.Ordinal));
         Assert.DoesNotContain(data.GetProperty("suggested_commands").EnumerateArray(), command =>
@@ -1011,6 +1014,7 @@ public sealed partial class AppTests
         Assert.Contains("## Artifact Manifest", readme, StringComparison.Ordinal);
         Assert.Contains("failures/wait-login-button.png", readme, StringComparison.Ordinal);
         Assert.Contains("luotsi replay timeline", readme, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay scrub", readme, StringComparison.Ordinal);
         Assert.Contains("luotsi replay graph", readme, StringComparison.Ordinal);
         using var jsonSummary = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-capsule-summary.json")));
         Assert.Equal(ResultSchemas.ReplayCapsule, jsonSummary.RootElement.GetProperty("schema").GetString());

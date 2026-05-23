@@ -333,6 +333,22 @@ public sealed partial class AppTests
                 }
             }
         });
+        await session.WriteJsonAsync("replay-scrub.json", new
+        {
+            schema = ResultSchemas.ReplayScrub,
+            eventCount = 3,
+            focusIndex = 1,
+            markdownPath = Path.Join(session.Root, "replay-scrub.md"),
+            focusEvent = new
+            {
+                type = "scenario_step_failed",
+                detail = "step=wait login button error_message=not visible"
+            },
+            commands = new[]
+            {
+                new { command = "luotsi replay timeline --artifacts root --source-path session-timeline.jsonl --sequence 1 --context 5" }
+            }
+        });
 
         var markdownIndex = await fileSystem.ReadAllTextAsync(Path.Join(session.Root, "index.md"));
         var htmlIndex = await fileSystem.ReadAllTextAsync(Path.Join(session.Root, "index.html"));
@@ -340,11 +356,15 @@ public sealed partial class AppTests
         Assert.Contains("## Replay", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("- [replay-capsule-summary.json](replay-capsule-summary.json)", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("- [scenario-draft-summary.json](scenario-draft-summary.json)", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("- [replay-scrub.json](replay-scrub.json)", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("session_count=2 | failure_count=1 | scenario_draft_available=true | scenario_draft_reason=Found command_result:tap_text source in inspect/session-timeline.jsonl. | artifact_manifest=1", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("confidence=medium | source_summaries=1 | steps=2 | warnings=1 | normalizations=1", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("event_count=3 | focus_index=1 | markdown_path=", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("focus_type=scenario_step_failed | focus_detail=step=wait login button error_message=not visible | commands=1", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("<h2>Replay</h2>", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("session_count=2 | failure_count=1 | scenario_draft_available=true | scenario_draft_reason=Found command_result:tap_text source in inspect/session-timeline.jsonl. | artifact_manifest=1", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("confidence=medium | source_summaries=1 | steps=2 | warnings=1 | normalizations=1", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("focus_type=scenario_step_failed | focus_detail=step=wait login button error_message=not visible | commands=1", htmlIndex, StringComparison.Ordinal);
     }
 
     [Fact]

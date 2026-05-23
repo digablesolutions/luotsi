@@ -238,6 +238,11 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
                 return BuildScenarioDraftSummary(root);
             }
 
+            if (string.Equals(schemaName, ResultSchemas.ReplayScrub, StringComparison.Ordinal))
+            {
+                return BuildReplayScrubSummary(root);
+            }
+
             if (string.Equals(schemaName, "luotsi-scenario-run-report.v1", StringComparison.Ordinal))
             {
                 return BuildScenarioRunReportSummary(root);
@@ -274,6 +279,23 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         AddJsonProperty(parts, root, "scenarioDraftReason", "scenario_draft_reason");
         AddArrayCount(parts, root, "artifactManifest", "artifact_manifest");
         AddArrayCount(parts, root, "failureTimeline", "failure_timeline");
+        return parts.Count == 0 ? null : string.Join(" | ", parts);
+    }
+
+    private static string? BuildReplayScrubSummary(JsonElement root)
+    {
+        var parts = new List<string>();
+        AddJsonProperty(parts, root, "eventCount", "event_count");
+        AddJsonProperty(parts, root, "focusIndex", "focus_index");
+        AddJsonProperty(parts, root, "markdownPath", "markdown_path");
+        if (root.TryGetProperty("focusEvent", out var focusEvent) ||
+            root.TryGetProperty("focus_event", out focusEvent))
+        {
+            AddJsonProperty(parts, focusEvent, "type", "focus_type");
+            AddJsonProperty(parts, focusEvent, "detail", "focus_detail");
+        }
+
+        AddArrayCount(parts, root, "commands");
         return parts.Count == 0 ? null : string.Join(" | ", parts);
     }
 

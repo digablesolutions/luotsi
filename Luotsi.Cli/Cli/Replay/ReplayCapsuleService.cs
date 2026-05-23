@@ -141,6 +141,9 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             $"luotsi replay timeline --artifacts {Quote(artifactRoot)} --failures --context 3 --write-json --write-markdown",
             "Write the failure-focused timeline with nearby context for offline triage.");
         yield return new ReplayCapsuleCommandHint(
+            $"luotsi replay scrub --artifacts {Quote(artifactRoot)} --failures --context 3 --write-json --write-markdown",
+            "Write a local previous/focused/next event scrub view for the primary failure window.");
+        yield return new ReplayCapsuleCommandHint(
             $"luotsi replay graph --artifacts {Quote(artifactRoot)} --write-json --write-markdown",
             "Write the semantic debug graph for agents and local inspection.");
 
