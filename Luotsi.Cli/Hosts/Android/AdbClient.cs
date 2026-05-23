@@ -12,7 +12,7 @@ namespace Luotsi.Cli.Hosts.Android;
 /// </summary>
 public sealed class AdbClient(string executable, string? serial, IProcessRunner processRunner, TimeSpan? commandTimeout = null) : IAdbClient
 {
-    private const int MaxCapturedLogChars = 2 * 1024 * 1024;
+    private const int MaxCapturedLogChars = 512 * 1024;
     private const int MaxCapturedStreamChars = 512 * 1024;
 
     private readonly string _executable = string.IsNullOrWhiteSpace(executable) ? throw new ArgumentException("ADB executable is required.", nameof(executable)) : executable;

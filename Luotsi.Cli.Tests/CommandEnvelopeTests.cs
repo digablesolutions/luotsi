@@ -753,7 +753,7 @@ public sealed partial class AppTests
             DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
         });
 
-        var exitCode = await app.RunAsync(["replay", "capsule", "--artifacts", replayRoot, "--write-readme"]);
+        var exitCode = await app.RunAsync(["replay", "capsule", "--artifacts", replayRoot, "--write-readme", "--write-json"]);
         using var envelope = console.ParseSingleOutputAsJson();
 
         Assert.Equal(0, exitCode);
@@ -763,6 +763,7 @@ public sealed partial class AppTests
         Assert.Equal(1, data.GetProperty("failure_count").GetInt32());
         Assert.True(data.GetProperty("has_failure_capsule").GetBoolean());
         Assert.Equal(Path.Join(replayRoot, "replay-capsule.md"), data.GetProperty("readme_path").GetString());
+        Assert.Equal(Path.Join(replayRoot, "replay-capsule-summary.json"), data.GetProperty("json_path").GetString());
         var primaryFailure = data.GetProperty("primary_failure");
         Assert.Equal("login smoke", primaryFailure.GetProperty("scenario").GetString());
         Assert.Equal("wait login button", primaryFailure.GetProperty("step").GetString());
@@ -773,10 +774,108 @@ public sealed partial class AppTests
         Assert.Contains(data.GetProperty("suggested_commands").EnumerateArray(), command =>
             command.GetProperty("command").GetString()!.Contains("replay search", StringComparison.Ordinal));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-capsule.md")));
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-capsule-summary.json")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.md")));
         var readme = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-capsule.md"));
         Assert.Contains("## Primary Failure", readme, StringComparison.Ordinal);
         Assert.Contains("not visible", readme, StringComparison.Ordinal);
+        using var jsonSummary = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-capsule-summary.json")));
+        Assert.Equal(ResultSchemas.ReplayCapsule, jsonSummary.RootElement.GetProperty("schema").GetString());
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayTimeline_Returns_Filtered_Failure_Events()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "timeline", "--artifacts", replayRoot, "--failures"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(ResultSchemas.ReplayTimeline, data.GetProperty("schema").GetString());
+        Assert.Equal(1, data.GetProperty("event_count").GetInt32());
+        Assert.Equal(1, data.GetProperty("scanned_file_count").GetInt32());
+        var evt = Assert.Single(data.GetProperty("events").EnumerateArray());
+        Assert.Equal("session-timeline.jsonl", evt.GetProperty("path").GetString());
+        Assert.Equal(1, evt.GetProperty("sequence").GetInt32());
+        Assert.Equal("scenario_step_failed", evt.GetProperty("type").GetString());
+        Assert.True(evt.GetProperty("failure_relevant").GetBoolean());
+        Assert.Contains("error_message=not visible", evt.GetProperty("detail").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayTimeline_Filters_By_Detail_Text()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "timeline", "--artifacts", replayRoot, "--contains", "wait login button"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(1, data.GetProperty("event_count").GetInt32());
+        var evt = Assert.Single(data.GetProperty("events").EnumerateArray());
+        Assert.Equal("scenario_step_failed", evt.GetProperty("type").GetString());
+        Assert.Contains("step=wait login button", evt.GetProperty("detail").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayTimeline_FormatJsonl_Writes_Summary_And_Event_Lines()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "timeline", "--artifacts", replayRoot, "--failures", "--format", "jsonl", "--write-json", "--write-jsonl", "--write-markdown"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(2, console.OutputLines.Count);
+        using var summaryLine = JsonDocument.Parse(console.OutputLines[0]);
+        using var eventLine = JsonDocument.Parse(console.OutputLines[1]);
+        Assert.Equal(ResultSchemas.ReplayTimeline, summaryLine.RootElement.GetProperty("schema").GetString());
+        Assert.Equal("summary", summaryLine.RootElement.GetProperty("type").GetString());
+        Assert.Equal(1, summaryLine.RootElement.GetProperty("event_count").GetInt32());
+        Assert.Equal(ResultSchemas.ReplayTimeline, eventLine.RootElement.GetProperty("schema").GetString());
+        Assert.Equal("event", eventLine.RootElement.GetProperty("type").GetString());
+        Assert.Equal("scenario_step_failed", eventLine.RootElement.GetProperty("event").GetProperty("type").GetString());
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-timeline.json")));
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-timeline.jsonl")));
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-timeline.md")));
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.md")));
+        using var jsonArtifact = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-timeline.json")));
+        Assert.Equal(ResultSchemas.ReplayTimeline, jsonArtifact.RootElement.GetProperty("schema").GetString());
+        var jsonlArtifact = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-timeline.jsonl"));
+        var jsonlLines = jsonlArtifact.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        using var jsonlSummaryLine = JsonDocument.Parse(jsonlLines[0]);
+        using var jsonlEventLine = JsonDocument.Parse(jsonlLines[1]);
+        Assert.Equal("summary", jsonlSummaryLine.RootElement.GetProperty("type").GetString());
+        Assert.Equal("event", jsonlEventLine.RootElement.GetProperty("type").GetString());
+        var markdownArtifact = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-timeline.md"));
+        Assert.Contains("# Luotsi Replay Timeline", markdownArtifact, StringComparison.Ordinal);
+        Assert.Contains("scenario_step_failed", markdownArtifact, StringComparison.Ordinal);
     }
 
     [Fact]

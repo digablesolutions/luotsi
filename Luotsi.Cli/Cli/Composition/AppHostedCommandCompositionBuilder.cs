@@ -52,7 +52,8 @@ internal static class AppHostedCommandCompositionBuilder
             dependencies.ProcessRunner,
             new ReplayScenarioDraftService(dependencies.FileSystem),
             new ReplaySearchService(dependencies.FileSystem),
-            new ReplayCapsuleService(dependencies.FileSystem)));
+            new ReplayCapsuleService(dependencies.FileSystem),
+            new ReplayTimelineService(dependencies.FileSystem)));
 
         return new(
             envelopeWriter,

@@ -44,7 +44,26 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             return 0;
         }
 
-        var outputMode = ParseOutputMode(options);
+        if (IsTimelineCommand(options))
+        {
+            var timelineResult = await _dependencies.TimelineService.ReadAsync(options, artifacts).ConfigureAwait(false);
+            switch (ParseOutputMode(options, "replay timeline"))
+            {
+                case ReplayOutputMode.Json:
+                    _dependencies.JsonWriter.Write(timelineResult);
+                    break;
+                case ReplayOutputMode.Jsonl:
+                    _dependencies.JsonWriter.WriteLines(ReplayTimelineService.ToJsonLineObjects(timelineResult));
+                    break;
+                default:
+                    _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, timelineResult, artifacts.ToData());
+                    break;
+            }
+
+            return 0;
+        }
+
+        var outputMode = ParseOutputMode(options, "replay summarize");
         var result = await _dependencies.CommandDispatcher.ExecuteAsync(options).ConfigureAwait(false);
 
         switch (outputMode)
@@ -99,7 +118,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             command.Args);
     }
 
-    private static ReplayOutputMode ParseOutputMode(CliOptions options)
+    private static ReplayOutputMode ParseOutputMode(CliOptions options, string commandName)
     {
         var format = options.Get("format");
         if (string.IsNullOrWhiteSpace(format))
@@ -111,7 +130,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         {
             "json" => ReplayOutputMode.Json,
             "jsonl" => ReplayOutputMode.Jsonl,
-            _ => throw new UsageException("replay summarize --format must be json or jsonl.")
+            _ => throw new UsageException($"{commandName} --format must be json or jsonl.")
         };
     }
 
@@ -131,6 +150,10 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
     private static bool IsCapsuleCommand(CliOptions options) =>
         options.Arguments.Count > 0 &&
         string.Equals(options.Arguments[0], "capsule", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsTimelineCommand(CliOptions options) =>
+        options.Arguments.Count > 0 &&
+        string.Equals(options.Arguments[0], "timeline", StringComparison.OrdinalIgnoreCase);
 
     private static ReplayOpenCommand BuildOpenCommand(string indexHtmlPath)
     {
@@ -194,4 +217,5 @@ internal sealed record ReplayCommandHostDependencies(
     IProcessRunner ProcessRunner,
     ReplayScenarioDraftService ScenarioDraftService,
     ReplaySearchService SearchService,
-    ReplayCapsuleService CapsuleService);
+    ReplayCapsuleService CapsuleService,
+    ReplayTimelineService TimelineService);

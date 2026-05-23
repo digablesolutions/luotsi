@@ -336,6 +336,7 @@ public sealed record ReplayCapsuleResult(
     int FailureCount,
     bool HasFailureCapsule,
     string? ReadmePath,
+    string? JsonPath,
     ReplayCapsulePrimaryFailureResult? PrimaryFailure,
     ReplayCapsuleArtifactCounts ArtifactCounts,
     IReadOnlyList<ReplayCapsuleCommandHint> SuggestedCommands);
@@ -360,6 +361,25 @@ public sealed record ReplayCapsuleArtifactCounts(
 public sealed record ReplayCapsuleCommandHint(
     string Command,
     string Purpose);
+
+public sealed record ReplayTimelineResult(
+    string Schema,
+    string ArtifactRoot,
+    int EventCount,
+    int ScannedFileCount,
+    bool Truncated,
+    string? JsonPath,
+    string? JsonlPath,
+    string? MarkdownPath,
+    IReadOnlyList<ReplayTimelineEventResult> Events);
+
+public sealed record ReplayTimelineEventResult(
+    string Path,
+    int Sequence,
+    DateTimeOffset? Timestamp,
+    string Type,
+    bool FailureRelevant,
+    string Detail);
 
 public sealed record DoctorCheck(
     string Name,

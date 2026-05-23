@@ -89,19 +89,29 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(packet);
 
-        List<ObserverConnection> snapshot;
+        List<ObserverConnection>? disconnectedConnections = null;
         lock (_gate)
         {
             _bootstrapPackets = UpdateBootstrapPackets(_bootstrapPackets, packet);
-            snapshot = [.. _connections];
+            for (var index = 0; index < _connections.Count; index++)
+            {
+                var connection = _connections[index];
+                if (!connection.TryQueue(packet))
+                {
+                    disconnectedConnections ??= [];
+                    disconnectedConnections.Add(connection);
+                }
+            }
         }
 
-        foreach (var connection in snapshot)
+        if (disconnectedConnections is null)
         {
-            if (!connection.TryQueue(packet))
-            {
-                await RemoveConnectionAsync(connection, ViewShareObserverDisconnectReasons.ObserverBackpressure, disposeConnection: true, cancellationToken).ConfigureAwait(false);
-            }
+            return;
+        }
+
+        foreach (var connection in disconnectedConnections)
+        {
+            await RemoveConnectionAsync(connection, ViewShareObserverDisconnectReasons.ObserverBackpressure, disposeConnection: true).ConfigureAwait(false);
         }
     }
 
@@ -115,7 +125,7 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
 
         foreach (var connection in snapshot)
         {
-            await RemoveConnectionAsync(connection, reason, disposeConnection: true, cancellationToken).ConfigureAwait(false);
+            await RemoveConnectionAsync(connection, reason, disposeConnection: true).ConfigureAwait(false);
         }
     }
 
@@ -186,9 +196,9 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
     }
 
     private Task NotifyConnectionClosedAsync(ObserverConnection connection) =>
-        RemoveConnectionAsync(connection, ViewShareObserverDisconnectReasons.ObserverDisconnected, disposeConnection: false, CancellationToken.None);
+        RemoveConnectionAsync(connection, ViewShareObserverDisconnectReasons.ObserverDisconnected, disposeConnection: false);
 
-    private async Task RemoveConnectionAsync(ObserverConnection connection, string reason, bool disposeConnection, CancellationToken cancellationToken)
+    private async Task RemoveConnectionAsync(ObserverConnection connection, string reason, bool disposeConnection)
     {
         bool removed;
         lock (_gate)

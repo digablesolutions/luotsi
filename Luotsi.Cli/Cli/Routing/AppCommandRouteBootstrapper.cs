@@ -80,6 +80,7 @@ internal sealed class AppCommandRouteBootstrapper(AppCommandRouteBootstrapperDep
     private static bool IsExistingReplayArtifactCommand(string replaySubcommand) =>
         string.Equals(replaySubcommand, "summarize", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(replaySubcommand, "capsule", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(replaySubcommand, "timeline", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(replaySubcommand, "open", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(replaySubcommand, "search", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(replaySubcommand, "scenario-draft", StringComparison.OrdinalIgnoreCase) ||

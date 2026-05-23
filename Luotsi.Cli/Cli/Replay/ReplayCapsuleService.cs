@@ -9,6 +9,7 @@ namespace Luotsi.Cli.Cli.Replay;
 internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
 {
     private const string CapsuleReadmeFileName = "replay-capsule.md";
+    private const string CapsuleSummaryFileName = "replay-capsule-summary.json";
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
 
     public async Task<ReplayCapsuleResult> DescribeAsync(CliOptions options, ArtifactSession artifacts)
@@ -37,21 +38,32 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         var readmePath = options.HasFlag("write-readme")
             ? Path.Join(artifacts.Root, CapsuleReadmeFileName)
             : null;
-        if (readmePath is not null)
-        {
-            await artifacts.WriteTextAsync(CapsuleReadmeFileName, BuildReadme(artifacts.Root, summaries.Count, failureSessions.Length, primaryFailure, artifactCounts, commandHints)).ConfigureAwait(false);
-        }
-
-        return new ReplayCapsuleResult(
+        var jsonPath = options.HasFlag("write-json")
+            ? Path.Join(artifacts.Root, CapsuleSummaryFileName)
+            : null;
+        var result = new ReplayCapsuleResult(
             ResultSchemas.ReplayCapsule,
             artifacts.Root,
             summaries.Count,
             failureSessions.Length,
             summaries.Any(static summary => summary.FailureCapsule is not null),
             readmePath,
+            jsonPath,
             primaryFailure,
             artifactCounts,
             commandHints);
+
+        if (jsonPath is not null)
+        {
+            await artifacts.WriteJsonAsync(CapsuleSummaryFileName, result).ConfigureAwait(false);
+        }
+
+        if (readmePath is not null)
+        {
+            await artifacts.WriteTextAsync(CapsuleReadmeFileName, BuildReadme(artifacts.Root, summaries.Count, failureSessions.Length, primaryFailure, artifactCounts, commandHints)).ConfigureAwait(false);
+        }
+
+        return result;
     }
 
     private static ReplayCapsulePrimaryFailureResult CreatePrimaryFailure(SessionReplaySummary summary)

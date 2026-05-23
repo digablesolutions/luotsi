@@ -23,4 +23,5 @@ public static class ResultSchemas
     public const string ScenarioDraft = "luotsi-scenario-draft.v1";
     public const string ReplaySearch = "luotsi-replay-search.v1";
     public const string ReplayCapsule = "luotsi-replay-capsule.v1";
+    public const string ReplayTimeline = "luotsi-replay-timeline.v1";
 }
