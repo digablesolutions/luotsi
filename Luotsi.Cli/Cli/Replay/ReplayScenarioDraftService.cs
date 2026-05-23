@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using Luotsi.Cli.Artifacts;
@@ -263,14 +264,9 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
         var steps = new List<ScenarioStep>();
         if (data.TryGetProperty("events", out var events) && events.ValueKind == JsonValueKind.Array)
         {
-            foreach (var telemetryEvent in events.EnumerateArray())
-            {
-                var step = CreateTelemetryStep(telemetryEvent);
-                if (step is not null)
-                {
-                    steps.Add(step);
-                }
-            }
+            steps.AddRange(events.EnumerateArray()
+                .Select(CreateTelemetryStep)
+                .OfType<ScenarioStep>());
         }
         else
         {

@@ -166,6 +166,8 @@ internal sealed class LabLeaseStore(IFileSystem fileSystem, TimeProvider timePro
                     }
                     catch (Exception cleanupEx) when (cleanupEx is IOException or UnauthorizedAccessException)
                     {
+                        // Ignore cleanup failures so a corrupt lease file does not break listing.
+                        _ = cleanupEx;
                     }
                 }
             }
