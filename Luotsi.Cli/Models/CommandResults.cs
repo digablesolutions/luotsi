@@ -516,6 +516,23 @@ public sealed record ReplayTimelineEventResult(
     string Detail,
     IReadOnlyDictionary<string, string?> Properties);
 
+public sealed record ReplayScrubResult(
+    string Schema,
+    string ArtifactRoot,
+    int EventCount,
+    int FocusIndex,
+    string? JsonPath,
+    string? MarkdownPath,
+    ReplayTimelineEventResult? FocusEvent,
+    ReplayTimelineEventResult? PreviousEvent,
+    ReplayTimelineEventResult? NextEvent,
+    IReadOnlyList<ReplayTimelineEventResult> Events,
+    IReadOnlyList<ReplayScrubCommandHint> Commands);
+
+public sealed record ReplayScrubCommandHint(
+    string Command,
+    string Purpose);
+
 public sealed record ReplayGraphResult(
     string Schema,
     string ArtifactRoot,

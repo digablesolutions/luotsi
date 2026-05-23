@@ -1160,6 +1160,45 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayScrub_Returns_Focused_Event_And_Navigation_Commands()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "scrub", "--artifacts", replayRoot, "--failures", "--context", "1", "--write-json", "--write-markdown"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(ResultSchemas.ReplayScrub, data.GetProperty("schema").GetString());
+        Assert.Equal(Path.Join(replayRoot, "replay-scrub.json"), data.GetProperty("json_path").GetString());
+        Assert.Equal(Path.Join(replayRoot, "replay-scrub.md"), data.GetProperty("markdown_path").GetString());
+        Assert.Equal(1, data.GetProperty("focus_index").GetInt32());
+        Assert.Equal("scenario_step_failed", data.GetProperty("focus_event").GetProperty("type").GetString());
+        Assert.Equal("scenario_run_started", data.GetProperty("previous_event").GetProperty("type").GetString());
+        Assert.Equal("scenario_run_ended", data.GetProperty("next_event").GetProperty("type").GetString());
+        Assert.Contains(data.GetProperty("commands").EnumerateArray(), command =>
+            command.GetProperty("command").GetString()!.Contains("replay timeline", StringComparison.Ordinal) &&
+            command.GetProperty("command").GetString()!.Contains("--source-path session-timeline.jsonl --sequence 1", StringComparison.Ordinal));
+        Assert.Contains(data.GetProperty("commands").EnumerateArray(), command =>
+            command.GetProperty("command").GetString()!.Contains("replay search", StringComparison.Ordinal) &&
+            command.GetProperty("command").GetString()!.Contains("not visible", StringComparison.Ordinal));
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-scrub.json")));
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-scrub.md")));
+        var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-scrub.md"));
+        Assert.Contains("## Focused Event", markdown, StringComparison.Ordinal);
+        Assert.Contains("scenario_step_failed", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Scrub Window", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayTimeline_Filters_By_Detail_Text()
     {
         var console = new FakeConsole();

@@ -19,6 +19,7 @@ Artifacts are part of the Luotsi contract. Commands, scenario runs, inspect sess
 luotsi replay summarize --artifacts ./artifacts/my-run
 luotsi replay timeline --artifacts ./artifacts/my-run --failures
 luotsi replay timeline --artifacts ./artifacts/my-run --source-path session-timeline.jsonl --sequence 1
+luotsi replay scrub --artifacts ./artifacts/my-run --failures --context 3 --write-markdown
 luotsi replay search --artifacts ./artifacts/my-run --contains "timeout"
 luotsi replay open --artifacts ./artifacts/my-run
 ```
@@ -27,6 +28,7 @@ luotsi replay open --artifacts ./artifacts/my-run
 
 - `replay summarize`: condensed session-level overview, including failure capsule linkage
 - `replay timeline`: ordered timeline events with type, timestamps, detail text, and filters for failures, time windows, or exact source path/sequence
+- `replay scrub`: local previous/focused/next event view with exact commands to move through replay evidence
 - `replay search`: text search across timelines and text-like artifacts
 - `replay open`: regenerate and open the artifact browser locally
 - `replay capsule`: compact manifest with primary failure reopen command, failure timeline with exact reopen commands, existing scenario draft artifacts and summary counts, artifact manifest, and suggested next commands
@@ -107,6 +109,7 @@ This is enough for the near-term authoring loop: explore a flow, generate a draf
 ```bash
 luotsi replay capsule --artifacts ./artifacts/failing-run --write-readme --write-json
 luotsi replay timeline --artifacts ./artifacts/failing-run --failures --context 3 --write-markdown
+luotsi replay scrub --artifacts ./artifacts/failing-run --failures --context 3 --write-markdown
 luotsi replay scenario-draft --artifacts ./artifacts/failing-run --output ./scenarios/recovered-draft.json --write-json --write-markdown
 luotsi scenario-validate --file ./scenarios/recovered-draft.json
 luotsi replay open --artifacts ./artifacts/failing-run
