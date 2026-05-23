@@ -25,6 +25,7 @@ flowchart LR
     View --> Bootstrap[Android view bootstrap]
     View --> Renderer[SDL3 renderer]
     View --> Backend[Libav decode backend]
+    View --> Share[TCP share relay optional]
 
     Host --> Adb[adb / device shell]
     Bootstrap --> Adb
@@ -32,6 +33,7 @@ flowchart LR
     Helper --> Stream[H.264 packet stream]
     Stream --> Backend
     Backend --> Renderer
+    Backend --> Share
     Host --> Artifacts[ArtifactSession]
     View --> Artifacts
     Commands --> Artifacts
@@ -68,6 +70,10 @@ libav, and presents decoded BGRA frames through SDL3. With
 `--capture-backend auto`, the host prefers MediaProjection and falls back to
 `screenrecord` if helper startup or consent fails during bring-up.
 
+The same view session can optionally relay packets to observers via
+`--share-bind`. Observer sessions (`--join-share`) are intentionally
+read-only at the command/input layer.
+
 ## View runtime data path
 
 ```mermaid
@@ -77,6 +83,7 @@ sequenceDiagram
     participant Bootstrap as AndroidViewBootstrap
     participant Device as Android helper
     participant Stream as Localhost socket
+    participant Share as Optional share relay
     participant Backend as LibavViewBackend
     participant Window as SDL3 window
     participant Host as IDeviceHost
@@ -87,11 +94,13 @@ sequenceDiagram
     Device-->>CLI: startup header (codec, size, session)
     Device-->>Stream: config + frame packets
     CLI->>Backend: RunAsync(packet stream)
+    CLI->>Share: Publish stream packets (optional)
     Backend->>Window: PresentAsync(decoded BGRA frame)
     User->>Window: click
     Window->>CLI: pointer event
     CLI->>Host: TapPointAsync(relative coords)
     CLI-->>User: view_started / view_ended JSONL events
+    Note over Share,Backend: Late-joining observers receive cached bootstrap packets\n(config plus latest keyframe) so decoding can start immediately.
 ```
 
 ## Native dependency story

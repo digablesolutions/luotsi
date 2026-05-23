@@ -8,6 +8,7 @@ internal enum AppCommandFamily
     ProfileDelete,
     Doctor,
     Inspect,
+    Replay,
     ViewDiagnostics,
     ViewSession,
     HostedCommand
@@ -37,6 +38,11 @@ internal static class AppCommandFamilyClassifier
         if (string.Equals(options.Command, "doctor", StringComparison.OrdinalIgnoreCase))
         {
             return new AppCommandFamilyClassification(AppCommandFamily.Doctor);
+        }
+
+        if (string.Equals(options.Command, "replay", StringComparison.OrdinalIgnoreCase))
+        {
+            return new AppCommandFamilyClassification(AppCommandFamily.Replay);
         }
 
         var viewDiagnostic = ViewDiagnosticInvocation.Resolve(options);

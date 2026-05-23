@@ -13,14 +13,16 @@
 
 Luotsi is a host-driven CLI for Android device automation, inspection, and live view. It runs on the engineer or CI machine, talks to real devices over ADB, and returns structured JSON results plus artifacts. Orchestration, policy, and diagnostics stay on the host; the on-device helper stays thin and purpose-built.
 
+Docs site: [https://digablesolutions.github.io/luotsi/](https://digablesolutions.github.io/luotsi/)
+
 ## How it works
 
-1. **Run a command** — every command returns one JSON envelope with `ok`, `command`, `data`, `artifacts`, `provenance`, and `error`. No third-party device server required.
+1. **Run a command** — commands return one JSON envelope with `schema`, `ok`, `command`, `started_at`, `ended_at`, `data`, `artifacts`, `provenance`, and `error` by default. `replay summarize --format json|jsonl` can emit raw machine-readable replay summaries for CI without the envelope wrapper, `replay capsule` describes a replay bundle and suggests next commands, `replay open` opens the local artifact browser, `replay search` finds text across replay timelines and artifacts, `replay scenario-draft` turns inspect action history into a starter scenario, and failed scenario runs now carry an embedded `failure_capsule` summary so replay consumers do not need a second artifact read just to discover linked reports and failure artifacts. No third-party device server required.
 2. **Run a scenario** — drive multi-step device flows from a small JSON playbook. Steps are validated, templated, and timed; failures produce artifact bundles automatically.
-3. **Inspect mode** — open a JSONL session for agent-driven exploration. Luotsi emits screen snapshots and diffs so an agent can reason about the UI and act without a scenario file.
+3. **Inspect mode** — open a JSONL session for agent-driven exploration. Luotsi emits structured JSONL events (`session_started`, `screen_snapshot`, `screen_delta`, `command_result`, `session_ended`, `protocol_error`, `session_error`) so an agent can reason about the UI and act without a scenario file.
 4. **Live view** — stream a mirrored device display to a local SDL window with an operator control layer, hotkeys, and JSONL events for agents consuming stream state.
 5. **Telemetry** — parse structured `LUOTSI_DEVICE_TELEMETRY` events from logcat for semantic waits and assertions.
-6. **CI-friendly** — same binary, same output shape for engineers, CI pipelines, and agent-driven flows.
+6. **CI-friendly** — same binary for engineers, CI pipelines, and agent-driven flows, with default envelopes plus optional raw replay summary output for CI consumers.
 
 ## Install
 
@@ -38,6 +40,7 @@ Verify the installed executable:
 
 ```powershell
 luotsi --version
+luotsi version
 luotsi devices
 ```
 
@@ -60,6 +63,7 @@ Verify the installed executable:
 
 ```bash
 luotsi --version
+luotsi version
 luotsi devices
 ```
 
@@ -95,6 +99,18 @@ dotnet build Luotsi.sln
 dotnet test Luotsi.sln
 ```
 
+**Update an installed Luotsi.** `luotsi update` reuses the same release installer and install manifest that the quick installers create. Stable updates target the latest non-prerelease GitHub release. Release candidates and other prereleases need an explicit tag for now.
+
+```bash
+luotsi version
+luotsi update --dry-run
+luotsi update --detach
+luotsi update --version v0.1.0-rc.4 --channel prerelease --dry-run
+luotsi update --version v0.1.0-rc.4 --channel prerelease --detach
+```
+
+Luotsi does not auto-update silently. Updates are explicit so CI and lab machines stay reproducible. If Luotsi was installed into a custom root and `luotsi version` cannot find its manifest, set `LUOTSI_INSTALL_ROOT` to that install root. On Windows, non-dry-run update requires `--detach` and returns `update_started` after launching a background updater that waits for the current `luotsi.exe` process to exit before replacing the installed `current` directory.
+
 **First run after install.** Point Luotsi at a connected device and ask it to diagnose or repair the local prerequisites it owns:
 
 ```bash
@@ -103,6 +119,42 @@ luotsi doctor --device <serial> --fix
 ```
 
 `doctor` reuses the existing adb, device preflight, and live-view readiness checks. With `--fix`, Luotsi stages FFmpeg native libraries when the selected decoder is missing them, then runs the same helper provisioning flow used by `view setup`. Published Luotsi bundles include the repair assets needed for those fixes, and source checkouts continue to use the repository layout.
+
+## Workflow quickstart
+
+If you already have a device connected, start from the workflow that matches what you are trying to do.
+
+1. First-time setup and repair:
+
+  ```bash
+  luotsi devices
+  luotsi doctor --device <serial>
+  luotsi doctor --device <serial> --fix
+  luotsi view setup --device <serial>
+  ```
+
+2. Manual live debugging:
+
+  ```bash
+  luotsi view --device <serial>
+  luotsi screen-state --device <serial>
+  luotsi inspect --device <serial>
+  ```
+
+3. Scenario authoring:
+
+  ```bash
+  luotsi scenario-init --file scenarios/smoke.json --name "smoke"
+  luotsi scenario-validate --path scenarios
+  ```
+
+4. CI execution and reports:
+
+  ```bash
+  luotsi run --path scenarios --device <serial> --report-junit junit.xml
+  ```
+
+The CLI also exposes this directly via `luotsi help quickstart`.
 
 ## Code layout
 
@@ -119,9 +171,9 @@ luotsi doctor --device <serial> --fix
 
 ## Commands
 
-Quick reference. See [docs/commands.md](docs/commands.md) for flags, retry behavior, and wireless pairing details.
+Quick reference. Start with the public [CLI command groups](https://digablesolutions.github.io/luotsi/docs/reference/cli-command-groups/), [Live View](https://digablesolutions.github.io/luotsi/docs/core-workflows/live-view/), and [Scenario Playbooks](https://digablesolutions.github.io/luotsi/docs/reference/scenario-playbooks/).
 
-`luotsi --version` prints the CLI version embedded at build or release time.
+`luotsi --version` prints the CLI version embedded at build or release time. `luotsi version` returns a JSON envelope with runtime version, installed release tag, install root, command path, helper APK path, and whether the bundled helper APK is present. `luotsi update` reruns the installer from the recorded install root; use `--dry-run` first to inspect the exact command.
 
 ### Device & ADB
 
@@ -200,7 +252,7 @@ Quick reference. See [docs/commands.md](docs/commands.md) for flags, retry behav
 | `wait-step --device <serial> --step <name>` | Wait for a semantic step telemetry event |
 | `wait-action-ready --device <serial> --action <name> [--step <name>]` | Wait for a semantic action-ready telemetry event |
 
-The full command reference also includes direct UI and capture commands such as `wait-visible`, `tap`, `type-text`, `keyevent`, `logcat`, and `record`. See [docs/commands.md](docs/commands.md) for the complete surface.
+The public [CLI command groups](https://digablesolutions.github.io/luotsi/docs/reference/cli-command-groups/) also cover the direct UI and capture commands such as `wait-visible`, `tap`, `type-text`, `keyevent`, `logcat`, and `record`.
 
 ### Scenarios & Inspect
 
@@ -216,11 +268,15 @@ The full command reference also includes direct UI and capture commands such as 
 
 ## View session
 
-`view` is a long-lived JSONL session that mirrors a connected device to a local SDL window. See [docs/view-session.md](docs/view-session.md) for the full reference.
+`view` is a long-lived JSONL session that mirrors a connected device to a local SDL window. See the public [Live View guide](https://digablesolutions.github.io/luotsi/docs/core-workflows/live-view/) for the main operator-facing reference.
 
 Key flags: `--preset <name>` (low-latency / balanced / high-quality / safe), `--capture-backend <auto|screenrecord|mediaprojection>`, `--save-profile <name>`, `--record <file>`, `--share-bind <host:port>`, `--read-only`.
 
-The SDL window has a clickable toolbar, multi-device shelf, and hotkeys (F1–F12, Ctrl+V, drag-and-drop). Full hotkey and JSONL event tables are in [docs/view-session.md](docs/view-session.md).
+`--join-share <host:port>` attaches as a read-only observer. Observer sessions can reconnect and render stream state, but interactive input plus screenshot/record controls are intentionally blocked and emitted as `view_input_blocked` events.
+
+Share relay is lab-oriented: `--share-bind`/`--join-share` currently uses an unauthenticated, unencrypted TCP stream (no TLS, no auth token). Do not expose it on untrusted networks.
+
+The SDL window has a clickable toolbar, multi-device shelf, and hotkeys (F1–F12, Ctrl+V, drag-and-drop). The public [Live View guide](https://digablesolutions.github.io/luotsi/docs/core-workflows/live-view/) covers the main controls and workflow shape.
 
 View screenshots and operator-triggered recordings go to the current artifact root. By default that is a timestamped directory under the host temp folder, for example `%TEMP%\luotsi\<timestamp>-view` on Windows or `/tmp/luotsi/<timestamp>-view` on Linux/macOS. Pass `--artifacts <directory>` to choose it. F12 writes files such as `view-window-001-screenshot.png`; F9 writes `view-window-record-001.h264` unless `--record <file.h264|file.mp4|file.mkv>` supplies a preferred recording path. Use F7 or the toolbar folder button to open the artifact root.
 
@@ -229,7 +285,7 @@ Release packaging signs the helper with `LUOTSI_ANDROID_KEYSTORE_*` secrets and 
 
 ## Inspect mode
 
-`inspect` opens a JSONL session for agent-driven exploration without a scenario file. Startup emits `session_started` and an initial `screen_snapshot`; state-affecting commands emit `command_result` followed by a `screen_delta`.
+`inspect` opens a JSONL session for agent-driven exploration without a scenario file. Startup emits `session_started` and an initial `screen_snapshot`; state-affecting commands emit `command_result` followed by a `screen_delta`. Parse failures emit `protocol_error`, command/runtime failures emit `session_error`, and shutdown emits `session_ended`.
 
 ```bash
 luotsi inspect --device 192.168.0.134:5555
@@ -248,7 +304,7 @@ Available inspect commands: `refresh`, `screen_state`, `snapshot`, `tap`, `tap_t
 
 ## Scenarios
 
-Scenarios are JSON playbooks. See [docs/scenarios.md](docs/scenarios.md) for the full format, template syntax, and action reference.
+Scenarios are JSON playbooks. See the public [Scenario Playbooks guide](https://digablesolutions.github.io/luotsi/docs/reference/scenario-playbooks/) for the format, template syntax, and supported action families.
 
 ```json
 {
@@ -265,7 +321,7 @@ Template syntax: `${env:NAME}`, `${env:NAME|fallback}`, `${var:name}`, `${now:HH
 
 Generic examples: [`examples/scenarios/android-home-smoke.json`](examples/scenarios/android-home-smoke.json), [`examples/scenarios/android-navigation-smoke.json`](examples/scenarios/android-navigation-smoke.json).
 
-For a full device walkthrough with screenshots, video, reports, and troubleshooting notes, see [Guides And Tutorials](docs/tutorials.md).
+For a full device walkthrough with screenshots, reports, and troubleshooting notes, see the public [Buggy Controller Live Demo](https://digablesolutions.github.io/luotsi/docs/tutorials/buggy-controller-live-demo/).
 
 ## Output format
 
@@ -276,6 +332,8 @@ Every command returns a single JSON envelope:
   "schema": "luotsi-command.v1",
   "ok": true,
   "command": "screen-state",
+  "started_at": "2026-05-20T17:54:49.2529673+00:00",
+  "ended_at": "2026-05-20T17:55:17.584933+00:00",
   "data": {},
   "artifacts": {
     "artifact_root": "/tmp/luotsi/..."
@@ -296,7 +354,7 @@ Every command returns a single JSON envelope:
 }
 ```
 
-Failure envelopes include `error.type`, `error.message`, and `error.category`. The current category values are documented in [docs/commands.md](docs/commands.md).
+Failure envelopes include `error.type`, `error.message`, and `error.category`. The current category values are documented in the public [Output Envelopes guide](https://digablesolutions.github.io/luotsi/docs/reference/output-envelopes/).
 
 Scenario `run` commands return the scenario result inside `data`, including per-step timing and top-level overhead:
 
@@ -328,8 +386,10 @@ Every command that reaches the device writes artifacts to a dedicated artifact r
 
 | Doc | Contents |
 |---|---|
-| [docs/commands.md](docs/commands.md) | Full command reference with flags, retry behavior, wireless pairing |
-| [docs/view-session.md](docs/view-session.md) | Presets, backends, profiles, hotkeys, JSONL events, sharing |
-| [docs/scenarios.md](docs/scenarios.md) | Playbook format, template syntax, all actions |
-| [docs/architecture.md](docs/architecture.md) | System architecture and component flow |
-| [docs/subsystems.md](docs/subsystems.md) | CLI, host automation, scenario, view, and telemetry subsystems |
+| [Luotsi docs](https://digablesolutions.github.io/luotsi/docs/) | Public docs hub for installation, workflows, reference, and tutorials |
+| [CLI command groups](https://digablesolutions.github.io/luotsi/docs/reference/cli-command-groups/) | Command families and first-stop command surface |
+| [Live View](https://digablesolutions.github.io/luotsi/docs/core-workflows/live-view/) | Presets, profiles, artifacts, hotkeys, and sharing |
+| [Scenario Playbooks](https://digablesolutions.github.io/luotsi/docs/reference/scenario-playbooks/) | Playbook format, template syntax, and supported action families |
+| [Architecture](https://digablesolutions.github.io/luotsi/docs/concepts/architecture/) | System architecture and component flow |
+| [Subsystems](https://digablesolutions.github.io/luotsi/docs/concepts/subsystems/) | CLI, host automation, scenario, view, and telemetry subsystems |
+| [Troubleshooting](https://digablesolutions.github.io/luotsi/docs/getting-started/troubleshooting/) | First-run failure shapes, pairing friction, and hierarchy limits |

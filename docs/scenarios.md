@@ -16,6 +16,9 @@ luotsi run --device <serial> --file examples/scenarios/android-home-smoke.json
   "variables": {
     "appPackage": "com.example.app"
   },
+  "setup": [
+    { "name": "start app", "action": "startApp", "package": "${var:appPackage}" }
+  ],
   "metadata": {
     "package": "com.example.app",
     "activity": ".MainActivity",
@@ -35,9 +38,24 @@ luotsi run --device <serial> --file examples/scenarios/android-home-smoke.json
     { "name": "go home",           "action": "keyevent",       "code": "KEYCODE_HOME" },
     { "name": "let launcher settle","action": "sleep",          "milliseconds": 750 },
     { "name": "capture screenshot", "action": "takeScreenshot", "label": "android-home-smoke" }
+  ],
+  "teardown": [
+    { "name": "stop app", "action": "forceStop", "package": "${var:appPackage}" }
   ]
 }
 ```
+
+---
+
+## Lifecycle
+
+Scenarios can include three phases:
+
+- `setup` *(optional)* runs before main steps.
+- `steps` *(required)* is the main execution phase.
+- `teardown` *(optional)* runs after main steps, even when a main step fails.
+
+Step results include a `phase` field (`setup`, `main`, or `teardown`) so reports can separate preparation, core flow, and cleanup.
 
 ---
 
@@ -86,6 +104,21 @@ Each step result includes:
 
 The top-level scenario result also includes `prologue_ms`, `steps_ms`, and `non_step_ms` for overhead accounting.
 
+### Common defaults
+
+When optional parameters are omitted, these defaults apply:
+
+| Field | Default | Used by |
+|---|---|---|
+| `timeoutSec` | `15` | `waitVisible`, `waitNotVisible`, `tapText`, `waitLog`, `waitStep`, `waitActionReady`, `assertEvent`, `assertTextInputReady`, `waitForActivity`, `waitForNotActivity` |
+| `postTapDelayMs` | `300` | `tapPoint` |
+| `intervalMs` | `120` | `typePin` |
+| `milliseconds` | `1000` | `sleep` |
+| `maxGapPx` | `260` | `assertBelow` |
+| `maxDeltaPx` | `160` | `assertAligned` |
+| `requireKeyboard` | `false` | `assertTextInputReady` |
+| `thirdPartyOnly` | `false` | `listInstalledPackages` |
+
 ---
 
 ## Actions
@@ -114,14 +147,14 @@ The top-level scenario result also includes `prologue_ms`, `steps_ms`, and `non_
 | `waitStep` | `step`, `timeoutSec` |
 | `waitActionReady` | `text` *(required)*, `step` *(optional)*, `timeoutSec` |
 | `resetLog` | — |
-| `assertEvent` | `event`, `timeoutSec`; supports `observeFromPreviousStep: true` |
+| `assertEvent` | `event` or `text`, `contains` *(optional string array)*, `detailsPattern` *(optional regex)*, `timeoutSec`; supports `observeFromPreviousStep: true` |
 | `assertScreenshot` | `label` *(optional; falls back to `text`/`name`)*, `expectedWidth`, `expectedHeight`, `expectedSha256`, `expectedSha256File`, `baselineFile`, `updateBaseline`, `regionX`, `regionY`, `regionWidth`, `regionHeight`, `expectedRegionSha256`, `expectedRegionSha256File` |
 | `assertTextInputReady` | `timeoutSec`, `requireKeyboard` *(optional bool)* |
 | `assertBelow` | `text`, `below`, `maxGapPx` *(optional)* |
 | `assertAligned` | `text`, `with`, `maxDeltaPx` *(optional)* |
 | `assertAppVersion` | `package` *(optional)*, `maxTopInsetPx` *(optional)*, `maxRightInsetPx` *(optional)* |
 
-`assertEvent` with `observeFromPreviousStep: true` begins the log observation window at the previous step's start time rather than the assert step's own start time.
+`assertEvent` with `observeFromPreviousStep: true` begins the log observation window at the previous step's start time rather than the assert step's own start time. `contains` applies additional required substrings, and `detailsPattern` can validate event details with a regular expression.
 
 `assertScreenshot` captures a screenshot, stores it as an artifact, records its dimensions and SHA-256 hash, and fails when the provided expected dimensions or hash do not match. It can assert a literal SHA-256, a SHA-256 stored in a text file, or the SHA-256 of a baseline image. Region assertions require `regionX`, `regionY`, `regionWidth`, and `regionHeight`; pair them with `expectedRegionSha256` or `expectedRegionSha256File` to validate the cropped pixel region. Use `updateBaseline: true` with `baselineFile` when intentionally refreshing a checked-in baseline.
 
@@ -145,11 +178,34 @@ The top-level scenario result also includes `prologue_ms`, `steps_ms`, and `non_
 | Action | Key arguments |
 |---|---|
 | `takeScreenshot` | `label` *(optional)* |
-| `captureArtifacts` | — |
+| `captureArtifacts` | one of `label`, `text`, or `name` *(first non-empty value is used)* |
 | `screenState` | — |
 | `sleep` | `milliseconds` |
 
 Screenshot assertions are the preferred fallback when an older Android device has weak or broken hierarchy output.
+
+### Error handling
+
+Set `continueOnError: true` on a step to continue execution after non-usage runtime failures. The step is recorded with `status: continued_on_error` and an attached error payload.
+
+`continueOnError` does not suppress validation/usage errors.
+
+### Validation rules
+
+- `tapPoint` requires either `x` + `y` or `xRatio` + `yRatio`.
+- `x` and `y` must be zero or greater.
+- `xRatio` and `yRatio` must be between `0` and `1`.
+- `typePin` accepts digits only.
+- `startApp` with `wait: true` requires `activity`.
+- `assertScreenshot` with region SHA checks requires `regionX`, `regionY`, `regionWidth`, and `regionHeight`.
+- `captureArtifacts` and `takeScreenshot` require one of `label`, `text`, or `name`.
+
+### Argument fallback precedence
+
+For labels and user-facing naming:
+
+- `takeScreenshot`, `captureArtifacts`: `label` -> `text` -> `name`
+- `tapPoint`: `label` -> `name` -> `text`
 
 ---
 

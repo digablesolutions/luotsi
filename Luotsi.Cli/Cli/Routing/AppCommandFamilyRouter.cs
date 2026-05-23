@@ -1,6 +1,7 @@
 using Luotsi.Cli.Cli.Composition;
 using Luotsi.Cli.Cli.Doctor;
 using Luotsi.Cli.Cli.Inspect;
+using Luotsi.Cli.Cli.Replay;
 using Luotsi.Cli.Cli.View;
 
 namespace Luotsi.Cli.Cli.Routing;
@@ -35,6 +36,9 @@ internal sealed class AppCommandFamilyRouter(AppCommandFamilyRouterDependencies 
                 context.Runner = preparedDoctor.Runner;
                 return await preparedDoctor.ExecuteAsync().ConfigureAwait(false);
             }
+
+            case AppCommandFamily.Replay:
+                return await _dependencies.ReplayCommandHost.RunAsync(options, started, routeSetup.Artifacts).ConfigureAwait(false);
 
             case AppCommandFamily.ViewDiagnostics:
             {
@@ -78,6 +82,8 @@ internal sealed class AppCommandFamilyRouterDependencies
     public required AppCommandRouteBootstrapper RouteBootstrapper { get; init; }
 
     public required AppCommandHost CommandHost { get; init; }
+
+    public required ReplayCommandHost ReplayCommandHost { get; init; }
 
     public required ViewSessionCommandPreparer ViewSessionCommandPreparer { get; init; }
 

@@ -84,6 +84,46 @@ Failure modes:
   commands useful where possible; screen-state includes attempted strategies
   and raw output in artifacts when hierarchy capture fails.
 """,
+        ["quickstart"] = """
+Luotsi help: quickstart
+
+Goal:
+  Get from "device is attached" to a useful developer or CI workflow with the
+  fewest Luotsi commands.
+
+First run:
+  1. Confirm device visibility
+     luotsi devices
+
+  2. Run guided readiness checks and fixes
+     luotsi doctor --device <adb serial>
+     luotsi doctor --device <adb serial> --fix
+
+  3. Open a live mirror when you need operator feedback
+     luotsi view --device <adb serial>
+
+Common workflows:
+  Inspect a screen and gather artifacts
+    luotsi screen-state --device <adb serial>
+    luotsi inspect --device <adb serial>
+
+  Prepare live view prerequisites without opening a stream
+    luotsi view setup --device <adb serial>
+    luotsi view-doctor --device <adb serial>
+
+  Start authoring a scenario
+    luotsi scenario-init --file scenarios/smoke.json --name "smoke"
+    luotsi scenario-validate --path scenarios
+
+  Run scenarios for CI or local verification
+    luotsi run --path scenarios --device <adb serial> --report-junit junit.xml
+
+Tips:
+  Use --artifacts <directory> when you want a stable output location instead of
+  the default temp folder.
+  Use luotsi help view, luotsi help scenario, and luotsi help lab when you want
+  a deeper command family reference.
+""",
         ["lab"] = """
 Luotsi help: lab
 
@@ -96,18 +136,38 @@ Usage:
   luotsi doctor --device <adb serial> [--package <app.id>] [--fix]
   luotsi lab status [--device-query <query>]
   luotsi lab doctor [--device-query <query>] [--fix]
+  luotsi lab plan [--device-query <query>]
+  luotsi lab claim [--device-query <query>] [--owner <name>] [--ttl-sec 3600]
+  luotsi lab leases
+  luotsi lab release (--lease <lease-id> | --serial <adb serial>)
+  luotsi lab extend (--lease <lease-id> | --serial <adb serial>) [--ttl-sec 3600]
+  luotsi lab quarantine [--device-query <query>] --reason <text> [--owner <name>]
+  luotsi lab quarantines
+  luotsi lab unquarantine --serial <adb serial>
 
 Examples:
   luotsi devices
   luotsi device-status --device emulator-5554
   luotsi lab status
   luotsi lab status --device-query state=device,type=physical
+  luotsi lab plan --device-query model=Pixel_9
+  luotsi lab claim --device-query model=Pixel_9 --owner ci-job-1 --ttl-sec 1800
+  luotsi lab leases
+  luotsi lab extend --serial emulator-5554 --ttl-sec 7200
+  luotsi lab quarantine --device-query serial=emulator-5554 --reason "flaky touchscreen"
+  luotsi lab quarantines
   luotsi lab doctor --fix
 
 Output:
   Lab status explains which attached devices match a query. Lab doctor reports
   ambiguous selection, offline devices, stale devices, and recommended repair
-  commands. With --fix, Luotsi may run safe host-side recovery actions.
+  commands. With --fix, Luotsi may run safe host-side recovery actions. Lab
+  claim creates a host-side lease token so CI and agents can avoid selecting a
+  device already claimed by another workflow. Active leases are honored by
+  --device-query selection. Lab quarantine marks unhealthy devices unavailable
+  until they are explicitly unquarantined. Lab plan is a dry-run allocator that
+  explains which device would be selected or why selection is blocked, and
+  returns recommended_commands for the next operator or agent action.
 """,
         ["ports"] = """
 Luotsi help: ports
@@ -128,19 +188,104 @@ Notes:
   Use reverse when an Android app needs to call a host-local dev server. Use
   forward when the host needs to reach a device-local service.
 """,
+        ["replay"] = """
+Luotsi help: replay
+
+Usage:
+  luotsi replay summarize --artifacts <artifact-root> [--format json|jsonl]
+  luotsi replay capsule --artifacts <artifact-root> [--write-readme] [--write-json]
+  luotsi replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
+  luotsi replay graph --artifacts <artifact-root> [--write-json] [--write-markdown]
+  luotsi replay cluster --artifacts <artifact-root> [--write-json] [--write-markdown]
+  luotsi replay open --artifacts <artifact-root> [--dry-run]
+  luotsi replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>] [--write-json] [--write-markdown]
+  luotsi replay search --artifacts <artifact-root> --contains <text> [--limit 50]
+
+Examples:
+  luotsi replay summarize --artifacts artifacts/20260518-100000-view
+  luotsi replay summarize --artifacts artifacts/20260518-100000-view --format json
+  luotsi replay summarize --artifacts artifacts/20260518-100000-view --format jsonl
+  luotsi replay capsule --artifacts artifacts/20260518-100000-run --write-readme --write-json
+  luotsi replay timeline --artifacts artifacts/20260518-100000-run --failures --format jsonl --write-jsonl --write-markdown
+  luotsi replay graph --artifacts artifacts/20260518-100000-run --write-json --write-markdown
+  luotsi replay cluster --artifacts artifacts/ci-runs --write-json --write-markdown
+  luotsi replay open --artifacts artifacts/20260518-100000-view
+  luotsi replay scenario-draft --artifacts artifacts/20260518-100000-inspect --output scenarios/draft.json --write-markdown
+  luotsi replay search --artifacts artifacts/20260518-100000-run --contains "not visible"
+
+Notes:
+  Replay summarize reads session-replay.json and session-timeline.jsonl from an
+  existing artifact root. By default it returns the condensed failure timeline
+  as a normal JSON command envelope. `--format json` writes the bare summary
+  object, and `--format jsonl` writes one summary header line followed by one
+  session line per replay session. Failed scenario runs also expose
+  failure_capsule_path and an embedded failure_capsule summary with linked
+  reports and failure artifacts. Replay open refreshes index.html/index.md for
+  the artifact root and opens index.html in the local browser. Replay
+  scenario-draft turns inspect/replay action events into a conservative draft
+  scenario with warnings and suggestions for cleanup. With --write-json and
+  --write-markdown, it writes review artifacts into the replay root. Replay search scans
+  text-like replay artifacts, reports, logcat, hierarchies, screen-state JSON,
+  and timelines for a case-insensitive string. Replay capsule returns a compact
+  bundle manifest with artifact counts, primary failure, and suggested next
+  commands. With --write-readme, replay capsule writes replay-capsule.md into
+  the artifact root. With --write-json, it writes replay-capsule-summary.json.
+  Both options refresh the artifact index. Replay timeline returns ordered
+  session-timeline.jsonl events with stable detail text for CI and agents.
+  Use --contains to filter normalized event type/detail text. Use --since and
+  --until with ISO-8601 timestamps to narrow by event time. Use --context to
+  include neighboring events around filtered matches.
+  With --format json or --format jsonl, replay timeline writes raw machine
+  output instead of the normal command envelope. With --write-json or
+  --write-jsonl, it persists normalized timeline artifacts. With
+  --write-markdown, it writes replay-timeline.md for artifact browsing. These
+  write options refresh the artifact index. Replay graph emits a stable node
+  and edge model over sessions, timeline events, failures, scenarios,
+  artifacts, actions, text selectors, screen observations, and telemetry
+  signals. Its result includes node_kinds and edge_kinds counts so agents can
+  quickly understand what semantic material is available before traversing the
+  graph. Replay cluster groups failed replay sessions by normalized failure
+  shape and returns triage hints plus replay/search commands for the latest
+  matching bundle.
+  Failures still use the normal error envelope.
+""",
+        ["update"] = """
+Luotsi help: update
+
+Usage:
+  luotsi version
+  luotsi update [--version <tag>] [--channel stable|prerelease] [--dry-run] [--detach]
+
+Examples:
+  luotsi version
+  luotsi update --dry-run
+  luotsi update --detach
+  luotsi update --version v0.1.0-rc.4 --dry-run
+  luotsi update --version v0.1.0-rc.4 --detach
+
+Notes:
+  Luotsi does not auto-update during normal commands. The update command uses
+  the existing installer manifest to reinstall the correct runtime archive for
+  this host. Stable updates can use the latest stable release. Prerelease
+  updates currently require an explicit --version tag. On Windows, non-dry-run
+  update requires --detach and returns `update_started` because the installer
+  continues after the current luotsi.exe process exits.
+""",
         ["run"] = """
 Luotsi help: run
 
 Usage:
-  luotsi run --file <scenario.json> [--validate-only]
+  luotsi run --file <scenario.json> [--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600]
   luotsi run --path <scenario-file-or-directory-or-glob> [--dry-run|--validate-only]
              [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>]
              [--shard-count <n> --shard-index <zero-based>] [--shard-strategy index|hash]
+             [--claim-device] [--owner <name>] [--ttl-sec 3600]
              [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>]
              [--capture-on failure|never] [--attach-artifacts never|on-failure|always]
 
 Examples:
   luotsi run --path scenarios --device emulator-5554 --report-junit junit.xml
+  luotsi run --path scenarios --device-query model=Pixel_9 --claim-device --owner ci-job-1
   luotsi run --path scenarios --include-tag smoke --dry-run
   luotsi run --path scenarios --shard-count 4 --shard-index 0 --events-jsonl events.jsonl
 
@@ -150,7 +295,8 @@ Artifacts:
 
 Failure modes:
   scenarioRunEnded is emitted even when parsing, ADB readiness, install, or a
-  step fails. Use --validate-only for null-device CI validation.
+  step fails. Use --validate-only for null-device CI validation. --claim-device
+  releases its lab lease from a finally path after execution.
 """,
         ["scenario"] = """
 Luotsi help: scenarios
@@ -222,6 +368,11 @@ Notes:
     public static IReadOnlyList<string> Topics { get; } = TopicTexts.Keys.Order(StringComparer.OrdinalIgnoreCase).ToArray();
 
     /// <summary>
+    /// Gets help topics ordered for user-facing suggestions.
+    /// </summary>
+    public static IReadOnlyList<string> SuggestedTopics { get; } = BuildSuggestedTopics();
+
+    /// <summary>
     /// Gets command-line help.
     /// </summary>
     public const string Text = """
@@ -238,11 +389,35 @@ Usage:
   luotsi help <topic>
   luotsi --version
 
-Fast paths:
-  luotsi devices
-  luotsi view --device <adb serial>
-  luotsi screen-state --device <adb serial>
-  luotsi run --path scenarios --device <adb serial> --report-junit junit.xml
+Start here:
+  luotsi help quickstart
+
+Workflow index:
+
+  First-time setup and repair
+    luotsi devices
+    luotsi doctor --device <adb serial>
+    luotsi view setup --device <adb serial>
+    luotsi help lab
+
+  Manual live debugging
+    luotsi view --device <adb serial>
+    luotsi screen-state --device <adb serial>
+    luotsi inspect --device <adb serial>
+    luotsi help view
+
+  Scenario authoring
+    luotsi scenario-init --file scenarios/smoke.json --name "smoke"
+    luotsi scenario-validate --path scenarios
+    luotsi help scenario
+
+  CI execution and reports
+    luotsi run --path scenarios --device <adb serial> --report-junit junit.xml
+    luotsi help run
+
+Help topics:
+  quickstart | lab | view | inspect | scenario | run | artifacts | replay | adb
+  wireless | ports | app | update
 
 From source:
   .\scripts\luotsi.ps1 <command> [options]
@@ -255,6 +430,14 @@ Command groups:
     devices
     lab status [--device-query <query>]
     lab doctor [--device-query <query>] [--fix]
+    lab plan [--device-query <query>]
+    lab claim [--device-query <query>] [--owner <name>] [--ttl-sec 3600]
+    lab leases
+    lab release (--lease <lease-id> | --serial <adb serial>)
+    lab extend (--lease <lease-id> | --serial <adb serial>) [--ttl-sec 3600]
+    lab quarantine [--device-query <query>] --reason <text> [--owner <name>]
+    lab quarantines
+    lab unquarantine --serial <adb serial>
     device-status [--device <adb serial> | --device-query <query>]
     wait-for-device [--timeout-sec 15]
     device-wait [--timeout-sec 15]
@@ -315,13 +498,27 @@ Command groups:
     wait-log --contains <text> [--timeout-sec 15]
     record --output <file.mp4> [--time-limit-sec 30]
 
+  Artifact replay and triage
+    replay summarize --artifacts <artifact-root> [--format json|jsonl]
+    replay capsule --artifacts <artifact-root> [--write-readme] [--write-json]
+    replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
+    replay graph --artifacts <artifact-root> [--write-json] [--write-markdown]
+    replay cluster --artifacts <artifact-root> [--write-json] [--write-markdown]
+    replay open --artifacts <artifact-root> [--dry-run]
+    replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>] [--write-json] [--write-markdown]
+    replay search --artifacts <artifact-root> --contains <text> [--limit 50]
+
+  Install and update
+    version
+    update [--version <tag>] [--channel stable|prerelease] [--dry-run] [--detach]
+
   Scenarios and CI reports
     scenario-init [--file <scenario.json>] [--name <name>] [--package <app.id>] [--activity <activity>] [--width <px>] [--height <px>] [--orientation <name>] [--force]
     scenario-list --path <scenario-file-or-directory-or-glob> [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>]
     scenario-validate (--file <scenario.json> | --path <scenario-file-or-directory-or-glob>) [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>]
     scenario-explain --file <scenario.json>
-    run --file <scenario.json> [--validate-only] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always]
-    run --path <scenario-file-or-directory-or-glob> [--dry-run|--validate-only] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>] [--shard-count <n> --shard-index <zero-based>] [--shard-strategy index|hash]
+    run --file <scenario.json> [--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always]
+    run --path <scenario-file-or-directory-or-glob> [--dry-run|--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>] [--shard-count <n> --shard-index <zero-based>] [--shard-strategy index|hash]
 
 Common options:
   --device <adb serial>
@@ -365,6 +562,9 @@ Design:
     {
         normalized = topic.ToLowerInvariant() switch
         {
+          "workflow" or "workflows" or "start" or "getting-started" or "gettingstarted" => "quickstart",
+            "replay-summarize" => "replay",
+            "version" => "update",
             "view-setup" or "view-doctor" or "reconnect" or "profile-list" or "profile-delete" => "view",
             "scenario-init" or "scenario-list" or "scenario-validate" or "scenario-explain" => "scenario",
             "wireless-scan" or "wireless-pair" or "wireless-connect" => "wireless",
@@ -377,4 +577,11 @@ Design:
 
         return normalized.Length > 0;
     }
+
+  private static IReadOnlyList<string> BuildSuggestedTopics()
+  {
+    var topics = Topics.Where(static topic => !string.Equals(topic, "quickstart", StringComparison.OrdinalIgnoreCase)).ToList();
+    topics.Insert(0, "quickstart");
+    return topics;
+  }
 }

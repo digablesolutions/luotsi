@@ -1,0 +1,16 @@
+{
+  "profiles": {
+    "Luotsi.Cli": {
+      "commandName": "Project",
+      "commandLineArgs": "view --device 192.168.0.134:5555",
+      "environmentVariables": {
+        "LUOTSI_VIEW_HELPER_APK": "C:\\tmp\\device-e2e-lab\\Luotsi.ViewServer.Android\\app\\build\\outputs\\apk\\debug\\app-debug.apk",
+        "LUOTSI_FFMPEG_ROOT": "C:\\tmp\\device-e2e-lab\\ffmpeg\\bin"
+      }
+    },
+    "Profile 1": {
+      "commandName": "Project",
+      "commandLineArgs": "view --device 192.168.0.134:5555"
+    }
+  }
+}

@@ -511,7 +511,7 @@ public sealed partial class AppTests
         var call = Assert.Single(processRunner.Calls);
         Assert.Equal("pwsh", call.FileName);
         Assert.Equal(["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath], call.Args);
-        Assert.Contains(steps, step => step.Name == "ffmpeg_stage" && step.Status == ViewStartupPhaseStatus.Started && step.Detail == scriptPath);
+        Assert.Contains(steps, step => step is {Name: "ffmpeg_stage", Status: ViewStartupPhaseStatus.Started} && step.Detail == scriptPath);
     }
 
     [Fact]
@@ -544,7 +544,7 @@ public sealed partial class AppTests
         var call = Assert.Single(processRunner.Calls);
         Assert.Equal(wrapperPath, call.FileName);
         Assert.Equal(["-p", projectDirectory, ":app:assembleRelease"], call.Args);
-        Assert.Contains(steps, step => step.Name == "helper_build" && step.Status == ViewStartupPhaseStatus.Started && step.Detail == projectDirectory);
+        Assert.Contains(steps, step => step is {Name: "helper_build", Status: ViewStartupPhaseStatus.Started} && step.Detail == projectDirectory);
     }
 
     private sealed class SequencedAndroidViewHelperPackageLocator(params object[] outcomes) : IAndroidViewHelperPackageLocator

@@ -1,7 +1,9 @@
+using System.Text.Json;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Processes;
+using Luotsi.Cli.Models;
 using Xunit;
 
 namespace Luotsi.Cli.Tests;
@@ -30,6 +32,23 @@ public sealed partial class AppTests
 
         await Assert.ThrowsAsync<UsageException>(() => session.WriteTextAsync("../escape.txt", "bad"));
         await Assert.ThrowsAsync<UsageException>(() => session.WriteJsonAsync("/tmp/escape.json", new { ok = true }));
+    }
+
+    [Fact]
+    public void ArtifactSession_Create_Sanitizes_Command_Segment()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-18T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var constructor = typeof(CliOptions).GetConstructor(
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
+            binder: null,
+            [typeof(string)],
+            modifiers: null);
+        var options = Assert.IsType<CliOptions>(constructor?.Invoke(["../escape"]));
+
+        var session = ArtifactSession.Create(options, fileSystem, timeProvider);
+
+        Assert.Equal(Path.Join("/tmp", "luotsi", "20260518-100000-escape"), session.Root);
     }
 
     [Fact]
@@ -107,6 +126,176 @@ public sealed partial class AppTests
 
         Assert.Contains("events_sampled=500 | terminal=passed", index, StringComparison.Ordinal);
         Assert.DoesNotContain("events=510", index, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ArtifactSession_Indexes_Replay_Session_Summary_For_Ci_And_Browsing()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-18T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var session = ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider);
+
+        await session.WriteTextAsync("session-timeline.jsonl", """
+        {"type":"view_started","session_id":"view-session","started_at":"2026-05-18T10:00:00Z"}
+        {"type":"view_reconnect_requested","session_id":"view-session","occurred_at":"2026-05-18T10:00:01Z","device":"192.168.0.134:5555","source":"toolbar","reason":"manual_retry"}
+        {"type":"view_share_client_connected","session_id":"view-session","occurred_at":"2026-05-18T10:00:02Z","endpoint":"127.0.0.1:9000","remote_endpoint":"10.0.0.25:40122","observer_count":1,"reason":"observer_joined"}
+        {"type":"view_stats","session_id":"view-session","observed_at":"2026-05-18T10:00:03Z","stats":{"decoded_frames":120,"presented_frames":118,"dropped_frames":2,"decode_fps":29.5,"present_fps":29.0,"end_to_end_latency_ms":142}}
+        {"type":"view_diagnostic","session_id":"view-session","occurred_at":"2026-05-18T10:00:03Z","category":"transport","message":"Unexpected end of stream"}
+        {"type":"view_error","session_id":"view-session","occurred_at":"2026-05-18T10:00:03Z","error":{"category":"transport","message":"Unexpected end of stream"}}
+        {"type":"view_ended","session_id":"view-session","ended_at":"2026-05-18T10:00:03Z","reason":"error"}
+        """);
+        await session.WriteJsonAsync("session-replay.json", new
+        {
+            schema = ResultSchemas.SessionReplay,
+            sessionKind = "view",
+            sessionId = "view-session",
+            startedAt = DateTimeOffset.Parse("2026-05-18T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind),
+            endedAt = DateTimeOffset.Parse("2026-05-18T10:00:03Z", null, System.Globalization.DateTimeStyles.RoundtripKind),
+            reason = "error",
+            exitCode = 1,
+            target = "192.168.0.134:5555",
+            timelineFileName = "session-timeline.jsonl",
+            eventCount = 7,
+            eventTypes = new[] { "view_started", "view_reconnect_requested", "view_share_client_connected", "view_stats", "view_diagnostic", "view_error", "view_ended" }
+        });
+
+        var markdownIndex = await fileSystem.ReadAllTextAsync(Path.Join(session.Root, "index.md"));
+        var htmlIndex = await fileSystem.ReadAllTextAsync(Path.Join(session.Root, "index.html"));
+
+        Assert.Contains("## Replay Sessions", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("### view 192.168.0.134:5555", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("reason=error | exit_code=1 | events=7 | target=192.168.0.134:5555", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("[metadata](session-replay.json) | [timeline](session-timeline.jsonl)", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("Failure timeline:", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("view_reconnect_requested | device=192.168.0.134:5555 | source=toolbar | reason=manual_retry", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("view_share_client_connected | endpoint=127.0.0.1:9000 | remote_endpoint=10.0.0.25:40122 | observer_count=1 | reason=observer_joined", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("view_stats | decoded_frames=120 | presented_frames=118 | dropped_frames=2 | decode_fps=29.5 | present_fps=29.0 | end_to_end_latency_ms=142", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("view_error | error=transport: Unexpected end of stream", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("## Reports", markdownIndex, StringComparison.Ordinal);
+
+        Assert.Contains("<h2>Replay Sessions</h2>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("<strong>view 192.168.0.134:5555</strong>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains(">metadata</a> | <a href=\"session-timeline.jsonl\">timeline</a>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("Failure timeline", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("view_reconnect_requested | device=192.168.0.134:5555 | source=toolbar | reason=manual_retry", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("view_share_client_connected | endpoint=127.0.0.1:9000 | remote_endpoint=10.0.0.25:40122 | observer_count=1 | reason=observer_joined", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("view_stats | decoded_frames=120 | presented_frames=118 | dropped_frames=2 | decode_fps=29.5 | present_fps=29.0 | end_to_end_latency_ms=142", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("view_error | error=transport: Unexpected end of stream", htmlIndex, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SessionReplayArtifacts_Stream_Timeline_Entries_And_Tag_Invalid_Json()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-18T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var session = ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider);
+        var replay = new SessionReplayArtifacts(session, "view", "view-session", timeProvider.GetUtcNow());
+
+        replay.RecordSerializedEvent("""{"type":"view_started"}""");
+        replay.RecordSerializedEvent("not-json");
+
+        var timelinePath = Path.Join(session.Root, SessionReplayArtifacts.TimelineFileName);
+        var timeline = await fileSystem.ReadAllTextAsync(timelinePath);
+        Assert.Contains("{\"type\":\"view_started\"}", timeline, StringComparison.Ordinal);
+        Assert.Contains("not-json", timeline, StringComparison.Ordinal);
+
+        await replay.PersistAsync(timeProvider.GetUtcNow().AddSeconds(2), "stream_ended", 0);
+
+        using var metadata = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(Path.Join(session.Root, SessionReplayArtifacts.MetadataFileName)));
+        Assert.Equal(2, metadata.RootElement.GetProperty("eventCount").GetInt32());
+        var eventTypes = metadata.RootElement.GetProperty("eventTypes").EnumerateArray().Select(static value => value.GetString()).ToArray();
+        Assert.Contains("view_started", eventTypes);
+        Assert.Contains("invalid-json", eventTypes);
+    }
+
+    [Fact]
+    public async Task ArtifactSession_Index_Summarizes_Failure_Capsule_Report()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-18T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var session = ArtifactSession.Create(CliOptions.Parse(["run"]), fileSystem, timeProvider);
+
+        await session.WriteJsonAsync("failure-capsule.json", new
+        {
+            schema = ResultSchemas.FailureCapsule,
+            generatedAt = DateTimeOffset.Parse("2026-05-18T10:00:03Z", null, System.Globalization.DateTimeStyles.RoundtripKind),
+            path = "/tmp/scenario.json",
+            status = "failed",
+            replayMetadataPath = "session-replay.json",
+            replayTimelinePath = "session-timeline.jsonl",
+            reports = new
+            {
+                jsonPath = "/tmp/report.json",
+                junitPath = "/tmp/junit.xml"
+            },
+            scenarios = new object[]
+            {
+                new
+                {
+                    scenario = "broken scenario",
+                    scenarioId = "/tmp/scenario.json::broken scenario",
+                    status = "failed",
+                    file = "/tmp/scenario.json",
+                    failedStep = new
+                    {
+                        index = 1,
+                        name = "waitVisible",
+                        action = "waitVisible",
+                        phase = "main"
+                    },
+                    artifacts = new object[]
+                    {
+                        new { kind = "screenshot", path = "failure.png", stepIndex = 1, stepName = "waitVisible" },
+                        new { kind = "logcat", path = "failure-logcat.txt", stepIndex = 1, stepName = "waitVisible" }
+                    }
+                }
+            },
+            screenshots = new object[]
+            {
+                new { kind = "screenshot", path = "failure.png", stepIndex = 1, stepName = "waitVisible" }
+            },
+            logcat = new object[]
+            {
+                new { kind = "logcat", path = "failure-logcat.txt", stepIndex = 1, stepName = "waitVisible" }
+            },
+            hierarchies = new object[]
+            {
+                new { kind = "hierarchy", path = "failure-hierarchy.xml", stepIndex = 1, stepName = "waitVisible" }
+            },
+            screenStates = new object[]
+            {
+                new { kind = "screen_state", path = "failure-screen-state.json", stepIndex = 1, stepName = "waitVisible" }
+            },
+            failureBundles = new object[]
+            {
+                new
+                {
+                    path = "failure.json",
+                    scenario = "broken scenario",
+                    scenarioId = "/tmp/scenario.json::broken scenario",
+                    file = "/tmp/scenario.json",
+                    failedStep = new
+                    {
+                        index = 1,
+                        name = "waitVisible",
+                        action = "waitVisible",
+                        phase = "main"
+                    },
+                    artifacts = new object[]
+                    {
+                        new { kind = "screenshot", path = "failure.png", stepIndex = 1, stepName = "waitVisible" }
+                    }
+                }
+            }
+        });
+
+        var markdownIndex = await fileSystem.ReadAllTextAsync(Path.Join(session.Root, "index.md"));
+        var htmlIndex = await fileSystem.ReadAllTextAsync(Path.Join(session.Root, "index.html"));
+
+        Assert.Contains("- [failure-capsule.json](failure-capsule.json)", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("status=failed | scenarios=1 | failed_scenarios=broken scenario | failed_steps=waitVisible | screenshots=1 | logcat=1 | hierarchies=1 | screen_states=1 | failure_bundles=1", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("href=\"failure-capsule.json\"", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("status=failed | scenarios=1 | failed_scenarios=broken scenario | failed_steps=waitVisible | screenshots=1 | logcat=1 | hierarchies=1 | screen_states=1 | failure_bundles=1", htmlIndex, StringComparison.Ordinal);
     }
 
     [Fact]

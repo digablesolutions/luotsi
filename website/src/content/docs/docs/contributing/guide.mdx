@@ -1,0 +1,66 @@
+---
+title: Contribution Guide
+description: Keep Luotsi changes small, explicit, and easy to validate, then update the public docs when behavior changes.
+---
+
+Luotsi is intended to stay boring to operate and boring to automate. Good contributions keep behavior explicit, validation obvious, and public docs aligned with the shipped workflow.
+
+## Workflow
+
+- Branch from `main` for each focused change.
+- Keep commits and pull requests scoped to one behavior or one tightly related slice.
+- Update docs when command behavior, flags, artifacts, or operator UX changes.
+
+## Validation
+
+Use the pinned .NET SDK from `global.json` for source builds.
+
+Run the normal safety net from the repository root:
+
+```powershell
+dotnet build .\Luotsi.sln
+dotnet test .\Luotsi.sln
+```
+
+If you only touched a narrow slice, run the focused test or command that proves that slice first, then fall back to the broader solution checks before merge.
+
+If you changed the public website, also validate it from `website/`:
+
+```powershell
+npm run check
+npm run build
+```
+
+If you changed the Android helper, validate the helper build from `Luotsi.ViewServer.Android`:
+
+```powershell
+.\gradlew.bat assembleDebug
+```
+
+## Design expectations
+
+- Preserve the single JSON envelope contract for normal command mode.
+- Preserve JSONL streaming semantics for `inspect` and `view` sessions.
+- Prefer host-side orchestration over device-side complexity.
+- Keep Android support adb first unless there is a concrete reason not to.
+- Maintain artifact capture on device-facing failures.
+- Prefer injected fakes in tests over real devices or real `adb`.
+
+## Source of truth when docs drift
+
+When documentation needs a source of truth, prefer the owning implementation surface instead of copying behavior from stale notes.
+
+- `Luotsi.Cli/Cli/Help.cs` for the public CLI command list and flags
+- `Luotsi.Cli/Scenarios/ScenarioExecutor.cs` and `Luotsi.Cli/Scenarios/ScenarioValidator.cs` for supported scenario actions and validation rules
+- `Luotsi.ViewServer.Android/app/src/main/AndroidManifest.xml` plus the helper Kotlin sources for Android helper behavior, permissions, and entry points
+
+## Useful public docs while you work
+
+- [Architecture](../concepts/architecture/)
+- [Subsystems](../concepts/subsystems/)
+- [Live view](../core-workflows/live-view/)
+- [Scenario playbooks](../reference/scenario-playbooks/)
+
+## Pull requests
+
+PRs should explain what changed, how it was validated, and whether the change affected the CLI contract, artifact set, or operator experience. If command output changed, attach representative JSON or artifact examples in the PR description.

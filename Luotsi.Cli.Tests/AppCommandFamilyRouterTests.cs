@@ -197,6 +197,80 @@ public sealed class AppCommandFamilyRouterTests
         Assert.Contains("does not exist", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task DispatchAsync_ReplaySummarize_Uses_Existing_Artifact_Root_Without_Creating_Runner()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-19T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+                var replayRoot = "/tmp/replay-root";
+                fileSystem.CreateDirectory(replayRoot);
+                fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), """
+        {"type":"view_started","session_id":"view-session","started_at":"2026-05-18T10:00:00Z"}
+        {"type":"view_ended","session_id":"view-session","ended_at":"2026-05-18T10:00:01Z","reason":"stream_ended"}
+        """);
+                fileSystem.AddFile(Path.Join(replayRoot, "session-replay.json"), """
+        {
+          "schema": "luotsi-session-replay.v1",
+          "sessionKind": "view",
+          "sessionId": "view-session",
+          "startedAt": "2026-05-18T10:00:00Z",
+          "endedAt": "2026-05-18T10:00:01Z",
+          "reason": "stream_ended",
+          "exitCode": 0,
+          "target": "192.168.0.134:5555",
+          "timelineFileName": "session-timeline.jsonl",
+          "eventCount": 2,
+          "eventTypes": ["view_started", "view_ended"]
+        }
+        """);
+        var deviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost());
+        var router = CreateRouter(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = deviceHostFactory,
+            ViewProfileStore = new FakeViewProfileStore()
+        });
+        var context = new AppExecutionContext(timeProvider.GetUtcNow(), CliOptions.Parse(["replay", "summarize", "--artifacts", replayRoot]));
+
+        var exitCode = await router.DispatchAsync(context);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(context.Artifacts);
+        Assert.Equal(replayRoot, context.Artifacts!.Root);
+        Assert.Equal(replayRoot, envelope.RootElement.GetProperty("artifacts").GetProperty("artifact_root").GetString());
+        Assert.Null(context.Runner);
+        Assert.Equal(0, deviceHostFactory.CreateCallCount);
+    }
+
+    [Fact]
+    public async Task DispatchAsync_ReplayWithoutSubcommand_DoesNot_Create_New_Artifact_Root()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-19T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var deviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost());
+        var router = CreateRouter(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            Console = new FakeConsole(),
+            FileSystem = fileSystem,
+            DeviceHostFactory = deviceHostFactory,
+            ViewProfileStore = new FakeViewProfileStore()
+        });
+        var context = new AppExecutionContext(timeProvider.GetUtcNow(), CliOptions.Parse(["replay"]));
+
+        var exception = await Assert.ThrowsAsync<UsageException>(() => router.DispatchAsync(context));
+
+        Assert.Equal("replay requires --artifacts <directory> pointing to an existing artifact root.", exception.Message);
+        Assert.Null(context.Artifacts);
+        Assert.Null(context.Runner);
+        Assert.False(fileSystem.DirectoryExists("/tmp/luotsi/20260519-100000-replay"));
+        Assert.Equal(0, deviceHostFactory.CreateCallCount);
+    }
+
     private static AppCommandFamilyRouter CreateRouter(AppDependencies dependencies)
     {
         var infrastructure = AppInfrastructureCompositionBuilder.Build(dependencies);
@@ -205,7 +279,9 @@ public sealed class AppCommandFamilyRouterTests
             infrastructure.Console,
             infrastructure.FileSystem,
             infrastructure.Environment,
+            infrastructure.ProcessRunner,
             infrastructure.Delay,
+            null,
             infrastructure.ProfileCoordinator));
         var viewCommands = AppViewCommandCompositionBuilder.Build(new(
             dependencies,
@@ -231,6 +307,7 @@ public sealed class AppCommandFamilyRouterTests
                 DeviceHostLauncher = infrastructure.DeviceHostLauncher
             }),
             CommandHost = hostedCommands.CommandHost,
+            ReplayCommandHost = hostedCommands.ReplayCommandHost,
             ViewSessionCommandPreparer = viewCommands.ViewSessionCommandPreparer,
             InspectSessionLauncher = new InspectSessionLauncher(infrastructure.DeviceHostLauncher, infrastructure.Console, infrastructure.TimeProvider),
             ViewDiagnosticsLauncher = viewCommands.ViewDiagnosticsLauncher,

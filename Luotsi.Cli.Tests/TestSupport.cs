@@ -1,7 +1,6 @@
 using System.IO.Enumeration;
 using System.Text.Json;
 using Luotsi.Cli.Artifacts;
-using Luotsi.Cli.Cli;
 using Luotsi.Cli.Cli.View;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Infrastructure.Time;
@@ -32,12 +31,11 @@ internal sealed class ManualTimeProvider(DateTimeOffset utcNow) : TimeProvider
 internal sealed class SteppingTimeProvider(DateTimeOffset utcNow, TimeSpan step) : TimeProvider
 {
     private DateTimeOffset _utcNow = utcNow;
-    private readonly TimeSpan _step = step;
 
     public override DateTimeOffset GetUtcNow()
     {
         var current = _utcNow;
-        _utcNow = _utcNow.Add(_step);
+        _utcNow = _utcNow.Add(step);
         return current;
     }
 
@@ -142,6 +140,11 @@ internal sealed class FakeFileSystem : IFileSystem
     public Task<string> ReadAllTextAsync(string path, CancellationToken cancellationToken = default) =>
         Task.FromResult(_files.TryGetValue(path, out var text) ? text : System.Text.Encoding.UTF8.GetString(_binaryFiles[path]));
 
+    public Task<byte[]> ReadAllBytesAsync(string path, CancellationToken cancellationToken = default) =>
+        Task.FromResult(_files.TryGetValue(path, out var text)
+            ? System.Text.Encoding.UTF8.GetBytes(text)
+            : _binaryFiles[path]);
+
     public Stream OpenRead(string path)
     {
         if (_files.TryGetValue(path, out var text))
@@ -229,6 +232,18 @@ internal sealed class FakeFileSystem : IFileSystem
 
     private sealed class FakeWriteStream(FakeFileSystem fileSystem, string path) : MemoryStream
     {
+        public override void Flush()
+        {
+            fileSystem.WriteBinaryFile(path, ToArray());
+            base.Flush();
+        }
+
+        public override Task FlushAsync(CancellationToken cancellationToken)
+        {
+            fileSystem.WriteBinaryFile(path, ToArray());
+            return base.FlushAsync(cancellationToken);
+        }
+
         protected override void Dispose(bool disposing)
         {
             if (disposing)
@@ -285,16 +300,16 @@ internal sealed class FakeAdbClient(string? serial = null) : IAdbClient
             return Task.FromResult(new AdbCommandResult("adb", serial, finalArgs, new ProcessResult(0, string.Empty, string.Empty)));
         }
 
-                var result = _runResults.Count > 0
-                        ? _runResults.Dequeue()
-                        : finalArgs.Length == 4 &&
-                            string.Equals(finalArgs[0], "exec-out", StringComparison.Ordinal) &&
-                            string.Equals(finalArgs[1], "uiautomator", StringComparison.Ordinal) &&
-                            string.Equals(finalArgs[2], "dump", StringComparison.Ordinal) &&
-                            string.Equals(finalArgs[3], "/dev/tty", StringComparison.Ordinal) &&
-                            _shellResults.Count > 0
-                                ? _shellResults.Dequeue()
-                                : new ProcessResult(0, string.Empty, string.Empty);
+        var result = _runResults.Count > 0
+            ? _runResults.Dequeue()
+            : finalArgs.Length == 4 &&
+              string.Equals(finalArgs[0], "exec-out", StringComparison.Ordinal) &&
+              string.Equals(finalArgs[1], "uiautomator", StringComparison.Ordinal) &&
+              string.Equals(finalArgs[2], "dump", StringComparison.Ordinal) &&
+              string.Equals(finalArgs[3], "/dev/tty", StringComparison.Ordinal) &&
+              _shellResults.Count > 0
+                ? _shellResults.Dequeue()
+                : new ProcessResult(0, string.Empty, string.Empty);
         return Task.FromResult(new AdbCommandResult("adb", serial, finalArgs, result));
     }
 

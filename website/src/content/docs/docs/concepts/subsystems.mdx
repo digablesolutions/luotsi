@@ -1,0 +1,62 @@
+---
+title: Subsystems
+description: Use the subsystem map to understand which slice of the Luotsi codebase owns a behavior before you change it or debug it.
+---
+
+The subsystem view is the best bridge between the public docs and the actual code layout.
+
+## CLI and session subsystem
+
+- `App` dispatches one-shot commands and the two long-lived session modes
+- One-shot commands return exactly one final JSON envelope
+- `inspect` and `view` are JSONL sessions with startup and shutdown events
+
+Relevant code:
+
+- `Luotsi.Cli/Cli/App.cs`
+- `Luotsi.Cli/Cli/CliOptions.cs`
+- `Luotsi.Cli/Cli/InspectSession.cs`
+- `Luotsi.Cli/View/ViewSession.cs`
+
+## Host automation subsystem
+
+- `IDeviceHost` is the host-side automation seam
+- The Android runtime stays adb first
+- Core device actions include tap, type, key events, screen-state capture, hierarchy capture, and telemetry or log collection
+
+## Scenario subsystem
+
+- Scenario files live under `examples/scenarios/` and your own repo paths
+- `ScenarioExecutor` resolves templates, validates steps, and routes actions through host-side behaviors
+- Failure handling is artifact-heavy by design
+
+## Telemetry subsystem
+
+- Luotsi understands `LUOTSI_DEVICE_TELEMETRY` logcat lines
+- Telemetry powers both dedicated commands and semantic waits inside scenarios
+
+## Artifact subsystem
+
+- Each run or session gets its own artifact root
+- Runtime failures are expected to leave behind enough context to diagnose device, screen, log, and view state
+
+## View subsystem
+
+The live mirror is a real subsystem, not just an operator convenience.
+
+- `AndroidViewBootstrap` stages the helper package, configures the adb tunnel, and starts the helper or consent flow
+- `LocalhostViewStreamConnector` opens the forwarded socket
+- `ViewPacketStreamReader` parses the private packet protocol
+- `LibavViewBackend` decodes H.264 packets into BGRA frames
+- `NativeWindowViewRenderer` and `Sdl3ViewWindowSurface` own local presentation
+- Optional share relay publishes packets to observers and replays bootstrap packets for late joins
+
+## Why this page exists
+
+Use the subsystem map when a behavior is spread across public docs and multiple code areas. It helps you find the owning abstraction before you patch the wrong layer.
+
+## Related pages
+
+- [Architecture](./architecture/)
+- [Live view](../core-workflows/live-view/)
+- [Contribution guide](../contributing/guide/)

@@ -132,6 +132,7 @@ public sealed class ViewSession : IViewSession
     private readonly IArtifactFolderOpener _artifactFolderOpener;
     private readonly TimeSpan _autoReconnectAfter;
     private readonly Lock _writeGate = new();
+    private SessionReplayArtifacts? _replayArtifacts;
 
     public ViewSession(IDeviceHost deviceHost, ArtifactSession artifacts, ViewSessionRuntime runtime)
     {
@@ -159,10 +160,13 @@ public sealed class ViewSession : IViewSession
         ArgumentNullException.ThrowIfNull(options);
 
         var sessionId = Guid.NewGuid().ToString("N");
+        var replayStartedAt = _timeProvider.GetUtcNow();
         var activeDeviceSelector = options.DeviceSelector;
         var usesSharedTransport = !string.IsNullOrWhiteSpace(options.JoinShareEndpoint);
         var emittedShareStarted = false;
         TcpViewShareServer? shareServer = null;
+        _replayArtifacts = new SessionReplayArtifacts(_artifacts, "view", sessionId, replayStartedAt);
+        _replayArtifacts.SetTarget(usesSharedTransport ? options.JoinShareEndpoint : activeDeviceSelector);
 
         try
         {
@@ -417,13 +421,22 @@ public sealed class ViewSession : IViewSession
                     await sessionRenderer.FlushPendingStatsAsync().ConfigureAwait(false);
                 }
 
+                var endedAt = _timeProvider.GetUtcNow();
                 WriteJsonLine(new
                 {
                     type = SessionEventTypes.View.Ended,
                     session_id = sessionId,
-                    ended_at = _timeProvider.GetUtcNow(),
+                    ended_at = endedAt,
                     reason = endReason
                 });
+
+                var replayArtifacts = _replayArtifacts;
+                if (replayArtifacts is not null)
+                {
+                    await replayArtifacts.PersistAsync(endedAt, endReason, 0).ConfigureAwait(false);
+                }
+
+                _replayArtifacts = null;
 
                 return 0;
             }
@@ -438,11 +451,12 @@ public sealed class ViewSession : IViewSession
         catch (Exception ex)
         {
             var diagnostic = ViewRuntimeDiagnostic.From(ex, options);
+            var endedAt = _timeProvider.GetUtcNow();
             WriteJsonLine(new
             {
                 type = SessionEventTypes.View.Diagnostic,
                 session_id = sessionId,
-                occurred_at = _timeProvider.GetUtcNow(),
+                occurred_at = endedAt,
                 category = diagnostic.Category,
                 message = diagnostic.Message,
                 next_command = diagnostic.NextCommand
@@ -452,7 +466,7 @@ public sealed class ViewSession : IViewSession
             {
                 type = SessionEventTypes.View.Error,
                 session_id = sessionId,
-                occurred_at = _timeProvider.GetUtcNow(),
+                occurred_at = endedAt,
                 error = ErrorInfo.From(ex, ex is UsageException ? "usage_error" : ErrorInfo.Classify(ex.Message))
             });
 
@@ -460,9 +474,17 @@ public sealed class ViewSession : IViewSession
             {
                 type = SessionEventTypes.View.Ended,
                 session_id = sessionId,
-                ended_at = _timeProvider.GetUtcNow(),
+                ended_at = endedAt,
                 reason = "error"
             });
+
+            var replayArtifacts = _replayArtifacts;
+            if (replayArtifacts is not null)
+            {
+                await replayArtifacts.PersistAsync(endedAt, "error", 1).ConfigureAwait(false);
+            }
+
+            _replayArtifacts = null;
 
             return 1;
         }
@@ -486,7 +508,9 @@ public sealed class ViewSession : IViewSession
     {
         lock (_writeGate)
         {
-            _console.WriteLine(JsonSerializer.Serialize(value, OutputJsonOptions));
+            var json = JsonSerializer.Serialize(value, OutputJsonOptions);
+            _console.WriteLine(json);
+            _replayArtifacts?.RecordSerializedEvent(json);
         }
     }
 

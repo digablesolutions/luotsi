@@ -13,7 +13,6 @@ public sealed class AndroidViewServerInstaller(
 {
     private readonly IAdbClient _adbClient = adbClient ?? throw new ArgumentNullException(nameof(adbClient));
     private readonly IAndroidViewHelperPackageLocator _packageLocator = packageLocator ?? throw new ArgumentNullException(nameof(packageLocator));
-    private readonly Action<ViewStartupPhase>? _reportPhase = reportPhase;
 
     /// <summary>
     /// Resolves and installs the helper package.
@@ -118,7 +117,7 @@ public sealed class AndroidViewServerInstaller(
     }
 
     private void Report(string phase, string status, string summary, string? detail = null, string? recommendation = null) =>
-        _reportPhase?.Invoke(new ViewStartupPhase(phase, status, summary, string.IsNullOrWhiteSpace(detail) ? null : detail, recommendation));
+        reportPhase?.Invoke(new ViewStartupPhase(phase, status, summary, string.IsNullOrWhiteSpace(detail) ? null : detail, recommendation));
 
     internal static string PackageDetail(AndroidViewHelperPackage package) =>
         $"path={package.LocalPath}; source={package.ResolutionSource}; size={package.LocalSizeBytes?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown"}; sha256={package.LocalSha256 ?? "unknown"}";

@@ -1,0 +1,188 @@
+using System.Text;
+using Luotsi.Cli.Artifacts;
+using Luotsi.Cli.Errors;
+using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.Models;
+
+namespace Luotsi.Cli.Cli.Replay;
+
+internal sealed class ReplaySearchService(IFileSystem fileSystem)
+{
+    private const int DefaultLimit = 50;
+    private const int MaxPreviewLength = 240;
+    private static readonly HashSet<string> SearchableExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".json",
+        ".jsonl",
+        ".txt",
+        ".log",
+        ".xml",
+        ".md",
+        ".html",
+        ".csv"
+    };
+
+    private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+
+    public async Task<ReplaySearchResult> SearchAsync(CliOptions options, ArtifactSession artifacts)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(artifacts);
+
+        var query = options.Get("contains") ?? options.Get("text") ?? options.Get("query");
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            throw new UsageException("replay search requires --contains <text>.");
+        }
+
+        var limit = options.Int("limit", DefaultLimit);
+        if (limit <= 0)
+        {
+            throw new UsageException("replay search --limit must be greater than zero.");
+        }
+
+        var matches = new List<ReplaySearchMatchResult>();
+        var scannedFileCount = 0;
+        var truncated = false;
+        foreach (var file in GetSearchableFiles(artifacts.Root))
+        {
+            scannedFileCount++;
+            await foreach (var match in SearchFileAsync(artifacts.Root, file, query).ConfigureAwait(false))
+            {
+                if (matches.Count >= limit)
+                {
+                    truncated = true;
+                    break;
+                }
+
+                matches.Add(match);
+            }
+
+            if (truncated)
+            {
+                break;
+            }
+        }
+
+        return new ReplaySearchResult(
+            ResultSchemas.ReplaySearch,
+            artifacts.Root,
+            query,
+            matches.Count,
+            scannedFileCount,
+            truncated,
+            matches);
+    }
+
+    private IEnumerable<string> GetSearchableFiles(string artifactRoot) =>
+        _fileSystem
+            .GetFiles(artifactRoot, "*", SearchOption.AllDirectories)
+            .Where(IsSearchableFile)
+            .Order(StringComparer.OrdinalIgnoreCase);
+
+    private async IAsyncEnumerable<ReplaySearchMatchResult> SearchFileAsync(string artifactRoot, string file, string query)
+    {
+        using var stream = _fileSystem.OpenRead(file);
+        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 4096);
+        var lineNumber = 0;
+        while (await reader.ReadLineAsync().ConfigureAwait(false) is { } line)
+        {
+            lineNumber++;
+            if (line.Contains(query, StringComparison.OrdinalIgnoreCase))
+            {
+                yield return new ReplaySearchMatchResult(
+                    ToArtifactRelativePath(artifactRoot, file),
+                    lineNumber,
+                    Classify(file),
+                    CreatePreview(line, query));
+            }
+        }
+    }
+
+    private static bool IsSearchableFile(string file)
+    {
+        var extension = Path.GetExtension(file);
+        return !string.IsNullOrWhiteSpace(extension) && SearchableExtensions.Contains(extension);
+    }
+
+    private static string Classify(string file)
+    {
+        var fileName = Path.GetFileName(file);
+        if (fileName.Equals(SessionReplayArtifacts.TimelineFileName, StringComparison.OrdinalIgnoreCase))
+        {
+            return "timeline";
+        }
+
+        if (fileName.Equals(SessionReplayArtifacts.MetadataFileName, StringComparison.OrdinalIgnoreCase))
+        {
+            return "replay_metadata";
+        }
+
+        if (fileName.Contains("failure-capsule", StringComparison.OrdinalIgnoreCase) ||
+            fileName.Contains("failure", StringComparison.OrdinalIgnoreCase))
+        {
+            return "failure";
+        }
+
+        if (fileName.Contains("logcat", StringComparison.OrdinalIgnoreCase) ||
+            fileName.EndsWith(".log", StringComparison.OrdinalIgnoreCase))
+        {
+            return "log";
+        }
+
+        if (fileName.Contains("screen-state", StringComparison.OrdinalIgnoreCase))
+        {
+            return "screen_state";
+        }
+
+        if (fileName.Contains("hierarchy", StringComparison.OrdinalIgnoreCase) ||
+            fileName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
+        {
+            return "hierarchy";
+        }
+
+        if (fileName.Contains("report", StringComparison.OrdinalIgnoreCase) ||
+            fileName.Equals("junit.xml", StringComparison.OrdinalIgnoreCase))
+        {
+            return "report";
+        }
+
+        return "artifact";
+    }
+
+    private static string CreatePreview(string line, string query)
+    {
+        var normalized = line.Trim();
+        if (normalized.Length <= MaxPreviewLength)
+        {
+            return normalized;
+        }
+
+        var matchIndex = normalized.IndexOf(query, StringComparison.OrdinalIgnoreCase);
+        if (matchIndex < 0)
+        {
+            return normalized[..MaxPreviewLength] + "...";
+        }
+
+        var start = Math.Max(0, matchIndex - 80);
+        var length = Math.Min(MaxPreviewLength, normalized.Length - start);
+        var preview = normalized.Substring(start, length);
+        if (start > 0)
+        {
+            preview = "..." + preview;
+        }
+
+        if (start + length < normalized.Length)
+        {
+            preview += "...";
+        }
+
+        return preview;
+    }
+
+    private static string ToArtifactRelativePath(string artifactRoot, string file)
+    {
+        var relative = Path.GetRelativePath(artifactRoot, file);
+        return relative.Replace('\\', '/');
+    }
+}

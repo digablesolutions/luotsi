@@ -1,0 +1,55 @@
+---
+title: Wireless And Port Forwarding
+description: Use Luotsi to connect over Android wireless debugging or manage adb forward and reverse plumbing.
+---
+
+Luotsi keeps wireless debugging and adb port plumbing in the same CLI surface as the rest of the device workflow.
+
+## Modern wireless debugging
+
+For Android 11 and newer, Luotsi supports the TLS and mDNS pairing flow:
+
+```bash
+luotsi wireless-scan
+luotsi wireless-pair --endpoint <host:port> --code <code>
+luotsi wireless-connect --service <service-name> --save-profile desk-wifi
+luotsi view --profile desk-wifi
+```
+
+Notes:
+
+- `wireless-scan` is useful, but not always required
+- `wireless-pair` without `--code` returns a structured error instead of trying to drive an interactive prompt
+- `wireless-connect --service` can resolve the mDNS service directly and save a profile in one step
+
+If the device is visible over USB but not yet stable over Wi-Fi, validate it first with the readiness commands before you debug pairing itself.
+
+## Legacy TCP/IP mode
+
+For older Android versions, Luotsi can switch a USB-connected device into TCP/IP mode:
+
+```bash
+luotsi wireless --device <usb-serial> --host 192.168.0.44
+```
+
+When `--host` is omitted, Luotsi infers the Wi-Fi address from the device route table.
+
+## Forward and reverse helpers
+
+Use these when your workflow needs explicit host-to-device or device-to-host sockets.
+
+```bash
+luotsi forward --local tcp:8080 --remote tcp:8080
+luotsi forward-list
+luotsi reverse --remote tcp:7000 --local tcp:7000
+luotsi reverse-list
+```
+
+Endpoints follow adb syntax such as `tcp:8080`, `tcp:0`, and `localabstract:service`.
+
+## Related pages
+
+- [Device readiness](../getting-started/device-readiness/)
+- [Live view](../core-workflows/live-view/)
+- [CLI command groups](./cli-command-groups/#wireless-and-port-forwarding)
+- [Troubleshooting](../getting-started/troubleshooting/)

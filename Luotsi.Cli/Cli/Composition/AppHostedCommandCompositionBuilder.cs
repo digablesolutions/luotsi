@@ -1,6 +1,8 @@
 using Luotsi.Cli.Cli.Envelope;
 using Luotsi.Cli.Cli.Provenance;
+using Luotsi.Cli.Cli.Replay;
 using Luotsi.Cli.Cli.Routing;
+using Luotsi.Cli.Cli.Update;
 using Luotsi.Cli.Cli.View;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Scenarios;
@@ -34,13 +36,35 @@ internal static class AppHostedCommandCompositionBuilder
             scenarioRunReportCoordinatorFactory,
             scenarioDeviceAllocator);
         var envelopeWriter = new AppCommandEnvelopeWriter(dependencies.Console, dependencies.TimeProvider, provenance);
+        var jsonWriter = new AppCommandJsonWriter(dependencies.Console);
+        var selfUpdateService = dependencies.SelfUpdateService
+            ?? new SelfUpdateService(dependencies.FileSystem, dependencies.Environment, dependencies.ProcessRunner);
+        var replayCommandDispatcher = new ReplayCommandDispatcher(dependencies.FileSystem);
+        var labLeaseStore = new LabLeaseStore(dependencies.FileSystem, dependencies.TimeProvider);
+        var labQuarantineStore = new LabQuarantineStore(dependencies.FileSystem, dependencies.TimeProvider);
         var commandDispatcher = new AppCommandDispatcher(
             new AdbSubcommandDispatcher(),
-            new ScenarioCommandDispatcher(scenarioRunPlanner, scenarioRunOrchestrator, scenarioAuthoring),
-            dependencies.ProfileCoordinator);
+            new ScenarioCommandDispatcher(scenarioRunPlanner, scenarioRunOrchestrator, scenarioAuthoring, labLeaseStore),
+            selfUpdateService,
+            dependencies.ProfileCoordinator,
+            labLeaseStore,
+            labQuarantineStore);
+        var replayTimelineService = new ReplayTimelineService(dependencies.FileSystem);
+        var replayCommandHost = new ReplayCommandHost(new(
+            envelopeWriter,
+            jsonWriter,
+            replayCommandDispatcher,
+            dependencies.ProcessRunner,
+            new ReplayScenarioDraftService(dependencies.FileSystem),
+            new ReplaySearchService(dependencies.FileSystem),
+            new ReplayCapsuleService(dependencies.FileSystem),
+            replayTimelineService,
+            new ReplayGraphService(dependencies.FileSystem, replayTimelineService),
+            new ReplayClusterService(dependencies.FileSystem)));
 
         return new(
             envelopeWriter,
+            replayCommandHost,
             new AppCommandHost(new(
                 envelopeWriter,
                 new AppCommandExitCodeResolver(),
@@ -54,9 +78,12 @@ internal sealed record AppHostedCommandCompositionBuilderDependencies(
     IConsoleIo Console,
     IFileSystem FileSystem,
     IEnvironmentVariables Environment,
+    IProcessRunner ProcessRunner,
     IDelay Delay,
+    ISelfUpdateService? SelfUpdateService,
     ViewProfileCoordinator ProfileCoordinator);
 
 internal sealed record AppHostedCommandComposition(
     AppCommandEnvelopeWriter EnvelopeWriter,
+    ReplayCommandHost ReplayCommandHost,
     AppCommandHost CommandHost);

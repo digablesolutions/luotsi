@@ -1,0 +1,107 @@
+---
+title: Luotsi Docs
+description: Install Luotsi, connect a device, and choose the workflow that matches your debugging or automation loop.
+template: splash
+hero:
+  tagline: Host-driven Android device automation, inspection, and live view.
+  actions:
+    - text: Installation
+      link: getting-started/installation/
+      icon: right-arrow
+    - text: Quickstart
+      link: getting-started/quickstart/
+      icon: right-arrow
+    - text: GitHub
+      link: https://github.com/digablesolutions/luotsi
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+Luotsi keeps the device automation runtime on the host machine. Use it to inspect real Android devices over adb, open a live mirror, run JSON scenario playbooks, and preserve artifacts that explain failures without forcing another control plane into the stack.
+
+## Start here
+
+<CardGrid stagger>
+	<Card title="Device readiness">
+		Use `doctor`, `preflight`, and lab-level checks to make device selection and first-run validation explicit before you start debugging the app itself.
+
+		[Open device readiness](./getting-started/device-readiness/)
+	</Card>
+	<Card title="Installation">
+		Use the release installer or build from source, then run <code>doctor</code> to confirm adb, device readiness, and live-view prerequisites.
+
+		[Open installation guide](./getting-started/installation/)
+	</Card>
+	<Card title="Quickstart">
+		Go from a connected device to a working live-view or scenario run in a few commands.
+
+		[Open quickstart](./getting-started/quickstart/)
+	</Card>
+	<Card title="Live view">
+		Mirror a device to a local SDL window, use presets and profiles, and relay the stream to observer sessions when needed.
+
+		[Explore live view](./core-workflows/live-view/)
+	</Card>
+	<Card title="Inspect and scenarios">
+		Choose between agent-driven JSONL sessions and repeatable JSON playbooks depending on whether you are exploring or codifying a flow.
+
+		[Read the workflow guide](./core-workflows/inspect-and-scenarios/)
+	</Card>
+	<Card title="Replay and artifacts">
+		Use artifact roots, replay summaries, and timeline or search tools to triage failures after a run without reconnecting to the device.
+
+		[Open replay and artifacts](./core-workflows/replay-and-artifacts/)
+	</Card>
+	<Card title="CLI command groups">
+		See the main command families and the first-stop command surface without dropping back to repository markdown.
+
+		[Open the reference guide](./reference/cli-command-groups/)
+	</Card>
+	<Card title="Troubleshooting">
+		Start with the common failure shapes: offline devices, pairing friction, missing view prerequisites, and old-device hierarchy limits.
+
+		[Open troubleshooting](./getting-started/troubleshooting/)
+	</Card>
+	<Card title="Scenario playbooks">
+		Learn the JSON scenario format, metadata model, supported actions, timing defaults, and validation rules.
+
+		[Open scenario playbooks](./reference/scenario-playbooks/)
+	</Card>
+	<Card title="Wireless and port forwarding">
+		Connect over Android wireless debugging, save a profile, or use adb forward and reverse helpers when your workflow needs it.
+
+		[Open networking reference](./reference/wireless-and-port-forwarding/)
+	</Card>
+	<Card title="Output envelopes">
+		Understand where Luotsi emits one-shot JSON envelopes versus long-lived JSONL sessions and how error categories map to runtime failure shapes.
+
+		[Open output envelopes](./reference/output-envelopes/)
+	</Card>
+	<Card title="Architecture">
+		Understand how the command layer, Android host runtime, helper process, and artifact system fit together.
+
+		[Read the architecture guide](./concepts/architecture/)
+	</Card>
+	<Card title="Subsystems">
+		Use the subsystem map when you need to understand which part of the codebase owns CLI routing, view transport, telemetry, or artifact capture.
+
+		[Open subsystems](./concepts/subsystems/)
+	</Card>
+	<Card title="Contributing">
+		Keep changes small, validate the touched slice first, and use the public docs and subsystem map to find the owning implementation surface.
+
+		[Open the contribution guide](./contributing/guide/)
+	</Card>
+	<Card title="Buggy Controller demo">
+		Walk through a concrete Luotsi run on an older Android 6 device, including reports, artifacts, and hierarchy limitations.
+
+		[Open the tutorial](./tutorials/buggy-controller-live-demo/)
+	</Card>
+	<Card title="Repository docs">
+		The rest of the current reference still lives in the repository while the public docs IA settles.
+
+		[Open the repo](https://github.com/digablesolutions/luotsi)
+	</Card>
+</CardGrid>

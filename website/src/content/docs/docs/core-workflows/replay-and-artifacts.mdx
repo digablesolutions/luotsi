@@ -1,0 +1,54 @@
+---
+title: Replay And Artifacts
+description: Use Luotsi's artifact roots and replay commands to triage failures without reconnecting to a live device session.
+---
+
+Artifacts are part of the Luotsi contract. Commands, scenario runs, inspect sessions, and live view all write into an artifact root so the result can be explained after the fact.
+
+## What typically lands in an artifact root
+
+- Screenshots and recordings
+- UI hierarchy and screen-state captures
+- Telemetry and log snapshots
+- `session-timeline.jsonl` and `session-replay.json`
+- Report outputs such as JSON, JSONL, JUnit, or replay summaries
+
+## Core replay commands
+
+```bash
+luotsi replay summarize --artifacts ./artifacts/my-run
+luotsi replay timeline --artifacts ./artifacts/my-run --failures
+luotsi replay search --artifacts ./artifacts/my-run --contains "timeout"
+luotsi replay open --artifacts ./artifacts/my-run
+```
+
+## What each command is for
+
+- `replay summarize`: condensed session-level overview, including failure capsule linkage
+- `replay timeline`: ordered timeline events with type, timestamps, detail text, and filtering
+- `replay search`: text search across timelines and text-like artifacts
+- `replay open`: regenerate and open the artifact browser locally
+- `replay capsule`: compact manifest with primary failure and suggested next commands
+- `replay scenario-draft`: turn inspect or replay actions into a conservative starter scenario
+
+## Newer semantic triage helpers
+
+```bash
+luotsi replay graph --artifacts ./artifacts/my-run
+luotsi replay cluster --artifacts ./artifacts/my-run
+```
+
+Use `replay graph` when you want a stable node or edge model across sessions, failures, artifacts, actions, and telemetry signals. Use `replay cluster` when you need repeated failure shapes grouped into triage buckets.
+
+## Practical workflow
+
+1. Run the command or scenario with an explicit artifact root if you want a stable location.
+2. Use `replay summarize` to confirm what happened at the session level.
+3. Move to `replay timeline` or `replay search` to narrow the failure window.
+4. Open the local browser index when you want screenshots, logs, or replay markdown in one place.
+
+## Related pages
+
+- [Live view](./live-view/)
+- [Inspect and scenarios](./inspect-and-scenarios/)
+- [Output envelopes](../reference/output-envelopes/)

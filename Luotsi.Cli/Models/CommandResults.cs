@@ -31,6 +31,56 @@ public sealed record LabDoctorResult(
 
 public sealed record LabDoctorProbe(string Name, bool Succeeded, int ExitCode, string Invocation);
 
+public sealed record LabPlanResult(
+    string Status,
+    string? Query,
+    string? SelectedSerial,
+    string Summary,
+    IReadOnlyList<string> RecommendedCommands,
+    IReadOnlyList<LabDeviceDecision> Decisions);
+
+public sealed record LabLeaseResult(
+    string LeaseId,
+    string Serial,
+    string Owner,
+    DateTimeOffset ClaimedAt,
+    DateTimeOffset ExpiresAt,
+    string LeaseFile);
+
+public sealed record LabLeaseReleaseResult(
+    string LeaseId,
+    bool Released,
+    string? LeaseFile,
+    string? Serial = null);
+
+public sealed record LabLeaseExtendResult(
+    string LeaseId,
+    string Serial,
+    bool Extended,
+    DateTimeOffset? PreviousExpiresAt,
+    DateTimeOffset? ExpiresAt,
+    string? LeaseFile);
+
+public sealed record LabLeasesResult(
+    int Count,
+    IReadOnlyList<LabLeaseResult> Leases);
+
+public sealed record LabQuarantineResult(
+    string Serial,
+    string Reason,
+    string Owner,
+    DateTimeOffset QuarantinedAt,
+    string QuarantineFile);
+
+public sealed record LabQuarantineReleaseResult(
+    string Serial,
+    bool Released,
+    string? QuarantineFile);
+
+public sealed record LabQuarantinesResult(
+    int Count,
+    IReadOnlyList<LabQuarantineResult> Quarantines);
+
 public sealed record DeviceState(
     string? Serial,
     string State,
@@ -50,7 +100,8 @@ public sealed record ScenarioDeviceAllocation(
     PreflightResult? Readiness,
     bool RequireReady,
     int WaitTimeoutSec,
-    string? Package = null);
+    string? Package = null,
+    LabLeaseResult? Lease = null);
 
 // Preflight
 public sealed record PreflightResult(
@@ -214,6 +265,242 @@ public sealed record ViewProfileListResult(IReadOnlyList<string> Profiles);
 
 public sealed record ViewProfileDeleteResult(string Name, bool Deleted);
 
+public sealed record ReplaySummarizeResult(
+    string Schema,
+    string ArtifactRoot,
+    int SessionCount,
+    int FailureCount,
+    IReadOnlyList<ReplaySessionSummaryResult> Sessions);
+
+public sealed record ReplaySessionSummaryResult(
+    string MetadataPath,
+    string TimelinePath,
+    string? FailureCapsulePath,
+    ReplayFailureCapsuleResult? FailureCapsule,
+    string SessionKind,
+    string SessionId,
+    DateTimeOffset StartedAt,
+    DateTimeOffset EndedAt,
+    long DurationMs,
+    string Reason,
+    int ExitCode,
+    string? Target,
+    int EventCount,
+    IReadOnlyList<string> EventTypes,
+    bool HasTimeline,
+    bool HasFailureSignals,
+    IReadOnlyList<ReplayTimelineHighlightResult> TimelineHighlights);
+
+public sealed record ReplayTimelineHighlightResult(
+    DateTimeOffset? Timestamp,
+    string Type,
+    string Detail,
+    bool FailureRelevant);
+
+public sealed record ReplayFailureCapsuleResult(
+    string Path,
+    ReplayFailureCapsuleReportLinksResult Reports,
+    IReadOnlyList<ReplayFailureCapsuleScenarioResult> Scenarios,
+    IReadOnlyList<ReplayFailureCapsuleArtifactResult> Screenshots,
+    IReadOnlyList<ReplayFailureCapsuleArtifactResult> Logcat,
+    IReadOnlyList<ReplayFailureCapsuleArtifactResult> Hierarchies,
+    IReadOnlyList<ReplayFailureCapsuleArtifactResult> ScreenStates,
+    IReadOnlyList<ReplayFailureCapsuleBundleResult> FailureBundles);
+
+public sealed record ReplayFailureCapsuleReportLinksResult(
+    string? JsonPath,
+    string? JunitPath);
+
+public sealed record ReplayFailureCapsuleScenarioResult(
+    string Scenario,
+    string? ScenarioId,
+    string Status,
+    string? File,
+    ReplayFailureCapsuleFailedStepResult? FailedStep,
+    IReadOnlyList<ReplayFailureCapsuleArtifactResult> Artifacts,
+    ErrorInfo? Error);
+
+public sealed record ReplayFailureCapsuleFailedStepResult(
+    int Index,
+    string Name,
+    string Action,
+    string Phase);
+
+public sealed record ReplayFailureCapsuleArtifactResult(
+    string Kind,
+    string Path,
+    int? StepIndex,
+    string? StepName);
+
+public sealed record ReplayFailureCapsuleBundleResult(
+    string Path,
+    string? Scenario,
+    string? ScenarioId,
+    string? File,
+    ReplayFailureCapsuleFailedStepResult? FailedStep,
+    IReadOnlyList<ReplayFailureCapsuleArtifactResult> Artifacts,
+    ErrorInfo? Error);
+
+public sealed record ReplayOpenResult(
+    string Schema,
+    string ArtifactRoot,
+    string IndexHtmlPath,
+    string IndexMarkdownPath,
+    bool Opened,
+    string? Opener,
+    IReadOnlyList<string> OpenerArgs);
+
+public sealed record ReplayScenarioDraftResult(
+    string Schema,
+    string ArtifactRoot,
+    string? Output,
+    string? JsonPath,
+    string? MarkdownPath,
+    string Confidence,
+    IReadOnlyList<string> Warnings,
+    ScenarioFile Scenario,
+    IReadOnlyList<ReplayScenarioDraftSuggestion> Suggestions);
+
+public sealed record ReplayScenarioDraftSuggestion(
+    int StepIndex,
+    string Kind,
+    string Confidence,
+    string Message);
+
+public sealed record ReplaySearchResult(
+    string Schema,
+    string ArtifactRoot,
+    string Query,
+    int MatchCount,
+    int ScannedFileCount,
+    bool Truncated,
+    IReadOnlyList<ReplaySearchMatchResult> Matches);
+
+public sealed record ReplaySearchMatchResult(
+    string Path,
+    int Line,
+    string Kind,
+    string Preview);
+
+public sealed record ReplayCapsuleResult(
+    string Schema,
+    string ArtifactRoot,
+    int SessionCount,
+    int FailureCount,
+    bool HasFailureCapsule,
+    string? ReadmePath,
+    string? JsonPath,
+    ReplayCapsulePrimaryFailureResult? PrimaryFailure,
+    ReplayCapsuleArtifactCounts ArtifactCounts,
+    IReadOnlyList<ReplayCapsuleCommandHint> SuggestedCommands);
+
+public sealed record ReplayCapsulePrimaryFailureResult(
+    string? Scenario,
+    string? Step,
+    string? Action,
+    string? Message,
+    string? FailureCapsulePath,
+    string? TimelinePath);
+
+public sealed record ReplayCapsuleArtifactCounts(
+    int Screenshots,
+    int Videos,
+    int Logs,
+    int Hierarchies,
+    int ScreenStates,
+    int Reports,
+    int Timelines);
+
+public sealed record ReplayCapsuleCommandHint(
+    string Command,
+    string Purpose);
+
+public sealed record ReplayTimelineResult(
+    string Schema,
+    string ArtifactRoot,
+    int EventCount,
+    int ScannedFileCount,
+    bool Truncated,
+    string? JsonPath,
+    string? JsonlPath,
+    string? MarkdownPath,
+    IReadOnlyList<ReplayTimelineEventResult> Events);
+
+public sealed record ReplayTimelineEventResult(
+    string Path,
+    int Sequence,
+    DateTimeOffset? Timestamp,
+    string Type,
+    bool FailureRelevant,
+    string Detail,
+    IReadOnlyDictionary<string, string?> Properties);
+
+public sealed record ReplayGraphResult(
+    string Schema,
+    string ArtifactRoot,
+    int NodeCount,
+    int EdgeCount,
+    IReadOnlyDictionary<string, int> NodeKinds,
+    IReadOnlyDictionary<string, int> EdgeKinds,
+    string? JsonPath,
+    string? MarkdownPath,
+    IReadOnlyList<ReplayGraphNodeResult> Nodes,
+    IReadOnlyList<ReplayGraphEdgeResult> Edges);
+
+public sealed record ReplayGraphNodeResult(
+    string Id,
+    string Kind,
+    string Label,
+    IReadOnlyDictionary<string, string?> Properties);
+
+public sealed record ReplayGraphEdgeResult(
+    string From,
+    string To,
+    string Kind,
+    IReadOnlyDictionary<string, string?> Properties);
+
+public sealed record ReplayClustersResult(
+    string Schema,
+    string ArtifactRoot,
+    int SessionCount,
+    int FailureCount,
+    int ClusterCount,
+    string? JsonPath,
+    string? MarkdownPath,
+    IReadOnlyList<ReplayFailureClusterResult> Clusters);
+
+public sealed record ReplayFailureClusterResult(
+    string Id,
+    string Signature,
+    int Count,
+    string? Category,
+    string? Message,
+    string? Action,
+    string? Step,
+    IReadOnlyList<ReplayFailureClusterHintResult> Hints,
+    IReadOnlyList<ReplayFailureClusterInstanceResult> Instances);
+
+public sealed record ReplayFailureClusterHintResult(
+    string Kind,
+    string Message,
+    string? Command);
+
+public sealed record ReplayFailureClusterInstanceResult(
+    string SessionId,
+    string SessionKind,
+    DateTimeOffset StartedAt,
+    string? Target,
+    string MetadataPath,
+    string? FailureCapsulePath,
+    string? ScenarioId,
+    string? Scenario,
+    string? File,
+    int? StepIndex,
+    string? Step,
+    string? Action,
+    string? ErrorCategory,
+    string? ErrorMessage);
+
 public sealed record DoctorCheck(
     string Name,
     bool Ok,
@@ -228,8 +515,8 @@ public sealed record DoctorResult(
     string? Package,
     IReadOnlyList<DoctorCheck> Checks,
     PreflightResult? PackagePreflight,
-    Luotsi.Cli.View.Diagnostics.ViewDoctorResult View,
-    IReadOnlyList<Luotsi.Cli.View.Diagnostics.ViewSetupStep> Repairs);
+    View.Diagnostics.ViewDoctorResult View,
+    IReadOnlyList<View.Diagnostics.ViewSetupStep> Repairs);
 
 // Wait not visible
 public sealed record WaitNotVisibleResult(string Text, int AttemptCount, bool Visible);

@@ -21,7 +21,7 @@ internal sealed class AppCommandRouteBootstrapper(AppCommandRouteBootstrapperDep
         var adbExecutable = options.Get("adb")
             ?? _dependencies.Environment.GetEnvironmentVariable(CliDefaults.AdbExecutableEnvironmentVariable)
             ?? CliDefaults.DefaultAdbExecutable;
-        var artifacts = ArtifactSession.Create(options, _dependencies.FileSystem, _dependencies.TimeProvider);
+        var artifacts = CreateArtifacts(options);
         context.Artifacts = artifacts;
 
         return new AppCommandRouteSetup(adbExecutable, artifacts);
@@ -37,7 +37,14 @@ internal sealed class AppCommandRouteBootstrapper(AppCommandRouteBootstrapperDep
             setup.AdbExecutable,
             setup.Artifacts,
             options.Command,
-            _dependencies.DeviceHostLauncher).ConfigureAwait(false);
+            _dependencies.DeviceHostLauncher,
+            new LabLeaseStore(_dependencies.FileSystem, _dependencies.TimeProvider),
+            new LabQuarantineStore(_dependencies.FileSystem, _dependencies.TimeProvider)).ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(deviceSelector) && string.IsNullOrWhiteSpace(options.Get("device")))
+        {
+            options.ApplyDefaults(new Dictionary<string, string?> { ["device"] = deviceSelector });
+        }
+
         return _dependencies.DeviceHostLauncher.Create(options, setup.AdbExecutable, setup.Artifacts, deviceSelector);
     }
 
@@ -62,6 +69,17 @@ internal sealed class AppCommandRouteBootstrapper(AppCommandRouteBootstrapperDep
         {
             throw new UsageException($"Scenario file '{file}' does not exist.");
         }
+    }
+
+    private ArtifactSession CreateArtifacts(CliOptions options)
+    {
+        if (string.Equals(options.Command, "replay", StringComparison.OrdinalIgnoreCase))
+        {
+            var artifactRoot = options.Get("artifacts") ?? throw new UsageException("replay requires --artifacts <directory> pointing to an existing artifact root.");
+            return ArtifactSession.AttachExisting(artifactRoot, _dependencies.FileSystem, options.Get("poll-artifacts"));
+        }
+
+        return ArtifactSession.Create(options, _dependencies.FileSystem, _dependencies.TimeProvider);
     }
 }
 

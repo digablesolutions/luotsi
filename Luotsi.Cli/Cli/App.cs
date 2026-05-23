@@ -35,7 +35,9 @@ public sealed class App
             infrastructure.Console,
             infrastructure.FileSystem,
             infrastructure.Environment,
+            infrastructure.ProcessRunner,
             infrastructure.Delay,
+            dependencies.SelfUpdateService,
             infrastructure.ProfileCoordinator));
         var viewCommands = AppViewCommandCompositionBuilder.Build(new(
             dependencies,
@@ -66,6 +68,7 @@ public sealed class App
                 DeviceHostLauncher = infrastructure.DeviceHostLauncher
             }),
             CommandHost = hostedCommands.CommandHost,
+            ReplayCommandHost = hostedCommands.ReplayCommandHost,
             ViewSessionCommandPreparer = viewCommands.ViewSessionCommandPreparer,
             InspectSessionLauncher = new InspectSessionLauncher(infrastructure.DeviceHostLauncher, infrastructure.Console, infrastructure.TimeProvider),
             ViewDiagnosticsLauncher = viewCommands.ViewDiagnosticsLauncher,

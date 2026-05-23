@@ -20,6 +20,9 @@ public sealed class PhysicalFileSystem : IFileSystem
     public Task<string> ReadAllTextAsync(string path, CancellationToken cancellationToken = default) =>
         File.ReadAllTextAsync(path, cancellationToken);
 
+    public Task<byte[]> ReadAllBytesAsync(string path, CancellationToken cancellationToken = default) =>
+        File.ReadAllBytesAsync(path, cancellationToken);
+
     public Stream OpenRead(string path) =>
         new FileStream(path, new FileStreamOptions
         {

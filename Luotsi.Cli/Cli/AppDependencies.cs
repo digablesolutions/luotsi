@@ -1,4 +1,5 @@
 using Luotsi.Cli.Cli.View;
+using Luotsi.Cli.Cli.Update;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.View.Contracts;
 using Luotsi.Cli.View.Diagnostics;
@@ -74,4 +75,9 @@ public sealed class AppDependencies
     /// Gets or sets the profile store used by the application.
     /// </summary>
     public IViewProfileStore? ViewProfileStore { get; init; }
+
+    /// <summary>
+    /// Gets or sets the Luotsi updater used by update/version commands.
+    /// </summary>
+    internal ISelfUpdateService? SelfUpdateService { get; init; }
 }

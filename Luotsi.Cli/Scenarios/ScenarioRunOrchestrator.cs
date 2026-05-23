@@ -1,3 +1,4 @@
+using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 
@@ -20,14 +21,15 @@ internal sealed class ScenarioRunOrchestrator(
     private readonly ScenarioRunReportCoordinatorFactory _scenarioRunReportCoordinatorFactory = scenarioRunReportCoordinatorFactory ?? throw new ArgumentNullException(nameof(scenarioRunReportCoordinatorFactory));
     private readonly IScenarioDeviceAllocator _deviceAllocator = deviceAllocator ?? throw new ArgumentNullException(nameof(deviceAllocator));
 
-    public async Task<ScenarioRunResult> RunFileAsync(string file, IDeviceHost runner, ScenarioRunConfiguration configuration)
+    public async Task<ScenarioRunResult> RunFileAsync(string file, IDeviceHost runner, ScenarioRunConfiguration configuration, ArtifactSession artifacts)
     {
+        ArgumentNullException.ThrowIfNull(artifacts);
         ArgumentException.ThrowIfNullOrWhiteSpace(file);
         ArgumentNullException.ThrowIfNull(runner);
         ArgumentNullException.ThrowIfNull(configuration);
 
-        await using var runEvents = _scenarioRunEventCoordinatorFactory.Create(configuration.EventsJsonlPath);
-        var runReports = _scenarioRunReportCoordinatorFactory.Create(configuration);
+        await using var runEvents = _scenarioRunEventCoordinatorFactory.Create(configuration.EventsJsonlPath, artifacts, file);
+        var runReports = _scenarioRunReportCoordinatorFactory.Create(configuration, artifacts);
         return await RunFileCoreAsync(
             file,
             runner,
@@ -36,14 +38,15 @@ internal sealed class ScenarioRunOrchestrator(
             runReports).ConfigureAwait(false);
     }
 
-    public async Task<ScenarioRunBatchResult> RunPathAsync(ScenarioQuery query, IDeviceHost runner, ScenarioRunConfiguration configuration)
+    public async Task<ScenarioRunBatchResult> RunPathAsync(ScenarioQuery query, IDeviceHost runner, ScenarioRunConfiguration configuration, ArtifactSession artifacts)
     {
+        ArgumentNullException.ThrowIfNull(artifacts);
         ArgumentNullException.ThrowIfNull(query);
         ArgumentNullException.ThrowIfNull(runner);
         ArgumentNullException.ThrowIfNull(configuration);
 
-        await using var runEvents = _scenarioRunEventCoordinatorFactory.Create(configuration.EventsJsonlPath);
-        var runReports = _scenarioRunReportCoordinatorFactory.Create(configuration);
+        await using var runEvents = _scenarioRunEventCoordinatorFactory.Create(configuration.EventsJsonlPath, artifacts, query.Path);
+        var runReports = _scenarioRunReportCoordinatorFactory.Create(configuration, artifacts);
         return await RunPathCoreAsync(
             query,
             runner,

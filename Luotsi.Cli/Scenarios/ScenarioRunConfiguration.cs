@@ -1,5 +1,6 @@
 using Luotsi.Cli.Cli;
 using Luotsi.Cli.Errors;
+using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Scenarios;
 
@@ -19,7 +20,8 @@ internal sealed record ScenarioRunConfiguration(
     bool ValidateOnly,
     bool RequireDeviceReady,
     int DeviceWaitTimeoutSec,
-    string? DeviceReadinessPackage)
+    string? DeviceReadinessPackage,
+    LabLeaseResult? LabLease = null)
 {
     public static ScenarioRunConfiguration Create(CliOptions options)
     {

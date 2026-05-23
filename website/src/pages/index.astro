@@ -1,0 +1,310 @@
+---
+import '../styles/site.css';
+
+const base = import.meta.env.BASE_URL;
+
+const heroImage = `${base}images/buggy-commands.png`;
+const docsHref = `${base}docs/`;
+const installHref = `${base}docs/getting-started/installation/`;
+const quickstartHref = `${base}docs/getting-started/quickstart/`;
+
+const workflows = [
+	{
+		title: 'Live view that stays operator-friendly',
+		body: 'Mirror a real Android device into a local SDL window, keep the hotkeys and toolbar local, and emit JSONL events that agents or CI can consume without scraping the screen.',
+	},
+	{
+		title: 'Inspect sessions for agent loops',
+		body: 'Use structured JSONL screen snapshots and deltas to explore a device interactively without inventing a second control plane or bolting on a fragile remote browser stack.',
+	},
+	{
+		title: 'Scenario runs with durable artifacts',
+		body: 'Drive multi-step flows from plain JSON playbooks and leave behind screenshots, hierarchy dumps, telemetry, reports, and replay metadata when something fails.',
+	},
+	{
+		title: 'Boring ADB first, on purpose',
+		body: 'Luotsi keeps orchestration on the host and leans on adb, structured envelopes, and thin helper logic instead of requiring a heavy always-on device service.',
+	},
+];
+
+const docsSections = [
+	{
+		href: installHref,
+		title: 'Installation',
+		summary: 'Release installers, source builds, and the first-run doctor flow.',
+		cta: 'Install Luotsi',
+	},
+	{
+		href: quickstartHref,
+		title: 'Quickstart',
+		summary: 'Connect a device, run doctor, open live view, and execute a first scenario.',
+		cta: 'Start here',
+	},
+	{
+		href: `${base}docs/getting-started/device-readiness/`,
+		title: 'Device Readiness',
+		summary: 'Doctor, preflight, lab status, adb health, and how to select the right device transport.',
+		cta: 'Validate lab',
+	},
+	{
+		href: `${base}docs/getting-started/troubleshooting/`,
+		title: 'Troubleshooting',
+		summary: 'Offline devices, wireless pairing friction, view setup failures, and old-device hierarchy limits.',
+		cta: 'Fix first-run issues',
+	},
+	{
+		href: `${base}docs/core-workflows/live-view/`,
+		title: 'Live View',
+		summary: 'Presets, profiles, share mode, artifacts, hotkeys, and operator controls.',
+		cta: 'Open workflow',
+	},
+	{
+		href: `${base}docs/core-workflows/inspect-and-scenarios/`,
+		title: 'Inspect And Scenarios',
+		summary: 'When to use JSONL inspection loops versus repeatable JSON playbooks.',
+		cta: 'Read workflow',
+	},
+	{
+		href: `${base}docs/core-workflows/replay-and-artifacts/`,
+		title: 'Replay And Artifacts',
+		summary: 'Use artifact roots, replay summaries, and search tools to debug failures after the run ends.',
+		cta: 'Triage failures',
+	},
+	{
+		href: `${base}docs/reference/cli-command-groups/`,
+		title: 'CLI Command Groups',
+		summary: 'The quickest way to understand Luotsi command families before diving into flags.',
+		cta: 'Browse reference',
+	},
+	{
+		href: `${base}docs/reference/scenario-playbooks/`,
+		title: 'Scenario Playbooks',
+		summary: 'JSON format, lifecycle phases, metadata, step actions, timing defaults, and validation rules.',
+		cta: 'Author scenarios',
+	},
+	{
+		href: `${base}docs/reference/wireless-and-port-forwarding/`,
+		title: 'Wireless And Port Forwarding',
+		summary: 'Modern wireless debugging, legacy TCP/IP mode, and adb forward or reverse helpers.',
+		cta: 'Connect over network',
+	},
+	{
+		href: `${base}docs/concepts/architecture/`,
+		title: 'Architecture',
+		summary: 'A host-first view of how commands, view sessions, helpers, and artifacts fit together.',
+		cta: 'See architecture',
+	},
+	{
+		href: `${base}docs/concepts/subsystems/`,
+		title: 'Subsystems',
+		summary: 'The boundary map for CLI routing, host automation, scenarios, telemetry, artifacts, and view transport.',
+		cta: 'Map the codebase',
+	},
+	{
+		href: `${base}docs/contributing/guide/`,
+		title: 'Contributing',
+		summary: 'Workflow, validation, design constraints, and where to look before changing a Luotsi behavior.',
+		cta: 'Contribute safely',
+	},
+	{
+		href: `${base}docs/tutorials/buggy-controller-live-demo/`,
+		title: 'Buggy Controller Demo',
+		summary: 'A concrete end-to-end walkthrough against an older Android 6 device with real artifacts.',
+		cta: 'Run the demo',
+	},
+	{
+		href: 'https://github.com/digablesolutions/luotsi',
+		title: 'GitHub Repo',
+		summary: 'Source, releases, examples, Android helper project, and the full repo docs.',
+		cta: 'Open GitHub',
+	},
+];
+
+const signals = [
+	{ title: 'JSON envelopes', copy: 'Single-command results stay machine-readable by default.' },
+	{ title: 'JSONL sessions', copy: 'Inspect and view stream structured events instead of terminal prose.' },
+	{ title: 'Replay artifacts', copy: 'Failures keep the context needed to debug without re-running blind.' },
+];
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Luotsi | Host-Driven Android Device Automation</title>
+		<meta
+			name="description"
+			content="Luotsi is a host-driven CLI for Android device automation, inspection, live view, and artifact-rich scenario runs."
+		/>
+		<link rel="icon" type="image/svg+xml" href={`${base}luotsi-mark.svg`} />
+	</head>
+	<body>
+		<main class="landing-page">
+			<div class="landing-shell">
+				<header class="topbar">
+					<a class="brand" href={base}>
+						<img src={`${base}luotsi-mark.svg`} alt="Luotsi" />
+						<span class="brand__text">
+							Luotsi
+							<span class="brand__subtext">Host-driven Android automation</span>
+						</span>
+					</a>
+					<nav class="nav-links" aria-label="Primary navigation">
+						<a href={docsHref}>Docs</a>
+						<a href="https://github.com/digablesolutions/luotsi/releases">Releases</a>
+						<a href="https://github.com/digablesolutions/luotsi">GitHub</a>
+					</nav>
+				</header>
+
+				<section class="hero">
+					<div>
+						<div class="eyebrow">ADB-first tooling for real Android labs</div>
+						<h1 class="display">Live view, inspect loops, and reproducible device runs from one CLI.</h1>
+						<p class="lede">
+							Luotsi keeps orchestration, policy, and diagnostics on the engineer or CI machine while the on-device helper stays thin. Use it to mirror a device, drive scenarios, inspect UI state through JSONL, and preserve the artifacts that explain what actually happened.
+						</p>
+						<div class="hero-actions">
+							<a class="button-link button-link--primary" href={installHref}>Install Luotsi</a>
+							<a class="button-link button-link--secondary" href={quickstartHref}>Read the quickstart</a>
+						</div>
+						<div class="signal-grid">
+							{signals.map((signal) => (
+								<div class="signal-card">
+									<strong>{signal.title}</strong>
+									<span>{signal.copy}</span>
+								</div>
+							))}
+						</div>
+					</div>
+
+					<div class="hero-visual">
+						<div class="hero-visual__frame">
+							<img src={heroImage} alt="Luotsi scenario demo running against a real Android device screen." />
+						</div>
+						<div class="hero-visual__caption">
+							<div>
+								<strong>Operator loop</strong>
+								<span>SDL window, hotkeys, toolbar, screenshot and recording controls.</span>
+							</div>
+							<div>
+								<strong>Automation loop</strong>
+								<span>Scenario JSON, inspect JSONL, and semantic waits from the same host runtime.</span>
+							</div>
+							<div>
+								<strong>Failure loop</strong>
+								<span>Replay metadata, screenshots, hierarchy, logcat, and reports under one artifact root.</span>
+							</div>
+						</div>
+					</div>
+				</section>
+
+				<section class="section">
+					<div class="section-header">
+						<div>
+							<div class="section-kicker">Core workflows</div>
+							<h2 class="section-title">Designed around the work you actually do with devices.</h2>
+						</div>
+						<p class="section-copy">
+							Luotsi is strongest when an operator, a test harness, and an agent all need the same ground truth from a real Android device without standing up a second control service.
+						</p>
+					</div>
+					<div class="workflow-grid">
+						{workflows.map((workflow) => (
+							<div class="workflow-card">
+								<strong>{workflow.title}</strong>
+								<span>{workflow.body}</span>
+							</div>
+						))}
+					</div>
+				</section>
+
+				<section class="section">
+					<div class="section-header">
+						<div>
+							<div class="section-kicker">Quick install</div>
+							<h2 class="section-title">Start from releases, then let doctor verify the rest.</h2>
+						</div>
+						<p class="section-copy">
+							The fastest path is the per-user release installer. After that, use <code>doctor</code> or <code>view setup</code> to validate adb, helper provisioning, and live-view prerequisites against a real device.
+						</p>
+					</div>
+					<div class="architecture">
+						<div class="terminal-card">
+							<pre><code>{`# Windows
+iex (irm https://github.com/digablesolutions/luotsi/releases/latest/download/luotsi-install.ps1)
+luotsi doctor --device <serial> --fix
+
+# macOS / Linux
+curl -fsSL https://github.com/digablesolutions/luotsi/releases/latest/download/luotsi-install.sh | sh
+luotsi doctor --device <serial> --fix`}</code></pre>
+						</div>
+						<div class="architecture-card">
+							<strong>What happens next</strong>
+							<ul>
+								<li>Luotsi checks adb visibility, package readiness, and live-view prerequisites.</li>
+								<li>With <code>--fix</code>, it can stage helper and decoder assets Luotsi owns.</li>
+								<li>The same install works for engineers, CI jobs, and agent-driven flows.</li>
+							</ul>
+						</div>
+					</div>
+				</section>
+
+				<section class="section">
+					<div class="section-header">
+						<div>
+							<div class="section-kicker">Architecture</div>
+							<h2 class="section-title">Host-first orchestration, thin helper, durable artifacts.</h2>
+						</div>
+						<p class="section-copy">
+							The command layer, scenario runtime, inspect sessions, and live view all converge on the same Android host abstractions. That keeps behavior consistent and failure reporting useful instead of fragmented by transport.
+						</p>
+					</div>
+					<div class="architecture">
+						<div class="architecture-card">
+							<strong>Data path</strong>
+							<ul>
+								<li>CLI commands and long-lived sessions stay on the host machine.</li>
+								<li>Android helper startup, device shell calls, and live stream transport run over adb.</li>
+								<li>Scenario runs and sessions keep writing screenshots, telemetry, logs, and replay metadata into artifact roots for later triage.</li>
+							</ul>
+						</div>
+						<div class="architecture-card">
+							<strong>Why it matters</strong>
+							<ul>
+								<li>No heavyweight device server is required to get structured outputs.</li>
+								<li>Operators, CI pipelines, and agents can use the same runtime without maintaining separate workflows.</li>
+								<li>Replay artifacts shorten the debug loop when a scenario or live session goes sideways.</li>
+							</ul>
+						</div>
+					</div>
+				</section>
+
+				<section class="section">
+					<div class="section-header">
+						<div>
+							<div class="section-kicker">Docs</div>
+							<h2 class="section-title">A real public docs surface, not just a landing page.</h2>
+						</div>
+						<p class="section-copy">
+							The site now covers onboarding, device readiness, core workflows, scenario authoring, replay triage, networking helpers, and architecture. The remaining repo docs still stay close at hand in GitHub while the public IA keeps tightening.
+						</p>
+					</div>
+					<div class="docs-grid">
+						{docsSections.map((section) => (
+							<a class="docs-card" href={section.href}>
+								<strong>{section.title}</strong>
+								<span>{section.summary}</span>
+								<small>{section.cta} -></small>
+							</a>
+						))}
+					</div>
+				</section>
+
+				<footer class="site-footer">
+					<p>Luotsi is built in the open at <a href="https://github.com/digablesolutions/luotsi">digablesolutions/luotsi</a>.</p>
+				</footer>
+			</div>
+		</main>
+	</body>
+</html>

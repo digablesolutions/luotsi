@@ -6,7 +6,7 @@ using Luotsi.Cli.Scenarios;
 
 namespace Luotsi.Cli.Cli.Inspect;
 
-internal sealed class InspectSessionProtocol(IConsoleIo console)
+internal sealed class InspectSessionProtocol(IConsoleIo console, Action<string>? onWriteJsonLine = null)
 {
     private static readonly JsonSerializerOptions OutputJsonOptions = new()
     {
@@ -112,7 +112,12 @@ internal sealed class InspectSessionProtocol(IConsoleIo console)
         });
     }
 
-    private void WriteJsonLine(object value) => _console.WriteLine(JsonSerializer.Serialize(value, OutputJsonOptions));
+    private void WriteJsonLine(object value)
+    {
+        var json = JsonSerializer.Serialize(value, OutputJsonOptions);
+        _console.WriteLine(json);
+        onWriteJsonLine?.Invoke(json);
+    }
 }
 
 internal sealed record InspectCommandRequest(

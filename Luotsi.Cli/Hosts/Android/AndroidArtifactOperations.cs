@@ -63,7 +63,7 @@ internal sealed class AndroidArtifactOperations(
             ValidateScreenshotRegion(fileName, artifact, region);
             if (!string.IsNullOrWhiteSpace(expectedRegionSha256))
             {
-                regionSha256 = _screenshotRegionArtifacts.ComputeRegionSha256(ResolveArtifactDestination(fileName), region);
+                regionSha256 = await _screenshotRegionArtifacts.ComputeRegionSha256Async(ResolveArtifactDestination(fileName), region).ConfigureAwait(false);
             }
         }
 
@@ -131,22 +131,20 @@ internal sealed class AndroidArtifactOperations(
         await _adb.ShellAsync($"rm -f {remote}").ConfigureAwait(false);
         pull.EnsureSuccess("pull screenshot failed");
         await _artifacts.RefreshIndexAsync().ConfigureAwait(false);
-        return ReadScreenshotArtifact(fileName, destination);
+        return await ReadScreenshotArtifactAsync(fileName, destination).ConfigureAwait(false);
     }
 
-    private ScreenshotArtifactInfo ReadScreenshotArtifact(string fileName, string destination)
+    private async Task<ScreenshotArtifactInfo> ReadScreenshotArtifactAsync(string fileName, string destination)
     {
         if (!_fileSystem.FileExists(destination))
         {
             return new ScreenshotArtifactInfo(fileName, null, null, null);
         }
 
-        using var stream = _fileSystem.OpenRead(destination);
-        using var memory = new MemoryStream();
-        stream.CopyTo(memory);
-        var bytes = memory.ToArray();
+        var bytes = await _fileSystem.ReadAllBytesAsync(destination).ConfigureAwait(false);
         var (width, height) = ReadPngDimensions(bytes);
-        var sha256 = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+        var hash = SHA256.HashData(bytes);
+        var sha256 = Convert.ToHexString(hash).ToLowerInvariant();
         return new ScreenshotArtifactInfo(fileName, width, height, sha256);
     }
 
@@ -184,7 +182,7 @@ internal sealed class AndroidArtifactOperations(
                 throw new FileNotFoundException($"Screenshot baseline file '{baselineFile}' was not found.", baselineFile);
             }
 
-            using var stream = _fileSystem.OpenRead(baselineFile);
+            await using var stream = _fileSystem.OpenRead(baselineFile);
             var hash = await SHA256.HashDataAsync(stream).ConfigureAwait(false);
             return Convert.ToHexString(hash).ToLowerInvariant();
         }

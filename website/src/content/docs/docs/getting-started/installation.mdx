@@ -1,0 +1,65 @@
+---
+title: Installation
+description: Install Luotsi from GitHub Releases or build it from source, then validate the local setup against a real device.
+---
+
+Luotsi is distributed as a self-contained CLI through GitHub Releases. The quickest path is the per-user release installer for your platform.
+
+## Windows
+
+```powershell
+iex (irm https://github.com/digablesolutions/luotsi/releases/latest/download/luotsi-install.ps1)
+```
+
+After the install finishes, open a new terminal and verify the command:
+
+```powershell
+luotsi --version
+luotsi version
+luotsi devices
+```
+
+## macOS and Linux
+
+```bash
+curl -fsSL https://github.com/digablesolutions/luotsi/releases/latest/download/luotsi-install.sh | sh
+```
+
+Then verify the install:
+
+```bash
+luotsi --version
+luotsi version
+luotsi devices
+```
+
+## Manual release archives
+
+If you do not want to run the installers, download a self-contained archive from [GitHub Releases](https://github.com/digablesolutions/luotsi/releases). Each archive includes the CLI executable and companion files emitted by publish.
+
+## Build from source
+
+The repository is pinned to .NET SDK `10.0.300`.
+
+```bash
+dotnet build Luotsi.sln
+dotnet test Luotsi.sln
+dotnet run --project Luotsi.Cli -- devices
+```
+
+## First-run validation
+
+Once a device is visible over adb, let Luotsi validate the setup it owns:
+
+```bash
+luotsi doctor --device <serial>
+luotsi doctor --device <serial> --fix
+```
+
+Use `doctor` when you want the broad first-run report. It wraps adb checks, optional package preflight, and the same live-view readiness path exposed by `view setup` and `view-doctor`.
+
+## Next steps
+
+- Continue to [Quickstart](./quickstart/)
+- Open the [GitHub Releases page](https://github.com/digablesolutions/luotsi/releases)
+- Read the full install section in the [repository README](https://github.com/digablesolutions/luotsi/blob/main/README.md)

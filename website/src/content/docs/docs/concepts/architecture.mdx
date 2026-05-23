@@ -1,0 +1,40 @@
+---
+title: Architecture
+description: Understand Luotsi as a host-first runtime built around adb, structured outputs, and artifact capture.
+---
+
+Luotsi is a .NET CLI for driving a real Android device through adb, capturing artifacts by default, and optionally opening a live mirrored view through the built-in `view` session.
+
+## The three long-lived concerns
+
+- One-shot command execution for CLI commands
+- Long-lived `inspect` and `view` sessions with structured JSONL output
+- Device-specific Android runtime work behind host abstractions
+
+## Top-level flow
+
+1. The operator, agent, or CI job invokes Luotsi on the host machine.
+2. The command layer routes into one-shot commands, inspect sessions, or view sessions.
+3. Android-specific behavior flows through the host abstractions and adb-backed runtime.
+4. Sessions and commands write artifacts so failures can be debugged later from the artifact root.
+
+## Why the design is intentionally conservative
+
+Luotsi keeps the core runtime boring on purpose:
+
+- It prefers adb-first flows over inventing a heavyweight device server.
+- It reuses the same host abstractions across commands, scenarios, telemetry, and view sessions.
+- It treats artifact capture as part of the product contract rather than an optional afterthought.
+
+## View-specific path
+
+The live view stack bootstraps an Android helper over adb, starts the requested capture backend, receives the mirrored H.264 packet stream over a localhost tunnel, decodes it with libav, and presents frames through SDL3.
+
+Observer sessions can join a shared TCP relay, but remain read-only at the input layer.
+
+## Read more
+
+- [Live view](../core-workflows/live-view/)
+- [Inspect and scenarios](../core-workflows/inspect-and-scenarios/)
+- [Subsystems](./subsystems/)
+- [Contribution guide](../contributing/guide/)

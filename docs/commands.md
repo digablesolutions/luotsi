@@ -1,10 +1,12 @@
 # Command Reference
 
-All commands run on the host machine and return a single JSON envelope unless noted as a JSONL session.
+All commands run on the host machine and return a single JSON envelope unless noted as a JSONL session or as an explicit raw replay output mode.
 
 ```
 luotsi [--device <serial> | --device-query <query>] [--platform android] [--adb <path>] [--adb-timeout-sec <n>] <command> [flags]
 luotsi --version
+luotsi version
+luotsi update [--version <tag>] [--channel stable|prerelease] [--dry-run]
 ```
 
 **ADB path.** If `adb` is not on `PATH` (common in WSL), pass `--adb /path/to/adb` or set `LUOTSI_ADB`. Bounded ADB commands default to a 120-second timeout; override with `--adb-timeout-sec <n>` or `LUOTSI_ADB_TIMEOUT_SEC`. Use `0` to disable.
@@ -13,7 +15,29 @@ luotsi --version
 
 **Artifacts.** Use `--artifacts <directory>` to override the artifact root for the current command or session. Use `--poll-artifacts <final|per-attempt|none>` to control whether polling-style commands write artifacts only at the end, on each attempt, or not at all.
 
-**Version.** `luotsi --version` prints the CLI version. Release builds stamp this from the GitHub release tag via `/p:Version=<version>`; source builds use the assembly version produced by the local build.
+**Version and update.** `luotsi --version` prints the CLI version. `luotsi version` returns a JSON envelope with runtime version, installed tag/version, install root, command path, and bundled helper APK presence. `luotsi update` reruns the installer recorded in the installed manifest; use `--dry-run` to inspect the exact command. Stable updates target the latest non-prerelease release. Prerelease updates currently require `--version <tag>` and should use `--channel prerelease`. Luotsi does not auto-update silently. Custom install roots are discovered from `LUOTSI_INSTALL_ROOT`, the running `current` directory, or the platform default install root. On Windows, non-dry-run update requires `--detach` and returns `update_started` after launching a background updater so the running executable can exit before the install directory is replaced.
+
+## Workflow quickstart
+
+Use these entry points when you want the shortest path into a real Luotsi workflow instead of scanning the full command surface.
+
+For the same summary inside the CLI, run `luotsi help quickstart` or jump directly to a command family with `luotsi help <topic>`.
+
+| Goal | Command |
+|---|---|
+| Confirm Luotsi can see your device | `luotsi devices` |
+| Diagnose and repair first-run issues | `luotsi doctor --device <serial>` |
+| Prepare or repair live-view prerequisites | `luotsi view setup --device <serial>` |
+| Open a live mirror | `luotsi view --device <serial>` |
+| Snapshot current UI state | `luotsi screen-state --device <serial>` |
+| Start an agent-driven inspection session | `luotsi inspect --device <serial>` |
+| Generate a starter scenario | `luotsi scenario-init --file scenarios/smoke.json --name "smoke"` |
+| Validate scenarios without using a device | `luotsi scenario-validate --path scenarios` |
+| Run scenarios with CI output | `luotsi run --path scenarios --device <serial> --report-junit junit.xml` |
+| Check install metadata | `luotsi version` |
+| Update explicit install | `luotsi update --dry-run` then `luotsi update` |
+
+The CLI includes the same flow-oriented summary in `luotsi help quickstart`.
 
 ---
 
@@ -21,9 +45,19 @@ luotsi --version
 
 | Command | Description |
 |---|---|
+| `version` | Return Luotsi runtime/install metadata as a JSON envelope |
+| `update [--version <tag>] [--channel stable|prerelease] [--dry-run] [--detach]` | Re-run the release installer for the recorded install root |
 | `devices` | List adb-visible devices |
 | `lab status [--device-query <query>]` | Summarize attached-device availability and explain which devices match or are rejected by a selection query |
 | `lab doctor [--device-query <query>]` | Detect stale/offline/ambiguous lab state and return concrete remediation commands |
+| `lab plan [--device-query <query>]` | Dry-run lab allocation and explain the selected or rejected devices, including recommended claim/run commands |
+| `lab claim [--device-query <query>] [--owner <name>] [--ttl-sec 3600]` | Claim exactly one selected device with a host-side lease token |
+| `lab leases` | List active host-side device leases |
+| `lab release (--lease <lease-id> | --serial <adb serial>)` | Release a host-side device lease |
+| `lab extend (--lease <lease-id> | --serial <adb serial>) [--ttl-sec 3600]` | Renew an active host-side device lease |
+| `lab quarantine [--device-query <query>] --reason <text> [--owner <name>]` | Mark exactly one selected device unavailable until explicitly unquarantined |
+| `lab quarantines` | List quarantined lab devices |
+| `lab unquarantine --serial <adb serial>` | Remove a device quarantine |
 | `device-status (--device <serial> | --device-query <query>)` | Read selected device inventory metadata plus current readiness details |
 | `adb server-status` | Host ADB server status |
 | `adb version` | ADB binary version |
@@ -37,6 +71,10 @@ luotsi --version
 | `screen-state --device <serial>` | Dump current screen state |
 
 `wait-for-device` is also available as `device-wait` or `adb wait-for-device`.
+Active `lab claim` leases are honored by `--device-query` selection so CI and agent workflows do not accidentally target an already claimed device. Stale leases can be released by lease id or directly by serial with `lab release --serial <adb serial>`.
+Long-running jobs can renew an active lease with `lab extend --serial <adb serial> --ttl-sec <seconds>`.
+Active quarantines are also honored by `--device-query`; use them for unhealthy hardware that should stay out of local and CI allocation until repaired.
+When `lab plan` is ready, `recommended_commands` includes both an explicit `lab claim` command and a direct `run --path <scenarios> --claim-device ...` command for agents or CI jobs that want allocation and execution in one step.
 
 `doctor` is the first-run entry point. It reuses the existing adb/version checks, optional package-specific preflight, and the same live-view readiness report exposed by `view-doctor`. `doctor --fix` stages Luotsi-owned FFmpeg native libraries when the requested decoder is missing them, then routes through the same helper/install readiness path as `view setup`. Published Luotsi bundles include those repair assets; source checkouts continue to resolve them from the repository layout.
 
@@ -59,6 +97,23 @@ See [view-session.md](view-session.md) for the full view reference (presets, bac
 | `profile-delete --name <name>` | Delete a saved view profile |
 
 View screenshots and operator-triggered recordings are written to the artifact root. By default that root is a timestamped directory under the host temp folder, such as `%TEMP%\luotsi\<timestamp>-view` on Windows or `/tmp/luotsi/<timestamp>-view` on Linux/macOS. Pass `--artifacts <directory>` to choose it. F12/toolbar screenshot writes `view-window-001-screenshot.png`; F9/toolbar record writes `view-window-record-001.h264` unless `--record <file.h264|file.mp4|file.mkv>` supplies a preferred output path. F7/toolbar open-folder opens the artifact root.
+
+---
+
+## Replay & Artifact Triage
+
+| Command | Description |
+|---|---|
+| `replay summarize --artifacts <artifact-root> [--format json|jsonl]` | Read `session-replay.json` and `session-timeline.jsonl` under an existing artifact root and emit condensed replay summaries, including failure-capsule linkage for failed scenario runs |
+| `replay capsule --artifacts <artifact-root> [--write-readme] [--write-json]` | Return a compact capsule manifest with session counts, primary failure, artifact counts, and suggested next commands |
+| `replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]` | Read ordered replay timeline events with stable details and optional failure/type/text/time filtering |
+| `replay graph --artifacts <artifact-root> [--write-json] [--write-markdown]` | Build a stable node/edge model over sessions, timeline events, failures, scenarios, artifacts, actions, selectors, screen observations, and telemetry signals |
+| `replay cluster --artifacts <artifact-root> [--write-json] [--write-markdown]` | Group failed replay sessions by normalized failure shape and emit triage hints plus replay/search commands |
+| `replay open --artifacts <artifact-root> [--dry-run]` | Refresh the artifact browser index and open `index.html` locally |
+| `replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>] [--write-json] [--write-markdown]` | Convert inspect/replay action events into a conservative starter scenario with warnings and cleanup suggestions |
+| `replay search --artifacts <artifact-root> --contains <text> [--limit 50]` | Search replay timelines and text-like artifacts for errors, labels, telemetry, or log lines |
+
+`replay summarize` returns the normal JSON command envelope by default. `--format json` writes only the replay summary object. `--format jsonl` writes a `type: summary` header line followed by one `type: session` line per replay session. Failed scenario runs expose `failure_capsule_path` plus an embedded `failure_capsule` summary with linked reports, grouped failure artifacts, and failure-bundle metadata. `replay capsule` is the higher-level entry point for a bundle: it identifies the primary failure, counts screenshots/videos/logs/reports/timelines, and returns suggested follow-up commands. With `--write-readme`, it writes `replay-capsule.md` into the artifact root; with `--write-json`, it writes `replay-capsule-summary.json`. Both write options refresh the artifact index. `replay timeline` reads `session-timeline.jsonl` files directly and returns ordered events with path, sequence, timestamp, type, failure relevance, detail text, and flattened scalar properties; `--contains` filters normalized event type/detail text, `--since` and `--until` filter by event timestamp, `--context` includes neighboring events around filtered matches, `--format json|jsonl` writes raw timeline output instead of the command envelope, and `--write-json`, `--write-jsonl`, and `--write-markdown` persist `replay-timeline.json`, `replay-timeline.jsonl`, and `replay-timeline.md` into the artifact root. `replay graph` builds a stable semantic-debug seed graph and can persist `replay-graph.json` and `replay-graph.md`; the result includes `node_kinds` and `edge_kinds` plus promoted semantic nodes for actions, text selectors, screen observations, and telemetry signals. `replay cluster` groups failed replay sessions by normalized failure shape, including error category/message and failed action/step, returns triage hints with suggested replay/search commands for the latest matching bundle, and can persist `replay-clusters.json` and `replay-clusters.md`. `replay open` attaches the existing artifact root, regenerates `index.md` and `index.html`, and opens the HTML index with the platform default opener; `--dry-run` returns the opener command without launching it. `replay scenario-draft` reads timeline action events from inspect/view/replay artifacts and writes a valid JSON scenario draft when enough action data is available; `--write-json` and `--write-markdown` persist draft review artifacts with confidence, warnings, suggestions, and draft steps. `replay search` scans JSON, JSONL, XML, text, log, Markdown, HTML, and CSV artifacts and returns relative file paths with line numbers and previews. Failures continue to use the normal error envelope.
 
 ---
 
@@ -176,7 +231,31 @@ Luotsi reads the `LUOTSI_DEVICE_TELEMETRY` logcat marker to parse structured sem
 | `inspect --device <serial>` | Open an agent-driven JSONL inspection session |
 
 See [scenarios.md](scenarios.md) for the playbook format and full action reference.
-`inspect` is described in the README [Inspect mode](../README.md#inspect-mode) section.
+
+### Inspect mode protocol
+
+`inspect` is a JSONL request/response session.
+
+- Client writes one JSON command object per line.
+- Luotsi writes JSONL events with snake_case keys.
+
+Primary inspect events:
+
+- `session_started`
+- `screen_snapshot`
+- `screen_delta`
+- `command_result`
+- `session_ended`
+- `protocol_error`
+- `session_error`
+
+For command examples, see README [Inspect mode](../README.md#inspect-mode).
+
+### View mode events
+
+`view` is also a JSONL session. Core lifecycle events include `view_started`, `view_stats`, `view_reconnect_requested`, `view_reconnected`, `view_error`, and `view_ended`, with additional operational events for recording/share/input blocking.
+
+See [view-session.md](view-session.md) for the complete event table and operator controls.
 
 `scenario-list` and `run --path` share the same discovery filters: `--include-tag`, `--exclude-tag`, `--name`, and `--action`. `run --path` also supports `--shard-count`, `--shard-index`, and `--shard-strategy` for parallel execution.
 
@@ -188,12 +267,15 @@ Scenario runner flags:
 - `--events-jsonl`, `--report-json`, and `--report-junit` write machine-readable run outputs for validation and execution flows.
 - `--capture-on failure|never` controls runtime failure capture during scenario execution.
 - `--attach-artifacts never|on-failure|always` controls whether report outputs include artifact references.
+- `--claim-device` creates a host-side lab lease for the selected `--device` or `--device-query` serial and releases it in a `finally` path after the scenario run. Use `--owner <name>` and `--ttl-sec <seconds>` to identify the run and set the safety expiry.
 
 ---
 
 ## Output Envelopes
 
-Normal command mode returns a single JSON envelope with `ok`, `command`, `data`, `artifacts`, `provenance`, and `error`. Long-lived `inspect` and `view` sessions are the exceptions: they stream JSONL events instead of a single final envelope.
+Normal command mode returns a single JSON envelope with `schema`, `ok`, `command`, `started_at`, `ended_at`, `data`, `artifacts`, `provenance`, and `error`.
+
+Long-lived `inspect` and `view` sessions are the main exceptions: they stream JSONL events instead of a single final envelope. `replay summarize --format json|jsonl` is the other intentional exception for CI-oriented replay export.
 
 Common `error.category` values currently include:
 

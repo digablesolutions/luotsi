@@ -46,6 +46,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
     private bool _disposeRequested;
     private bool _disposed;
     private bool _isFullscreen;
+    private bool _showHelpOverlay;
     private ViewScaleMode _scaleMode = ViewScaleMode.Fit;
     private ViewChromeTooltip? _hoverTooltip;
     private int _lastMouseClientX;
@@ -709,6 +710,10 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
                 DispatchInteraction(new ViewWindowCommandRequest(ViewWindowCommand.ToggleRecording));
                 return false;
 
+            case SDL_Keycode.SDLK_F10:
+                ToggleHelpOverlay();
+                return true;
+
             case SDL_Keycode.SDLK_F11:
                 ToggleFullscreen();
                 return true;
@@ -896,6 +901,11 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         }
     }
 
+    private void ToggleHelpOverlay()
+    {
+        _showHelpOverlay = !_showHelpOverlay;
+    }
+
     private bool TryHandleChromeInteraction(int clientX, int clientY)
     {
         if (!TryGetLogicalWindowSize(out var clientWidth, out var clientHeight))
@@ -940,6 +950,10 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
 
                     case ViewChromeLocalAction.ToggleFullscreen:
                         ToggleFullscreen();
+                        return true;
+
+                    case ViewChromeLocalAction.ToggleHelpOverlay:
+                        ToggleHelpOverlay();
                         return true;
                 }
 
@@ -1044,6 +1058,11 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
             }
         }
 
+        if (_showHelpOverlay)
+        {
+            DrawHelpOverlay(logicalWidth, logicalHeight, scaleX, scaleY);
+        }
+
         if (_hoverTooltip is not null)
         {
             DrawTooltip(_hoverTooltip, logicalWidth, logicalHeight, scaleX, scaleY);
@@ -1105,6 +1124,10 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
 
             case ViewChromeButtonKind.Fullscreen:
                 DrawFullscreenIcon(button.Bounds, scaleX, scaleY, stroke.R, stroke.G, stroke.B, stroke.A);
+                break;
+
+            case ViewChromeButtonKind.Help:
+                DrawHelpIcon(button.Bounds, scaleX, scaleY, stroke.R, stroke.G, stroke.B, stroke.A);
                 break;
         }
     }
@@ -1227,6 +1250,59 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         DrawLine(bounds.Left + 9, bounds.Bottom - 9, bounds.Left + 15, bounds.Bottom - 9, scaleX, scaleY, r, g, b, a);
         DrawLine(bounds.Right - 9, bounds.Bottom - 15, bounds.Right - 9, bounds.Bottom - 9, scaleX, scaleY, r, g, b, a);
         DrawLine(bounds.Right - 15, bounds.Bottom - 9, bounds.Right - 9, bounds.Bottom - 9, scaleX, scaleY, r, g, b, a);
+    }
+
+    private void DrawHelpIcon(ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
+    {
+        var middleX = bounds.Left + bounds.Width / 2;
+        DrawLine(middleX - 5, bounds.Top + 11, middleX + 5, bounds.Top + 11, scaleX, scaleY, r, g, b, a);
+        DrawLine(middleX + 5, bounds.Top + 11, middleX + 5, bounds.Top + 17, scaleX, scaleY, r, g, b, a);
+        DrawLine(middleX + 5, bounds.Top + 17, middleX, bounds.Top + 17, scaleX, scaleY, r, g, b, a);
+        DrawLine(middleX, bounds.Top + 17, middleX, bounds.Top + 22, scaleX, scaleY, r, g, b, a);
+        FillRect(new ViewChromeRect(middleX - 1, bounds.Top + 25, 3, 3), scaleX, scaleY, r, g, b, a);
+    }
+
+    private void DrawHelpOverlay(int logicalWidth, int logicalHeight, float scaleX, float scaleY)
+    {
+        string[] lines =
+        [
+            "LUOTSI HELP",
+            "CLICK TOOLBAR",
+            "TOGGLE F10",
+            "F1 BACK",
+            "F2 HOME",
+            "F3 RECENTS",
+            "F4 ROTATE",
+            "F5 RECONNECT",
+            "F6 PAUSE",
+            "F7 ARTIFACTS",
+            "F8 FIT OR FILL",
+            "F9 RECORD",
+            "F11 FULLSCREEN",
+            "F12 SCREENSHOT"
+        ];
+
+        const int glyphWidth = 5 * TooltipGlyphCellSize;
+        const int glyphHeight = 7 * TooltipGlyphCellSize;
+        const int lineGap = 4;
+        const int overlayPadding = 10;
+        const int overlayTop = 56;
+        var maxTextWidth = lines.Max(line => line.Length * glyphWidth + Math.Max(0, line.Length - 1) * TooltipGlyphGap);
+        var overlayWidth = maxTextWidth + overlayPadding * 2;
+        var overlayHeight = lines.Length * glyphHeight + Math.Max(0, lines.Length - 1) * lineGap + overlayPadding * 2;
+        var overlayLeft = Math.Max(8, logicalWidth - overlayWidth - 8);
+        var overlayTopClamped = Math.Clamp(overlayTop, 8, Math.Max(8, logicalHeight - overlayHeight - 8));
+        var bounds = new ViewChromeRect(overlayLeft, overlayTopClamped, overlayWidth, overlayHeight);
+
+        FillRect(bounds, scaleX, scaleY, 10, 10, 10, 232);
+        OutlineRect(bounds, scaleX, scaleY, 232, 232, 232, 255);
+
+        var textTop = bounds.Top + overlayPadding;
+        foreach (var line in lines)
+        {
+            DrawTooltipText(line, bounds.Left + overlayPadding, textTop, scaleX, scaleY, 244, 244, 244, 255);
+            textTop += glyphHeight + lineGap;
+        }
     }
 
     private void DrawNumber(int value, ViewChromeRect bounds, float scaleX, float scaleY, byte r, byte g, byte b, byte a)
@@ -1437,6 +1513,7 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
     private static long GetTooltipGlyphRows(char character) => char.ToUpperInvariant(character) switch
     {
         'A' => 0b01110_10001_10001_11111_10001_10001_10001,
+        'B' => 0b11110_10001_10001_11110_10001_10001_11110,
         'C' => 0b01110_10001_10000_10000_10000_10001_01110,
         'D' => 0b11110_10001_10001_10001_10001_10001_11110,
         'E' => 0b11111_10000_10000_11110_10000_10000_11111,
@@ -1444,7 +1521,9 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         'G' => 0b01110_10001_10000_10111_10001_10001_01110,
         'H' => 0b10001_10001_10001_11111_10001_10001_10001,
         'I' => 0b11111_00100_00100_00100_00100_00100_11111,
+        'K' => 0b10001_10010_10100_11000_10100_10010_10001,
         'L' => 0b10000_10000_10000_10000_10000_10000_11111,
+        'M' => 0b10001_11011_10101_10101_10001_10001_10001,
         'N' => 0b10001_11001_10101_10011_10001_10001_10001,
         'O' => 0b01110_10001_10001_10001_10001_10001_01110,
         'P' => 0b11110_10001_10001_11110_10000_10000_10000,
@@ -1454,6 +1533,16 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         'U' => 0b10001_10001_10001_10001_10001_10001_01110,
         'W' => 0b10001_10001_10001_10101_10101_11011_10001,
         'Y' => 0b10001_10001_01010_00100_00100_00100_00100,
+        '0' => 0b01110_10001_10011_10101_11001_10001_01110,
+        '1' => 0b00100_01100_00100_00100_00100_00100_01110,
+        '2' => 0b01110_10001_00001_00010_00100_01000_11111,
+        '3' => 0b11110_00001_00001_01110_00001_00001_11110,
+        '4' => 0b00010_00110_01010_10010_11111_00010_00010,
+        '5' => 0b11111_10000_10000_11110_00001_00001_11110,
+        '6' => 0b01110_10000_10000_11110_10001_10001_01110,
+        '7' => 0b11111_00001_00010_00100_01000_01000_01000,
+        '8' => 0b01110_10001_10001_01110_10001_10001_01110,
+        '9' => 0b01110_10001_10001_01111_00001_00001_01110,
         ' ' => 0,
         _ => 0b11111_00001_00110_00100_00000_00100_00000
     };

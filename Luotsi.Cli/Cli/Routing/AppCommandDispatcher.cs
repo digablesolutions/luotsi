@@ -1,4 +1,6 @@
+using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli.View;
+using Luotsi.Cli.Cli.Update;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Infrastructure.Devices;
@@ -9,11 +11,17 @@ namespace Luotsi.Cli.Cli.Routing;
 internal sealed class AppCommandDispatcher(
     AdbSubcommandDispatcher adbSubcommandDispatcher,
     ScenarioCommandDispatcher scenarioCommandDispatcher,
-    ViewProfileCoordinator profileCoordinator)
+    ISelfUpdateService selfUpdateService,
+    ViewProfileCoordinator profileCoordinator,
+    LabLeaseStore labLeaseStore,
+    LabQuarantineStore labQuarantineStore)
 {
     private readonly AdbSubcommandDispatcher _adbSubcommandDispatcher = adbSubcommandDispatcher ?? throw new ArgumentNullException(nameof(adbSubcommandDispatcher));
     private readonly ScenarioCommandDispatcher _scenarioCommandDispatcher = scenarioCommandDispatcher ?? throw new ArgumentNullException(nameof(scenarioCommandDispatcher));
+    private readonly ISelfUpdateService _selfUpdateService = selfUpdateService ?? throw new ArgumentNullException(nameof(selfUpdateService));
     private readonly ViewProfileCoordinator _profileCoordinator = profileCoordinator ?? throw new ArgumentNullException(nameof(profileCoordinator));
+    private readonly LabLeaseStore _labLeaseStore = labLeaseStore ?? throw new ArgumentNullException(nameof(labLeaseStore));
+    private readonly LabQuarantineStore _labQuarantineStore = labQuarantineStore ?? throw new ArgumentNullException(nameof(labQuarantineStore));
 
     public bool RequiresRunner(CliOptions options)
     {
@@ -25,19 +33,24 @@ internal sealed class AppCommandDispatcher(
             "scenario-init" => false,
             "scenario-validate" => false,
             "scenario-explain" => false,
+            "version" => false,
+            "update" => false,
             "run" => _scenarioCommandDispatcher.RequiresRunner(options),
             _ => true
         };
     }
 
-    public async Task<object> ExecuteAsync(string command, CliOptions options, string adbExecutable, IDeviceHost? runner)
+    public async Task<object> ExecuteAsync(string command, CliOptions options, string adbExecutable, IDeviceHost? runner, ArtifactSession artifacts)
     {
+        ArgumentNullException.ThrowIfNull(artifacts);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentException.ThrowIfNullOrWhiteSpace(command);
 
         return command switch
         {
             "adb" => await _adbSubcommandDispatcher.ExecuteAsync(options, RequireAdbCommandHost(runner, command)).ConfigureAwait(false),
+            "version" => await _selfUpdateService.GetVersionInfoAsync().ConfigureAwait(false),
+            "update" => await _selfUpdateService.UpdateAsync(options).ConfigureAwait(false),
             "devices" => DeviceInventory.FromDeviceList(await RequireRunner(runner, command).GetDevicesAsync().ConfigureAwait(false)),
             "device-status" => await DeviceStatusResolver.ReadAsync(RequireRunner(runner, command), RequireAdbCommandHost(runner, command)).ConfigureAwait(false),
             "device-wait" or "wait-for-device" => await RequireAdbCommandHost(runner, command).WaitForDeviceAsync(options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
@@ -65,7 +78,7 @@ internal sealed class AppCommandDispatcher(
             "revoke-permission" => await RequireRunner(runner, command).RevokePermissionAsync(options.Require("package"), options.Require("permission")).ConfigureAwait(false),
             "scenario-list" => await _scenarioCommandDispatcher.ListAsync(options).ConfigureAwait(false),
             "scenario-init" => await _scenarioCommandDispatcher.InitAsync(options).ConfigureAwait(false),
-            "scenario-validate" => await _scenarioCommandDispatcher.ValidateAsync(options).ConfigureAwait(false),
+            "scenario-validate" => await _scenarioCommandDispatcher.ValidateAsync(options, artifacts).ConfigureAwait(false),
             "scenario-explain" => await _scenarioCommandDispatcher.ExplainAsync(options).ConfigureAwait(false),
             "screen-state" => await RequireRunner(runner, command).GetScreenStateAsync().ConfigureAwait(false),
             "telemetry-tail" => await RequireRunner(runner, command).TelemetryTailAsync(options.Int("tail", CliDefaults.DefaultLogTail)).ConfigureAwait(false),
@@ -80,7 +93,7 @@ internal sealed class AppCommandDispatcher(
             "logcat" => await RequireRunner(runner, command).LogcatAsync(options.Int("tail", CliDefaults.DefaultLogTail)).ConfigureAwait(false),
             "wait-log" => await RequireRunner(runner, command).WaitForLogAsync(options.Require("contains"), options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
             "record" => await RequireRunner(runner, command).RecordAsync(options.Require("output"), options.Int("time-limit-sec", CliDefaults.DefaultRecordTimeLimitSeconds)).ConfigureAwait(false),
-            "run" => await _scenarioCommandDispatcher.RunAsync(options, runner).ConfigureAwait(false),
+            "run" => await _scenarioCommandDispatcher.RunAsync(options, runner, artifacts).ConfigureAwait(false),
             _ => throw new UsageException($"Unknown command '{command}'.")
         };
     }
@@ -101,15 +114,57 @@ internal sealed class AppCommandDispatcher(
         return result;
     }
 
-    private static async Task<object> ExecuteLabAsync(CliOptions options, IDeviceHost runner)
+    private async Task<object> ExecuteLabAsync(CliOptions options, IDeviceHost runner)
     {
         var action = options.Arguments.FirstOrDefault() ?? "status";
         return action.ToLowerInvariant() switch
         {
-            "status" => await LabCommandResolver.ReadStatusAsync(runner, options.Get("device-query")).ConfigureAwait(false),
-            "doctor" => await LabCommandResolver.DiagnoseAsync(runner, options.Get("device-query"), options.HasFlag("fix")).ConfigureAwait(false),
-            _ => throw new UsageException("lab requires subcommand status or doctor.")
+            "status" => await LabCommandResolver.ReadStatusAsync(runner, options.Get("device-query"), _labLeaseStore, _labQuarantineStore).ConfigureAwait(false),
+            "doctor" => await LabCommandResolver.DiagnoseAsync(runner, options.Get("device-query"), options.HasFlag("fix"), _labLeaseStore, _labQuarantineStore).ConfigureAwait(false),
+            "plan" => await LabCommandResolver.PlanAsync(runner, options.Get("device-query"), _labLeaseStore, _labQuarantineStore).ConfigureAwait(false),
+            "claim" => await LabCommandResolver.ClaimAsync(runner, options.Get("device-query"), options.Get("owner"), options.Int("ttl-sec", 3600), _labLeaseStore, _labQuarantineStore).ConfigureAwait(false),
+            "release" => await ReleaseLabLeaseAsync(options).ConfigureAwait(false),
+            "extend" => await ExtendLabLeaseAsync(options).ConfigureAwait(false),
+            "leases" => await _labLeaseStore.ListAsync().ConfigureAwait(false),
+            "quarantine" => await LabCommandResolver.QuarantineAsync(runner, options.Get("device-query"), options.Require("reason"), options.Get("owner"), _labQuarantineStore).ConfigureAwait(false),
+            "unquarantine" => await _labQuarantineStore.ReleaseAsync(options.Require("serial")).ConfigureAwait(false),
+            "quarantines" => await _labQuarantineStore.ListAsync().ConfigureAwait(false),
+            _ => throw new UsageException("lab requires subcommand status, doctor, plan, claim, release, extend, leases, quarantine, unquarantine, or quarantines.")
         };
+    }
+
+    private async Task<LabLeaseReleaseResult> ReleaseLabLeaseAsync(CliOptions options)
+    {
+        var leaseId = options.Get("lease");
+        var serial = options.Get("serial");
+        if (!string.IsNullOrWhiteSpace(leaseId) && !string.IsNullOrWhiteSpace(serial))
+        {
+            throw new UsageException("lab release accepts either --lease or --serial, not both.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(serial))
+        {
+            return await _labLeaseStore.ReleaseSerialAsync(serial).ConfigureAwait(false);
+        }
+
+        return await _labLeaseStore.ReleaseAsync(options.Require("lease")).ConfigureAwait(false);
+    }
+
+    private async Task<LabLeaseExtendResult> ExtendLabLeaseAsync(CliOptions options)
+    {
+        var leaseId = options.Get("lease");
+        var serial = options.Get("serial");
+        if (!string.IsNullOrWhiteSpace(leaseId) && !string.IsNullOrWhiteSpace(serial))
+        {
+            throw new UsageException("lab extend accepts either --lease or --serial, not both.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(serial))
+        {
+            return await _labLeaseStore.ExtendSerialAsync(serial, options.Int("ttl-sec", 3600)).ConfigureAwait(false);
+        }
+
+        return await _labLeaseStore.ExtendAsync(options.Require("lease"), options.Int("ttl-sec", 3600)).ConfigureAwait(false);
     }
 
     private static IWirelessDebugHost GetWirelessHost(IDeviceHost? runner, string command) =>

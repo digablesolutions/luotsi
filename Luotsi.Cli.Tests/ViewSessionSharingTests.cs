@@ -2,7 +2,6 @@ using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
 using Luotsi.Cli.Infrastructure.Devices;
 using Luotsi.Cli.View.Contracts;
-using Luotsi.Cli.View.Session;
 using Luotsi.Cli.View.Transport;
 using Xunit;
 
