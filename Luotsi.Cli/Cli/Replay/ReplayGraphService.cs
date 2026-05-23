@@ -290,15 +290,10 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
 
     private static string? FirstProperty(ReplayTimelineEventResult evt, params string[] names)
     {
-        foreach (var name in names)
-        {
-            if (evt.Properties.TryGetValue(name, out var value) && !string.IsNullOrWhiteSpace(value))
-            {
-                return value;
-            }
-        }
-
-        return null;
+        return names
+            .Select(name => evt.Properties.TryGetValue(name, out var value) ? value : null)
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .FirstOrDefault();
     }
 
     private static string StableId(string value)

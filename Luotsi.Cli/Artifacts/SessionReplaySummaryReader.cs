@@ -15,17 +15,10 @@ internal sealed class SessionReplaySummaryReader(string root, IFileSystem fileSy
     {
         ArgumentNullException.ThrowIfNull(files);
 
-        var summaries = new List<SessionReplaySummary>();
-        foreach (var file in files)
-        {
-            var summary = TryRead(file);
-            if (summary is not null)
-            {
-                summaries.Add(summary);
-            }
-        }
-
-        return summaries
+        return files
+            .Select(TryRead)
+            .Where(static summary => summary is not null)
+            .Select(static summary => summary!)
             .OrderByDescending(static summary => summary.StartedAt)
             .ToArray();
     }

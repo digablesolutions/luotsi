@@ -24,14 +24,47 @@ internal sealed class LabLeaseStore(IFileSystem fileSystem, TimeProvider timePro
             throw new Errors.UsageException("lab claim --ttl-sec must be greater than zero.");
         }
 
+        var leasePath = GetLeasePath(serial);
+        if (_fileSystem.FileExists(leasePath))
+        {
+            var existingLease = TryReadLease(leasePath);
+            if (existingLease is not null)
+            {
+                if (existingLease.ExpiresAt > claimedAt)
+                {
+                    throw CreateActiveLeaseConflict(existingLease);
+                }
+
+                _fileSystem.DeleteFile(leasePath);
+            }
+        }
+
         var result = new LabLeaseResult(
             "lease:" + ShortHash(serial + "|" + claimedAt.ToUnixTimeMilliseconds().ToString(System.Globalization.CultureInfo.InvariantCulture)),
             serial,
             string.IsNullOrWhiteSpace(owner) ? Environment.UserName : owner,
             claimedAt,
             claimedAt.AddSeconds(ttl),
-            GetLeasePath(serial));
-        await _fileSystem.WriteAllTextAsync(result.LeaseFile, JsonSerializer.Serialize(result, AppJson.Options), Encoding.UTF8).ConfigureAwait(false);
+            leasePath);
+
+        _fileSystem.CreateDirectory(GetLeaseRoot());
+
+        try
+        {
+            await using var stream = _fileSystem.OpenWrite(result.LeaseFile, overwrite: false);
+            await JsonSerializer.SerializeAsync(stream, result, AppJson.Options).ConfigureAwait(false);
+        }
+        catch (IOException) when (_fileSystem.FileExists(result.LeaseFile))
+        {
+            var concurrentLease = TryReadLease(result.LeaseFile);
+            if (concurrentLease is not null && concurrentLease.ExpiresAt > _timeProvider.GetUtcNow())
+            {
+                throw CreateActiveLeaseConflict(concurrentLease);
+            }
+
+            throw new Errors.UsageException($"lab claim found an unreadable lease file for '{serial}' at '{result.LeaseFile}'. Release it manually or remove the file before retrying.");
+        }
+
         return result;
     }
 
@@ -116,6 +149,22 @@ internal sealed class LabLeaseStore(IFileSystem fileSystem, TimeProvider timePro
 
     private string GetLeaseRoot() =>
         Path.Join(_fileSystem.GetTempPath(), "luotsi", "lab-leases");
+
+    private LabLeaseResult? TryReadLease(string path)
+    {
+        try
+        {
+            using var stream = _fileSystem.OpenRead(path);
+            return JsonSerializer.Deserialize<LabLeaseResult>(stream, AppJson.Options);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static Errors.UsageException CreateActiveLeaseConflict(LabLeaseResult lease) =>
+        new($"Device '{lease.Serial}' is already leased by {lease.Owner} until {lease.ExpiresAt:O} (lease {lease.LeaseId}). Release it first or wait for expiry.");
 
     private static string ShortHash(string value)
     {

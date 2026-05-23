@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
 using Luotsi.Cli.Errors;
@@ -31,6 +32,23 @@ public sealed partial class AppTests
 
         await Assert.ThrowsAsync<UsageException>(() => session.WriteTextAsync("../escape.txt", "bad"));
         await Assert.ThrowsAsync<UsageException>(() => session.WriteJsonAsync("/tmp/escape.json", new { ok = true }));
+    }
+
+    [Fact]
+    public void ArtifactSession_Create_Sanitizes_Command_Segment()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-18T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var constructor = typeof(CliOptions).GetConstructor(
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
+            binder: null,
+            [typeof(string)],
+            modifiers: null);
+        var options = Assert.IsType<CliOptions>(constructor?.Invoke(["../escape"]));
+
+        var session = ArtifactSession.Create(options, fileSystem, timeProvider);
+
+        Assert.Equal(Path.Join("/tmp", "luotsi", "20260518-100000-escape"), session.Root);
     }
 
     [Fact]
@@ -163,6 +181,31 @@ public sealed partial class AppTests
         Assert.Contains("view_share_client_connected | endpoint=127.0.0.1:9000 | remote_endpoint=10.0.0.25:40122 | observer_count=1 | reason=observer_joined", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("view_stats | decoded_frames=120 | presented_frames=118 | dropped_frames=2 | decode_fps=29.5 | present_fps=29.0 | end_to_end_latency_ms=142", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("view_error | error=transport: Unexpected end of stream", htmlIndex, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SessionReplayArtifacts_Stream_Timeline_Entries_And_Tag_Invalid_Json()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-18T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var session = ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider);
+        var replay = new SessionReplayArtifacts(session, "view", "view-session", timeProvider.GetUtcNow());
+
+        replay.RecordSerializedEvent("""{"type":"view_started"}""");
+        replay.RecordSerializedEvent("not-json");
+
+        var timelinePath = Path.Join(session.Root, SessionReplayArtifacts.TimelineFileName);
+        var timeline = await fileSystem.ReadAllTextAsync(timelinePath);
+        Assert.Contains("{\"type\":\"view_started\"}", timeline, StringComparison.Ordinal);
+        Assert.Contains("not-json", timeline, StringComparison.Ordinal);
+
+        await replay.PersistAsync(timeProvider.GetUtcNow().AddSeconds(2), "stream_ended", 0);
+
+        using var metadata = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(Path.Join(session.Root, SessionReplayArtifacts.MetadataFileName)));
+        Assert.Equal(2, metadata.RootElement.GetProperty("eventCount").GetInt32());
+        var eventTypes = metadata.RootElement.GetProperty("eventTypes").EnumerateArray().Select(static value => value.GetString()).ToArray();
+        Assert.Contains("view_started", eventTypes);
+        Assert.Contains("invalid-json", eventTypes);
     }
 
     [Fact]

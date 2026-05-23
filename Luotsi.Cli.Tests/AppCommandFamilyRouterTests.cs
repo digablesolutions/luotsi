@@ -246,6 +246,31 @@ public sealed class AppCommandFamilyRouterTests
         Assert.Equal(0, deviceHostFactory.CreateCallCount);
     }
 
+    [Fact]
+    public async Task DispatchAsync_ReplayWithoutSubcommand_DoesNot_Create_New_Artifact_Root()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-19T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var deviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost());
+        var router = CreateRouter(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            Console = new FakeConsole(),
+            FileSystem = fileSystem,
+            DeviceHostFactory = deviceHostFactory,
+            ViewProfileStore = new FakeViewProfileStore()
+        });
+        var context = new AppExecutionContext(timeProvider.GetUtcNow(), CliOptions.Parse(["replay"]));
+
+        var exception = await Assert.ThrowsAsync<UsageException>(() => router.DispatchAsync(context));
+
+        Assert.Equal("replay requires --artifacts <directory> pointing to an existing artifact root.", exception.Message);
+        Assert.Null(context.Artifacts);
+        Assert.Null(context.Runner);
+        Assert.False(fileSystem.DirectoryExists("/tmp/luotsi/20260519-100000-replay"));
+        Assert.Equal(0, deviceHostFactory.CreateCallCount);
+    }
+
     private static AppCommandFamilyRouter CreateRouter(AppDependencies dependencies)
     {
         var infrastructure = AppInfrastructureCompositionBuilder.Build(dependencies);

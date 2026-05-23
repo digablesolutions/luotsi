@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Runtime.InteropServices;
 using Luotsi.Cli.Cli;
+using Luotsi.Cli.Cli.Routing;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Infrastructure.Processes;
@@ -692,6 +693,31 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayScenarioDraft_Invalid_Timeline_Returns_Usage_Error_Envelope()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedInspectReplayDraftArtifacts(fileSystem);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), """
+        {"type":"command_result","command":"tap_text","ok":true,"data":{"text":"Sign in"}}
+        not-json
+        """);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "scenario-draft", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("invalid JSON", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task RunAsync_ReplaySearch_Returns_Text_Matches_From_Artifact_Root()
     {
         var console = new FakeConsole();
@@ -1234,6 +1260,22 @@ public sealed partial class AppTests
 
         Assert.Equal(0, leasesAfterReleaseExitCode);
         Assert.Equal(0, leasesAfterReleaseEnvelope.RootElement.GetProperty("data").GetProperty("count").GetInt32());
+    }
+
+    [Fact]
+    public async Task LabClaim_Does_Not_Overwrite_Active_Lease_For_Same_Serial()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-19T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var store = new LabLeaseStore(fileSystem, timeProvider);
+
+        var firstLease = await store.ClaimAsync("usb-1", "ci-job-1", 60);
+        var error = await Assert.ThrowsAsync<UsageException>(() => store.ClaimAsync("usb-1", "ci-job-2", 60));
+
+        Assert.Contains("already leased by ci-job-1", error.Message, StringComparison.Ordinal);
+
+        using var persistedLease = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(firstLease.LeaseFile));
+        Assert.Equal("ci-job-1", persistedLease.RootElement.GetProperty("owner").GetString());
     }
 
     [Fact]

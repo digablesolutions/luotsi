@@ -151,33 +151,43 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
             throw new UsageException($"No {SessionReplayArtifacts.TimelineFileName} was found under artifact root '{artifactRoot}'.");
         }
 
-        var events = new List<JsonElement>();
-        foreach (var file in files.Order(StringComparer.OrdinalIgnoreCase))
-        {
-            using var stream = _fileSystem.OpenRead(file);
-            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 4096);
-            while (reader.ReadLine() is { } line)
-            {
-                if (string.IsNullOrWhiteSpace(line))
-                {
-                    continue;
-                }
+        return files.Order(StringComparer.OrdinalIgnoreCase)
+            .SelectMany(ReadTimelineEventsFromFile)
+            .ToArray();
+    }
 
-                try
-                {
-                    using var document = JsonDocument.Parse(line);
-                    if (document.RootElement.ValueKind == JsonValueKind.Object)
-                    {
-                        events.Add(document.RootElement.Clone());
-                    }
-                }
-                catch (JsonException)
-                {
-                }
+    private IEnumerable<JsonElement> ReadTimelineEventsFromFile(string file)
+    {
+        using var stream = _fileSystem.OpenRead(file);
+        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 4096);
+        while (reader.ReadLine() is { } line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                continue;
+            }
+
+            var evt = ParseTimelineEvent(file, line);
+            if (evt is not null)
+            {
+                yield return evt.Value;
             }
         }
+    }
 
-        return events;
+    private static JsonElement? ParseTimelineEvent(string file, string line)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(line);
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                ? document.RootElement.Clone()
+                : null;
+        }
+        catch (JsonException ex)
+        {
+            throw new UsageException($"replay scenario-draft encountered invalid JSON in '{file}'. {ex.Message} Line: {line}");
+        }
     }
 
     private static IReadOnlyList<ScenarioStep> CreateSteps(IReadOnlyList<JsonElement> events)

@@ -57,7 +57,7 @@ public sealed class ArtifactSession
         var activeFileSystem = fileSystem ?? new PhysicalFileSystem();
         var activeTimeProvider = timeProvider ?? TimeProvider.System;
         var baseDir = options.Get("artifacts") ?? Path.Combine(activeFileSystem.GetTempPath(), "luotsi");
-        var name = $"{activeTimeProvider.GetUtcNow():yyyyMMdd-HHmmss}-{options.Command ?? "command"}";
+        var name = $"{activeTimeProvider.GetUtcNow():yyyyMMdd-HHmmss}-{SanitizePathSegment(options.Command)}";
         return new ArtifactSession(Path.Combine(baseDir, name), activeFileSystem, ParseUiPollArtifactPolicy(options.Get("poll-artifacts")), ensureDirectoryExists: true);
     }
 
@@ -117,6 +117,9 @@ public sealed class ArtifactSession
     /// <returns>Artifact metadata.</returns>
     public ArtifactData ToData() => new(Root, ToOptionValue(UiPollArtifactPolicy));
 
+    internal Stream OpenArtifactWrite(string name, bool overwrite = true) =>
+        _fileSystem.OpenWrite(GetArtifactPath(name), overwrite);
+
     private string GetArtifactPath(string name)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -155,6 +158,29 @@ public sealed class ArtifactSession
             "none" => UiPollArtifactPolicy.None,
             _ => throw new UsageException("Option --poll-artifacts must be one of: final, per-attempt, none.")
         };
+    }
+
+    private static string SanitizePathSegment(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "command";
+        }
+
+        var builder = new StringBuilder(value.Length);
+        foreach (var ch in value)
+        {
+            if (ch == Path.DirectorySeparatorChar || ch == Path.AltDirectorySeparatorChar || Array.IndexOf(Path.GetInvalidFileNameChars(), ch) >= 0)
+            {
+                builder.Append('-');
+                continue;
+            }
+
+            builder.Append(ch);
+        }
+
+        var sanitized = builder.ToString().Trim('-', '.');
+        return string.IsNullOrWhiteSpace(sanitized) ? "command" : sanitized;
     }
 
     private static string ToOptionValue(UiPollArtifactPolicy policy) =>

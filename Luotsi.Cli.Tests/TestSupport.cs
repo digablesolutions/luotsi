@@ -232,6 +232,18 @@ internal sealed class FakeFileSystem : IFileSystem
 
     private sealed class FakeWriteStream(FakeFileSystem fileSystem, string path) : MemoryStream
     {
+        public override void Flush()
+        {
+            fileSystem.WriteBinaryFile(path, ToArray());
+            base.Flush();
+        }
+
+        public override Task FlushAsync(CancellationToken cancellationToken)
+        {
+            fileSystem.WriteBinaryFile(path, ToArray());
+            return base.FlushAsync(cancellationToken);
+        }
+
         protected override void Dispose(bool disposing)
         {
             if (disposing)

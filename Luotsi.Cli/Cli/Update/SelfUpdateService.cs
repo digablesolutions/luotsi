@@ -127,15 +127,9 @@ internal sealed class SelfUpdateService(
 
     private string? ResolveManifestPath()
     {
-        foreach (var candidate in EnumerateManifestPathCandidates())
-        {
-            if (_fileSystem.FileExists(candidate))
-            {
-                return candidate;
-            }
-        }
-
-        return null;
+        return EnumerateManifestPathCandidates()
+            .Where(candidate => _fileSystem.FileExists(candidate))
+            .FirstOrDefault();
     }
 
     private IEnumerable<string> EnumerateManifestPathCandidates()

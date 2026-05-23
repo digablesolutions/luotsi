@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using Luotsi.Cli.Infrastructure.Contracts;
@@ -71,6 +72,7 @@ internal sealed class LabQuarantineStore(IFileSystem fileSystem, TimeProvider ti
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
             {
+                Debug.WriteLine($"Failed to read lab quarantine '{file}': {ex.GetType().Name}: {ex.Message}");
             }
         }
 

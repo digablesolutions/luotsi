@@ -316,17 +316,13 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
 
     private static DateTimeOffset? TryGetTimestamp(JsonElement root)
     {
-        foreach (var propertyName in new[] { "received_at", "occurred_at", "observed_at", "captured_at", "started_at", "ended_at", "reconnected_at" })
-        {
-            if (root.TryGetProperty(propertyName, out var property) &&
+        return new[] { "received_at", "occurred_at", "observed_at", "captured_at", "started_at", "ended_at", "reconnected_at" }
+            .Select(propertyName => root.TryGetProperty(propertyName, out var property) &&
                 property.ValueKind == JsonValueKind.String &&
-                DateTimeOffset.TryParse(property.GetString(), out var timestamp))
-            {
-                return timestamp;
-            }
-        }
-
-        return null;
+                DateTimeOffset.TryParse(property.GetString(), out var timestamp)
+                    ? timestamp
+                    : (DateTimeOffset?)null)
+            .FirstOrDefault(static timestamp => timestamp is not null);
     }
 
     private static bool IsFailureRelevant(JsonElement root, string type)
