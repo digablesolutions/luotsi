@@ -1192,6 +1192,77 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayGraph_Includes_ScenarioDraft_Provenance()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = "/tmp/replay-graph-draft-root";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), """
+        {"type":"session_started","session_id":"inspect-session","started_at":"2026-05-18T10:00:00Z"}
+        {"type":"command_result","session_id":"inspect-session","id":"1","command":"tap_text","ok":true,"started_at":"2026-05-18T10:00:01Z","ended_at":"2026-05-18T10:00:02Z","data":{"text":"Sign in"}}
+        {"type":"session_ended","session_id":"inspect-session","ended_at":"2026-05-18T10:00:09Z","reason":"client_exit"}
+        """);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-replay.json"), """
+        {
+          "schema": "luotsi-session-replay.v1",
+          "sessionKind": "inspect",
+          "sessionId": "inspect-session",
+          "startedAt": "2026-05-18T10:00:00Z",
+          "endedAt": "2026-05-18T10:00:09Z",
+          "reason": "client_exit",
+          "exitCode": 0,
+          "timelineFileName": "session-timeline.jsonl",
+          "eventCount": 3,
+          "eventTypes": ["session_started", "command_result", "session_ended"]
+        }
+        """);
+        fileSystem.AddFile(Path.Join(replayRoot, "scenario-draft-summary.json"), """
+        {
+          "schema": "luotsi-scenario-draft.v1",
+          "artifact_root": "/tmp/replay-graph-draft-root",
+          "output": "/tmp/draft.json",
+          "confidence": "medium",
+          "scenario": {
+            "name": "draft from replay",
+            "steps": [
+              { "name": "tap Sign in", "action": "tapText", "text": "Sign in" }
+            ]
+          },
+          "source_summaries": [
+            { "source": "inspect_command", "step_count": 1, "normalization_count": 1, "event_types": ["command_result"], "confidence": "medium" }
+          ],
+          "step_origins": [
+            { "step_index": 1, "source": "inspect_command", "event_type": "command_result", "command": "tap_text", "detail": "tap_text", "confidence": "medium" }
+          ],
+          "normalizations": [
+            { "kind": "duplicate_wait", "detail": "Dropped adjacent duplicate waitVisible for `Sign in`.", "source": "screen_delta", "event_type": "screen_delta", "confidence": "medium" }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(1, data.GetProperty("node_kinds").GetProperty("scenario_draft").GetInt32());
+        Assert.Equal(1, data.GetProperty("node_kinds").GetProperty("generated_step").GetInt32());
+        Assert.True(data.GetProperty("node_kinds").GetProperty("draft_source").GetInt32() >= 1);
+        Assert.Equal(1, data.GetProperty("node_kinds").GetProperty("draft_normalization").GetInt32());
+        Assert.Contains(data.GetProperty("edges").EnumerateArray(), edge => edge.GetProperty("kind").GetString() == "generates_step");
+        Assert.Contains(data.GetProperty("edges").EnumerateArray(), edge => edge.GetProperty("kind").GetString() == "derived_from");
+        Assert.Contains(data.GetProperty("edges").EnumerateArray(), edge => edge.GetProperty("kind").GetString() == "uses_source");
+        Assert.Contains(data.GetProperty("edges").EnumerateArray(), edge => edge.GetProperty("kind").GetString() == "applies_normalization");
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayCluster_Groups_Failures_By_Normalized_Shape()
     {
         var console = new FakeConsole();

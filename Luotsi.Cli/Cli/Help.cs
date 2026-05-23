@@ -244,8 +244,8 @@ Notes:
   --write-markdown, it writes replay-timeline.md for artifact browsing. These
   write options refresh the artifact index. Replay graph emits a stable node
   and edge model over sessions, timeline events, failures, scenarios,
-  artifacts, actions, text selectors, screen observations, and telemetry
-  signals. Its result includes node_kinds and edge_kinds counts so agents can
+  artifacts, actions, text selectors, screen observations, telemetry
+  signals, and generated scenario draft provenance. Its result includes node_kinds and edge_kinds counts so agents can
   quickly understand what semantic material is available before traversing the
   graph. Replay cluster groups failed replay sessions by normalized failure
   shape and returns triage hints plus replay/search commands for the latest
