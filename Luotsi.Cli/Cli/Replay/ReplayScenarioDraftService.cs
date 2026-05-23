@@ -200,9 +200,14 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
                 continue;
             }
 
+            if (string.Equals(type, "command_result", StringComparison.Ordinal))
+            {
+                steps.AddRange(CreateInspectCommandSteps(evt));
+                continue;
+            }
+
             var step = type switch
             {
-                "command_result" => CreateInspectCommandStep(evt),
                 "scenario_step_passed" or "scenario_step_continued_on_error" or "scenario_step_failed" => CreateScenarioStep(evt),
                 "view_screenshot_captured" => CreateScreenshotStep(evt),
                 "view_key_command_sent" => CreateKeyCommandStep(evt),
@@ -218,17 +223,22 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
         return steps;
     }
 
-    private static ScenarioStep? CreateInspectCommandStep(JsonElement evt)
+    private static IReadOnlyList<ScenarioStep> CreateInspectCommandSteps(JsonElement evt)
     {
         if (!TryGetString(evt, "command", out var command) || TryGetBool(evt, "ok") is false)
         {
-            return null;
+            return [];
         }
 
         var data = evt.TryGetProperty("data", out var dataElement) && dataElement.ValueKind == JsonValueKind.Object
             ? dataElement
             : default;
-        return command switch
+        if (command is "telemetry_tail" or "telemetry_watch")
+        {
+            return CreateTelemetrySteps(data);
+        }
+
+        var step = command switch
         {
             "tap_text" => CreateTextStep(data, "tapText", "tap text"),
             "wait_visible" => CreateTextStep(data, "waitVisible", "wait visible"),
@@ -239,6 +249,62 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
             "screenshot" or "take_screenshot" => CreateLabelStep(data, "takeScreenshot", "screenshot"),
             _ => null
         };
+
+        return step is null ? [] : [step];
+    }
+
+    private static IReadOnlyList<ScenarioStep> CreateTelemetrySteps(JsonElement data)
+    {
+        if (data.ValueKind != JsonValueKind.Object)
+        {
+            return [];
+        }
+
+        var steps = new List<ScenarioStep>();
+        if (data.TryGetProperty("events", out var events) && events.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var telemetryEvent in events.EnumerateArray())
+            {
+                var step = CreateTelemetryStep(telemetryEvent);
+                if (step is not null)
+                {
+                    steps.Add(step);
+                }
+            }
+        }
+        else
+        {
+            var step = CreateTelemetryStep(data);
+            if (step is not null)
+            {
+                steps.Add(step);
+            }
+        }
+
+        return steps;
+    }
+
+    private static ScenarioStep? CreateTelemetryStep(JsonElement telemetryEvent)
+    {
+        if (!TryGetString(telemetryEvent, "event", out var eventName))
+        {
+            return null;
+        }
+
+        if (string.Equals(eventName, "step", StringComparison.OrdinalIgnoreCase) &&
+            TryGetString(telemetryEvent, "step", out var stepName))
+        {
+            return new ScenarioStep("wait step " + stepName, "waitStep", null, null, stepName, TimeoutSec: 15);
+        }
+
+        if (string.Equals(eventName, "action_ready", StringComparison.OrdinalIgnoreCase) &&
+            TryGetString(telemetryEvent, "action", out var actionName))
+        {
+            TryGetString(telemetryEvent, "step", out var telemetryStepName);
+            return new ScenarioStep("wait action " + actionName, "waitActionReady", actionName, null, string.IsNullOrWhiteSpace(telemetryStepName) ? null : telemetryStepName, TimeoutSec: 15);
+        }
+
+        return new ScenarioStep("assert event " + eventName, "assertEvent", null, null, null, Event: eventName, TimeoutSec: 15);
     }
 
     private static ScenarioStep? CreateScenarioStep(JsonElement evt)
@@ -328,6 +394,12 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
             else if (string.Equals(step.Action, "takeScreenshot", StringComparison.OrdinalIgnoreCase))
             {
                 yield return new ReplayScenarioDraftSuggestion(i + 1, "visual", "medium", "Consider upgrading screenshot capture to assertScreenshot with a baseline or region hash.");
+            }
+            else if (string.Equals(step.Action, "waitStep", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(step.Action, "waitActionReady", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(step.Action, "assertEvent", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return new ReplayScenarioDraftSuggestion(i + 1, "telemetry", "medium", "Verify this semantic telemetry assertion is emitted reliably by the app before using it as a CI gate.");
             }
         }
     }

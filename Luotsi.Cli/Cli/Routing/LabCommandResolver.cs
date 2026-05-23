@@ -135,7 +135,10 @@ internal static class LabCommandResolver
     {
         return status switch
         {
-            "ready" => [BuildLabCommand("claim", query)],
+            "ready" => [
+                BuildLabCommand("claim", query),
+                BuildRunCommand(query, selected.FirstOrDefault()?.Serial)
+            ],
             "ambiguous" => ["luotsi lab status", "luotsi lab plan --device-query state=online,type=physical,model=<model>"],
             "blocked" when decisions.Any(static decision => decision.Reason.Contains("leased by", StringComparison.OrdinalIgnoreCase)) =>
                 ["luotsi lab leases", "luotsi lab release --serial <serial>"],
@@ -151,6 +154,19 @@ internal static class LabCommandResolver
         return string.IsNullOrWhiteSpace(query)
             ? command
             : command + " --device-query " + Quote(query);
+    }
+
+    private static string BuildRunCommand(string? query, string? serial)
+    {
+        var command = "luotsi run --path <scenarios> --claim-device";
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            return command + " --device-query " + Quote(query);
+        }
+
+        return string.IsNullOrWhiteSpace(serial)
+            ? command + " --device <adb serial>"
+            : command + " --device " + Quote(serial);
     }
 
     private static string Quote(string value) =>

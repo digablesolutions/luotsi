@@ -140,6 +140,7 @@ Usage:
   luotsi lab claim [--device-query <query>] [--owner <name>] [--ttl-sec 3600]
   luotsi lab leases
   luotsi lab release (--lease <lease-id> | --serial <adb serial>)
+  luotsi lab extend (--lease <lease-id> | --serial <adb serial>) [--ttl-sec 3600]
   luotsi lab quarantine [--device-query <query>] --reason <text> [--owner <name>]
   luotsi lab quarantines
   luotsi lab unquarantine --serial <adb serial>
@@ -152,6 +153,7 @@ Examples:
   luotsi lab plan --device-query model=Pixel_9
   luotsi lab claim --device-query model=Pixel_9 --owner ci-job-1 --ttl-sec 1800
   luotsi lab leases
+  luotsi lab extend --serial emulator-5554 --ttl-sec 7200
   luotsi lab quarantine --device-query serial=emulator-5554 --reason "flaky touchscreen"
   luotsi lab quarantines
   luotsi lab doctor --fix
@@ -432,6 +434,7 @@ Command groups:
     lab claim [--device-query <query>] [--owner <name>] [--ttl-sec 3600]
     lab leases
     lab release (--lease <lease-id> | --serial <adb serial>)
+    lab extend (--lease <lease-id> | --serial <adb serial>) [--ttl-sec 3600]
     lab quarantine [--device-query <query>] --reason <text> [--owner <name>]
     lab quarantines
     lab unquarantine --serial <adb serial>

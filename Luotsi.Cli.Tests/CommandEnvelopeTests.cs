@@ -693,6 +693,50 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayScenarioDraft_Promotes_Telemetry_Into_Semantic_Waits()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = "/tmp/inspect-telemetry-replay-root";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), """
+        {"type":"session_started","session_id":"inspect-session","started_at":"2026-05-18T10:00:00Z"}
+        {"type":"command_result","session_id":"inspect-session","id":"1","command":"telemetry_tail","ok":true,"started_at":"2026-05-18T10:00:01Z","ended_at":"2026-05-18T10:00:02Z","data":{"events":[{"event":"step","step":"STEP_IDLE"},{"event":"action_ready","step":"STEP_IDLE","action":"sign_in"},{"event":"domain_warning"}]}}
+        {"type":"session_ended","session_id":"inspect-session","ended_at":"2026-05-18T10:00:09Z","reason":"client_exit"}
+        """);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "scenario-draft", "--artifacts", replayRoot, "--output", "/tmp/telemetry-draft.json", "--write-json"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var steps = envelope.RootElement.GetProperty("data").GetProperty("scenario").GetProperty("steps").EnumerateArray().ToArray();
+        Assert.Equal("waitStep", steps[0].GetProperty("action").GetString());
+        Assert.Equal("STEP_IDLE", steps[0].GetProperty("step").GetString());
+        Assert.Equal("waitActionReady", steps[1].GetProperty("action").GetString());
+        Assert.Equal("sign_in", steps[1].GetProperty("text").GetString());
+        Assert.Equal("STEP_IDLE", steps[1].GetProperty("step").GetString());
+        Assert.Equal("assertEvent", steps[2].GetProperty("action").GetString());
+        Assert.Equal("domain_warning", steps[2].GetProperty("event").GetString());
+        Assert.Contains(envelope.RootElement.GetProperty("data").GetProperty("suggestions").EnumerateArray(), suggestion => suggestion.GetProperty("kind").GetString() == "telemetry");
+
+        var validateConsole = new FakeConsole();
+        var validateApp = new App(new AppDependencies
+        {
+            Console = validateConsole,
+            FileSystem = fileSystem
+        });
+        var validateExitCode = await validateApp.RunAsync(["scenario-validate", "--file", "/tmp/telemetry-draft.json"]);
+
+        Assert.Equal(0, validateExitCode);
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayScenarioDraft_Invalid_Timeline_Returns_Usage_Error_Envelope()
     {
         var console = new FakeConsole();
@@ -1318,6 +1362,43 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task LabExtend_BySerial_Renews_Active_Lease()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("usb-1", "device", "product:p model:Pixel_9 device:komodo usb:1-1"));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            TimeProvider = timeProvider,
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var claimExitCode = await app.RunAsync(["lab", "claim", "--device-query", "model=Pixel_9", "--owner", "ci-job-1", "--ttl-sec", "60"]);
+        timeProvider.Advance(TimeSpan.FromSeconds(30));
+        var extendExitCode = await app.RunAsync(["lab", "extend", "--serial", "usb-1", "--ttl-sec", "120"]);
+        using var extendEnvelope = JsonDocument.Parse(console.OutputLines[1]);
+
+        Assert.Equal(0, claimExitCode);
+        Assert.Equal(0, extendExitCode);
+        var extend = extendEnvelope.RootElement.GetProperty("data");
+        Assert.True(extend.GetProperty("extended").GetBoolean());
+        Assert.Equal("usb-1", extend.GetProperty("serial").GetString());
+        Assert.Equal("2026-05-15T12:01:00+00:00", extend.GetProperty("previous_expires_at").GetString());
+        Assert.Equal("2026-05-15T12:02:30+00:00", extend.GetProperty("expires_at").GetString());
+
+        var leasesExitCode = await app.RunAsync(["lab", "leases"]);
+        using var leasesEnvelope = JsonDocument.Parse(console.OutputLines[2]);
+
+        Assert.Equal(0, leasesExitCode);
+        var lease = leasesEnvelope.RootElement.GetProperty("data").GetProperty("leases")[0];
+        Assert.Equal("2026-05-15T12:02:30+00:00", lease.GetProperty("expires_at").GetString());
+    }
+
+    [Fact]
     public async Task LabQuarantine_Marks_Device_Unallocatable_Until_Unquarantined()
     {
         var console = new FakeConsole();
@@ -1384,6 +1465,7 @@ public sealed partial class AppTests
         Assert.Equal("usb-1", plan.GetProperty("selected_serial").GetString());
         Assert.Contains("would be selected", plan.GetProperty("summary").GetString(), StringComparison.Ordinal);
         Assert.Contains("luotsi lab claim", plan.GetProperty("recommended_commands")[0].GetString(), StringComparison.Ordinal);
+        Assert.Equal("luotsi run --path <scenarios> --claim-device --device-query model=Pixel_9", plan.GetProperty("recommended_commands")[1].GetString());
 
         var claimExitCode = await app.RunAsync(["lab", "claim", "--device-query", "model=Pixel_9", "--owner", "ci-job-1"]);
         var blockedPlanExitCode = await app.RunAsync(["lab", "plan", "--device-query", "model=Pixel_9"]);

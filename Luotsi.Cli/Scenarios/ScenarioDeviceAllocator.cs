@@ -41,7 +41,8 @@ internal sealed class ScenarioDeviceAllocator : IScenarioDeviceAllocator
             readiness,
             configuration.RequireDeviceReady,
             configuration.DeviceWaitTimeoutSec,
-            configuration.DeviceReadinessPackage);
+            configuration.DeviceReadinessPackage,
+            configuration.LabLease);
     }
 
     private static async Task<DeviceInventoryResult?> TryReadInventoryAsync(IDeviceHost runner)

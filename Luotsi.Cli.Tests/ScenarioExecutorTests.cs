@@ -837,10 +837,15 @@ public sealed partial class AppTests
             "--device-query", "model=Pixel_7",
             "--claim-device",
             "--owner", "ci-job-1",
+            "--report-json", "/tmp/report.json",
             "--no-require-device-ready"]);
 
         Assert.Equal(0, exitCode);
         Assert.False(fileSystem.FileExists(Path.Join("/tmp", "luotsi", "lab-leases", "SER123.json")));
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+        var lease = report.RootElement.GetProperty("device_allocation").GetProperty("lease");
+        Assert.Equal("SER123", lease.GetProperty("serial").GetString());
+        Assert.Equal("ci-job-1", lease.GetProperty("owner").GetString());
     }
 
     [Fact]

@@ -72,7 +72,7 @@ internal sealed class ScenarioCommandDispatcher(
                 return await _scenarioRunOrchestrator.ValidateFileAsync(file, configuration).ConfigureAwait(false);
             }
 
-            return await RunWithOptionalClaimAsync(options, () => _scenarioRunOrchestrator.RunFileAsync(file, RequireRunner(runner), configuration, artifacts)).ConfigureAwait(false);
+            return await RunWithOptionalClaimAsync(options, configuration, claimedConfiguration => _scenarioRunOrchestrator.RunFileAsync(file, RequireRunner(runner), claimedConfiguration, artifacts)).ConfigureAwait(false);
         }
 
         var query = ScenarioQueryFactory.CreateCatalogRunQuery(options);
@@ -102,14 +102,17 @@ internal sealed class ScenarioCommandDispatcher(
             return await _scenarioRunOrchestrator.ValidatePathAsync(query, configuration).ConfigureAwait(false);
         }
 
-        return await RunWithOptionalClaimAsync(options, () => _scenarioRunOrchestrator.RunPathAsync(query, RequireRunner(runner), configuration, artifacts)).ConfigureAwait(false);
+        return await RunWithOptionalClaimAsync(options, configuration, claimedConfiguration => _scenarioRunOrchestrator.RunPathAsync(query, RequireRunner(runner), claimedConfiguration, artifacts)).ConfigureAwait(false);
     }
 
-    private async Task<T> RunWithOptionalClaimAsync<T>(CliOptions options, Func<Task<T>> runAsync)
+    private async Task<T> RunWithOptionalClaimAsync<T>(
+        CliOptions options,
+        ScenarioRunConfiguration configuration,
+        Func<ScenarioRunConfiguration, Task<T>> runAsync)
     {
         if (!options.HasFlag("claim-device"))
         {
-            return await runAsync().ConfigureAwait(false);
+            return await runAsync(configuration).ConfigureAwait(false);
         }
 
         if (_labLeaseStore is null)
@@ -126,7 +129,7 @@ internal sealed class ScenarioCommandDispatcher(
         var lease = await _labLeaseStore.ClaimAsync(serial, options.Get("owner") ?? "luotsi-run", options.Int("ttl-sec", 3600)).ConfigureAwait(false);
         try
         {
-            return await runAsync().ConfigureAwait(false);
+            return await runAsync(configuration with { LabLease = lease }).ConfigureAwait(false);
         }
         finally
         {

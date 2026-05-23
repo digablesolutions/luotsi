@@ -50,10 +50,11 @@ The CLI includes the same flow-oriented summary in `luotsi help quickstart`.
 | `devices` | List adb-visible devices |
 | `lab status [--device-query <query>]` | Summarize attached-device availability and explain which devices match or are rejected by a selection query |
 | `lab doctor [--device-query <query>]` | Detect stale/offline/ambiguous lab state and return concrete remediation commands |
-| `lab plan [--device-query <query>]` | Dry-run lab allocation and explain the selected or rejected devices, including recommended next commands |
+| `lab plan [--device-query <query>]` | Dry-run lab allocation and explain the selected or rejected devices, including recommended claim/run commands |
 | `lab claim [--device-query <query>] [--owner <name>] [--ttl-sec 3600]` | Claim exactly one selected device with a host-side lease token |
 | `lab leases` | List active host-side device leases |
 | `lab release (--lease <lease-id> | --serial <adb serial>)` | Release a host-side device lease |
+| `lab extend (--lease <lease-id> | --serial <adb serial>) [--ttl-sec 3600]` | Renew an active host-side device lease |
 | `lab quarantine [--device-query <query>] --reason <text> [--owner <name>]` | Mark exactly one selected device unavailable until explicitly unquarantined |
 | `lab quarantines` | List quarantined lab devices |
 | `lab unquarantine --serial <adb serial>` | Remove a device quarantine |
@@ -71,7 +72,9 @@ The CLI includes the same flow-oriented summary in `luotsi help quickstart`.
 
 `wait-for-device` is also available as `device-wait` or `adb wait-for-device`.
 Active `lab claim` leases are honored by `--device-query` selection so CI and agent workflows do not accidentally target an already claimed device. Stale leases can be released by lease id or directly by serial with `lab release --serial <adb serial>`.
+Long-running jobs can renew an active lease with `lab extend --serial <adb serial> --ttl-sec <seconds>`.
 Active quarantines are also honored by `--device-query`; use them for unhealthy hardware that should stay out of local and CI allocation until repaired.
+When `lab plan` is ready, `recommended_commands` includes both an explicit `lab claim` command and a direct `run --path <scenarios> --claim-device ...` command for agents or CI jobs that want allocation and execution in one step.
 
 `doctor` is the first-run entry point. It reuses the existing adb/version checks, optional package-specific preflight, and the same live-view readiness report exposed by `view-doctor`. `doctor --fix` stages Luotsi-owned FFmpeg native libraries when the requested decoder is missing them, then routes through the same helper/install readiness path as `view setup`. Published Luotsi bundles include those repair assets; source checkouts continue to resolve them from the repository layout.
 

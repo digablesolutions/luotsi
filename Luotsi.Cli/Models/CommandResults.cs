@@ -53,6 +53,14 @@ public sealed record LabLeaseReleaseResult(
     string? LeaseFile,
     string? Serial = null);
 
+public sealed record LabLeaseExtendResult(
+    string LeaseId,
+    string Serial,
+    bool Extended,
+    DateTimeOffset? PreviousExpiresAt,
+    DateTimeOffset? ExpiresAt,
+    string? LeaseFile);
+
 public sealed record LabLeasesResult(
     int Count,
     IReadOnlyList<LabLeaseResult> Leases);
@@ -92,7 +100,8 @@ public sealed record ScenarioDeviceAllocation(
     PreflightResult? Readiness,
     bool RequireReady,
     int WaitTimeoutSec,
-    string? Package = null);
+    string? Package = null,
+    LabLeaseResult? Lease = null);
 
 // Preflight
 public sealed record PreflightResult(
