@@ -288,16 +288,16 @@ internal sealed class FakeAdbClient(string? serial = null) : IAdbClient
             return Task.FromResult(new AdbCommandResult("adb", serial, finalArgs, new ProcessResult(0, string.Empty, string.Empty)));
         }
 
-                var result = _runResults.Count > 0
-                        ? _runResults.Dequeue()
-                        : finalArgs.Length == 4 &&
-                            string.Equals(finalArgs[0], "exec-out", StringComparison.Ordinal) &&
-                            string.Equals(finalArgs[1], "uiautomator", StringComparison.Ordinal) &&
-                            string.Equals(finalArgs[2], "dump", StringComparison.Ordinal) &&
-                            string.Equals(finalArgs[3], "/dev/tty", StringComparison.Ordinal) &&
-                            _shellResults.Count > 0
-                                ? _shellResults.Dequeue()
-                                : new ProcessResult(0, string.Empty, string.Empty);
+        var result = _runResults.Count > 0
+            ? _runResults.Dequeue()
+            : finalArgs.Length == 4 &&
+              string.Equals(finalArgs[0], "exec-out", StringComparison.Ordinal) &&
+              string.Equals(finalArgs[1], "uiautomator", StringComparison.Ordinal) &&
+              string.Equals(finalArgs[2], "dump", StringComparison.Ordinal) &&
+              string.Equals(finalArgs[3], "/dev/tty", StringComparison.Ordinal) &&
+              _shellResults.Count > 0
+                ? _shellResults.Dequeue()
+                : new ProcessResult(0, string.Empty, string.Empty);
         return Task.FromResult(new AdbCommandResult("adb", serial, finalArgs, result));
     }
 

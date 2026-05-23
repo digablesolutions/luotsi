@@ -96,11 +96,9 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
             for (var index = 0; index < _connections.Count; index++)
             {
                 var connection = _connections[index];
-                if (!connection.TryQueue(packet))
-                {
-                    disconnectedConnections ??= [];
-                    disconnectedConnections.Add(connection);
-                }
+                if (connection.TryQueue(packet)) continue;
+                disconnectedConnections ??= [];
+                disconnectedConnections.Add(connection);
             }
         }
 

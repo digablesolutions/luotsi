@@ -174,7 +174,7 @@ Luotsi help: replay
 Usage:
   luotsi replay summarize --artifacts <artifact-root> [--format json|jsonl]
   luotsi replay capsule --artifacts <artifact-root> [--write-readme] [--write-json]
-  luotsi replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
+  luotsi replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
   luotsi replay open --artifacts <artifact-root> [--dry-run]
   luotsi replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>]
   luotsi replay search --artifacts <artifact-root> --contains <text> [--limit 50]
@@ -207,7 +207,9 @@ Notes:
   the artifact root. With --write-json, it writes replay-capsule-summary.json.
   Both options refresh the artifact index. Replay timeline returns ordered
   session-timeline.jsonl events with stable detail text for CI and agents.
-  Use --contains to filter normalized event type/detail text.
+  Use --contains to filter normalized event type/detail text. Use --since and
+  --until with ISO-8601 timestamps to narrow by event time. Use --context to
+  include neighboring events around filtered matches.
   With --format json or --format jsonl, replay timeline writes raw machine
   output instead of the normal command envelope. With --write-json or
   --write-jsonl, it persists normalized timeline artifacts. With
@@ -456,7 +458,7 @@ Command groups:
   Artifact replay and triage
     replay summarize --artifacts <artifact-root> [--format json|jsonl]
     replay capsule --artifacts <artifact-root> [--write-readme] [--write-json]
-    replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
+    replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
     replay open --artifacts <artifact-root> [--dry-run]
     replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>]
     replay search --artifacts <artifact-root> --contains <text> [--limit 50]

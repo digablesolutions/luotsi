@@ -28,9 +28,22 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
             throw new UsageException("replay timeline --limit must be greater than zero.");
         }
 
+        var contextCount = options.Int("context", 0);
+        if (contextCount < 0)
+        {
+            throw new UsageException("replay timeline --context must be zero or greater.");
+        }
+
         var typeFilter = options.Get("type");
         var containsFilter = options.Get("contains");
+        var since = ParseTimestampOption(options.Get("since"), "since");
+        var until = ParseTimestampOption(options.Get("until"), "until");
         var failuresOnly = options.HasFlag("failures");
+        if (since is not null && until is not null && since > until)
+        {
+            throw new UsageException("replay timeline --since must be earlier than or equal to --until.");
+        }
+
         var events = new List<ReplayTimelineEventResult>();
         var files = _fileSystem.GetFiles(artifacts.Root, SessionReplayArtifacts.TimelineFileName, SearchOption.AllDirectories)
             .Order(StringComparer.OrdinalIgnoreCase)
@@ -43,13 +56,9 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
         var truncated = false;
         foreach (var file in files)
         {
-            await foreach (var evt in ReadFileAsync(artifacts.Root, file).ConfigureAwait(false))
+            var fileEvents = await ReadFileAsync(artifacts.Root, file).ConfigureAwait(false);
+            foreach (var evt in SelectEvents(fileEvents, typeFilter, containsFilter, since, until, failuresOnly, contextCount))
             {
-                if (!Matches(evt, typeFilter, containsFilter, failuresOnly))
-                {
-                    continue;
-                }
-
                 if (events.Count >= limit)
                 {
                     truncated = true;
@@ -164,8 +173,9 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
         return builder.ToString();
     }
 
-    private async IAsyncEnumerable<ReplayTimelineEventResult> ReadFileAsync(string artifactRoot, string file)
+    private async Task<IReadOnlyList<ReplayTimelineEventResult>> ReadFileAsync(string artifactRoot, string file)
     {
+        var events = new List<ReplayTimelineEventResult>();
         using var stream = _fileSystem.OpenRead(file);
         using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 4096);
         var sequence = 0;
@@ -179,9 +189,11 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
             var evt = TryReadEvent(artifactRoot, file, sequence++, line);
             if (evt is not null)
             {
-                yield return evt;
+                events.Add(evt);
             }
         }
+
+        return events;
     }
 
     private static ReplayTimelineEventResult? TryReadEvent(string artifactRoot, string file, int sequence, string line)
@@ -209,7 +221,13 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
         }
     }
 
-    private static bool Matches(ReplayTimelineEventResult evt, string? typeFilter, string? containsFilter, bool failuresOnly)
+    private static bool Matches(
+        ReplayTimelineEventResult evt,
+        string? typeFilter,
+        string? containsFilter,
+        DateTimeOffset? since,
+        DateTimeOffset? until,
+        bool failuresOnly)
     {
         if (failuresOnly && !evt.FailureRelevant)
         {
@@ -222,9 +240,67 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
             return false;
         }
 
-        return string.IsNullOrWhiteSpace(containsFilter) ||
-            evt.Type.Contains(containsFilter, StringComparison.OrdinalIgnoreCase) ||
-            evt.Detail.Contains(containsFilter, StringComparison.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(containsFilter) &&
+            !evt.Type.Contains(containsFilter, StringComparison.OrdinalIgnoreCase) &&
+            !evt.Detail.Contains(containsFilter, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (since is not null && (evt.Timestamp is null || evt.Timestamp < since))
+        {
+            return false;
+        }
+
+        return until is null || evt.Timestamp is not null && evt.Timestamp <= until;
+    }
+
+    private static IEnumerable<ReplayTimelineEventResult> SelectEvents(
+        IReadOnlyList<ReplayTimelineEventResult> events,
+        string? typeFilter,
+        string? containsFilter,
+        DateTimeOffset? since,
+        DateTimeOffset? until,
+        bool failuresOnly,
+        int contextCount)
+    {
+        if (contextCount == 0)
+        {
+            return events.Where(evt => Matches(evt, typeFilter, containsFilter, since, until, failuresOnly));
+        }
+
+        var selected = new SortedSet<int>();
+        for (var i = 0; i < events.Count; i++)
+        {
+            if (!Matches(events[i], typeFilter, containsFilter, since, until, failuresOnly))
+            {
+                continue;
+            }
+
+            var start = Math.Max(0, i - contextCount);
+            var end = Math.Min(events.Count - 1, i + contextCount);
+            for (var selectedIndex = start; selectedIndex <= end; selectedIndex++)
+            {
+                selected.Add(selectedIndex);
+            }
+        }
+
+        return selected.Select(index => events[index]);
+    }
+
+    private static DateTimeOffset? ParseTimestampOption(string? value, string optionName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        if (DateTimeOffset.TryParse(value, out var timestamp))
+        {
+            return timestamp;
+        }
+
+        throw new UsageException($"replay timeline --{optionName} must be a valid timestamp, for example 2026-05-18T10:00:02Z.");
     }
 
     private static DateTimeOffset? TryGetTimestamp(JsonElement root)

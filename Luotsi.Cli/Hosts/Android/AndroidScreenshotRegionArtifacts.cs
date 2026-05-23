@@ -69,7 +69,7 @@ internal sealed class AndroidScreenshotRegionArtifacts(ArtifactSession artifacts
         }
 
         var diffFile = $"{Slugify(label)}-screenshot-region-diff.png";
-        await WritePngArtifactAsync(diffFile, new PngRgbaImage(current.Width, current.Height, overlay)).ConfigureAwait(false);
+        await WritePngArtifactAsync(diffFile, current with {Rgba = overlay}).ConfigureAwait(false);
         return diffFile;
     }
 

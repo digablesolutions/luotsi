@@ -837,6 +837,63 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayTimeline_Filters_By_Timestamp_Window()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync([
+            "replay",
+            "timeline",
+            "--artifacts",
+            replayRoot,
+            "--since",
+            "2026-05-18T10:00:01Z",
+            "--until",
+            "2026-05-18T10:00:02Z"
+        ]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(1, data.GetProperty("event_count").GetInt32());
+        var evt = Assert.Single(data.GetProperty("events").EnumerateArray());
+        Assert.Equal("scenario_step_failed", evt.GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayTimeline_Includes_Context_Around_Filtered_Events()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "timeline", "--artifacts", replayRoot, "--failures", "--context", "1"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(3, data.GetProperty("event_count").GetInt32());
+        var events = data.GetProperty("events").EnumerateArray().ToArray();
+        Assert.Equal("scenario_run_started", events[0].GetProperty("type").GetString());
+        Assert.Equal("scenario_step_failed", events[1].GetProperty("type").GetString());
+        Assert.Equal("scenario_run_ended", events[2].GetProperty("type").GetString());
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayTimeline_FormatJsonl_Writes_Summary_And_Event_Lines()
     {
         var console = new FakeConsole();
