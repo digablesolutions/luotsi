@@ -963,6 +963,7 @@ public sealed partial class AppTests
         Assert.Equal("wait login button", primaryFailure.GetProperty("step").GetString());
         Assert.Equal("waitVisible", primaryFailure.GetProperty("action").GetString());
         Assert.Equal("not visible", primaryFailure.GetProperty("message").GetString());
+        Assert.Contains("--source-path session-timeline.jsonl --sequence 1 --context 3", primaryFailure.GetProperty("source_command").GetString(), StringComparison.Ordinal);
         Assert.Equal(1, data.GetProperty("artifact_counts").GetProperty("screenshots").GetInt32());
         Assert.Equal(1, data.GetProperty("artifact_counts").GetProperty("logs").GetInt32());
         var failureTimeline = data.GetProperty("failure_timeline").EnumerateArray().ToArray();
@@ -1001,6 +1002,7 @@ public sealed partial class AppTests
         var readme = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-capsule.md"));
         Assert.Contains("## Primary Failure", readme, StringComparison.Ordinal);
         Assert.Contains("not visible", readme, StringComparison.Ordinal);
+        Assert.Contains("Reopen:", readme, StringComparison.Ordinal);
         Assert.Contains("Scenario draft available: `False`", readme, StringComparison.Ordinal);
         Assert.Contains("Scenario draft reason:", readme, StringComparison.Ordinal);
         Assert.Contains("## Failure Timeline", readme, StringComparison.Ordinal);

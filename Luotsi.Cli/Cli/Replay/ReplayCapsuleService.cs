@@ -33,7 +33,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         var primaryFailureSession = failureSessions.FirstOrDefault();
         var primaryFailure = primaryFailureSession is null
             ? null
-            : CreatePrimaryFailure(primaryFailureSession);
+            : CreatePrimaryFailure(artifacts.Root, primaryFailureSession);
         var artifactCounts = CountArtifacts(files);
         var artifactManifest = ReplayCapsuleArtifactManifestBuilder.Build(files).ToArray();
         var failureTimeline = BuildFailureTimeline(artifacts.Root, failureSessions).ToArray();
@@ -76,19 +76,21 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         return result;
     }
 
-    private static ReplayCapsulePrimaryFailureResult CreatePrimaryFailure(SessionReplaySummary summary)
+    private static ReplayCapsulePrimaryFailureResult CreatePrimaryFailure(string artifactRoot, SessionReplaySummary summary)
     {
         var failedScenario = summary.FailureCapsule?.Scenarios.FirstOrDefault();
         var failedStep = failedScenario?.FailedStep;
+        var failureHighlight = summary.TimelineHighlights.FirstOrDefault(static entry => entry.IsFailureRelevant);
         var message = failedScenario?.Error?.Message ??
-            summary.TimelineHighlights.FirstOrDefault(static entry => entry.IsFailureRelevant)?.Detail;
+            failureHighlight?.Detail;
         return new ReplayCapsulePrimaryFailureResult(
             failedScenario?.Scenario,
             failedStep?.Name,
             failedStep?.Action,
             message,
             summary.FailureCapsulePath,
-            summary.TimelinePath);
+            summary.TimelinePath,
+            failureHighlight is null ? null : BuildTimelineSourceCommand(artifactRoot, summary.TimelinePath, failureHighlight.Sequence));
     }
 
     private static ReplayCapsuleArtifactCounts CountArtifacts(IReadOnlyList<string> files) =>
@@ -279,6 +281,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             AppendField(builder, "Message", primaryFailure.Message);
             AppendField(builder, "Failure capsule", primaryFailure.FailureCapsulePath);
             AppendField(builder, "Timeline", primaryFailure.TimelinePath);
+            AppendField(builder, "Reopen", primaryFailure.SourceCommand);
         }
 
         builder.AppendLine();

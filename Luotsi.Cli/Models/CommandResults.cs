@@ -446,7 +446,8 @@ public sealed record ReplayCapsulePrimaryFailureResult(
     string? Action,
     string? Message,
     string? FailureCapsulePath,
-    string? TimelinePath);
+    string? TimelinePath,
+    string? SourceCommand);
 
 public sealed record ReplayCapsuleScenarioDraftArtifacts(
     string? SummaryPath,
