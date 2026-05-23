@@ -432,6 +432,7 @@ public sealed record ReplayCapsuleResult(
     bool ScenarioDraftAvailable,
     string ScenarioDraftReason,
     ReplayCapsuleScenarioDraftArtifacts ScenarioDraftArtifacts,
+    ReplayCapsuleScenarioDraftSummary? ScenarioDraftSummary,
     string? ReadmePath,
     string? JsonPath,
     ReplayCapsulePrimaryFailureResult? PrimaryFailure,
@@ -453,6 +454,13 @@ public sealed record ReplayCapsuleScenarioDraftArtifacts(
     string? SummaryPath,
     string? MarkdownPath,
     string? ScenarioPath);
+
+public sealed record ReplayCapsuleScenarioDraftSummary(
+    string? Confidence,
+    int StepCount,
+    int WarningCount,
+    int ReviewItemCount,
+    int NormalizationCount);
 
 public sealed record ReplayCapsuleArtifactCounts(
     int Screenshots,

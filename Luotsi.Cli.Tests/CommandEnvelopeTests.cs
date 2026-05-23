@@ -1059,7 +1059,21 @@ public sealed partial class AppTests
         fileSystem.AddFile(Path.Join(replayRoot, "scenario-draft-summary.json"), """
         {
           "schema": "luotsi-scenario-draft.v1",
-          "confidence": "medium"
+          "confidence": "medium",
+          "scenario": {
+            "steps": [
+              { "action": "waitVisible" },
+              { "action": "tapText" }
+            ]
+          },
+          "warnings": ["Review selectors."],
+          "reviewItems": [
+            { "severity": "info" },
+            { "severity": "warning" }
+          ],
+          "normalizations": [
+            { "kind": "duplicate_wait" }
+          ]
         }
         """);
         fileSystem.AddFile(Path.Join(replayRoot, "scenario-draft.md"), "# Luotsi Scenario Draft\n\n## Review Checklist\n");
@@ -1080,12 +1094,20 @@ public sealed partial class AppTests
         Assert.Equal("scenario-draft-summary.json", draftArtifacts.GetProperty("summary_path").GetString());
         Assert.Equal("scenario-draft.md", draftArtifacts.GetProperty("markdown_path").GetString());
         Assert.Equal("draft-scenario.json", draftArtifacts.GetProperty("scenario_path").GetString());
+        var draftSummary = data.GetProperty("scenario_draft_summary");
+        Assert.Equal("medium", draftSummary.GetProperty("confidence").GetString());
+        Assert.Equal(2, draftSummary.GetProperty("step_count").GetInt32());
+        Assert.Equal(1, draftSummary.GetProperty("warning_count").GetInt32());
+        Assert.Equal(2, draftSummary.GetProperty("review_item_count").GetInt32());
+        Assert.Equal(1, draftSummary.GetProperty("normalization_count").GetInt32());
         Assert.Contains(data.GetProperty("suggested_commands").EnumerateArray(), command =>
             command.GetProperty("command").GetString()!.Contains("Review Checklist", StringComparison.Ordinal));
         var readme = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-capsule.md"));
         Assert.Contains("Scenario draft summary: `scenario-draft-summary.json`", readme, StringComparison.Ordinal);
         Assert.Contains("Scenario draft review: `scenario-draft.md`", readme, StringComparison.Ordinal);
         Assert.Contains("Scenario draft file: `draft-scenario.json`", readme, StringComparison.Ordinal);
+        Assert.Contains("Scenario draft confidence: `medium`", readme, StringComparison.Ordinal);
+        Assert.Contains("Scenario draft review items: `2`", readme, StringComparison.Ordinal);
     }
 
     [Fact]

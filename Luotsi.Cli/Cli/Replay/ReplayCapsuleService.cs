@@ -39,6 +39,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         var failureTimeline = BuildFailureTimeline(artifacts.Root, failureSessions).ToArray();
         var scenarioDraft = InspectScenarioDraftReadiness(artifacts.Root, files);
         var scenarioDraftArtifacts = FindScenarioDraftArtifacts(files);
+        var scenarioDraftSummary = ReadScenarioDraftSummary(artifacts.Root, scenarioDraftArtifacts.SummaryPath);
         var commandHints = BuildCommandHints(artifacts.Root, primaryFailure, scenarioDraft.Available, scenarioDraftArtifacts).ToArray();
         var readmePath = options.HasFlag("write-readme")
             ? Path.Join(artifacts.Root, CapsuleReadmeFileName)
@@ -55,6 +56,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             scenarioDraft.Available,
             scenarioDraft.Reason,
             scenarioDraftArtifacts,
+            scenarioDraftSummary,
             readmePath,
             jsonPath,
             primaryFailure,
@@ -70,7 +72,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
 
         if (readmePath is not null)
         {
-            await artifacts.WriteTextAsync(CapsuleReadmeFileName, BuildReadme(artifacts.Root, summaries.Count, failureSessions.Length, scenarioDraft, scenarioDraftArtifacts, primaryFailure, artifactCounts, artifactManifest, failureTimeline, commandHints)).ConfigureAwait(false);
+            await artifacts.WriteTextAsync(CapsuleReadmeFileName, BuildReadme(artifacts.Root, summaries.Count, failureSessions.Length, scenarioDraft, scenarioDraftArtifacts, scenarioDraftSummary, primaryFailure, artifactCounts, artifactManifest, failureTimeline, commandHints)).ConfigureAwait(false);
         }
 
         return result;
@@ -180,6 +182,32 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             !fileName.Equals("scenario-draft-summary.json", StringComparison.OrdinalIgnoreCase);
     }
 
+    private ReplayCapsuleScenarioDraftSummary? ReadScenarioDraftSummary(string artifactRoot, string? summaryPath)
+    {
+        if (string.IsNullOrWhiteSpace(summaryPath))
+        {
+            return null;
+        }
+
+        var fullPath = Path.Join(artifactRoot, summaryPath.Replace('/', Path.DirectorySeparatorChar));
+        try
+        {
+            using var stream = _fileSystem.OpenRead(fullPath);
+            using var document = JsonDocument.Parse(stream);
+            var root = document.RootElement;
+            return new ReplayCapsuleScenarioDraftSummary(
+                TryGetString(root, "confidence", out var confidence) ? confidence : null,
+                CountScenarioSteps(root),
+                CountArray(root, "warnings"),
+                CountArray(root, "reviewItems"),
+                CountArray(root, "normalizations"));
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     private ReplayCapsuleScenarioDraftReadiness InspectScenarioDraftReadiness(string artifactRoot, IReadOnlyList<string> files)
     {
         var timelineCount = 0;
@@ -249,6 +277,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         int failureCount,
         ReplayCapsuleScenarioDraftReadiness scenarioDraft,
         ReplayCapsuleScenarioDraftArtifacts scenarioDraftArtifacts,
+        ReplayCapsuleScenarioDraftSummary? scenarioDraftSummary,
         ReplayCapsulePrimaryFailureResult? primaryFailure,
         ReplayCapsuleArtifactCounts artifactCounts,
         IReadOnlyList<ReplayCapsuleArtifactManifestEntry> artifactManifest,
@@ -266,6 +295,15 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         AppendField(builder, "Scenario draft summary", scenarioDraftArtifacts.SummaryPath);
         AppendField(builder, "Scenario draft review", scenarioDraftArtifacts.MarkdownPath);
         AppendField(builder, "Scenario draft file", scenarioDraftArtifacts.ScenarioPath);
+        if (scenarioDraftSummary is not null)
+        {
+            AppendField(builder, "Scenario draft confidence", scenarioDraftSummary.Confidence);
+            builder.AppendLine($"- Scenario draft steps: `{scenarioDraftSummary.StepCount}`");
+            builder.AppendLine($"- Scenario draft warnings: `{scenarioDraftSummary.WarningCount}`");
+            builder.AppendLine($"- Scenario draft review items: `{scenarioDraftSummary.ReviewItemCount}`");
+            builder.AppendLine($"- Scenario draft normalizations: `{scenarioDraftSummary.NormalizationCount}`");
+        }
+
         builder.AppendLine();
         builder.AppendLine("## Primary Failure");
         builder.AppendLine();
@@ -418,6 +456,24 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         value = property.GetString() ?? string.Empty;
         return !string.IsNullOrWhiteSpace(value);
     }
+
+    private static int CountScenarioSteps(JsonElement root)
+    {
+        if (!root.TryGetProperty("scenario", out var scenario) ||
+            scenario.ValueKind != JsonValueKind.Object ||
+            !scenario.TryGetProperty("steps", out var steps) ||
+            steps.ValueKind != JsonValueKind.Array)
+        {
+            return 0;
+        }
+
+        return steps.GetArrayLength();
+    }
+
+    private static int CountArray(JsonElement root, string name) =>
+        root.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.Array
+            ? property.GetArrayLength()
+            : 0;
 
     private static string Quote(string value) =>
         value.Contains(' ', StringComparison.Ordinal) ? "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"" : value;
