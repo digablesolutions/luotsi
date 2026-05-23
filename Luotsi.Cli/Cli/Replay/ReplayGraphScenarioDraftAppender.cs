@@ -49,6 +49,7 @@ internal sealed class ReplayGraphScenarioDraftAppender(IFileSystem fileSystem)
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
+            _ = ex;
         }
     }
 

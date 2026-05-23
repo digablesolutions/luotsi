@@ -492,14 +492,10 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
         var steps = new List<DraftStep>();
         if (data.TryGetProperty("events", out var events) && events.ValueKind == JsonValueKind.Array)
         {
-            foreach (var telemetryEvent in events.EnumerateArray())
-            {
-                var step = CreateTelemetryStep(telemetryEvent);
-                if (step is not null)
-                {
-                    steps.Add(new DraftStep(step, "telemetry", "command_result", "telemetry", step.Event ?? step.Step ?? step.Text, "medium"));
-                }
-            }
+            steps.AddRange(events.EnumerateArray()
+                .Select(CreateTelemetryStep)
+                .OfType<ScenarioStep>()
+                .Select(static step => new DraftStep(step, "telemetry", "command_result", "telemetry", step.Event ?? step.Step ?? step.Text, "medium")));
         }
         else
         {

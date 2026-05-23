@@ -776,7 +776,7 @@ public sealed partial class AppTests
         Assert.Equal("waitStep", steps[1].GetProperty("action").GetString());
         Assert.Equal("STEP_IDLE", steps[1].GetProperty("step").GetString());
         Assert.Equal(2, data.GetProperty("step_origins").GetArrayLength());
-        Assert.Equal(2, data.GetProperty("source_summaries").GetArrayLength());
+        Assert.Equal(3, data.GetProperty("source_summaries").GetArrayLength());
         var normalizations = data.GetProperty("normalizations").EnumerateArray().ToArray();
         Assert.Equal(2, normalizations.Length);
         Assert.All(normalizations, normalization => Assert.Equal("duplicate_wait", normalization.GetProperty("kind").GetString()));

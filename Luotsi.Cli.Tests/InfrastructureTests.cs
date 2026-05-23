@@ -171,7 +171,7 @@ public sealed partial class AppTests
         Assert.Contains("view_share_client_connected | endpoint=127.0.0.1:9000 | remote_endpoint=10.0.0.25:40122 | observer_count=1 | reason=observer_joined", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("view_stats | decoded_frames=120 | presented_frames=118 | dropped_frames=2 | decode_fps=29.5 | present_fps=29.0 | end_to_end_latency_ms=142", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("view_error | error=transport: Unexpected end of stream", markdownIndex, StringComparison.Ordinal);
-        Assert.Contains("## Reports", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("## Replay", markdownIndex, StringComparison.Ordinal);
 
         Assert.Contains("<h2>Replay Sessions</h2>", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("<strong>view 192.168.0.134:5555</strong>", htmlIndex, StringComparison.Ordinal);
@@ -320,7 +320,7 @@ public sealed partial class AppTests
         {
             schema = ResultSchemas.ScenarioDraft,
             confidence = "medium",
-            source_summaries = new[] { new { source = "inspect_command", step_count = 2, normalization_count = 0 } },
+            sourceSummaries = new[] { new { source = "inspect_command", stepCount = 2, normalizationCount = 0 } },
             warnings = new[] { "Review generated selectors before CI use." },
             normalizations = new[] { new { kind = "duplicate_wait" } },
             scenario = new
