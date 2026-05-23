@@ -36,7 +36,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             : CreatePrimaryFailure(primaryFailureSession);
         var artifactCounts = CountArtifacts(files);
         var artifactManifest = ReplayCapsuleArtifactManifestBuilder.Build(files).ToArray();
-        var failureTimeline = BuildFailureTimeline(failureSessions).ToArray();
+        var failureTimeline = BuildFailureTimeline(artifacts.Root, failureSessions).ToArray();
         var scenarioDraft = InspectScenarioDraftReadiness(artifacts.Root, files);
         var scenarioDraftArtifacts = FindScenarioDraftArtifacts(files);
         var commandHints = BuildCommandHints(artifacts.Root, primaryFailure, scenarioDraft.Available, scenarioDraftArtifacts).ToArray();
@@ -101,7 +101,9 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             Count(files, IsReport),
             Count(files, static path => Path.GetFileName(path).Equals(SessionReplayArtifacts.TimelineFileName, StringComparison.OrdinalIgnoreCase)));
 
-    private static IEnumerable<ReplayCapsuleTimelineHighlightResult> BuildFailureTimeline(IEnumerable<SessionReplaySummary> failureSessions)
+    private static IEnumerable<ReplayCapsuleTimelineHighlightResult> BuildFailureTimeline(
+        string artifactRoot,
+        IEnumerable<SessionReplaySummary> failureSessions)
     {
         foreach (var summary in failureSessions)
         {
@@ -117,7 +119,8 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
                     highlight.IsFailureRelevant,
                     highlight.ScenarioId,
                     highlight.Scenario,
-                    highlight.StepIndex);
+                    highlight.StepIndex,
+                    BuildTimelineSourceCommand(artifactRoot, summary.TimelinePath, highlight.Sequence));
             }
         }
     }
@@ -287,8 +290,8 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         }
         else
         {
-            builder.AppendLine("| Time | Type | Scenario | Step | Detail |");
-            builder.AppendLine("|---|---|---|---|---|");
+            builder.AppendLine("| Time | Type | Scenario | Step | Detail | Reopen |");
+            builder.AppendLine("|---|---|---|---|---|---|");
             foreach (var entry in failureTimeline)
             {
                 builder.Append("| ");
@@ -301,6 +304,8 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
                 builder.Append(EscapeMarkdown(entry.StepIndex?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty));
                 builder.Append(" | ");
                 builder.Append(EscapeMarkdown(entry.Detail));
+                builder.Append(" | ");
+                builder.Append(EscapeMarkdown(entry.SourceCommand));
                 builder.AppendLine(" |");
             }
         }
@@ -413,6 +418,9 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
 
     private static string Quote(string value) =>
         value.Contains(' ', StringComparison.Ordinal) ? "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"" : value;
+
+    private static string BuildTimelineSourceCommand(string artifactRoot, string timelinePath, int sequence) =>
+        $"luotsi replay timeline --artifacts {Quote(artifactRoot)} --source-path {Quote(timelinePath)} --sequence {sequence} --context 3";
 
     private sealed record ReplayCapsuleScenarioDraftReadiness(bool Available, string Reason);
 }

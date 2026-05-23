@@ -970,6 +970,7 @@ public sealed partial class AppTests
         Assert.Equal("scenario_step_failed", failureTimeline[0].GetProperty("type").GetString());
         Assert.Contains("not visible", failureTimeline[0].GetProperty("detail").GetString(), StringComparison.Ordinal);
         Assert.Equal("login smoke", failureTimeline[0].GetProperty("scenario").GetString());
+        Assert.Contains("--source-path session-timeline.jsonl --sequence 1 --context 3", failureTimeline[0].GetProperty("source_command").GetString(), StringComparison.Ordinal);
         var manifest = data.GetProperty("artifact_manifest").EnumerateArray().ToArray();
         Assert.Contains(manifest, artifact =>
             artifact.GetProperty("path").GetString() == "session-timeline.jsonl" &&
@@ -1004,6 +1005,7 @@ public sealed partial class AppTests
         Assert.Contains("Scenario draft reason:", readme, StringComparison.Ordinal);
         Assert.Contains("## Failure Timeline", readme, StringComparison.Ordinal);
         Assert.Contains("scenario_step_failed", readme, StringComparison.Ordinal);
+        Assert.Contains("--source-path session-timeline.jsonl --sequence 1 --context 3", readme, StringComparison.Ordinal);
         Assert.Contains("## Artifact Manifest", readme, StringComparison.Ordinal);
         Assert.Contains("failures/wait-login-button.png", readme, StringComparison.Ordinal);
         Assert.Contains("luotsi replay timeline", readme, StringComparison.Ordinal);

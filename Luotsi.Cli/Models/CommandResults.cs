@@ -478,7 +478,8 @@ public sealed record ReplayCapsuleTimelineHighlightResult(
     bool FailureRelevant,
     string? ScenarioId,
     string? Scenario,
-    int? StepIndex);
+    int? StepIndex,
+    string SourceCommand);
 
 public sealed record ReplayCapsuleCommandHint(
     string Command,
