@@ -13,6 +13,7 @@ internal static class ReplayGraphInsightBuilder
         AddSelectorInsight(nodes, edges, insights);
         AddTelemetryInsight(nodes, insights);
         AddScenarioDraftInsight(nodes, insights);
+        AddTransitionInsight(edges, insights);
         return insights;
     }
 
@@ -110,6 +111,27 @@ internal static class ReplayGraphInsightBuilder
             "Scenario draft provenance is present; use generated_step and draft_source edges to audit where each step came from.",
             drafts.Select(static node => node.Id).ToArray(),
             []));
+    }
+
+    private static void AddTransitionInsight(IReadOnlyList<ReplayGraphEdgeResult> edges, ICollection<ReplayGraphInsightResult> insights)
+    {
+        var failureTransitions = edges
+            .Where(static edge => string.Equals(edge.Kind, "transitions_to", StringComparison.Ordinal) &&
+                edge.Properties.TryGetValue("category", out var category) &&
+                string.Equals(category, "action_to_failure", StringComparison.OrdinalIgnoreCase))
+            .Take(8)
+            .ToArray();
+        if (failureTransitions.Length == 0)
+        {
+            return;
+        }
+
+        insights.Add(new ReplayGraphInsightResult(
+            "transition",
+            "warning",
+            $"Graph contains {failureTransitions.Length} action-to-failure transition(s) that connect preceding actions to failure events.",
+            [],
+            failureTransitions.Select(EdgeId).ToArray()));
     }
 
     private static string EdgeId(ReplayGraphEdgeResult edge) => edge.From + " -> " + edge.Kind + " -> " + edge.To;

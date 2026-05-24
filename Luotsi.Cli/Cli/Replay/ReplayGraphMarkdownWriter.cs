@@ -20,6 +20,7 @@ internal static class ReplayGraphMarkdownWriter
         AppendFailureSummary(builder, graph);
         AppendActions(builder, graph);
         AppendInsights(builder, graph);
+        AppendTransitions(builder, graph);
         AppendKindTables(builder, graph);
         AppendNodes(builder, graph);
         AppendEdges(builder, graph);
@@ -107,6 +108,29 @@ internal static class ReplayGraphMarkdownWriter
         builder.AppendLine();
     }
 
+    private static void AppendTransitions(StringBuilder builder, ReplayGraphResult graph)
+    {
+        var transitions = graph.Edges
+            .Where(static edge => string.Equals(edge.Kind, "transitions_to", StringComparison.Ordinal))
+            .Take(20)
+            .ToArray();
+        if (transitions.Length == 0)
+        {
+            return;
+        }
+
+        builder.AppendLine("## Transitions");
+        builder.AppendLine();
+        builder.AppendLine("| Category | From | To | Elapsed ms |");
+        builder.AppendLine("|---|---|---|---:|");
+        foreach (var transition in transitions)
+        {
+            builder.AppendLine($"| {EscapeMarkdown(GetProperty(transition, "category"))} | {EscapeMarkdown(GetProperty(transition, "from_type"))} | {EscapeMarkdown(GetProperty(transition, "to_type"))} | {EscapeMarkdown(GetProperty(transition, "elapsed_ms"))} |");
+        }
+
+        builder.AppendLine();
+    }
+
     private static void AppendNodes(StringBuilder builder, ReplayGraphResult graph)
     {
         builder.AppendLine("## Nodes");
@@ -137,4 +161,7 @@ internal static class ReplayGraphMarkdownWriter
         (value ?? string.Empty).Replace("|", "\\|", StringComparison.Ordinal)
             .Replace("\r", " ", StringComparison.Ordinal)
             .Replace("\n", " ", StringComparison.Ordinal);
+
+    private static string? GetProperty(ReplayGraphEdgeResult edge, string name) =>
+        edge.Properties.TryGetValue(name, out var value) ? value : null;
 }

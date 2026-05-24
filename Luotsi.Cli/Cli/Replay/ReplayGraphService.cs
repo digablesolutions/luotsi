@@ -78,11 +78,9 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
 
             if (previousEvent is not null && string.Equals(previousEvent.Path, evt.Path, StringComparison.Ordinal))
             {
-                edges.Add(new ReplayGraphEdgeResult(
-                    "event:" + previousEvent.Path + ":" + previousEvent.Sequence.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    eventId,
-                    "next",
-                    new Dictionary<string, string?>()));
+                var previousEventId = "event:" + previousEvent.Path + ":" + previousEvent.Sequence.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                edges.Add(new ReplayGraphEdgeResult(previousEventId, eventId, "next", new Dictionary<string, string?>()));
+                edges.Add(new ReplayGraphEdgeResult(previousEventId, eventId, "transitions_to", BuildTransitionProperties(previousEvent, evt)));
             }
 
             if (evt.FailureRelevant)
@@ -313,6 +311,63 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
     {
         var stable = StableIdChars.Replace(value.Trim(), "-").Trim('-');
         return stable.Length == 0 ? "value" : stable.ToLowerInvariant();
+    }
+
+    private static IReadOnlyDictionary<string, string?> BuildTransitionProperties(ReplayTimelineEventResult from, ReplayTimelineEventResult to)
+    {
+        var properties = new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["from_type"] = from.Type,
+            ["to_type"] = to.Type,
+            ["from_detail"] = from.Detail,
+            ["to_detail"] = to.Detail,
+            ["category"] = ClassifyTransition(from, to)
+        };
+
+        if (from.Timestamp is not null && to.Timestamp is not null)
+        {
+            properties["elapsed_ms"] = (to.Timestamp.Value - from.Timestamp.Value).TotalMilliseconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        var fromAction = FirstProperty(from, "action", "command");
+        var toAction = FirstProperty(to, "action", "command");
+        if (!string.IsNullOrWhiteSpace(fromAction))
+        {
+            properties["from_action"] = fromAction;
+        }
+
+        if (!string.IsNullOrWhiteSpace(toAction))
+        {
+            properties["to_action"] = toAction;
+        }
+
+        return properties;
+    }
+
+    private static string ClassifyTransition(ReplayTimelineEventResult from, ReplayTimelineEventResult to)
+    {
+        if (to.FailureRelevant)
+        {
+            var action = FirstProperty(from, "action", "command") ?? FirstProperty(to, "action", "command");
+            return string.IsNullOrWhiteSpace(action) ? "to_failure" : "action_to_failure";
+        }
+
+        if (from.FailureRelevant)
+        {
+            return "from_failure";
+        }
+
+        if (IsScreenStateEvent(to))
+        {
+            return "screen_changed";
+        }
+
+        if (IsTelemetryEvent(to))
+        {
+            return "telemetry_observed";
+        }
+
+        return "progression";
     }
 
     private static IReadOnlyDictionary<string, int> CountKinds(IReadOnlyList<ReplayGraphNodeResult> nodes) =>

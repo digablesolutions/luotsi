@@ -56,6 +56,7 @@ Filtering returns a focused subgraph with one-hop context. `total_node_count` an
 | Kind | Meaning |
 |---|---|
 | `next` | Timeline ordering within one source timeline file. |
+| `transitions_to` | Semantic timeline transition with `from_type`, `to_type`, `category`, details, and optional `elapsed_ms`. |
 | `indicates` | Event points to a failure node. |
 | `has_capsule` | Session has a failure capsule. |
 | `contains` | Capsule contains a scenario. |
@@ -77,6 +78,7 @@ luotsi replay graph --artifacts artifacts/run --node-kind selector --write-markd
 luotsi replay graph --artifacts artifacts/run --action waitVisible --limit 50
 luotsi replay graph --artifacts artifacts/run --selector "Sign in" --limit 50
 luotsi replay graph --artifacts artifacts/run --edge-kind has_artifact --limit 50
+luotsi replay graph --artifacts artifacts/run --edge-kind transitions_to --limit 50
 luotsi replay graph --artifacts artifacts/run --node failure:session-timeline.jsonl:3 --depth 2
 ```
 

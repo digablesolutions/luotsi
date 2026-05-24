@@ -1356,6 +1356,7 @@ public sealed partial class AppTests
         Assert.Equal(1, data.GetProperty("node_kinds").GetProperty("action").GetInt32());
         Assert.Contains(data.GetProperty("edges").EnumerateArray(), edge => edge.GetProperty("kind").GetString() == "has_artifact");
         Assert.Contains(data.GetProperty("edges").EnumerateArray(), edge => edge.GetProperty("kind").GetString() == "describes_action");
+        Assert.Contains(data.GetProperty("edges").EnumerateArray(), edge => edge.GetProperty("kind").GetString() == "transitions_to");
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-graph.json")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-graph.md")));
         Assert.False(fileSystem.FileExists(Path.Join(replayRoot, "replay-timeline.json")));
@@ -1364,6 +1365,33 @@ public sealed partial class AppTests
         var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-graph.md"));
         Assert.Contains("## What Failed", markdown, StringComparison.Ordinal);
         Assert.Contains("## What Agents Can Act On", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Transitions", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayGraph_Classifies_Action_To_Failure_Transitions()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot, "--edge-kind", "transitions_to"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        var transition = Assert.Single(data.GetProperty("edges").EnumerateArray(), edge =>
+            edge.GetProperty("properties").TryGetProperty("category", out var category) &&
+            category.GetString() == "action_to_failure");
+        Assert.Equal("scenario_run_started", transition.GetProperty("properties").GetProperty("from_type").GetString());
+        Assert.Equal("scenario_step_failed", transition.GetProperty("properties").GetProperty("to_type").GetString());
+        Assert.Contains(data.GetProperty("insights").EnumerateArray(), insight => insight.GetProperty("kind").GetString() == "transition");
     }
 
     [Fact]
