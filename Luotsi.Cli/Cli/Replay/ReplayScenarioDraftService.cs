@@ -831,9 +831,7 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
                 DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var timestamp)
                     ? (DateTimeOffset?)timestamp
                     : null)
-            .Where(timestamp => timestamp.HasValue)
-            .Select(timestamp => timestamp!.Value)
-            .FirstOrDefault();
+            .FirstOrDefault(timestamp => timestamp.HasValue);
     }
 
     private sealed record DraftTimelineEvent(
