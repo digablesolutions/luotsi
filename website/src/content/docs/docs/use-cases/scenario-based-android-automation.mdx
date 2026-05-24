@@ -1,0 +1,41 @@
+---
+title: Scenario-Based Android Automation
+description: Use Luotsi when the Android workflow is stable enough to codify as JSON playbooks and run repeatedly with reports and replay artifacts.
+---
+
+If you are looking for scenario-based Android automation, Luotsi fits when the flow is stable enough to move out of exploratory inspection and into JSON playbooks that engineers, CI, and shared labs can run the same way.
+
+## What scenario mode gives you
+
+- JSON playbooks with validated steps and metadata.
+- The same command surface locally and in CI.
+- Report outputs such as JSON, JUnit, and replay artifacts.
+- A clear handoff from live exploration into repeatable automation.
+
+## Recommended starting path
+
+```bash
+luotsi scenario-validate --path scenarios
+luotsi run --path scenarios --device <serial>
+luotsi replay summarize --artifacts ./artifacts/<run>
+```
+
+Use `inspect` first when the flow is still changing. Use scenarios when the next goal is repeatability.
+
+## Strong fit when
+
+- The workflow needs to run in both developer and CI contexts.
+- You want the scenario definition to stay small and explicit.
+- You care about artifact capture and replay as part of the automation contract.
+
+## Weaker fit when
+
+- The flow is still too exploratory and changes every session.
+- You need a recorder-style visual authoring tool instead of JSON playbooks.
+
+## Open these next
+
+- [Scenario Playbooks](../../reference/scenario-playbooks/)
+- [Inspect and Scenarios](../../core-workflows/inspect-and-scenarios/)
+- [Android CI Device Lab Workflows](../android-ci-device-lab-workflows/)
+- [Replay and Artifacts](../../core-workflows/replay-and-artifacts/)

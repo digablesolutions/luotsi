@@ -1,0 +1,45 @@
+---
+title: AI Agent Android Automation
+description: Use Luotsi when you need AI agents to inspect, steer, and replay real Android device workflows over adb.
+---
+
+If you searched for AI agent Android automation, the practical question is whether your agent can inspect real device state, act through a host-side control loop, and recover with replay artifacts. That is exactly the slice Luotsi is built to cover.
+
+## What Luotsi gives an agent loop
+
+- `inspect` for structured JSONL exploration of the current screen.
+- `view` when a human still wants the mirrored device while the agent consumes stream state.
+- `run` when the flow is stable enough to codify as a JSON scenario.
+- `replay` when the device session is over and the next question is summarization, search, or triage.
+
+## Recommended starting path
+
+```bash
+luotsi doctor --device <serial> --fix
+luotsi inspect --device <serial>
+luotsi scenario-validate --path scenarios
+luotsi run --path scenarios --device <serial>
+luotsi replay summarize --artifacts ./artifacts/<run>
+```
+
+This progression keeps the agent loop on the host machine: explore first, codify second, replay after the run.
+
+## Strong fit when
+
+- The agent needs real-device Android state rather than browser DOM state.
+- You want machine-readable JSONL sessions instead of a window-only control path.
+- You want the same runtime to support human debugging, agent exploration, and CI scenarios.
+- You need artifacts after the run, not just a final pass or fail.
+
+## Weaker fit when
+
+- The workflow never leaves a browser automation surface.
+- You need a cloud platform to supply both the devices and the orchestration model.
+- You only care about scripted end-to-end runs and not agent-driven exploration.
+
+## Open these next
+
+- [AI Agent Workflows](../../core-workflows/ai-agent-workflows/)
+- [Output Envelopes](../../reference/output-envelopes/)
+- [Replay and Artifacts](../../core-workflows/replay-and-artifacts/)
+- [Scenario Playbooks](../../reference/scenario-playbooks/)

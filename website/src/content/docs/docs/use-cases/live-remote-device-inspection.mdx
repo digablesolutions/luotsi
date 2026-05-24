@@ -1,0 +1,41 @@
+---
+title: Live Remote Device Inspection
+description: Use Luotsi when you need remote Android device inspection with a live mirror, structured state, and adb-first host-side control.
+---
+
+If you are looking for live remote device inspection, Luotsi fits when you need more than a screen share: a real Android device mirror, structured JSONL state, host-side controls, and artifacts that survive the session.
+
+## Two inspection surfaces
+
+- `view` for the live mirrored device window, operator controls, screenshots, and observer sharing.
+- `inspect` for structured JSONL exploration when the machine-readable state matters more than the pixels.
+
+Use `view` when people need to see and steer the device. Use `inspect` when the integration cares more about state transitions, command results, and deltas.
+
+## Recommended starting path
+
+```bash
+luotsi doctor --device <serial> --fix
+luotsi view --device <serial>
+luotsi inspect --device <serial>
+```
+
+The right surface depends on whether the session is operator-led, agent-led, or mixed.
+
+## Strong fit when
+
+- You need a live mirror and machine-readable state in the same stack.
+- You want adb-first remote inspection rather than a separate device server model.
+- You need screenshots, timeline data, or replay artifacts after the live session.
+
+## Weaker fit when
+
+- A plain screen share is enough and no structured output is required.
+- The workflow is entirely offline and only needs replay, not inspection.
+
+## Open these next
+
+- [Live View](../../core-workflows/live-view/)
+- [Inspect and Scenarios](../../core-workflows/inspect-and-scenarios/)
+- [AI Agent Workflows](../../core-workflows/ai-agent-workflows/)
+- [Troubleshooting](../../getting-started/troubleshooting/)

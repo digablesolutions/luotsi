@@ -15,18 +15,63 @@ The release workflow rejects tags outside that shape.
 
 1. Make sure `main` is green. The required branch protection check should be
    `CI result`.
-2. Create and push a signed or annotated tag:
+2. Before tagging a public release, work through the release-day checklist in
+   [docs/distribution-playbook.md](docs/distribution-playbook.md).
+   Minimum release-prep steps:
+
+   - Confirm repo description, homepage, and topics are current.
+   - Upload the repository social preview manually in GitHub settings if it is
+     still missing. Current candidate asset:
+     `website/public/images/buggy-commands.png`.
+   - Confirm the docs hub, AI agent workflows page, installation page, and
+     replay page match the release.
+   - Prepare a handwritten release intro by copying
+     `.github/release-notes/stable.template.md` to
+     `.github/release-notes/stable.md`, copying
+     `.github/release-notes/prerelease.template.md` to
+     `.github/release-notes/prerelease.md`, or creating
+     `.github/release-notes/<tag>.md` directly.
+
+3. Create and push a signed or annotated tag:
 
    ```powershell
    git tag -a v1.2.3 -m "Luotsi v1.2.3"
    git push origin v1.2.3
    ```
 
-3. GitHub Actions runs `.github/workflows/release.yml`.
-4. The workflow verifies that the tag commit is reachable from the repository's
+4. GitHub Actions runs `.github/workflows/release.yml`.
+5. The workflow verifies that the tag commit is reachable from the repository's
    default branch, validates the source with locked package restore, publishes
    all supported runtime archives, writes SHA-256 checksums, creates artifact
    attestations, and creates a GitHub Release.
+
+## Handwritten Release Intro
+
+The release workflow prepends optional checked-in text above GitHub-generated
+release notes.
+
+The workflow only consumes non-template files. Use one of these active intro
+files:
+
+- `.github/release-notes/stable.md` for normal public releases.
+- `.github/release-notes/prerelease.md` for prereleases such as `-rc` tags.
+- `.github/release-notes/<tag>.md` for tag-specific messaging that should only
+  apply to one release.
+
+The tag-specific file wins over the stable or prerelease default.
+
+Copy from one of these templates under `.github/release-notes/` and keep the
+intro short:
+
+- `.github/release-notes/stable.template.md`
+- `.github/release-notes/prerelease.template.md`
+
+The point is to add the top-level framing that generated release notes cannot
+infer:
+
+1. What changed for agent builders.
+2. What changed for real-device engineers or CI users.
+3. Which docs page to open first.
 
 ## Produced Assets
 

@@ -1,14 +1,56 @@
 ---
 import '../styles/site.css';
 
+const siteUrl = Astro.site ?? new URL('https://digablesolutions.github.io');
 const base = import.meta.env.BASE_URL.endsWith('/')
 	? import.meta.env.BASE_URL
 	: `${import.meta.env.BASE_URL}/`;
 
+const pageUrl = new URL(base, siteUrl).toString();
 const heroImage = `${base}images/buggy-commands.png`;
+const heroImageUrl = new URL(heroImage, siteUrl).toString();
 const docsHref = `${base}docs/`;
+const docsUrl = new URL(docsHref, siteUrl).toString();
 const installHref = `${base}docs/getting-started/installation/`;
 const quickstartHref = `${base}docs/getting-started/quickstart/`;
+const githubHref = 'https://github.com/digablesolutions/luotsi';
+const releasesHref = `${githubHref}/releases`;
+const engineeringLeadHref = `${base}docs/use-cases/android-automation-for-engineering-leads/`;
+
+const pageTitle = 'Luotsi | Host-Driven Android Automation For AI Agents, Engineers, And CI';
+const pageDescription = 'Luotsi is a host-driven Android automation CLI for AI agents, mobile engineers, and CI systems. Inspect over JSONL, mirror live view, run scenarios, and replay failures with durable artifacts.';
+const keywordsContent = 'android automation cli, ai agent android automation, adb automation, android ui inspection, mobile qa tooling, device lab automation, replay triage';
+
+const softwareSchema = {
+	'@context': 'https://schema.org',
+	'@type': 'SoftwareApplication',
+	name: 'Luotsi',
+	description: pageDescription,
+	url: pageUrl,
+	image: heroImageUrl,
+	applicationCategory: 'DeveloperApplication',
+	operatingSystem: 'Windows, macOS, Linux',
+	downloadUrl: releasesHref,
+	codeRepository: githubHref,
+	isAccessibleForFree: true,
+	offers: {
+		'@type': 'Offer',
+		price: '0',
+		priceCurrency: 'USD',
+	},
+	author: {
+		'@type': 'Organization',
+		name: 'Digable Solutions',
+	},
+	featureList: [
+		'ADB-first Android device automation',
+		'JSONL inspect sessions for agent workflows',
+		'Live mirrored device view with host-side controls',
+		'Scenario playbooks with artifact capture',
+		'Replay-driven failure triage and artifact browsing',
+	],
+	sameAs: [githubHref, docsUrl],
+};
 
 const installPaths = [
 	{
@@ -66,8 +108,23 @@ const docsBuckets = [
 		items: [
 			{ label: 'Live View', href: `${base}docs/core-workflows/live-view/` },
 			{ label: 'Inspect and Scenarios', href: `${base}docs/core-workflows/inspect-and-scenarios/` },
+			{ label: 'AI Agent Workflows', href: `${base}docs/core-workflows/ai-agent-workflows/` },
 			{ label: 'Scenario Playbooks', href: `${base}docs/reference/scenario-playbooks/` },
 			{ label: 'Wireless and Port Forwarding', href: `${base}docs/reference/wireless-and-port-forwarding/` },
+		],
+	},
+	{
+		title: 'Evaluate And Use Cases',
+		intro: 'Start from the page that matches the evaluation question or workflow you are trying to standardize.',
+		items: [
+			{ label: 'For Engineering Leads', href: engineeringLeadHref },
+			{ label: 'When Luotsi Fits', href: `${base}docs/use-cases/when-luotsi-fits/` },
+			{ label: 'Luotsi Alternatives And Comparison', href: `${base}docs/use-cases/luotsi-alternatives-and-comparison/` },
+			{ label: 'AI Agent Android Automation', href: `${base}docs/use-cases/ai-agent-android-automation/` },
+			{ label: 'Android CI Device Lab Workflows', href: `${base}docs/use-cases/android-ci-device-lab-workflows/` },
+			{ label: 'Replay-Driven Triage', href: `${base}docs/use-cases/replay-driven-triage/` },
+			{ label: 'Live Remote Device Inspection', href: `${base}docs/use-cases/live-remote-device-inspection/` },
+			{ label: 'Scenario-Based Automation', href: `${base}docs/use-cases/scenario-based-android-automation/` },
 		],
 	},
 	{
@@ -88,11 +145,13 @@ const proofStatus = [
 ];
 
 const utilityLinks = [
+	{ label: 'For Engineering Leads', href: engineeringLeadHref },
+	{ label: 'AI Agent Workflows', href: `${base}docs/core-workflows/ai-agent-workflows/` },
 	{ label: 'Architecture', href: `${base}docs/concepts/architecture/` },
 	{ label: 'Subsystems', href: `${base}docs/concepts/subsystems/` },
 	{ label: 'Contribution Guide', href: `${base}docs/contributing/guide/` },
-	{ label: 'Releases', href: 'https://github.com/digablesolutions/luotsi/releases' },
-	{ label: 'GitHub', href: 'https://github.com/digablesolutions/luotsi' },
+	{ label: 'Releases', href: releasesHref },
+	{ label: 'GitHub', href: githubHref },
 ];
 
 const proofBadges = [
@@ -119,11 +178,24 @@ const replaySnippet = [
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<title>Luotsi | Host-Driven Android Device Automation</title>
-		<meta
-			name="description"
-			content="Luotsi is a host-driven CLI for Android device automation, inspection, live view, and artifact-rich scenario runs."
-		/>
+		<title>{pageTitle}</title>
+		<meta name="description" content={pageDescription} />
+		<meta name="keywords" content={keywordsContent} />
+		<meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+		<link rel="canonical" href={pageUrl} />
+		<meta property="og:title" content={pageTitle} />
+		<meta property="og:description" content={pageDescription} />
+		<meta property="og:type" content="website" />
+		<meta property="og:url" content={pageUrl} />
+		<meta property="og:site_name" content="Luotsi" />
+		<meta property="og:image" content={heroImageUrl} />
+		<meta property="og:image:alt" content="Luotsi mirroring a real Android device with inspect JSONL and replay artifacts." />
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:title" content={pageTitle} />
+		<meta name="twitter:description" content={pageDescription} />
+		<meta name="twitter:image" content={heroImageUrl} />
+		<meta name="twitter:image:alt" content="Luotsi mirroring a real Android device with inspect JSONL and replay artifacts." />
+		<script is:inline type="application/ld+json" set:html={JSON.stringify(softwareSchema)} />
 		<link rel="icon" type="image/svg+xml" href={`${base}luotsi-mark.svg`} />
 	</head>
 	<body>
@@ -140,17 +212,17 @@ const replaySnippet = [
 					<nav class="nav-links" aria-label="Primary navigation">
 						<a href={docsHref}>Docs</a>
 						<a href={quickstartHref}>Quickstart</a>
-						<a href="https://github.com/digablesolutions/luotsi/releases">Releases</a>
-						<a href="https://github.com/digablesolutions/luotsi">GitHub</a>
+						<a href={releasesHref}>Releases</a>
+						<a href={githubHref}>GitHub</a>
 					</nav>
 				</header>
 
 				<section class="hero">
 					<div class="hero-copy">
-						<div class="eyebrow">ADB-first tooling for real Android labs</div>
+						<div class="eyebrow">Android automation CLI for AI agents, engineers, and CI</div>
 						<h1 class="display">Mirror the device. Inspect the UI. Replay the failure.</h1>
 						<p class="lede">
-							Luotsi keeps orchestration, policy, and diagnostics on the engineer or CI machine while the Android helper stays thin. Use it when you need a real-device workflow with operator control up front and durable artifacts at the end.
+							Luotsi keeps orchestration, policy, and diagnostics on the engineer or CI machine while the Android helper stays thin. Use it when you need a real-device Android workflow that both engineers and AI agents can drive, with operator control up front and durable artifacts at the end.
 						</p>
 						<div class="hero-actions">
 							<a class="button-link button-link--primary" href={installHref}>Install Luotsi</a>
