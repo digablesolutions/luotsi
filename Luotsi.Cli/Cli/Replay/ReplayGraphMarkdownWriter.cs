@@ -17,6 +17,7 @@ internal static class ReplayGraphMarkdownWriter
         builder.AppendLine($"Truncated: `{graph.Truncated.ToString().ToLowerInvariant()}`");
         builder.AppendLine($"Query: `{ReplayGraphQueryEngine.Describe(graph.Query)}`");
         builder.AppendLine();
+        AppendOutputArtifacts(builder, graph);
         AppendAgentSummary(builder, graph);
         AppendFailureSummary(builder, graph);
         AppendActions(builder, graph);
@@ -28,6 +29,35 @@ internal static class ReplayGraphMarkdownWriter
         AppendNodes(builder, graph);
         AppendEdges(builder, graph);
         return builder.ToString();
+    }
+
+    private static void AppendOutputArtifacts(StringBuilder builder, ReplayGraphResult graph)
+    {
+        if (string.IsNullOrWhiteSpace(graph.JsonPath) &&
+            string.IsNullOrWhiteSpace(graph.JsonlPath) &&
+            string.IsNullOrWhiteSpace(graph.MarkdownPath))
+        {
+            return;
+        }
+
+        builder.AppendLine("## Output Artifacts");
+        builder.AppendLine();
+        if (!string.IsNullOrWhiteSpace(graph.JsonPath))
+        {
+            builder.AppendLine($"- JSON: `{EscapeMarkdown(graph.JsonPath)}`");
+        }
+
+        if (!string.IsNullOrWhiteSpace(graph.JsonlPath))
+        {
+            builder.AppendLine($"- JSONL: `{EscapeMarkdown(graph.JsonlPath)}`");
+        }
+
+        if (!string.IsNullOrWhiteSpace(graph.MarkdownPath))
+        {
+            builder.AppendLine($"- Markdown: `{EscapeMarkdown(graph.MarkdownPath)}`");
+        }
+
+        builder.AppendLine();
     }
 
     private static void AppendFailureSummary(StringBuilder builder, ReplayGraphResult graph)

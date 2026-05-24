@@ -1372,6 +1372,8 @@ public sealed partial class AppTests
         Assert.False(fileSystem.FileExists(Path.Join(replayRoot, "replay-timeline.md")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.md")));
         var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-graph.md"));
+        Assert.Contains("## Output Artifacts", markdown, StringComparison.Ordinal);
+        Assert.Contains("replay-graph.jsonl", markdown, StringComparison.Ordinal);
         Assert.Contains("## Agent Summary", markdown, StringComparison.Ordinal);
         Assert.Contains("## What Failed", markdown, StringComparison.Ordinal);
         Assert.Contains("## What Agents Can Act On", markdown, StringComparison.Ordinal);
