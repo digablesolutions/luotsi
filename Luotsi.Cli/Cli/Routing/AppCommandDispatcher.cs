@@ -52,7 +52,7 @@ internal sealed class AppCommandDispatcher(
             "version" => await _selfUpdateService.GetVersionInfoAsync().ConfigureAwait(false),
             "update" => await _selfUpdateService.UpdateAsync(options).ConfigureAwait(false),
             "devices" => DeviceInventory.FromDeviceList(await RequireRunner(runner, command).GetDevicesAsync().ConfigureAwait(false)),
-            "device-status" => await DeviceStatusResolver.ReadAsync(RequireRunner(runner, command), RequireAdbCommandHost(runner, command)).ConfigureAwait(false),
+            "device-status" => await DeviceStatusResolver.ReadAsync(RequireRunner(runner, command), RequireAdbCommandHost(runner, command), options.Get("device")).ConfigureAwait(false),
             "device-wait" or "wait-for-device" => await RequireAdbCommandHost(runner, command).WaitForDeviceAsync(options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),
             "preflight" => await RequireAdbCommandHost(runner, command).PreflightAsync(options.Get("package")).ConfigureAwait(false),
             "wireless" => await GetWirelessHost(runner, command).EnableWirelessAsync(options.Get("host"), options.Int("port", 5555)).ConfigureAwait(false),

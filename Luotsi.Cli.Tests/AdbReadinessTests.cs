@@ -236,6 +236,34 @@ public sealed class AdbReadinessTests
     }
 
     [Fact]
+    public async Task RunAsync_DeviceStatus_Matches_Wifi_Transport_Serial_When_Preflight_Reports_Hardware_Serial()
+    {
+        var host = new FakeDeviceHost
+        {
+            PreflightTemplate = new PreflightResult("Panel", "12", "32", "focus", null, null, "fingerprint", "arm64-v8a", "C245A20107")
+        };
+        host.ConnectedDevices.Add(new DeviceInfo("192.168.0.134:5555", "device", "product:panel model:Panel device:panel"));
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = new FakeFileSystem(),
+            TimeProvider = DateTimeOffset.Parse("2026-05-15T12:00:00Z").ToTimeProvider(),
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var exitCode = await app.RunAsync(["device-status", "--device", "192.168.0.134:5555"]);
+        using var output = console.ParseSingleOutputAsJson();
+        var device = output.RootElement.GetProperty("data").GetProperty("device");
+        var readiness = output.RootElement.GetProperty("data").GetProperty("readiness");
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("192.168.0.134:5555", device.GetProperty("serial").GetString());
+        Assert.Equal("wifi", device.GetProperty("transport").GetString());
+        Assert.Equal("C245A20107", readiness.GetProperty("serial").GetString());
+    }
+
+    [Fact]
     public async Task RunAsync_DeviceStatus_Writes_Exact_Command_Envelope()
     {
         var started = DateTimeOffset.Parse("2026-05-15T12:00:00Z");
