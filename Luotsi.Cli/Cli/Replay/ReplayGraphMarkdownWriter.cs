@@ -17,6 +17,7 @@ internal static class ReplayGraphMarkdownWriter
         builder.AppendLine($"Truncated: `{graph.Truncated.ToString().ToLowerInvariant()}`");
         builder.AppendLine($"Query: `{ReplayGraphQueryEngine.Describe(graph.Query)}`");
         builder.AppendLine();
+        AppendAgentSummary(builder, graph);
         AppendFailureSummary(builder, graph);
         AppendActions(builder, graph);
         AppendInsights(builder, graph);
@@ -46,6 +47,16 @@ internal static class ReplayGraphMarkdownWriter
             }
         }
 
+        builder.AppendLine();
+    }
+
+    private static void AppendAgentSummary(StringBuilder builder, ReplayGraphResult graph)
+    {
+        builder.AppendLine("## Agent Summary");
+        builder.AppendLine();
+        builder.AppendLine($"- **What failed**: {EscapeMarkdown(graph.AgentSummary.WhatFailed)}");
+        builder.AppendLine($"- **What changed**: {EscapeMarkdown(graph.AgentSummary.WhatChanged)}");
+        builder.AppendLine($"- **What can I act on**: {EscapeMarkdown(graph.AgentSummary.WhatCanActOn)}");
         builder.AppendLine();
     }
 

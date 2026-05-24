@@ -118,6 +118,9 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
         var markdownPath = options.HasFlag("write-markdown")
             ? Path.Join(artifacts.Root, GraphMarkdownFileName)
             : null;
+        var insights = ReplayGraphInsightBuilder.Build(allNodes, allEdges);
+        var actions = ReplayGraphInsightBuilder.BuildActions(artifacts.Root, query, allNodes);
+        var failurePaths = ReplayGraphFailurePathBuilder.Build(allNodes, allEdges);
         var result = new ReplayGraphResult(
             ResultSchemas.ReplayGraph,
             artifacts.Root,
@@ -132,9 +135,10 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
             CountKinds(orderedNodes),
             CountKinds(orderedEdges),
             ReplayGraphTaxonomy.Build(artifacts.Root),
-            ReplayGraphInsightBuilder.Build(allNodes, allEdges),
-            ReplayGraphInsightBuilder.BuildActions(artifacts.Root, query, allNodes),
-            ReplayGraphFailurePathBuilder.Build(allNodes, allEdges),
+            ReplayGraphAgentSummaryBuilder.Build(allNodes, allEdges, failurePaths, actions),
+            insights,
+            actions,
+            failurePaths,
             jsonPath,
             markdownPath,
             orderedNodes,

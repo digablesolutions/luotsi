@@ -552,6 +552,7 @@ public sealed record ReplayGraphResult(
     IReadOnlyDictionary<string, int> NodeKinds,
     IReadOnlyDictionary<string, int> EdgeKinds,
     ReplayGraphTaxonomyResult Taxonomy,
+    ReplayGraphAgentSummaryResult AgentSummary,
     IReadOnlyList<ReplayGraphInsightResult> Insights,
     IReadOnlyList<ReplayGraphActionResult> Actions,
     IReadOnlyList<ReplayGraphFailurePathResult> FailurePaths,
@@ -583,6 +584,14 @@ public sealed record ReplayGraphQueryExampleResult(
     string Kind,
     string Description,
     string Command);
+
+public sealed record ReplayGraphAgentSummaryResult(
+    string WhatFailed,
+    string WhatChanged,
+    string WhatCanActOn,
+    IReadOnlyList<string> FailureNodeIds,
+    IReadOnlyList<string> TransitionEdgeIds,
+    IReadOnlyList<string> Commands);
 
 public sealed record ReplayGraphInsightResult(
     string Kind,

@@ -29,6 +29,7 @@ Filtering returns a focused subgraph with one-hop context. `total_node_count` an
 | `truncated` | `true` when `--limit` capped matched nodes or edges. |
 | `node_kinds`, `edge_kinds` | Counts for the returned graph view. |
 | `taxonomy` | Machine-readable node/edge kind descriptions and query examples. |
+| `agent_summary` | Compact answers for what failed, what changed, and what command to run next. |
 | `insights` | Agent-readable highlights such as failures, selectors, telemetry, and scenario-draft provenance. |
 | `actions` | Suggested next commands for opening, scrubbing, or narrowing the graph. |
 | `failure_paths` | Compact paths from nearby timeline context into failure nodes. |
@@ -84,4 +85,4 @@ luotsi replay graph --artifacts artifacts/run --edge-kind transitions_to --limit
 luotsi replay graph --artifacts artifacts/run --node failure:session-timeline.jsonl:3 --depth 2
 ```
 
-`replay-graph.md` starts with "What Failed", "What Agents Can Act On", and "Insights" before the raw node and edge tables.
+`replay-graph.md` starts with "Agent Summary", "What Failed", "What Agents Can Act On", and "Insights" before the raw node and edge tables.

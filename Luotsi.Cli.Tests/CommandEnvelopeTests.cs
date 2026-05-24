@@ -1350,6 +1350,9 @@ public sealed partial class AppTests
         Assert.Contains(data.GetProperty("taxonomy").GetProperty("node_kinds").EnumerateArray(), kind => kind.GetProperty("kind").GetString() == "failure");
         Assert.Contains(data.GetProperty("taxonomy").GetProperty("edge_kinds").EnumerateArray(), kind => kind.GetProperty("kind").GetString() == "transitions_to");
         Assert.Contains(data.GetProperty("taxonomy").GetProperty("query_examples").EnumerateArray(), example => example.GetProperty("kind").GetString() == "neighborhood");
+        Assert.Contains("scenario_step_failed", data.GetProperty("agent_summary").GetProperty("what_failed").GetString(), StringComparison.Ordinal);
+        Assert.Contains("action-to-failure", data.GetProperty("agent_summary").GetProperty("what_changed").GetString(), StringComparison.Ordinal);
+        Assert.Contains("luotsi replay", data.GetProperty("agent_summary").GetProperty("what_can_act_on").GetString(), StringComparison.Ordinal);
         Assert.Contains(data.GetProperty("actions").EnumerateArray(), action => action.GetProperty("kind").GetString() == "scrub_failures");
         Assert.True(data.GetProperty("failure_paths").GetArrayLength() >= 1);
         Assert.Equal(Path.Join(replayRoot, "replay-graph.json"), data.GetProperty("json_path").GetString());
@@ -1367,6 +1370,7 @@ public sealed partial class AppTests
         Assert.False(fileSystem.FileExists(Path.Join(replayRoot, "replay-timeline.md")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.md")));
         var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-graph.md"));
+        Assert.Contains("## Agent Summary", markdown, StringComparison.Ordinal);
         Assert.Contains("## What Failed", markdown, StringComparison.Ordinal);
         Assert.Contains("## What Agents Can Act On", markdown, StringComparison.Ordinal);
         Assert.Contains("## Failure Paths", markdown, StringComparison.Ordinal);
