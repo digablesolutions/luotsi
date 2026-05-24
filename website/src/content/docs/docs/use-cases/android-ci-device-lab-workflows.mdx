@@ -1,0 +1,44 @@
+---
+title: Android CI Device Lab Workflows
+description: Use Luotsi when one adb-first Android workflow needs to span engineer machines, shared device labs, and CI runs.
+---
+
+If you are looking for Android CI device lab workflows, Luotsi fits when the same CLI needs to work on an engineer laptop, a shared lab host, and CI, with explicit device readiness, scenario execution, and replay artifacts instead of one-off scripts.
+
+## What changes in CI and labs
+
+- Device readiness is explicit rather than implied.
+- Scenario validation and execution use the same JSON playbook format as local runs.
+- Reports, JUnit output, screenshots, and replay artifacts survive the pipeline run.
+- Lab allocation and shared operations can stay in the same public model as the rest of the tool.
+
+## Recommended workflow
+
+```bash
+luotsi doctor --device <serial>
+luotsi scenario-validate --path scenarios
+luotsi run --path scenarios --device <serial> --report-junit junit.xml
+luotsi replay summarize --artifacts ./artifacts/<run>
+```
+
+When the workflow depends on a shared device pool, pair this with [Lab And Device Claims](../../reference/lab-and-device-claims/) and [Shared Lab Operations](../../reference/shared-lab-operations/).
+
+## Strong fit when
+
+- Your CI pipeline already has adb access to physical devices.
+- You want the same artifact model locally and in automation.
+- You need shared-lab semantics instead of each job inventing its own device locking scheme.
+- You want failures to leave a triage trail instead of only console output.
+
+## Weaker fit when
+
+- Your main need is emulator-only smoke testing with no artifact or replay expectations.
+- A hosted device farm already dictates the automation contract and orchestration model.
+- You do not need shared-lab coordination, replay, or structured output contracts.
+
+## Open these next
+
+- [Lab And Device Claims](../../reference/lab-and-device-claims/)
+- [Shared Lab Operations](../../reference/shared-lab-operations/)
+- [Scenario Playbooks](../../reference/scenario-playbooks/)
+- [Replay and Artifacts](../../core-workflows/replay-and-artifacts/)

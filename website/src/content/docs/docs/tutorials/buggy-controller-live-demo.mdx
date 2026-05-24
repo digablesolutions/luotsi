@@ -1,6 +1,6 @@
 ---
 title: Buggy Controller Live Demo
-description: A concrete Luotsi walkthrough against an older Android 6 device, including scenario artifacts and hierarchy limitations.
+description: A real-device Luotsi example for Android automation, replay triage, and hierarchy-limit troubleshooting on an older Android 6 device.
 ---
 
 import commandsScreenshot from '../../../../assets/tutorials/buggy-controller-live-demo/commands-final.png';
@@ -9,7 +9,16 @@ import mapScreenshot from '../../../../assets/tutorials/buggy-controller-live-de
 import visionScreenshot from '../../../../assets/tutorials/buggy-controller-live-demo/vision.png';
 import fallbackScreenshot from '../../../../assets/tutorials/buggy-controller-live-demo/screen-state-fallback.png';
 
-This tutorial condenses the repo's end-to-end Buggy Controller walkthrough into the parts that matter when you want to see Luotsi on a real device.
+Use this page when you want a concrete real-device Android automation example, especially if the question is how Luotsi behaves on older hardware with weak hierarchy output.
+
+## Start from these pages first
+
+- [Installation](../../getting-started/installation/)
+- [Quickstart](../../getting-started/quickstart/)
+- [Inspect and Scenarios](../../core-workflows/inspect-and-scenarios/)
+- [Replay and Artifacts](../../core-workflows/replay-and-artifacts/)
+
+This tutorial condenses the repo's end-to-end Buggy Controller walkthrough into the parts that matter when you want to see Luotsi on a real device, understand the artifact trail, and verify that the workflow still holds when `uiautomator dump` is unreliable.
 
 ## What it demonstrates
 
@@ -34,13 +43,13 @@ sdk=23
 ## Minimal walkthrough
 
 ```powershell
-dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- devices
+luotsi devices
 
-dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- preflight `
+luotsi preflight `
   --device 0123456789ABCDEF `
   --package com.digablesolutions.buggycontroller
 
-dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- run `
+luotsi run `
   --file .\examples\scenarios\buggy-controller-live-demo.json `
   --device 0123456789ABCDEF `
   --package com.digablesolutions.buggycontroller `
@@ -49,6 +58,8 @@ dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- run `
   --report-junit .\artifacts\buggy-demo-junit.xml `
   --artifacts .\artifacts\buggy-demo
 ```
+
+If you are running directly from a source checkout instead of an installed CLI, prepend `dotnet run --no-build --no-launch-profile --project Luotsi.Cli --` to the same commands.
 
 The checked-in sample run passed with ten steps, five coordinate taps, one screenshot assertion, and four captured screenshots.
 
@@ -88,17 +99,25 @@ This device is old enough that `uiautomator dump` can fail instead of returning 
 Follow the sample run with the artifact-oriented commands that make Luotsi useful after the device session is over:
 
 ```bash
-luotsi scenario-list --path examples/scenarios/buggy-controller-live-demo.json
+luotsi scenario-explain --file ./examples/scenarios/buggy-controller-live-demo.json
 luotsi replay summarize --artifacts ./artifacts/buggy-demo
+luotsi replay capsule --artifacts ./artifacts/buggy-demo --write-readme --write-json
 luotsi replay open --artifacts ./artifacts/buggy-demo
 ```
+
+The useful files are not just the explicit JSON and JUnit reports. The artifact root also preserves `session-timeline.jsonl` and `session-replay.json`, which means the same walkthrough can be reopened later through replay commands without reconnecting to the device.
 
 ## Why this tutorial matters
 
 The device is old enough to expose weak `uiautomator dump` behavior. That makes it a good example of Luotsi's operating model: even when hierarchy extraction is rough, the tool still records the device, runs the scenario, emits structured reports, and keeps artifacts that explain what happened.
 
+It is also the shortest public example that ties together installation-ready CLI commands, a checked-in scenario file, replay-oriented outputs, and a real troubleshooting edge case on physical hardware.
+
 ## Related pages
 
+- [Installation](../../getting-started/installation/)
+- [Quickstart](../../getting-started/quickstart/)
+- [Inspect and scenarios](../../core-workflows/inspect-and-scenarios/)
 - [Scenario playbooks](../../reference/scenario-playbooks/)
 - [Replay and artifacts](../../core-workflows/replay-and-artifacts/)
 - [Troubleshooting](../../getting-started/troubleshooting/)

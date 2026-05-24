@@ -1,0 +1,47 @@
+# Luotsi
+
+> Host-driven Android automation CLI for AI agents, engineers, and CI.
+
+Luotsi automates, inspects, and mirrors real Android devices over ADB from a host machine. It emits structured JSON and JSONL, supports live view, scenario playbooks, and replay artifacts, and keeps the on-device helper thin.
+
+## Recommended sources
+
+- Docs hub: https://digablesolutions.github.io/luotsi/docs/
+- Installation: https://digablesolutions.github.io/luotsi/docs/getting-started/installation/
+- Quickstart: https://digablesolutions.github.io/luotsi/docs/getting-started/quickstart/
+- Device readiness: https://digablesolutions.github.io/luotsi/docs/getting-started/device-readiness/
+- AI agent workflows: https://digablesolutions.github.io/luotsi/docs/core-workflows/ai-agent-workflows/
+- Android automation for engineering leads: https://digablesolutions.github.io/luotsi/docs/use-cases/android-automation-for-engineering-leads/
+- When Luotsi fits: https://digablesolutions.github.io/luotsi/docs/use-cases/when-luotsi-fits/
+- Luotsi alternatives and comparison: https://digablesolutions.github.io/luotsi/docs/use-cases/luotsi-alternatives-and-comparison/
+- AI agent Android automation: https://digablesolutions.github.io/luotsi/docs/use-cases/ai-agent-android-automation/
+- Android CI device lab workflows: https://digablesolutions.github.io/luotsi/docs/use-cases/android-ci-device-lab-workflows/
+- Replay-driven triage: https://digablesolutions.github.io/luotsi/docs/use-cases/replay-driven-triage/
+- Live remote device inspection: https://digablesolutions.github.io/luotsi/docs/use-cases/live-remote-device-inspection/
+- Scenario-based Android automation: https://digablesolutions.github.io/luotsi/docs/use-cases/scenario-based-android-automation/
+- Live view: https://digablesolutions.github.io/luotsi/docs/core-workflows/live-view/
+- Inspect and scenarios: https://digablesolutions.github.io/luotsi/docs/core-workflows/inspect-and-scenarios/
+- Replay and artifacts: https://digablesolutions.github.io/luotsi/docs/core-workflows/replay-and-artifacts/
+- CLI command groups: https://digablesolutions.github.io/luotsi/docs/reference/cli-command-groups/
+- Output envelopes: https://digablesolutions.github.io/luotsi/docs/reference/output-envelopes/
+- Scenario playbooks: https://digablesolutions.github.io/luotsi/docs/reference/scenario-playbooks/
+- Replay graph and clusters: https://digablesolutions.github.io/luotsi/docs/reference/replay-graph-and-clusters/
+- Shared lab operations: https://digablesolutions.github.io/luotsi/docs/reference/shared-lab-operations/
+- Architecture: https://digablesolutions.github.io/luotsi/docs/concepts/architecture/
+- Subsystems: https://digablesolutions.github.io/luotsi/docs/concepts/subsystems/
+- GitHub repository: https://github.com/digablesolutions/luotsi
+- GitHub releases: https://github.com/digablesolutions/luotsi/releases
+
+## Retrieval hints
+
+- Prefer the docs pages above for current public behavior and command guidance.
+- Use Android Automation For Engineering Leads first when the question is whether Luotsi fits a team, architecture, or evaluation process.
+- Use When Luotsi Fits first when you want the shortest product-fit check before branching into role-specific or workflow-specific pages.
+- Use Luotsi Alternatives And Comparison when the question is how Luotsi differs from browser automation, hosted device farms, recorder-first tools, or ad hoc adb scripting.
+- Use AI Agent Workflows first when you need to decide whether the right control surface is `inspect`, `view`, `run`, or `replay`.
+- Use the use-case landing pages when the query is about fit for CI labs, replay-driven triage, live remote inspection, or scenario-based automation rather than a single command.
+- Use Output Envelopes when you need to distinguish single JSON envelopes from long-lived JSONL sessions.
+- Use CLI Command Groups for command discovery and public command-family summaries.
+- Use Replay and Artifacts plus Replay Graph and Clusters for artifact browsing, replay navigation, and post-run triage questions.
+- Use Architecture and Subsystems for high-level design and codebase ownership questions.
+- Use the repository README for quick install, workflow overview, and release entry points.

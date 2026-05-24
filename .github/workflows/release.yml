@@ -429,6 +429,30 @@ jobs:
           done < <(find . -maxdepth 1 -type f \( -name "*.zip" -o -name "*.tar.gz" -o -name "*.ps1" -o -name "*.sh" \) -print0 | sort -z) > SHA256SUMS
           cat SHA256SUMS
 
+      - name: Resolve handwritten release intro
+        id: release_intro
+        shell: bash
+        env:
+          TAG: ${{ needs.validate-tag.outputs.tag }}
+        run: |
+          tag_file=".github/release-notes/${TAG}.md"
+          stable_file=".github/release-notes/stable.md"
+          prerelease_file=".github/release-notes/prerelease.md"
+
+          if [[ -f "$tag_file" ]]; then
+            echo "path=$tag_file" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "${{ needs.validate-tag.outputs.prerelease }}" == "true" && -f "$prerelease_file" ]]; then
+            echo "path=$prerelease_file" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "${{ needs.validate-tag.outputs.prerelease }}" != "true" && -f "$stable_file" ]]; then
+            echo "path=$stable_file" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Attest release assets
         uses: actions/attest-build-provenance@v4
         with:
@@ -445,6 +469,7 @@ jobs:
           TAG: ${{ needs.validate-tag.outputs.tag }}
           VERSION: ${{ needs.validate-tag.outputs.version }}
           PRERELEASE: ${{ needs.validate-tag.outputs.prerelease }}
+          RELEASE_INTRO_PATH: ${{ steps.release_intro.outputs.path }}
         shell: bash
         run: |
           args=(
@@ -456,6 +481,11 @@ jobs:
             --verify-tag
             --generate-notes
           )
+
+          if [[ -n "$RELEASE_INTRO_PATH" ]]; then
+            intro="$(cat "$RELEASE_INTRO_PATH")"
+            args+=(--notes "$intro")
+          fi
 
           if [[ "$PRERELEASE" == "true" ]]; then
             args+=(--prerelease)
@@ -477,4 +507,8 @@ jobs:
             echo
             echo "Published assets:"
             find release-assets -maxdepth 1 -type f -printf "- \`%f\`\n" | sort
+            if [[ -n "${{ steps.release_intro.outputs.path }}" ]]; then
+              echo
+              echo "Handwritten release intro source: \`${{ steps.release_intro.outputs.path }}\`"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"

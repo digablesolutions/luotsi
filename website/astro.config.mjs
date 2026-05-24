@@ -33,14 +33,31 @@ export default defineConfig({
 					items: [
 						{ label: 'Live View', slug: 'docs/core-workflows/live-view' },
 						{ label: 'Inspect And Scenarios', slug: 'docs/core-workflows/inspect-and-scenarios' },
+						{ label: 'AI Agent Workflows', slug: 'docs/core-workflows/ai-agent-workflows' },
 						{ label: 'Replay And Artifacts', slug: 'docs/core-workflows/replay-and-artifacts' },
+					],
+				},
+				{
+					label: 'Use Cases',
+					items: [
+						{ label: 'For Engineering Leads', slug: 'docs/use-cases/android-automation-for-engineering-leads' },
+						{ label: 'When Luotsi Fits', slug: 'docs/use-cases/when-luotsi-fits' },
+						{ label: 'Luotsi Alternatives And Comparison', slug: 'docs/use-cases/luotsi-alternatives-and-comparison' },
+						{ label: 'AI Agent Android Automation', slug: 'docs/use-cases/ai-agent-android-automation' },
+						{ label: 'Android CI Device Lab Workflows', slug: 'docs/use-cases/android-ci-device-lab-workflows' },
+						{ label: 'Replay-Driven Triage', slug: 'docs/use-cases/replay-driven-triage' },
+						{ label: 'Live Remote Device Inspection', slug: 'docs/use-cases/live-remote-device-inspection' },
+						{ label: 'Scenario-Based Automation', slug: 'docs/use-cases/scenario-based-android-automation' },
 					],
 				},
 				{
 					label: 'Reference',
 					items: [
 						{ label: 'CLI Command Groups', slug: 'docs/reference/cli-command-groups' },
+						{ label: 'Lab And Device Claims', slug: 'docs/reference/lab-and-device-claims' },
+						{ label: 'Shared Lab Operations', slug: 'docs/reference/shared-lab-operations' },
 						{ label: 'Scenario Playbooks', slug: 'docs/reference/scenario-playbooks' },
+						{ label: 'Replay Graph And Clusters', slug: 'docs/reference/replay-graph-and-clusters' },
 						{ label: 'Wireless And Port Forwarding', slug: 'docs/reference/wireless-and-port-forwarding' },
 						{ label: 'Output Envelopes', slug: 'docs/reference/output-envelopes' },
 					],

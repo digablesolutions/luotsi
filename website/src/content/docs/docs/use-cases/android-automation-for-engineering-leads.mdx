@@ -1,0 +1,61 @@
+---
+title: Android Automation For Engineering Leads
+description: Evaluate Luotsi when you need a host-driven Android automation approach for real devices, agent workflows, CI, and shared labs.
+---
+
+If you are an engineering lead evaluating Android automation approaches, Luotsi fits when you want real-device control over adb, machine-readable sessions for agents, and replayable artifacts without standing up a second device control plane.
+
+## What Luotsi optimizes for
+
+- Host-driven control. The CLI, policy, and diagnostics stay on the engineer or CI machine.
+- Real devices over adb. Luotsi is built for Android device paths you can actually inspect, mirror, and replay.
+- Shared contracts across people and automation. Engineers, agents, and CI all use the same command surface and artifact model.
+- Failure evidence. Runs leave screenshots, hierarchy captures, logcat, telemetry, and replay material behind.
+- Shared-lab workflows. Device readiness, claims, scenarios, and replay fit the same operating model.
+
+## Questions to ask during evaluation
+
+### Where does the control plane live?
+
+Luotsi keeps orchestration on the host and uses a thin Android helper. That is a different bet from stacks that push most logic into an always-on device server.
+
+### Can engineers, agents, and CI share one workflow?
+
+Yes. `inspect` and `view` expose long-lived JSONL sessions, `run` executes repeatable JSON scenarios, and `replay` turns finished runs into triage-friendly artifacts.
+
+### What happens after a failure?
+
+The artifact root is part of the contract, not an afterthought. Replay summaries, timelines, screenshots, hierarchy output, logcat, and metadata are meant to survive the run so the next question can be answered without reconnecting to the device.
+
+### Does it support labs as well as laptops?
+
+That is one of the intended paths. Luotsi has public docs for [lab and device claims](../../reference/lab-and-device-claims/), [shared lab operations](../../reference/shared-lab-operations/), [scenario playbooks](../../reference/scenario-playbooks/), and [replay and artifacts](../../core-workflows/replay-and-artifacts/).
+
+## Strong fit when
+
+- Your Android workflow is already adb-first.
+- You want agent-readable JSONL instead of a UI-only control path.
+- You need one stack for interactive debugging, repeatable scenarios, and CI triage.
+- You care about post-run evidence as much as the live session.
+- You expect teams to operate in shared device-lab environments instead of only on local emulators.
+
+## Weaker fit when
+
+- Your main need is browser or WebView DOM automation rather than Android device automation.
+- You want a hosted device farm to own the orchestration layer end to end.
+- You need iOS coverage from the same tool immediately.
+
+## Recommended evaluation path
+
+1. Start with [Installation](../../getting-started/installation/) and [Quickstart](../../getting-started/quickstart/).
+2. Read [AI Agent Workflows](../../core-workflows/ai-agent-workflows/) if agents or structured session contracts matter.
+3. Read [Android CI Device Lab Workflows](../android-ci-device-lab-workflows/) if the evaluation is really about shared infrastructure.
+4. Read [Replay-Driven Triage](../replay-driven-triage/) if failure analysis is where your current stack breaks down.
+5. Use [Architecture](../../concepts/architecture/) and [Subsystems](../../concepts/subsystems/) when you need to inspect the underlying design rather than the public workflows.
+
+## Related pages
+
+- [AI Agent Android Automation](../ai-agent-android-automation/)
+- [Android CI Device Lab Workflows](../android-ci-device-lab-workflows/)
+- [Replay-Driven Triage](../replay-driven-triage/)
+- [Architecture](../../concepts/architecture/)
