@@ -133,6 +133,7 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
             CountKinds(orderedEdges),
             ReplayGraphInsightBuilder.Build(allNodes, allEdges),
             ReplayGraphInsightBuilder.BuildActions(artifacts.Root, query, allNodes),
+            ReplayGraphFailurePathBuilder.Build(allNodes, allEdges),
             jsonPath,
             markdownPath,
             orderedNodes,

@@ -1348,6 +1348,7 @@ public sealed partial class AppTests
         Assert.Equal(200, data.GetProperty("query").GetProperty("limit").GetInt32());
         Assert.True(data.GetProperty("insights").GetArrayLength() >= 1);
         Assert.Contains(data.GetProperty("actions").EnumerateArray(), action => action.GetProperty("kind").GetString() == "scrub_failures");
+        Assert.True(data.GetProperty("failure_paths").GetArrayLength() >= 1);
         Assert.Equal(Path.Join(replayRoot, "replay-graph.json"), data.GetProperty("json_path").GetString());
         Assert.Equal(Path.Join(replayRoot, "replay-graph.md"), data.GetProperty("markdown_path").GetString());
         Assert.Contains(data.GetProperty("nodes").EnumerateArray(), node => node.GetProperty("kind").GetString() == "failure");
@@ -1365,7 +1366,34 @@ public sealed partial class AppTests
         var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-graph.md"));
         Assert.Contains("## What Failed", markdown, StringComparison.Ordinal);
         Assert.Contains("## What Agents Can Act On", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Failure Paths", markdown, StringComparison.Ordinal);
         Assert.Contains("## Transitions", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayGraph_Reports_Failure_Path()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        var path = Assert.Single(data.GetProperty("failure_paths").EnumerateArray(), item =>
+            item.GetProperty("failure_node_id").GetString() == "failure:session-timeline.jsonl:1");
+        Assert.Equal("event:session-timeline.jsonl:1", path.GetProperty("failure_event_node_id").GetString());
+        Assert.Contains("scenario_step_failed", path.GetProperty("summary").GetString(), StringComparison.Ordinal);
+        Assert.Contains(path.GetProperty("node_ids").EnumerateArray(), node => node.GetString() == "failure:session-timeline.jsonl:1");
+        Assert.Contains(path.GetProperty("edge_ids").EnumerateArray(), edge => edge.GetString()!.Contains("indicates", StringComparison.Ordinal));
     }
 
     [Fact]

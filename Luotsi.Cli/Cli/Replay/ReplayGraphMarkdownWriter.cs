@@ -20,6 +20,7 @@ internal static class ReplayGraphMarkdownWriter
         AppendFailureSummary(builder, graph);
         AppendActions(builder, graph);
         AppendInsights(builder, graph);
+        AppendFailurePaths(builder, graph);
         AppendTransitions(builder, graph);
         AppendKindTables(builder, graph);
         AppendNodes(builder, graph);
@@ -103,6 +104,25 @@ internal static class ReplayGraphMarkdownWriter
         foreach (var kind in graph.EdgeKinds)
         {
             builder.AppendLine($"| {EscapeMarkdown(kind.Key)} | {kind.Value} |");
+        }
+
+        builder.AppendLine();
+    }
+
+    private static void AppendFailurePaths(StringBuilder builder, ReplayGraphResult graph)
+    {
+        if (graph.FailurePaths.Count == 0)
+        {
+            return;
+        }
+
+        builder.AppendLine("## Failure Paths");
+        builder.AppendLine();
+        builder.AppendLine("| Failure | Summary | Nodes |");
+        builder.AppendLine("|---|---|---|");
+        foreach (var path in graph.FailurePaths.Take(20))
+        {
+            builder.AppendLine($"| {EscapeMarkdown(path.FailureNodeId)} | {EscapeMarkdown(path.Summary)} | {EscapeMarkdown(string.Join(", ", path.NodeIds))} |");
         }
 
         builder.AppendLine();

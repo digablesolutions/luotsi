@@ -553,6 +553,7 @@ public sealed record ReplayGraphResult(
     IReadOnlyDictionary<string, int> EdgeKinds,
     IReadOnlyList<ReplayGraphInsightResult> Insights,
     IReadOnlyList<ReplayGraphActionResult> Actions,
+    IReadOnlyList<ReplayGraphFailurePathResult> FailurePaths,
     string? JsonPath,
     string? MarkdownPath,
     IReadOnlyList<ReplayGraphNodeResult> Nodes,
@@ -579,6 +580,13 @@ public sealed record ReplayGraphActionResult(
     string Kind,
     string Message,
     string? Command);
+
+public sealed record ReplayGraphFailurePathResult(
+    string FailureNodeId,
+    string? FailureEventNodeId,
+    string Summary,
+    IReadOnlyList<string> NodeIds,
+    IReadOnlyList<string> EdgeIds);
 
 public sealed record ReplayGraphNodeResult(
     string Id,

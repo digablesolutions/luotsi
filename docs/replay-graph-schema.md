@@ -30,6 +30,7 @@ Filtering returns a focused subgraph with one-hop context. `total_node_count` an
 | `node_kinds`, `edge_kinds` | Counts for the returned graph view. |
 | `insights` | Agent-readable highlights such as failures, selectors, telemetry, and scenario-draft provenance. |
 | `actions` | Suggested next commands for opening, scrubbing, or narrowing the graph. |
+| `failure_paths` | Compact paths from nearby timeline context into failure nodes. |
 | `nodes`, `edges` | Stable graph payload. |
 
 ## Node Taxonomy
