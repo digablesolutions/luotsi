@@ -1922,6 +1922,14 @@ public sealed partial class AppTests
         Assert.Contains("replay graph", intelligence.GetProperty("best_graph_command").GetString(), StringComparison.Ordinal);
         Assert.Contains("replay scrub", intelligence.GetProperty("best_scrub_command").GetString(), StringComparison.Ordinal);
         Assert.Contains(intelligence.GetProperty("supporting_signals").EnumerateArray(), signal => signal.GetString() == "instances=2");
+        var signalComparisons = intelligence.GetProperty("signal_comparisons").EnumerateArray().ToArray();
+        Assert.Contains(signalComparisons, signal =>
+            signal.GetProperty("name").GetString() == "action" &&
+            signal.GetProperty("stability").GetString() == "stable" &&
+            signal.GetProperty("values").EnumerateArray().Single().GetString() == "waitVisible");
+        Assert.Contains(signalComparisons, signal =>
+            signal.GetProperty("name").GetString() == "message" &&
+            signal.GetProperty("stability").GetString() == "variable");
         var hints = clusters[0].GetProperty("hints").EnumerateArray().ToArray();
         Assert.Contains(hints, hint => hint.GetProperty("kind").GetString() == "same_failure_shape");
         Assert.Contains(hints, hint => hint.GetProperty("kind").GetString() == "likely_repeated_selector_or_screen_state_failure");
@@ -1940,6 +1948,7 @@ public sealed partial class AppTests
         var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-clusters.md"));
         Assert.Contains("### Intelligence", markdown, StringComparison.Ordinal);
         Assert.Contains("Likely cause", markdown, StringComparison.Ordinal);
+        Assert.Contains("| Signal | Stability | Values |", markdown, StringComparison.Ordinal);
         Assert.Contains("luotsi replay graph", markdown, StringComparison.Ordinal);
     }
 

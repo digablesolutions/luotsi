@@ -146,7 +146,8 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
             latestRoot,
             $"luotsi replay graph --artifacts {Quote(latestRoot)} --failed --write-json --write-markdown",
             $"luotsi replay scrub --artifacts {Quote(latestRoot)} --failures --context 3 --write-markdown",
-            BuildSupportingSignals(instances));
+            BuildSupportingSignals(instances),
+            BuildSignalComparisons(instances));
     }
 
     private static IReadOnlyList<ReplayFailureClusterHintResult> CreateHints(string artifactRoot, IReadOnlyList<ReplayFailureClusterInstanceResult> instances)
@@ -254,6 +255,37 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
         AddSignal(signals, "step", latest.Step);
         AddSignal(signals, "message", latest.ErrorMessage);
         return signals;
+    }
+
+    private static IReadOnlyList<ReplayFailureClusterSignalComparisonResult> BuildSignalComparisons(
+        IReadOnlyList<ReplayFailureClusterInstanceResult> instances)
+    {
+        return new[]
+        {
+            CompareSignal("category", instances.Select(static instance => instance.ErrorCategory)),
+            CompareSignal("action", instances.Select(static instance => instance.Action)),
+            CompareSignal("step", instances.Select(static instance => instance.Step)),
+            CompareSignal("message", instances.Select(static instance => instance.ErrorMessage)),
+            CompareSignal("target", instances.Select(static instance => instance.Target))
+        };
+    }
+
+    private static ReplayFailureClusterSignalComparisonResult CompareSignal(string name, IEnumerable<string?> values)
+    {
+        var normalized = values
+            .Select(static value => string.IsNullOrWhiteSpace(value) ? "" : value.Trim())
+            .Where(static value => value.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(static value => value, StringComparer.Ordinal)
+            .Take(8)
+            .ToArray();
+        var stability = normalized.Length switch
+        {
+            0 => "missing",
+            1 => "stable",
+            _ => "variable"
+        };
+        return new ReplayFailureClusterSignalComparisonResult(name, stability, normalized);
     }
 
     private static int DistinctNormalized(IEnumerable<string?> values) =>
@@ -375,6 +407,17 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
             if (cluster.Intelligence.SupportingSignals.Count > 0)
             {
                 builder.AppendLine("- Signals: " + EscapeMarkdown(string.Join(", ", cluster.Intelligence.SupportingSignals)));
+            }
+
+            if (cluster.Intelligence.SignalComparisons.Count > 0)
+            {
+                builder.AppendLine();
+                builder.AppendLine("| Signal | Stability | Values |");
+                builder.AppendLine("|---|---|---|");
+                foreach (var signal in cluster.Intelligence.SignalComparisons)
+                {
+                    builder.AppendLine($"| {EscapeMarkdown(signal.Name)} | {EscapeMarkdown(signal.Stability)} | {EscapeMarkdown(string.Join(", ", signal.Values))} |");
+                }
             }
 
             builder.AppendLine();

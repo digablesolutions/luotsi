@@ -707,7 +707,13 @@ public sealed record ReplayFailureClusterIntelligenceResult(
     string BestReplayArtifactRoot,
     string? BestGraphCommand,
     string? BestScrubCommand,
-    IReadOnlyList<string> SupportingSignals);
+    IReadOnlyList<string> SupportingSignals,
+    IReadOnlyList<ReplayFailureClusterSignalComparisonResult> SignalComparisons);
+
+public sealed record ReplayFailureClusterSignalComparisonResult(
+    string Name,
+    string Stability,
+    IReadOnlyList<string> Values);
 
 public sealed record ReplayFailureClusterHintResult(
     string Kind,
