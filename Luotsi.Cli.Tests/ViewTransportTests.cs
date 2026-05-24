@@ -115,6 +115,23 @@ public sealed class ViewTransportTests
     }
 
     [Fact]
+    public async Task AndroidViewServerInstaller_VerifyInstalledAsync_Does_Not_Fail_When_Package_Dump_Omits_Service()
+    {
+        var adb = new FakeAdbClient();
+        adb.EnqueueRunResult(new ProcessResult(0, "dev.luotsi.view/.ConsentActivity", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "Package [dev.luotsi.view]\n", string.Empty));
+        var phases = new List<ViewStartupPhase>();
+        var locator = new FakeAndroidViewHelperPackageLocator(new AndroidViewHelperPackage("C:/tmp/helper.apk", "/data/local/tmp/luotsi-view-server.apk", "dev.luotsi.view.Main", "test-helper"));
+        var installer = new AndroidViewServerInstaller(adb, locator, phases.Add);
+
+        await installer.VerifyInstalledAsync(locator.Resolve());
+
+        Assert.Contains(phases, phase =>
+            phase is {Phase: "helper_verify", Status: ViewStartupPhaseStatus.Succeeded} &&
+            phase.Detail?.Contains("not listed by package dump", StringComparison.Ordinal) == true);
+    }
+
+    [Fact]
     public async Task AndroidViewBootstrap_StartAsync_ShellQuotes_Screenrecord_Request_Values()
     {
         var adb = new FakeAdbClient();
@@ -406,6 +423,23 @@ public sealed class ViewTransportTests
 
         Assert.Equal(expectedRoot, resolvedRoot);
         Assert.Equal([configuredRoot, expectedRoot], binder.AttemptedRoots);
+    }
+
+    [Fact]
+    public void LibavNativeLibraryLoader_Prefers_Published_App_Ffmpeg_Before_Working_Directory()
+    {
+        var appFfmpeg = Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "ffmpeg", "bin"));
+        var binder = new FakeLibavNativeLibraryBinder();
+        binder.SucceedFor(appFfmpeg);
+        var loader = new LibavNativeLibraryLoader(
+            new FakeEnvironmentVariables(new Dictionary<string, string>()),
+            binder);
+
+        var resolvedRoot = loader.EnsureLoaded();
+
+        Assert.Equal(appFfmpeg, resolvedRoot);
+        Assert.Equal(appFfmpeg, binder.AttemptedRoots[0]);
+        Assert.Single(binder.AttemptedRoots);
     }
 
     [Fact]

@@ -145,8 +145,8 @@ public sealed class ViewHostPathResolver(IEnvironmentVariables environment)
             throw new ArgumentException("Path must be process-relative.", nameof(relativePath));
         }
 
-        yield return Path.GetFullPath(Path.Join(Directory.GetCurrentDirectory(), relativePath));
         yield return Path.GetFullPath(Path.Join(AppContext.BaseDirectory, relativePath));
+        yield return Path.GetFullPath(Path.Join(Directory.GetCurrentDirectory(), relativePath));
     }
 
     private static IEnumerable<string> GetRepositoryRelativePathCandidates(string relativePath)
