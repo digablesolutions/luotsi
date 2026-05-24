@@ -1008,6 +1008,13 @@ public sealed partial class AppTests
             command.GetProperty("command").GetString()!.Contains("--write-json --write-markdown", StringComparison.Ordinal));
         Assert.DoesNotContain(data.GetProperty("suggested_commands").EnumerateArray(), command =>
             command.GetProperty("command").GetString()!.Contains("scenario-draft", StringComparison.Ordinal));
+        var nextSteps = data.GetProperty("recommended_next_steps").EnumerateArray().ToArray();
+        Assert.Equal("scrub_failure", nextSteps[0].GetProperty("kind").GetString());
+        Assert.Contains("replay scrub", nextSteps[0].GetProperty("command").GetString(), StringComparison.Ordinal);
+        Assert.Equal("graph_failure", nextSteps[1].GetProperty("kind").GetString());
+        Assert.Contains("--failed", nextSteps[1].GetProperty("command").GetString(), StringComparison.Ordinal);
+        Assert.Contains(nextSteps, step => step.GetProperty("kind").GetString() == "search_failure_text");
+        Assert.Contains(nextSteps, step => step.GetProperty("kind").GetString() == "open_artifacts");
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-capsule.md")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-capsule-summary.json")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.md")));
@@ -1022,6 +1029,8 @@ public sealed partial class AppTests
         Assert.Contains("--source-path session-timeline.jsonl --sequence 1 --context 3", readme, StringComparison.Ordinal);
         Assert.Contains("## Artifact Manifest", readme, StringComparison.Ordinal);
         Assert.Contains("failures/wait-login-button.png", readme, StringComparison.Ordinal);
+        Assert.Contains("## Recommended Next Steps", readme, StringComparison.Ordinal);
+        Assert.Contains("Scrub the failure window", readme, StringComparison.Ordinal);
         Assert.Contains("luotsi replay timeline", readme, StringComparison.Ordinal);
         Assert.Contains("luotsi replay scrub", readme, StringComparison.Ordinal);
         Assert.Contains("luotsi replay graph", readme, StringComparison.Ordinal);

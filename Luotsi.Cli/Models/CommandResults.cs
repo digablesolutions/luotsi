@@ -444,6 +444,7 @@ public sealed record ReplayCapsuleResult(
     ReplayCapsuleArtifactCounts ArtifactCounts,
     IReadOnlyList<ReplayCapsuleArtifactManifestEntry> ArtifactManifest,
     IReadOnlyList<ReplayCapsuleTimelineHighlightResult> FailureTimeline,
+    IReadOnlyList<ReplayCapsuleNextStep> RecommendedNextSteps,
     IReadOnlyList<ReplayCapsuleCommandHint> SuggestedCommands);
 
 public sealed record ReplayCapsulePrimaryFailureResult(
@@ -500,6 +501,12 @@ public sealed record ReplayCapsuleTimelineHighlightResult(
 public sealed record ReplayCapsuleCommandHint(
     string Command,
     string Purpose);
+
+public sealed record ReplayCapsuleNextStep(
+    string Kind,
+    string Title,
+    string Reason,
+    string Command);
 
 public sealed record ReplayTimelineResult(
     string Schema,

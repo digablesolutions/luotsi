@@ -41,6 +41,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         var scenarioDraftArtifacts = FindScenarioDraftArtifacts(files);
         var scenarioDraftSummary = ReadScenarioDraftSummary(artifacts.Root, scenarioDraftArtifacts.SummaryPath);
         var commandHints = BuildCommandHints(artifacts.Root, primaryFailure, scenarioDraft.Available, scenarioDraftArtifacts).ToArray();
+        var nextSteps = BuildRecommendedNextSteps(artifacts.Root, primaryFailure, scenarioDraft.Available).ToArray();
         var readmePath = options.HasFlag("write-readme")
             ? Path.Join(artifacts.Root, CapsuleReadmeFileName)
             : null;
@@ -63,6 +64,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             artifactCounts,
             artifactManifest,
             failureTimeline,
+            nextSteps,
             commandHints);
 
         if (jsonPath is not null)
@@ -72,7 +74,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
 
         if (readmePath is not null)
         {
-            await artifacts.WriteTextAsync(CapsuleReadmeFileName, BuildReadme(artifacts.Root, summaries.Count, failureSessions.Length, scenarioDraft, scenarioDraftArtifacts, scenarioDraftSummary, primaryFailure, artifactCounts, artifactManifest, failureTimeline, commandHints)).ConfigureAwait(false);
+            await artifacts.WriteTextAsync(CapsuleReadmeFileName, BuildReadme(artifacts.Root, summaries.Count, failureSessions.Length, scenarioDraft, scenarioDraftArtifacts, scenarioDraftSummary, primaryFailure, artifactCounts, artifactManifest, failureTimeline, nextSteps, commandHints)).ConfigureAwait(false);
         }
 
         return result;
@@ -166,6 +168,51 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             yield return new ReplayCapsuleCommandHint(
                 $"luotsi replay search --artifacts {Quote(artifactRoot)} --contains \"Review Checklist\"",
                 "Find the generated scenario draft review checklist.");
+        }
+    }
+
+    private static IEnumerable<ReplayCapsuleNextStep> BuildRecommendedNextSteps(
+        string artifactRoot,
+        ReplayCapsulePrimaryFailureResult? primaryFailure,
+        bool scenarioDraftAvailable)
+    {
+        if (primaryFailure is not null)
+        {
+            yield return new ReplayCapsuleNextStep(
+                "scrub_failure",
+                "Scrub the failure window",
+                "Start with the focused previous/current/next timeline view before opening broad artifacts.",
+                $"luotsi replay scrub --artifacts {Quote(artifactRoot)} --failures --context 3 --write-markdown");
+
+            yield return new ReplayCapsuleNextStep(
+                "graph_failure",
+                "Open semantic failure context",
+                "Use the graph when an agent or reviewer needs evidence, facts, causal chains, and hypotheses.",
+                $"luotsi replay graph --artifacts {Quote(artifactRoot)} --failed --write-json --write-markdown");
+        }
+
+        if (!string.IsNullOrWhiteSpace(primaryFailure?.Message))
+        {
+            yield return new ReplayCapsuleNextStep(
+                "search_failure_text",
+                "Search the bundle for the failure text",
+                "Find matching logcat, timeline, hierarchy, report, or markdown references.",
+                $"luotsi replay search --artifacts {Quote(artifactRoot)} --contains {Quote(primaryFailure.Message)}");
+        }
+
+        yield return new ReplayCapsuleNextStep(
+            "open_artifacts",
+            "Open the artifact browser",
+            "Use this when screenshots, videos, logs, and generated replay artifacts need human inspection.",
+            $"luotsi replay open --artifacts {Quote(artifactRoot)}");
+
+        if (scenarioDraftAvailable)
+        {
+            yield return new ReplayCapsuleNextStep(
+                "draft_scenario",
+                "Draft a scenario from replay",
+                "Use captured inspect/view/telemetry events to create a reviewable starter scenario.",
+                $"luotsi replay scenario-draft --artifacts {Quote(artifactRoot)} --output draft-scenario.json --write-json --write-markdown");
         }
     }
 
@@ -287,6 +334,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         ReplayCapsuleArtifactCounts artifactCounts,
         IReadOnlyList<ReplayCapsuleArtifactManifestEntry> artifactManifest,
         IReadOnlyList<ReplayCapsuleTimelineHighlightResult> failureTimeline,
+        IReadOnlyList<ReplayCapsuleNextStep> nextSteps,
         IReadOnlyList<ReplayCapsuleCommandHint> commandHints)
     {
         var builder = new StringBuilder();
@@ -358,6 +406,16 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             AppendField(builder, "Failure capsule", primaryFailure.FailureCapsulePath);
             AppendField(builder, "Timeline", primaryFailure.TimelinePath);
             AppendField(builder, "Reopen", primaryFailure.SourceCommand);
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("## Recommended Next Steps");
+        builder.AppendLine();
+        foreach (var step in nextSteps)
+        {
+            builder.AppendLine($"- **{EscapeMarkdown(step.Title)}** (`{EscapeMarkdown(step.Kind)}`)");
+            builder.AppendLine($"  {EscapeMarkdown(step.Reason)}");
+            builder.AppendLine($"  `{EscapeMarkdown(step.Command)}`");
         }
 
         builder.AppendLine();
