@@ -8,6 +8,7 @@ internal static class ReplayGraphAgentSummaryBuilder
         IReadOnlyList<ReplayGraphNodeResult> nodes,
         IReadOnlyList<ReplayGraphEdgeResult> edges,
         IReadOnlyList<ReplayGraphFailurePathResult> failurePaths,
+        IReadOnlyList<ReplayGraphEvidenceResult> evidence,
         IReadOnlyList<ReplayGraphActionResult> actions)
     {
         var failures = nodes.Where(ReplayGraphPredicates.IsFailureNode).Take(5).ToArray();
@@ -26,6 +27,7 @@ internal static class ReplayGraphAgentSummaryBuilder
             BuildActionSummary(actions),
             failures.Select(static failure => failure.Id).ToArray(),
             transitions.Select(EdgeId).ToArray(),
+            evidence.Select(static item => item.NodeId).Distinct(StringComparer.Ordinal).Take(8).ToArray(),
             actions.Select(static action => action.Command).Where(static command => !string.IsNullOrWhiteSpace(command)).Cast<string>().Take(5).ToArray());
     }
 

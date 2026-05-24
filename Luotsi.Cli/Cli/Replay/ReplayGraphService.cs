@@ -147,7 +147,7 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
             CountKinds(orderedNodes),
             CountKinds(orderedEdges),
             ReplayGraphTaxonomy.Build(artifacts.Root),
-            ReplayGraphAgentSummaryBuilder.Build(allNodes, allEdges, failurePaths, actions),
+            ReplayGraphAgentSummaryBuilder.Build(allNodes, allEdges, failurePaths, evidence, actions),
             insights,
             actions,
             CountKinds(evidence),

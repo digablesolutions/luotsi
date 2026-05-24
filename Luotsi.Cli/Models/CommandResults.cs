@@ -598,6 +598,7 @@ public sealed record ReplayGraphAgentSummaryResult(
     string WhatCanActOn,
     IReadOnlyList<string> FailureNodeIds,
     IReadOnlyList<string> TransitionEdgeIds,
+    IReadOnlyList<string> EvidenceNodeIds,
     IReadOnlyList<string> Commands);
 
 public sealed record ReplayGraphInsightResult(

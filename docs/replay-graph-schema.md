@@ -35,7 +35,7 @@ Filtering returns a focused subgraph with one-hop context. `total_node_count` an
 | `truncated` | `true` when `--limit` capped matched nodes or edges. |
 | `node_kinds`, `edge_kinds` | Counts for the returned graph view. |
 | `taxonomy` | Machine-readable node/edge kind descriptions and query examples. |
-| `agent_summary` | Compact answers for what failed, what changed, and what command to run next. |
+| `agent_summary` | Compact answers for what failed, what changed, what command to run next, and the first promoted evidence node IDs. |
 | `insights` | Agent-readable highlights such as failures, selectors, telemetry, and scenario-draft provenance. |
 | `actions` | Suggested next commands for opening, scrubbing, or narrowing the graph. |
 | `evidence_kinds` | Counts for promoted evidence records in the returned graph view. |

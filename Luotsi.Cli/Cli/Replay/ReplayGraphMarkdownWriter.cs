@@ -89,6 +89,11 @@ internal static class ReplayGraphMarkdownWriter
         builder.AppendLine($"- **What failed**: {EscapeMarkdown(graph.AgentSummary.WhatFailed)}");
         builder.AppendLine($"- **What changed**: {EscapeMarkdown(graph.AgentSummary.WhatChanged)}");
         builder.AppendLine($"- **What can I act on**: {EscapeMarkdown(graph.AgentSummary.WhatCanActOn)}");
+        if (graph.AgentSummary.EvidenceNodeIds.Count > 0)
+        {
+            builder.AppendLine($"- **Evidence nodes**: {EscapeMarkdown(string.Join(", ", graph.AgentSummary.EvidenceNodeIds.Take(8)))}");
+        }
+
         builder.AppendLine();
     }
 
