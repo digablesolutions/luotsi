@@ -9,10 +9,12 @@
 ## Command
 
 ```text
-luotsi replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--limit 200] [--write-json] [--write-markdown]
+luotsi replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--node <id> --depth 1] [--limit 200] [--write-json] [--write-markdown]
 ```
 
 Filtering returns a focused subgraph with one-hop context. `total_node_count` and `total_edge_count` describe the full graph before filtering; `node_count` and `edge_count` describe the returned view.
+
+`--node <id> --depth <n>` returns a deterministic neighborhood around a graph node. Use it after a broad query finds a failure, selector, artifact, or generated step ID.
 
 ## Top-Level Fields
 
@@ -75,6 +77,7 @@ luotsi replay graph --artifacts artifacts/run --node-kind selector --write-markd
 luotsi replay graph --artifacts artifacts/run --action waitVisible --limit 50
 luotsi replay graph --artifacts artifacts/run --selector "Sign in" --limit 50
 luotsi replay graph --artifacts artifacts/run --edge-kind has_artifact --limit 50
+luotsi replay graph --artifacts artifacts/run --node failure:session-timeline.jsonl:3 --depth 2
 ```
 
 `replay-graph.md` starts with "What Failed", "What Agents Can Act On", and "Insights" before the raw node and edge tables.

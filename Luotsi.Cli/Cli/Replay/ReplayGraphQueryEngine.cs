@@ -20,6 +20,8 @@ internal static class ReplayGraphQueryEngine
             NormalizeBlank(options.Get("edge-kind")),
             NormalizeBlank(options.Get("action")),
             NormalizeBlank(options.Get("selector")),
+            NormalizeBlank(options.Get("node")),
+            options.Int("depth", 1),
             options.HasFlag("failed"),
             limit);
     }
@@ -29,21 +31,30 @@ internal static class ReplayGraphQueryEngine
         IReadOnlyList<ReplayGraphEdgeResult> edges,
         ReplayGraphQueryResult query)
     {
-        var filteredNodes = nodes.Where(node => MatchesNode(node, query)).ToArray();
+        if (query.Depth < 0)
+        {
+            throw new UsageException("replay graph requires --depth greater than or equal to zero.");
+        }
+
+        var filteredNodes = query.Node is null
+            ? nodes.Where(node => MatchesNode(node, query)).ToArray()
+            : SelectNeighborhood(nodes, edges, query.Node, query.Depth);
         var nodeIds = filteredNodes.Select(static node => node.Id).ToHashSet(StringComparer.Ordinal);
         var filteredEdges = edges
             .Where(edge => MatchesEdge(edge, query))
             .Where(edge => nodeIds.Contains(edge.From) || nodeIds.Contains(edge.To))
             .ToArray();
 
-        if (query.EdgeKind is not null && query.NodeKind is null && query.Action is null && query.Selector is null && !query.FailedOnly)
+        if (query.EdgeKind is not null && query.NodeKind is null && query.Action is null && query.Selector is null && query.Node is null && !query.FailedOnly)
         {
             var edgeNodeIds = filteredEdges.SelectMany(static edge => new[] { edge.From, edge.To }).ToHashSet(StringComparer.Ordinal);
             filteredNodes = nodes.Where(node => edgeNodeIds.Contains(node.Id)).ToArray();
             nodeIds = filteredNodes.Select(static node => node.Id).ToHashSet(StringComparer.Ordinal);
         }
 
-        filteredNodes = ExpandOneHopContext(nodes, edges, filteredNodes, nodeIds, query);
+        filteredNodes = query.Node is null
+            ? ExpandOneHopContext(nodes, edges, filteredNodes, nodeIds, query)
+            : filteredNodes;
         nodeIds = filteredNodes.Select(static node => node.Id).ToHashSet(StringComparer.Ordinal);
         filteredEdges = edges
             .Where(edge => MatchesEdge(edge, query) || query.EdgeKind is null)
@@ -67,6 +78,12 @@ internal static class ReplayGraphQueryEngine
         AddQueryPart(parts, "edge-kind", query.EdgeKind);
         AddQueryPart(parts, "action", query.Action);
         AddQueryPart(parts, "selector", query.Selector);
+        AddQueryPart(parts, "node", query.Node);
+        if (query.Node is not null)
+        {
+            parts.Add("depth=" + query.Depth.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+
         if (query.FailedOnly)
         {
             parts.Add("failed=true");
@@ -83,7 +100,7 @@ internal static class ReplayGraphQueryEngine
         HashSet<string> nodeIds,
         ReplayGraphQueryResult query)
     {
-        if (query.NodeKind is null && query.Action is null && query.Selector is null && !query.FailedOnly)
+        if (query.NodeKind is null && query.Action is null && query.Selector is null && query.Node is null && !query.FailedOnly)
         {
             return filteredNodes.ToArray();
         }
@@ -103,6 +120,47 @@ internal static class ReplayGraphQueryEngine
         }
 
         return allNodes.Where(node => contextIds.Contains(node.Id)).ToArray();
+    }
+
+    private static ReplayGraphNodeResult[] SelectNeighborhood(
+        IReadOnlyList<ReplayGraphNodeResult> nodes,
+        IReadOnlyList<ReplayGraphEdgeResult> edges,
+        string nodeId,
+        int depth)
+    {
+        var nodeById = nodes.ToDictionary(static node => node.Id, StringComparer.Ordinal);
+        if (!nodeById.ContainsKey(nodeId))
+        {
+            throw new UsageException($"replay graph --node '{nodeId}' did not match any graph node.");
+        }
+
+        var selected = new HashSet<string>(StringComparer.Ordinal) { nodeId };
+        var frontier = new HashSet<string>(StringComparer.Ordinal) { nodeId };
+        for (var currentDepth = 0; currentDepth < depth; currentDepth++)
+        {
+            var next = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var edge in edges)
+            {
+                if (frontier.Contains(edge.From) && selected.Add(edge.To))
+                {
+                    next.Add(edge.To);
+                }
+
+                if (frontier.Contains(edge.To) && selected.Add(edge.From))
+                {
+                    next.Add(edge.From);
+                }
+            }
+
+            if (next.Count == 0)
+            {
+                break;
+            }
+
+            frontier = next;
+        }
+
+        return nodes.Where(node => selected.Contains(node.Id)).ToArray();
     }
 
     private static bool MatchesNode(ReplayGraphNodeResult node, ReplayGraphQueryResult query)

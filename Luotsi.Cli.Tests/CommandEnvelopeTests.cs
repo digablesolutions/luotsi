@@ -1419,6 +1419,31 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayGraph_Returns_Node_Neighborhood()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot, "--node", "failure:session-timeline.jsonl:1", "--depth", "1"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("failure:session-timeline.jsonl:1", data.GetProperty("query").GetProperty("node").GetString());
+        Assert.Equal(1, data.GetProperty("query").GetProperty("depth").GetInt32());
+        Assert.Contains(data.GetProperty("nodes").EnumerateArray(), node => node.GetProperty("id").GetString() == "failure:session-timeline.jsonl:1");
+        Assert.Contains(data.GetProperty("nodes").EnumerateArray(), node => node.GetProperty("id").GetString() == "event:session-timeline.jsonl:1");
+        Assert.Contains(data.GetProperty("edges").EnumerateArray(), edge => edge.GetProperty("kind").GetString() == "indicates");
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayGraph_Promotes_Inspect_Events_To_Semantic_Nodes()
     {
         var console = new FakeConsole();

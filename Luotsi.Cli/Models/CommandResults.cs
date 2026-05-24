@@ -563,6 +563,8 @@ public sealed record ReplayGraphQueryResult(
     string? EdgeKind,
     string? Action,
     string? Selector,
+    string? Node,
+    int Depth,
     bool FailedOnly,
     int Limit);
 
