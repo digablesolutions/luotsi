@@ -144,11 +144,11 @@ internal static class ReplayGraphMarkdownWriter
             builder.AppendLine();
         }
 
-        builder.AppendLine("| Kind | Node | Title | Detail | Artifact | Command |");
-        builder.AppendLine("|---|---|---|---|---|---|");
+        builder.AppendLine("| Kind | Node | Title | Detail | Artifact | Edges | Command |");
+        builder.AppendLine("|---|---|---|---|---|---|---|");
         foreach (var evidence in graph.Evidence)
         {
-            builder.AppendLine($"| {EscapeMarkdown(evidence.Kind)} | {EscapeMarkdown(evidence.NodeId)} | {EscapeMarkdown(evidence.Title)} | {EscapeMarkdown(evidence.Detail)} | {EscapeMarkdown(evidence.ArtifactPath)} | {EscapeMarkdown(evidence.Command)} |");
+            builder.AppendLine($"| {EscapeMarkdown(evidence.Kind)} | {EscapeMarkdown(evidence.NodeId)} | {EscapeMarkdown(evidence.Title)} | {EscapeMarkdown(evidence.Detail)} | {EscapeMarkdown(evidence.ArtifactPath)} | {EscapeMarkdown(string.Join(", ", evidence.EdgeIds.Take(3)))} | {EscapeMarkdown(evidence.Command)} |");
         }
 
         builder.AppendLine();

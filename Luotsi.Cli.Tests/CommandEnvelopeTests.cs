@@ -1358,8 +1358,12 @@ public sealed partial class AppTests
         Assert.Contains(data.GetProperty("actions").EnumerateArray(), action => action.GetProperty("kind").GetString() == "filter_artifact_evidence");
         Assert.True(data.GetProperty("evidence_kinds").GetProperty("artifact").GetInt32() >= 1);
         Assert.True(data.GetProperty("evidence_kinds").GetProperty("failure").GetInt32() >= 1);
-        Assert.Contains(data.GetProperty("evidence").EnumerateArray(), evidence => evidence.GetProperty("kind").GetString() == "failure");
-        Assert.Contains(data.GetProperty("evidence").EnumerateArray(), evidence => evidence.GetProperty("kind").GetString() == "artifact");
+        Assert.Contains(data.GetProperty("evidence").EnumerateArray(), evidence =>
+            evidence.GetProperty("kind").GetString() == "failure" &&
+            evidence.GetProperty("edge_ids").GetArrayLength() >= 1);
+        Assert.Contains(data.GetProperty("evidence").EnumerateArray(), evidence =>
+            evidence.GetProperty("kind").GetString() == "artifact" &&
+            evidence.GetProperty("edge_ids").GetArrayLength() >= 1);
         Assert.True(data.GetProperty("failure_paths").GetArrayLength() >= 1);
         Assert.Equal(Path.Join(replayRoot, "replay-graph.json"), data.GetProperty("json_path").GetString());
         Assert.Equal(Path.Join(replayRoot, "replay-graph.jsonl"), data.GetProperty("jsonl_path").GetString());
@@ -1385,6 +1389,7 @@ public sealed partial class AppTests
         Assert.Contains("## What Agents Can Act On", markdown, StringComparison.Ordinal);
         Assert.Contains("## Evidence", markdown, StringComparison.Ordinal);
         Assert.Contains("Kinds:", markdown, StringComparison.Ordinal);
+        Assert.Contains("| Kind | Node | Title | Detail | Artifact | Edges | Command |", markdown, StringComparison.Ordinal);
         Assert.Contains("## Failure Paths", markdown, StringComparison.Ordinal);
         Assert.Contains("## Transitions", markdown, StringComparison.Ordinal);
         Assert.Contains("## Query Examples", markdown, StringComparison.Ordinal);

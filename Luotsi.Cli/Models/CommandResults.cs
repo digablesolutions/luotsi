@@ -618,7 +618,8 @@ public sealed record ReplayGraphEvidenceResult(
     string Title,
     string? Detail,
     string? ArtifactPath,
-    string? Command);
+    string? Command,
+    IReadOnlyList<string> EdgeIds);
 
 public sealed record ReplayGraphFailurePathResult(
     string FailureNodeId,
