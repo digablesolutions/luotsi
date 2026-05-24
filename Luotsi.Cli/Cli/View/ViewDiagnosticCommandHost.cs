@@ -23,8 +23,7 @@ internal sealed class ViewDiagnosticCommandHost(ViewDiagnosticCommandHostDepende
             var repairSteps = new List<ViewSetupStep>();
             if (command.Fix)
             {
-                var setupReport = await _dependencies.ViewDoctorFactory.Create(runner).DiagnoseAsync(viewOptions).ConfigureAwait(false);
-                if (ShouldStageFfmpeg(viewOptions, setupReport))
+                if (IsFfmpegDecoder(viewOptions))
                 {
                     await _dependencies.FfmpegSetupProvisioner.StageAsync(repairSteps.Add).ConfigureAwait(false);
                 }
@@ -49,9 +48,8 @@ internal sealed class ViewDiagnosticCommandHost(ViewDiagnosticCommandHostDepende
         return ViewCommandOptionsFactory.Build(options, adbExecutable, allowJoinShare: false, commandTimeout, options.Command ?? "view-doctor");
     }
 
-    private static bool ShouldStageFfmpeg(Luotsi.Cli.View.Contracts.ViewOptions options, ViewDoctorResult report) =>
-        string.Equals(options.Decoder, "ffmpeg", StringComparison.OrdinalIgnoreCase) &&
-        report.Checks.Any(static check => string.Equals(check.Name, "decoder", StringComparison.Ordinal) && !check.Ok);
+    private static bool IsFfmpegDecoder(Luotsi.Cli.View.Contracts.ViewOptions options) =>
+        string.Equals(options.Decoder, "ffmpeg", StringComparison.OrdinalIgnoreCase);
 }
 
 internal sealed record ViewDiagnosticCommandHostDependencies(
