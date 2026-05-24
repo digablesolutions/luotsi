@@ -171,9 +171,17 @@ public sealed partial class AppTests
         Assert.Contains("view_share_client_connected | endpoint=127.0.0.1:9000 | remote_endpoint=10.0.0.25:40122 | observer_count=1 | reason=observer_joined", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("view_stats | decoded_frames=120 | presented_frames=118 | dropped_frames=2 | decode_fps=29.5 | present_fps=29.0 | end_to_end_latency_ms=142", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("view_error | error=transport: Unexpected end of stream", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("## Replay Workflow", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay capsule --artifacts", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay scrub --artifacts", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay graph --artifacts", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay cluster --artifacts", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("## Replay", markdownIndex, StringComparison.Ordinal);
 
         Assert.Contains("<h2>Replay Sessions</h2>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("<h2>Replay Workflow</h2>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay capsule --artifacts", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay graph --artifacts", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("<strong>view 192.168.0.134:5555</strong>", htmlIndex, StringComparison.Ordinal);
         Assert.Contains(">metadata</a> | <a href=\"session-timeline.jsonl\">timeline</a>", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("Failure timeline", htmlIndex, StringComparison.Ordinal);
@@ -314,6 +322,21 @@ public sealed partial class AppTests
             hasFailureCapsule = true,
             scenarioDraftAvailable = true,
             scenarioDraftReason = "Found command_result:tap_text source in inspect/session-timeline.jsonl.",
+            primaryFailure = new
+            {
+                scenario = "login smoke",
+                step = "wait login button",
+                action = "waitVisible",
+                message = "not visible"
+            },
+            recommendedNextSteps = new[]
+            {
+                new
+                {
+                    title = "Scrub the failure window",
+                    command = "luotsi replay scrub --artifacts root --failures --context 3 --write-markdown"
+                }
+            },
             artifactManifest = new[] { new { path = "session-timeline.jsonl", kind = "timeline", role = "session" } }
         });
         await session.WriteJsonAsync("scenario-draft-summary.json", new
@@ -357,12 +380,12 @@ public sealed partial class AppTests
         Assert.Contains("- [replay-capsule-summary.json](replay-capsule-summary.json)", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("- [scenario-draft-summary.json](scenario-draft-summary.json)", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("- [replay-scrub.json](replay-scrub.json)", markdownIndex, StringComparison.Ordinal);
-        Assert.Contains("session_count=2 | failure_count=1 | scenario_draft_available=true | scenario_draft_reason=Found command_result:tap_text source in inspect/session-timeline.jsonl. | artifact_manifest=1", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("session_count=2 | failure_count=1 | scenario_draft_available=true | scenario_draft_reason=Found command_result:tap_text source in inspect/session-timeline.jsonl. | primary_failure=login smoke / wait login button / waitVisible | next_step=Scrub the failure window | next_command=luotsi replay scrub --artifacts root --failures --context 3 --write-markdown | artifact_manifest=1", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("confidence=medium | source_summaries=1 | steps=2 | warnings=1 | normalizations=1", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("event_count=3 | focus_index=1 | markdown_path=", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("focus_type=scenario_step_failed | focus_detail=step=wait login button error_message=not visible | commands=1", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("<h2>Replay</h2>", htmlIndex, StringComparison.Ordinal);
-        Assert.Contains("session_count=2 | failure_count=1 | scenario_draft_available=true | scenario_draft_reason=Found command_result:tap_text source in inspect/session-timeline.jsonl. | artifact_manifest=1", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("session_count=2 | failure_count=1 | scenario_draft_available=true | scenario_draft_reason=Found command_result:tap_text source in inspect/session-timeline.jsonl. | primary_failure=login smoke / wait login button / waitVisible | next_step=Scrub the failure window | next_command=luotsi replay scrub --artifacts root --failures --context 3 --write-markdown | artifact_manifest=1", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("confidence=medium | source_summaries=1 | steps=2 | warnings=1 | normalizations=1", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("focus_type=scenario_step_failed | focus_detail=step=wait login button error_message=not visible | commands=1", htmlIndex, StringComparison.Ordinal);
     }

@@ -382,8 +382,16 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
             "Open the artifact browser for screenshots, timelines, and generated draft review files.");
 
         yield return new ReplayScenarioDraftCommandHint(
+            $"luotsi replay capsule --artifacts {Quote(artifactRoot)} --write-readme --write-json",
+            "Open the replay front door that links the draft to failures, artifacts, and follow-up commands.");
+
+        yield return new ReplayScenarioDraftCommandHint(
             $"luotsi replay scrub --artifacts {Quote(artifactRoot)} --context 3 --write-markdown",
             "Write a scrub view around the same evidence before editing the draft.");
+
+        yield return new ReplayScenarioDraftCommandHint(
+            $"luotsi replay graph --artifacts {Quote(artifactRoot)} --node-kind generated_step --write-markdown",
+            "Audit generated-step provenance in the semantic graph.");
 
         if (!string.IsNullOrWhiteSpace(output))
         {

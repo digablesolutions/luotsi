@@ -142,12 +142,16 @@ jobs:
         include:
           - rid: win-x64
             archive_ext: zip
+            stage_ffmpeg: true
           - rid: linux-x64
             archive_ext: tar.gz
+            stage_ffmpeg: true
           - rid: osx-x64
             archive_ext: tar.gz
+            stage_ffmpeg: false
           - rid: osx-arm64
             archive_ext: tar.gz
+            stage_ffmpeg: false
 
     steps:
       - name: Checkout
@@ -182,6 +186,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
           }
+
+      - name: Stage FFmpeg native libraries
+        if: ${{ matrix.stage_ffmpeg == true }}
+        shell: pwsh
+        run: >
+          ./ffmpeg/download-ffmpeg.ps1
+          -Platform ${{ matrix.rid }}
+          -Force
 
       - name: Publish CLI
         shell: pwsh

@@ -84,6 +84,39 @@ public sealed partial class AppTests
         Assert.Contains(SessionEventTypes.View.Ended, timeline, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task RunAsync_View_Fails_Before_Startup_When_Selected_Device_Is_Not_Visible()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        host.ConnectedDevices.Add(new DeviceInfo("192.168.0.134:5555", "device", "Panel"));
+        var artifacts = ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider);
+        using var stream = new MemoryStream();
+        var session = CreateViewSession(
+            host,
+            artifacts,
+            console,
+            timeProvider,
+            new FakeViewTransportBootstrap([new InvalidOperationException("transport should not start")]),
+            new FakeViewBackendFactory(new FakeViewBackend("ffmpeg-native")),
+            new FakeViewStreamConnector(stream),
+            new ViewPacketStreamReader());
+
+        var exitCode = await session.RunAsync(new ViewOptions("192.168.0.134:555", "adb", "h264", "ffmpeg", true, null, 1600, 60, "8M", false, false));
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal(3, console.OutputLines.Count);
+        using var diagnostic = JsonDocument.Parse(console.OutputLines[0]);
+        Assert.Equal(SessionEventTypes.View.Diagnostic, diagnostic.RootElement.GetProperty("type").GetString());
+        Assert.Equal("usage_error", diagnostic.RootElement.GetProperty("category").GetString());
+        Assert.Contains("Live view device selection is not usable.", diagnostic.RootElement.GetProperty("message").GetString(), StringComparison.Ordinal);
+
+        using var error = JsonDocument.Parse(console.OutputLines[1]);
+        Assert.Contains("Did you mean '--device 192.168.0.134:5555'?", error.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
 
 
     [Fact]

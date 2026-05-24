@@ -42,10 +42,10 @@ internal sealed class DoctorCommandHost(DoctorCommandHostDependencies dependenci
             "Install Android platform-tools or point Luotsi at a working adb binary with --adb or LUOTSI_ADB.",
             adbHost.GetAdbVersionAsync).ConfigureAwait(false);
 
-        var viewReport = await _dependencies.ViewDoctorFactory.Create(runner).DiagnoseAsync(viewOptions).ConfigureAwait(false);
+        ViewDoctorResult viewReport;
         if (fix)
         {
-            if (ShouldStageFfmpeg(viewOptions, viewReport))
+            if (IsFfmpegDecoder(viewOptions))
             {
                 await _dependencies.FfmpegSetupProvisioner.StageAsync(repairSteps.Add).ConfigureAwait(false);
             }
@@ -53,6 +53,10 @@ internal sealed class DoctorCommandHost(DoctorCommandHostDependencies dependenci
             var setup = await _dependencies.ViewSetupFactory.Create(runner).SetupAsync(viewOptions, fix: true).ConfigureAwait(false);
             repairSteps.AddRange(setup.Steps);
             viewReport = setup.Doctor;
+        }
+        else
+        {
+            viewReport = await _dependencies.ViewDoctorFactory.Create(runner).DiagnoseAsync(viewOptions).ConfigureAwait(false);
         }
 
         PreflightResult? packagePreflight = null;
@@ -131,9 +135,8 @@ internal sealed class DoctorCommandHost(DoctorCommandHostDependencies dependenci
         return ViewCommandOptionsFactory.Build(options, adbExecutable, allowJoinShare: false, commandTimeout, options.Command ?? "doctor");
     }
 
-    private static bool ShouldStageFfmpeg(Luotsi.Cli.View.Contracts.ViewOptions options, ViewDoctorResult report) =>
-        string.Equals(options.Decoder, "ffmpeg", StringComparison.OrdinalIgnoreCase) &&
-        report.Checks.Any(static check => string.Equals(check.Name, "decoder", StringComparison.Ordinal) && !check.Ok);
+    private static bool IsFfmpegDecoder(Luotsi.Cli.View.Contracts.ViewOptions options) =>
+        string.Equals(options.Decoder, "ffmpeg", StringComparison.OrdinalIgnoreCase);
 }
 
 internal sealed record DoctorCommandHostDependencies(

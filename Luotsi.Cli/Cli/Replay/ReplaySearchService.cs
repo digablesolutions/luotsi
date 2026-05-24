@@ -71,8 +71,47 @@ internal sealed class ReplaySearchService(IFileSystem fileSystem)
             matches.Count,
             scannedFileCount,
             truncated,
+            BuildCommandHints(artifacts.Root, query, matches).ToArray(),
             matches);
     }
+
+    private static IEnumerable<ReplaySearchCommandHint> BuildCommandHints(
+        string artifactRoot,
+        string query,
+        IReadOnlyCollection<ReplaySearchMatchResult> matches)
+    {
+        yield return new ReplaySearchCommandHint(
+            "describe_replay_capsule",
+            "Open the replay front door for the artifact root.",
+            $"luotsi replay capsule --artifacts {Quote(artifactRoot)} --write-readme --write-json");
+
+        yield return new ReplaySearchCommandHint(
+            "open_artifact_index",
+            "Open the artifact browser for screenshots, logs, reports, and generated replay files.",
+            $"luotsi replay open --artifacts {Quote(artifactRoot)}");
+
+        if (matches.Any(static match => string.Equals(match.Kind, "timeline", StringComparison.OrdinalIgnoreCase)))
+        {
+            yield return new ReplaySearchCommandHint(
+                "scrub_failures",
+                "Scrub failure-relevant timeline events near this search result.",
+                $"luotsi replay scrub --artifacts {Quote(artifactRoot)} --failures --context 3 --write-markdown");
+        }
+
+        if (matches.Any(IsGraphUsefulMatch))
+        {
+            yield return new ReplaySearchCommandHint(
+                "graph_matching_context",
+                "Query the semantic graph for the same text.",
+                $"luotsi replay graph --artifacts {Quote(artifactRoot)} --contains {Quote(query)} --write-markdown");
+        }
+    }
+
+    private static bool IsGraphUsefulMatch(ReplaySearchMatchResult match) =>
+        string.Equals(match.Kind, "timeline", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(match.Kind, "failure", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(match.Kind, "screen_state", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(match.Kind, "hierarchy", StringComparison.OrdinalIgnoreCase);
 
     private IEnumerable<string> GetSearchableFiles(string artifactRoot) =>
         _fileSystem
@@ -185,4 +224,7 @@ internal sealed class ReplaySearchService(IFileSystem fileSystem)
         var relative = Path.GetRelativePath(artifactRoot, file);
         return relative.Replace('\\', '/');
     }
+
+    private static string Quote(string value) =>
+        value.Contains(' ', StringComparison.Ordinal) ? $"\"{value}\"" : value;
 }

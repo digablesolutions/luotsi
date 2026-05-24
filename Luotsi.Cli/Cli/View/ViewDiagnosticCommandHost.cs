@@ -20,9 +20,18 @@ internal sealed class ViewDiagnosticCommandHost(ViewDiagnosticCommandHostDepende
         var viewOptions = BuildViewOptions(options, adbExecutable);
         if (command.Action == ViewDiagnosticAction.Setup)
         {
+            var repairSteps = new List<ViewSetupStep>();
+            if (command.Fix && IsFfmpegDecoder(viewOptions))
+            {
+                await _dependencies.FfmpegSetupProvisioner.StageAsync(repairSteps.Add).ConfigureAwait(false);
+            }
+
             var setup = await _dependencies.ViewSetupFactory.Create(runner).SetupAsync(viewOptions, command.Fix).ConfigureAwait(false);
-            _dependencies.EnvelopeWriter.WriteSuccess(command.EnvelopeCommand, started, setup, artifacts.ToData());
-            return setup.Ready ? 0 : 1;
+            var result = repairSteps.Count == 0
+                ? setup
+                : setup with {Steps = repairSteps.Concat(setup.Steps).ToArray()};
+            _dependencies.EnvelopeWriter.WriteSuccess(command.EnvelopeCommand, started, result, artifacts.ToData());
+            return result.Ready ? 0 : 1;
         }
 
         var report = await _dependencies.ViewDoctorFactory.Create(runner).DiagnoseAsync(viewOptions).ConfigureAwait(false);
@@ -35,10 +44,14 @@ internal sealed class ViewDiagnosticCommandHost(ViewDiagnosticCommandHostDepende
         var commandTimeout = AdbCommandTimeoutResolver.Resolve(options, _dependencies.Environment);
         return ViewCommandOptionsFactory.Build(options, adbExecutable, allowJoinShare: false, commandTimeout, options.Command ?? "view-doctor");
     }
+
+    private static bool IsFfmpegDecoder(Luotsi.Cli.View.Contracts.ViewOptions options) =>
+        string.Equals(options.Decoder, "ffmpeg", StringComparison.OrdinalIgnoreCase);
 }
 
 internal sealed record ViewDiagnosticCommandHostDependencies(
     IEnvironmentVariables Environment,
     AppCommandEnvelopeWriter EnvelopeWriter,
     IViewDoctorFactory ViewDoctorFactory,
-    IViewSetupFactory ViewSetupFactory);
+    IViewSetupFactory ViewSetupFactory,
+    FfmpegSetupProvisioner FfmpegSetupProvisioner);

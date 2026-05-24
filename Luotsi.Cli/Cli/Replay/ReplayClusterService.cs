@@ -21,6 +21,7 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(artifacts);
+        var query = CreateQuery(options);
 
         var allFiles = _fileSystem.GetFiles(artifacts.Root, "*", SearchOption.AllDirectories)
             .Select(path => Path.GetRelativePath(artifacts.Root, path))
@@ -37,6 +38,7 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
         var clusters = failures
             .GroupBy(static failure => failure.Signature, StringComparer.Ordinal)
             .Select(group => CreateCluster(artifacts.Root, group.Key, group.ToArray()))
+            .Where(cluster => MatchesCluster(cluster, query))
             .OrderByDescending(static cluster => cluster.Count)
             .ThenBy(static cluster => cluster.Signature, StringComparer.Ordinal)
             .ToArray();
@@ -53,6 +55,7 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
             summaries.Count,
             failures.Length,
             clusters.Length,
+            query,
             jsonPath,
             markdownPath,
             clusters);
@@ -69,6 +72,61 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
 
         return result;
     }
+
+    private static ReplayClusterQueryResult CreateQuery(CliOptions options)
+    {
+        var minCount = options.Int("min-count", 1);
+        if (minCount <= 0)
+        {
+            throw new UsageException("replay cluster requires --min-count greater than zero.");
+        }
+
+        var similarity = NormalizeBlank(options.Get("similarity"));
+        if (similarity is not null &&
+            !string.Equals(similarity, "same_failure_shape", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(similarity, "likely_same_cause", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(similarity, "same_bucket", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new UsageException("replay cluster --similarity must be same_failure_shape, likely_same_cause, or same_bucket.");
+        }
+
+        return new ReplayClusterQueryResult(minCount, similarity, NormalizeBlank(options.Get("contains")));
+    }
+
+    private static bool MatchesCluster(ReplayFailureClusterResult cluster, ReplayClusterQueryResult query)
+    {
+        if (cluster.Count < query.MinCount)
+        {
+            return false;
+        }
+
+        if (query.Similarity is not null &&
+            !string.Equals(cluster.Intelligence.Similarity, query.Similarity, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (query.Contains is not null && !ClusterContains(cluster, query.Contains))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool ClusterContains(ReplayFailureClusterResult cluster, string value) =>
+        Contains(cluster.Id, value) ||
+        Contains(cluster.Signature, value) ||
+        Contains(cluster.Category, value) ||
+        Contains(cluster.Message, value) ||
+        Contains(cluster.Action, value) ||
+        Contains(cluster.Step, value) ||
+        Contains(cluster.Intelligence.LikelyCause, value) ||
+        cluster.Intelligence.SupportingSignals.Any(signal => Contains(signal, value)) ||
+        cluster.Intelligence.SignalComparisons.Any(signal =>
+            Contains(signal.Name, value) ||
+            Contains(signal.Stability, value) ||
+            signal.Values.Any(signalValue => Contains(signalValue, value)));
 
     private static IEnumerable<FailureInstance> CreateFailureInstances(SessionReplaySummary summary)
     {
@@ -127,15 +185,34 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
             representative.ErrorMessage,
             representative.Action,
             representative.Step,
+            CreateIntelligence(artifactRoot, instances),
             CreateHints(artifactRoot, instances),
             instances);
+    }
+
+    private static ReplayFailureClusterIntelligenceResult CreateIntelligence(
+        string artifactRoot,
+        IReadOnlyList<ReplayFailureClusterInstanceResult> instances)
+    {
+        var representative = SelectBestReplayInstance(instances);
+        var representativeRoot = ResolveInstanceArtifactRoot(artifactRoot, representative.MetadataPath);
+        var score = CalculateSimilarityScore(instances);
+        return new ReplayFailureClusterIntelligenceResult(
+            ClassifySimilarity(score),
+            score,
+            BuildLikelyCause(instances),
+            representativeRoot,
+            $"luotsi replay graph --artifacts {Quote(representativeRoot)} --failed --write-json --write-markdown",
+            $"luotsi replay scrub --artifacts {Quote(representativeRoot)} --failures --context 3 --write-markdown",
+            BuildSupportingSignals(instances, representative),
+            BuildSignalComparisons(instances));
     }
 
     private static IReadOnlyList<ReplayFailureClusterHintResult> CreateHints(string artifactRoot, IReadOnlyList<ReplayFailureClusterInstanceResult> instances)
     {
         var hints = new List<ReplayFailureClusterHintResult>();
-        var latest = instances[0];
-        var latestRoot = ResolveInstanceArtifactRoot(artifactRoot, latest.MetadataPath);
+        var representative = SelectBestReplayInstance(instances);
+        var representativeRoot = ResolveInstanceArtifactRoot(artifactRoot, representative.MetadataPath);
         if (instances.Count > 1)
         {
             hints.Add(new ReplayFailureClusterHintResult(
@@ -144,29 +221,199 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
                 null));
         }
 
-        if (instances.Count > 1 && string.Equals(latest.ErrorCategory, "selector_or_screen_state", StringComparison.OrdinalIgnoreCase))
+        if (instances.Count > 1 && string.Equals(representative.ErrorCategory, "selector_or_screen_state", StringComparison.OrdinalIgnoreCase))
         {
             hints.Add(new ReplayFailureClusterHintResult(
                 "likely_repeated_selector_or_screen_state_failure",
                 "Repeated selector or screen-state failures usually deserve a stronger wait, alternate selector, or visual fallback.",
-                $"luotsi replay graph --artifacts {Quote(latestRoot)} --write-json --write-markdown"));
+                $"luotsi replay graph --artifacts {Quote(representativeRoot)} --failed --write-json --write-markdown"));
         }
 
         hints.Add(new ReplayFailureClusterHintResult(
-            "open_latest_replay",
-            "Open the latest matching replay bundle locally.",
-            $"luotsi replay open --artifacts {Quote(latestRoot)}"));
+            "inspect_best_failure_graph",
+            "Open the semantic graph for the best representative failure in this cluster.",
+            $"luotsi replay graph --artifacts {Quote(representativeRoot)} --failed --write-json --write-markdown"));
 
-        if (!string.IsNullOrWhiteSpace(latest.ErrorMessage))
+        hints.Add(new ReplayFailureClusterHintResult(
+            "scrub_best_failure",
+            "Scrub the best representative failure timeline with local context.",
+            $"luotsi replay scrub --artifacts {Quote(representativeRoot)} --failures --context 3 --write-markdown"));
+
+        hints.Add(new ReplayFailureClusterHintResult(
+            "describe_best_replay_capsule",
+            "Open the replay front door for the best representative failure.",
+            $"luotsi replay capsule --artifacts {Quote(representativeRoot)} --write-readme --write-json"));
+
+        hints.Add(new ReplayFailureClusterHintResult(
+            "open_best_replay",
+            "Open the best matching replay bundle locally.",
+            $"luotsi replay open --artifacts {Quote(representativeRoot)}"));
+
+        if (!string.IsNullOrWhiteSpace(representative.ErrorMessage))
         {
             hints.Add(new ReplayFailureClusterHintResult(
-                "search_latest_failure_text",
-                "Search the latest replay bundle for the representative failure text.",
-                $"luotsi replay search --artifacts {Quote(latestRoot)} --contains {Quote(latest.ErrorMessage)}"));
+                "search_best_failure_text",
+                "Search the best replay bundle for the representative failure text.",
+                $"luotsi replay search --artifacts {Quote(representativeRoot)} --contains {Quote(representative.ErrorMessage)}"));
         }
 
         return hints;
     }
+
+    private static ReplayFailureClusterInstanceResult SelectBestReplayInstance(IReadOnlyList<ReplayFailureClusterInstanceResult> instances) =>
+        instances
+            .OrderByDescending(ReplayEvidenceScore)
+            .ThenByDescending(static instance => instance.StartedAt)
+            .ThenBy(static instance => instance.MetadataPath, StringComparer.Ordinal)
+            .First();
+
+    private static int ReplayEvidenceScore(ReplayFailureClusterInstanceResult instance)
+    {
+        var score = 0;
+        if (!string.IsNullOrWhiteSpace(instance.FailureCapsulePath))
+        {
+            score += 5;
+        }
+
+        if (!string.IsNullOrWhiteSpace(instance.ErrorMessage))
+        {
+            score += 2;
+        }
+
+        if (!string.IsNullOrWhiteSpace(instance.Action))
+        {
+            score++;
+        }
+
+        if (!string.IsNullOrWhiteSpace(instance.Step))
+        {
+            score++;
+        }
+
+        if (!string.IsNullOrWhiteSpace(instance.Scenario))
+        {
+            score++;
+        }
+
+        return score;
+    }
+
+    private static double CalculateSimilarityScore(IReadOnlyList<ReplayFailureClusterInstanceResult> instances)
+    {
+        if (instances.Count <= 1)
+        {
+            return 1.0;
+        }
+
+        var categoryScore = IsStableSignal(instances.Select(static instance => instance.ErrorCategory)) ? 0.25 : 0.0;
+        var actionScore = IsStableSignal(instances.Select(static instance => instance.Action)) ? 0.25 : 0.0;
+        var stepScore = IsStableSignal(instances.Select(static instance => instance.Step)) ? 0.2 : 0.0;
+        var messageScore = IsStableSignal(instances.Select(static instance => instance.ErrorMessage)) ? 0.3 : 0.15;
+        return Math.Round(categoryScore + actionScore + stepScore + messageScore, 2);
+    }
+
+    private static string ClassifySimilarity(double score)
+    {
+        if (score >= 0.9)
+        {
+            return "same_failure_shape";
+        }
+
+        if (score >= 0.7)
+        {
+            return "likely_same_cause";
+        }
+
+        return "same_bucket";
+    }
+
+    private static string BuildLikelyCause(IReadOnlyList<ReplayFailureClusterInstanceResult> instances)
+    {
+        var latest = instances[0];
+        if (string.Equals(latest.ErrorCategory, "selector_or_screen_state", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Repeated selector or screen-state failure; inspect the semantic graph for selector drift, missing wait condition, or visual fallback need.";
+        }
+
+        if (!string.IsNullOrWhiteSpace(latest.Action))
+        {
+            return $"Repeated failure around action '{latest.Action}'; inspect causal graph and timeline around that action.";
+        }
+
+        return "Repeated failure shape; inspect the best representative replay graph and search the representative error text.";
+    }
+
+    private static IReadOnlyList<string> BuildSupportingSignals(
+        IReadOnlyList<ReplayFailureClusterInstanceResult> instances,
+        ReplayFailureClusterInstanceResult representative)
+    {
+        var signals = new List<string>
+        {
+            "instances=" + instances.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "best_replay_evidence_score=" + ReplayEvidenceScore(representative).ToString(System.Globalization.CultureInfo.InvariantCulture)
+        };
+
+        AddSignal(signals, "category", representative.ErrorCategory);
+        AddSignal(signals, "action", representative.Action);
+        AddSignal(signals, "step", representative.Step);
+        AddSignal(signals, "message", representative.ErrorMessage);
+        return signals;
+    }
+
+    private static IReadOnlyList<ReplayFailureClusterSignalComparisonResult> BuildSignalComparisons(
+        IReadOnlyList<ReplayFailureClusterInstanceResult> instances)
+    {
+        return new[]
+        {
+            CompareSignal("category", instances.Select(static instance => instance.ErrorCategory)),
+            CompareSignal("action", instances.Select(static instance => instance.Action)),
+            CompareSignal("step", instances.Select(static instance => instance.Step)),
+            CompareSignal("message", instances.Select(static instance => instance.ErrorMessage)),
+            CompareSignal("target", instances.Select(static instance => instance.Target))
+        };
+    }
+
+    private static ReplayFailureClusterSignalComparisonResult CompareSignal(string name, IEnumerable<string?> values)
+    {
+        var displayValues = values
+            .Select(static value => string.IsNullOrWhiteSpace(value) ? "" : value.Trim())
+            .Where(static value => value.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(static value => value, StringComparer.Ordinal)
+            .Take(8)
+            .ToArray();
+        var normalizedValues = displayValues
+            .Select(Normalize)
+            .Where(static value => value.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var stability = displayValues.Length == 0 ? "missing" : normalizedValues.Length switch
+        {
+            1 => "stable",
+            _ => "variable"
+        };
+        return new ReplayFailureClusterSignalComparisonResult(name, stability, displayValues);
+    }
+
+    private static int DistinctNormalized(IEnumerable<string?> values) =>
+        values.Select(Normalize).Where(static value => value.Length > 0).Distinct(StringComparer.Ordinal).Count();
+
+    private static bool IsStableSignal(IEnumerable<string?> values) =>
+        DistinctNormalized(values) <= 1;
+
+    private static void AddSignal(List<string> signals, string name, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            signals.Add(name + "=" + value);
+        }
+    }
+
+    private static bool Contains(string? value, string query) =>
+        value?.Contains(query, StringComparison.OrdinalIgnoreCase) == true;
+
+    private static string? NormalizeBlank(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static ReplayFailureClusterInstanceResult ToResult(
         SessionReplaySummary summary,
@@ -243,6 +490,9 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
         builder.AppendLine($"Sessions: `{result.SessionCount}`");
         builder.AppendLine($"Failures: `{result.FailureCount}`");
         builder.AppendLine($"Clusters: `{result.ClusterCount}`");
+        builder.AppendLine($"Query: `min-count={result.Query.MinCount}, similarity={result.Query.Similarity ?? "*"}, contains={result.Query.Contains ?? "*"}`");
+        builder.AppendLine();
+        AppendStartHere(builder, result.Clusters.FirstOrDefault());
         builder.AppendLine();
         builder.AppendLine("| Cluster | Count | Category | Action | Step | Message |");
         builder.AppendLine("|---|---:|---|---|---|---|");
@@ -257,6 +507,38 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
             builder.AppendLine($"## {cluster.Id}");
             builder.AppendLine();
             builder.AppendLine($"Signature: `{EscapeMarkdown(cluster.Signature)}`");
+            builder.AppendLine();
+            builder.AppendLine("### Intelligence");
+            builder.AppendLine();
+            builder.AppendLine($"- Similarity: `{EscapeMarkdown(cluster.Intelligence.Similarity)}` (`{cluster.Intelligence.SimilarityScore:0.##}`)");
+            builder.AppendLine($"- Likely cause: {EscapeMarkdown(cluster.Intelligence.LikelyCause)}");
+            builder.AppendLine($"- Best replay: `{EscapeMarkdown(cluster.Intelligence.BestReplayArtifactRoot)}`");
+            if (!string.IsNullOrWhiteSpace(cluster.Intelligence.BestGraphCommand))
+            {
+                builder.AppendLine($"- Graph: `{EscapeMarkdown(cluster.Intelligence.BestGraphCommand)}`");
+            }
+
+            if (!string.IsNullOrWhiteSpace(cluster.Intelligence.BestScrubCommand))
+            {
+                builder.AppendLine($"- Scrub: `{EscapeMarkdown(cluster.Intelligence.BestScrubCommand)}`");
+            }
+
+            if (cluster.Intelligence.SupportingSignals.Count > 0)
+            {
+                builder.AppendLine("- Signals: " + EscapeMarkdown(string.Join(", ", cluster.Intelligence.SupportingSignals)));
+            }
+
+            if (cluster.Intelligence.SignalComparisons.Count > 0)
+            {
+                builder.AppendLine();
+                builder.AppendLine("| Signal | Stability | Values |");
+                builder.AppendLine("|---|---|---|");
+                foreach (var signal in cluster.Intelligence.SignalComparisons)
+                {
+                    builder.AppendLine($"| {EscapeMarkdown(signal.Name)} | {EscapeMarkdown(signal.Stability)} | {EscapeMarkdown(string.Join(", ", signal.Values))} |");
+                }
+            }
+
             builder.AppendLine();
             builder.AppendLine("### Hints");
             builder.AppendLine();
@@ -284,6 +566,37 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
         }
 
         return builder.ToString();
+    }
+
+    private static void AppendStartHere(StringBuilder builder, ReplayFailureClusterResult? cluster)
+    {
+        builder.AppendLine("## Start Here");
+        builder.AppendLine();
+        if (cluster is null)
+        {
+            builder.AppendLine("No repeated failure clusters matched the query.");
+            return;
+        }
+
+        builder.AppendLine($"- Top cluster: `{EscapeMarkdown(cluster.Id)}` ({cluster.Count} failures)");
+        builder.AppendLine($"- Similarity: `{EscapeMarkdown(cluster.Intelligence.Similarity)}` (`{cluster.Intelligence.SimilarityScore:0.##}`)");
+        builder.AppendLine($"- Likely cause: {EscapeMarkdown(cluster.Intelligence.LikelyCause)}");
+        builder.AppendLine($"- Best replay bundle: `{EscapeMarkdown(cluster.Intelligence.BestReplayArtifactRoot)}`");
+        var capsuleHint = cluster.Hints.FirstOrDefault(static hint => string.Equals(hint.Kind, "describe_best_replay_capsule", StringComparison.Ordinal));
+        if (capsuleHint is not null)
+        {
+            builder.AppendLine($"- Open capsule: `{EscapeMarkdown(capsuleHint.Command)}`");
+        }
+
+        if (!string.IsNullOrWhiteSpace(cluster.Intelligence.BestScrubCommand))
+        {
+            builder.AppendLine($"- Scrub failure: `{EscapeMarkdown(cluster.Intelligence.BestScrubCommand)}`");
+        }
+
+        if (!string.IsNullOrWhiteSpace(cluster.Intelligence.BestGraphCommand))
+        {
+            builder.AppendLine($"- Inspect graph: `{EscapeMarkdown(cluster.Intelligence.BestGraphCommand)}`");
+        }
     }
 
     private static string MarkdownLink(string? path) =>

@@ -37,7 +37,11 @@ internal static class AppViewCommandCompositionBuilder
             dependencies.Environment,
             dependencies.EnvelopeWriter,
             resolvedViewDoctorFactory,
-            resolvedViewSetupFactory));
+            resolvedViewSetupFactory,
+            new FfmpegSetupProvisioner(
+                dependencies.Environment,
+                dependencies.FileSystem,
+                dependencies.ProcessRunner)));
         var doctorCommandHost = new DoctorCommandHost(new(
             dependencies.Environment,
             dependencies.EnvelopeWriter,

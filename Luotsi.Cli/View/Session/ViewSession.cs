@@ -170,6 +170,11 @@ public sealed class ViewSession : IViewSession
 
         try
         {
+            if (!usesSharedTransport)
+            {
+                await EnsureSelectedDeviceVisibleAsync(activeDeviceSelector).ConfigureAwait(false);
+            }
+
             await using var recorder = new SessionControlledViewRecorder(_viewRecorderFactory, options);
             IViewRenderer? renderer = null;
             SessionViewRenderer sessionRenderer;
@@ -514,6 +519,63 @@ public sealed class ViewSession : IViewSession
         }
     }
 
+    private async Task EnsureSelectedDeviceVisibleAsync(string deviceSelector)
+    {
+        DeviceListResult devices;
+        try
+        {
+            devices = await _deviceHost.GetDevicesAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException)
+        {
+            return;
+        }
+
+        if (devices.Devices.Count == 0 ||
+            devices.Devices.Any(device => string.Equals(device.Serial, deviceSelector, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        var visibleSerials = devices.Devices
+            .Where(static device => !string.IsNullOrWhiteSpace(device.Serial))
+            .Select(static device => device.Serial!)
+            .ToArray();
+        var suggestion = FindDeviceSuggestion(deviceSelector, visibleSerials);
+        var visible = string.Join(", ", visibleSerials);
+        var message = $"Configured device '{deviceSelector}' is not visible to adb.";
+        if (!string.IsNullOrWhiteSpace(visible))
+        {
+            message += $" Visible devices: {visible}.";
+        }
+
+        if (!string.IsNullOrWhiteSpace(suggestion))
+        {
+            message += $" Did you mean '--device {suggestion}'?";
+        }
+
+        throw new UsageException(message);
+    }
+
+    private static string? FindDeviceSuggestion(string deviceSelector, IReadOnlyList<string> visibleSerials)
+    {
+        if (visibleSerials.Count == 1)
+        {
+            return visibleSerials[0];
+        }
+
+        var selectorHost = GetHostPart(deviceSelector);
+        return visibleSerials.FirstOrDefault(serial =>
+            serial.StartsWith(deviceSelector, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(GetHostPart(serial), selectorHost, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string GetHostPart(string serial)
+    {
+        var separator = serial.LastIndexOf(':');
+        return separator <= 0 ? serial : serial[..separator];
+    }
+
     private async IAsyncEnumerable<ViewPacket> GuardReconnectBudgetAsync(
         IAsyncEnumerable<ViewPacket> sourcePackets,
         ViewSessionInteractionRouter interactionRouter,
@@ -763,6 +825,14 @@ internal sealed record ViewRuntimeDiagnostic(string Category, string Message, st
                 string.IsNullOrWhiteSpace(options.JoinShareEndpoint)
                     ? $"{commandPrefix} --decoder ffmpeg --fix"
                     : $"{viewCommandPrefix} --decoder ffmpeg");
+        }
+
+        if (exception is UsageException && message.Contains("not visible to adb", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ViewRuntimeDiagnostic(
+                "usage_error",
+                "Live view device selection is not usable.",
+                "luotsi devices");
         }
 
         if (message.Contains("Android view helper package was not found", StringComparison.OrdinalIgnoreCase) ||

@@ -270,7 +270,13 @@ public sealed record ReplaySummarizeResult(
     string ArtifactRoot,
     int SessionCount,
     int FailureCount,
+    IReadOnlyList<ReplaySummaryCommandHintResult> Commands,
     IReadOnlyList<ReplaySessionSummaryResult> Sessions);
+
+public sealed record ReplaySummaryCommandHintResult(
+    string Kind,
+    string Description,
+    string Command);
 
 public sealed record ReplaySessionSummaryResult(
     string MetadataPath,
@@ -420,7 +426,13 @@ public sealed record ReplaySearchResult(
     int MatchCount,
     int ScannedFileCount,
     bool Truncated,
+    IReadOnlyList<ReplaySearchCommandHint> Commands,
     IReadOnlyList<ReplaySearchMatchResult> Matches);
+
+public sealed record ReplaySearchCommandHint(
+    string Kind,
+    string Description,
+    string Command);
 
 public sealed record ReplaySearchMatchResult(
     string Path,
@@ -444,6 +456,7 @@ public sealed record ReplayCapsuleResult(
     ReplayCapsuleArtifactCounts ArtifactCounts,
     IReadOnlyList<ReplayCapsuleArtifactManifestEntry> ArtifactManifest,
     IReadOnlyList<ReplayCapsuleTimelineHighlightResult> FailureTimeline,
+    IReadOnlyList<ReplayCapsuleNextStep> RecommendedNextSteps,
     IReadOnlyList<ReplayCapsuleCommandHint> SuggestedCommands);
 
 public sealed record ReplayCapsulePrimaryFailureResult(
@@ -501,6 +514,12 @@ public sealed record ReplayCapsuleCommandHint(
     string Command,
     string Purpose);
 
+public sealed record ReplayCapsuleNextStep(
+    string Kind,
+    string Title,
+    string Reason,
+    string Command);
+
 public sealed record ReplayTimelineResult(
     string Schema,
     string ArtifactRoot,
@@ -510,7 +529,13 @@ public sealed record ReplayTimelineResult(
     string? JsonPath,
     string? JsonlPath,
     string? MarkdownPath,
+    IReadOnlyList<ReplayTimelineCommandHint> Commands,
     IReadOnlyList<ReplayTimelineEventResult> Events);
+
+public sealed record ReplayTimelineCommandHint(
+    string Kind,
+    string Description,
+    string Command);
 
 public sealed record ReplayTimelineEventResult(
     string Path,
@@ -684,9 +709,15 @@ public sealed record ReplayClustersResult(
     int SessionCount,
     int FailureCount,
     int ClusterCount,
+    ReplayClusterQueryResult Query,
     string? JsonPath,
     string? MarkdownPath,
     IReadOnlyList<ReplayFailureClusterResult> Clusters);
+
+public sealed record ReplayClusterQueryResult(
+    int MinCount,
+    string? Similarity,
+    string? Contains);
 
 public sealed record ReplayFailureClusterResult(
     string Id,
@@ -696,8 +727,24 @@ public sealed record ReplayFailureClusterResult(
     string? Message,
     string? Action,
     string? Step,
+    ReplayFailureClusterIntelligenceResult Intelligence,
     IReadOnlyList<ReplayFailureClusterHintResult> Hints,
     IReadOnlyList<ReplayFailureClusterInstanceResult> Instances);
+
+public sealed record ReplayFailureClusterIntelligenceResult(
+    string Similarity,
+    double SimilarityScore,
+    string LikelyCause,
+    string BestReplayArtifactRoot,
+    string? BestGraphCommand,
+    string? BestScrubCommand,
+    IReadOnlyList<string> SupportingSignals,
+    IReadOnlyList<ReplayFailureClusterSignalComparisonResult> SignalComparisons);
+
+public sealed record ReplayFailureClusterSignalComparisonResult(
+    string Name,
+    string Stability,
+    IReadOnlyList<string> Values);
 
 public sealed record ReplayFailureClusterHintResult(
     string Kind,

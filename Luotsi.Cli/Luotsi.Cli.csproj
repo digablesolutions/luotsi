@@ -29,6 +29,11 @@
              Link="ffmpeg/download-ffmpeg.ps1"
              ExcludeFromSingleFile="true"
              CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../ffmpeg/bin/**/*"
+             Condition="Exists('$(MSBuildProjectDirectory)/../ffmpeg/bin')"
+             Link="ffmpeg/bin/%(RecursiveDir)%(Filename)%(Extension)"
+             ExcludeFromSingleFile="true"
+             CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../Luotsi.ViewServer.Android/**/*"
              Exclude="../Luotsi.ViewServer.Android/**/bin/**;../Luotsi.ViewServer.Android/**/obj/**;../Luotsi.ViewServer.Android/**/.gradle/**;../Luotsi.ViewServer.Android/**/build/**"
              Link="Luotsi.ViewServer.Android/%(RecursiveDir)%(Filename)%(Extension)"

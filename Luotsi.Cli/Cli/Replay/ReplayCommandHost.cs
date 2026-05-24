@@ -223,6 +223,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             result.ArtifactRoot,
             result.SessionCount,
             result.FailureCount,
+            result.Commands,
             null);
 
         foreach (var session in result.Sessions)
@@ -231,6 +232,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
                 ResultSchemas.SessionReplaySummary,
                 "session",
                 result.ArtifactRoot,
+                null,
                 null,
                 null,
                 session);
@@ -250,6 +252,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         string ArtifactRoot,
         int? SessionCount,
         int? FailureCount,
+        IReadOnlyList<ReplaySummaryCommandHintResult>? Commands,
         ReplaySessionSummaryResult? Session);
 
     private sealed record ReplayOpenCommand(string FileName, IReadOnlyList<string> Args);

@@ -48,6 +48,7 @@ internal sealed class ReplayCommandDispatcher(IFileSystem fileSystem)
             artifactRoot,
             summaries.Count,
             summaries.Count(static summary => summary.HasFailureSignals),
+            CreateCommandHints(artifactRoot, summaries),
             summaries.Select(static summary => new ReplaySessionSummaryResult(
                 summary.MetadataPath,
                 summary.TimelinePath,
@@ -71,6 +72,50 @@ internal sealed class ReplayCommandDispatcher(IFileSystem fileSystem)
                     entry.Detail,
                     entry.IsFailureRelevant)).ToArray())).ToArray());
     }
+
+    private static IReadOnlyList<ReplaySummaryCommandHintResult> CreateCommandHints(
+        string artifactRoot,
+        IReadOnlyCollection<SessionReplaySummary> summaries)
+    {
+        var commands = new List<ReplaySummaryCommandHintResult>
+        {
+            new(
+                "describe_replay_capsule",
+                "Open the replay front door for the artifact root.",
+                $"luotsi replay capsule --artifacts {Quote(artifactRoot)} --write-readme --write-json"),
+            new(
+                "open_artifact_index",
+                "Open the local artifact browser.",
+                $"luotsi replay open --artifacts {Quote(artifactRoot)}")
+        };
+
+        if (summaries.Any(static summary => summary.HasFailureSignals))
+        {
+            commands.Add(new ReplaySummaryCommandHintResult(
+                "scrub_failures",
+                "Scrub failure-relevant timeline events with nearby context.",
+                $"luotsi replay scrub --artifacts {Quote(artifactRoot)} --failures --context 3 --write-markdown"));
+            commands.Add(new ReplaySummaryCommandHintResult(
+                "graph_failures",
+                "Build a focused semantic graph over failed replay evidence.",
+                $"luotsi replay graph --artifacts {Quote(artifactRoot)} --failed --write-json --write-markdown"));
+            commands.Add(new ReplaySummaryCommandHintResult(
+                "cluster_failures",
+                "Compare this artifact root with nearby replay bundles for repeated failure shapes.",
+                $"luotsi replay cluster --artifacts {Quote(ResolveClusterRoot(artifactRoot))} --min-count 2 --write-markdown"));
+        }
+
+        return commands;
+    }
+
+    private static string ResolveClusterRoot(string artifactRoot)
+    {
+        var parent = Path.GetDirectoryName(artifactRoot);
+        return string.IsNullOrWhiteSpace(parent) ? artifactRoot : parent;
+    }
+
+    private static string Quote(string value) =>
+        value.Contains(' ', StringComparison.Ordinal) ? $"\"{value}\"" : value;
 
     private static ReplayFailureCapsuleResult? ToFailureCapsuleResult(string? failureCapsulePath, FailureCapsuleManifest? failureCapsule)
     {

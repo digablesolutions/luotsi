@@ -27,10 +27,10 @@ luotsi replay open --artifacts ./artifacts/my-run
 
 ## What each command is for
 
-- `replay summarize`: condensed session-level overview, including failure capsule linkage
-- `replay timeline`: ordered timeline events with type, timestamps, detail text, and filters for failures, time windows, or exact source path/sequence
-- `replay scrub`: local previous/focused/next event view with exact commands to move through replay evidence
-- `replay search`: text search across timelines and text-like artifacts
+- `replay summarize`: condensed session-level overview with commands into capsule, open, scrub, graph, and clustering
+- `replay timeline`: ordered timeline events with type, timestamps, detail text, filters, and follow-up commands when failures are selected
+- `replay scrub`: local previous/focused/next event view with exact commands to move through replay evidence, open the capsule, search, or graph the focused failure
+- `replay search`: text search across timelines and text-like artifacts with follow-up commands when matches are replay-relevant
 - `replay open`: regenerate and open the artifact browser locally
 - `replay capsule`: compact manifest with primary failure reopen command, failure timeline with exact reopen commands, existing scenario draft artifacts and summary counts, artifact manifest, and suggested next commands
 - `replay scenario-draft`: turn inspect or replay actions into a conservative starter scenario
@@ -50,9 +50,9 @@ The public distinction that matters is:
 - `replay graph` is the agent- and debugger-facing node/edge model for that same root
 - `replay cluster` is the cross-run grouping view when the same failure shape keeps returning in CI
 
-`replay graph` returns the promoted graph for one artifact root with `node_count`, `edge_count`, `node_kinds`, `edge_kinds`, optional `json_path` and `markdown_path`, plus the full `nodes` and `edges` arrays. The promoted node kinds that matter most in practice are `failure`, `action`, `selector`, `screen_state`, `telemetry_signal`, `scenario_draft`, and `generated_step`. On this branch it does not narrow by query, so use `replay timeline`, `replay scrub`, or `replay search` to isolate the failure window before you read the graph.
+`replay graph` returns a queryable graph for one artifact root with `query`, `agent_summary`, `taxonomy`, `total_node_count`, `matched_node_count`, `node_kinds`, `edge_kinds`, `insights`, `actions`, `evidence`, `facts`, `causal_chains`, `hypotheses`, optional artifact paths, and the returned `nodes` and `edges` arrays. The promoted node kinds that matter most in practice are `failure`, `action`, `selector`, `screen_state`, `telemetry_signal`, `scenario_draft`, and `generated_step`. Use `--failed`, `--node-kind`, `--edge-kind`, `--action`, `--selector`, `--contains`, `--insight`, `--severity`, `--evidence`, `--fact`, or `--node <id> --depth <n>` to narrow the view. Graph actions start with `replay capsule` so semantic context can route back to the bundle front door.
 
-`replay cluster` works one level up. Point it at a directory of replayable artifact roots when you need Luotsi to group failed sessions by normalized failure shape and return triage hints plus the next replay/search commands for the latest matching bundle.
+`replay cluster` works one level up. Point it at a directory of replayable artifact roots when you need Luotsi to group failed sessions by normalized failure shape and return triage hints plus the next replay/search commands for the best representative bundle.
 
 ## Explore to scenario
 
@@ -80,7 +80,7 @@ When you persist draft review artifacts, Luotsi currently writes:
 1. Run the command or scenario with an explicit artifact root if you want a stable location.
 2. Use `replay summarize` to confirm what happened at the session level.
 3. Move to `replay timeline` or `replay search` to narrow the failure window.
-4. Use `replay graph` when `replay timeline`, `replay scrub`, or `replay search` has already narrowed the question and you now need promoted selectors/actions/telemetry, or `replay cluster` when the question is whether the same failure shape is repeating across runs.
+4. Use `replay graph` when you need promoted selectors/actions/telemetry, facts, causal chains, or hypotheses; use `replay cluster` when the question is whether the same failure shape is repeating across runs.
 5. Open the local browser index when you want screenshots, logs, replay markdown, and draft review artifacts in one place.
 
 ## MVP contract
@@ -107,6 +107,7 @@ Timeline events are still evidence, not assertions. They preserve what Luotsi ob
 - `artifact_manifest` and `artifact_counts` for screenshots, videos, logs, reports, timelines, and generated replay files.
 - `scenario_draft_artifacts` and `scenario_draft_summary` when a draft has already been generated, including a bounded preview of warnings and review items.
 - `suggested_commands` that lead the operator from summary to timeline, scrub, search, open, graph, or scenario draft without guessing paths.
+- `recommended_next_steps` that rank scrub, graph, search, cluster, open, and draft actions for the current bundle.
 
 Use `--write-readme --write-json` for shareable artifacts. That writes `replay-capsule.md` for humans and `replay-capsule-summary.json` for automation, then refreshes the artifact index.
 

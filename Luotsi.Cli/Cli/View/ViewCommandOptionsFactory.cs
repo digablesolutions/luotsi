@@ -16,7 +16,12 @@ internal static class ViewCommandOptionsFactory
         var device = options.Get("device");
         if (!allowJoinShare || string.IsNullOrWhiteSpace(joinShareEndpoint))
         {
-            device = options.Require("device");
+            if (string.IsNullOrWhiteSpace(device))
+            {
+                throw new UsageException(allowJoinShare
+                    ? $"{commandName} requires --device <adb serial> or --join-share <host:port>."
+                    : $"{commandName} requires --device <adb serial>.");
+            }
         }
         else if (!string.IsNullOrWhiteSpace(device))
         {

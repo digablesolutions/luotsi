@@ -76,6 +76,9 @@ internal sealed class ReplayScrubService(ReplayTimelineService timelineService)
         yield return new ReplayScrubCommandHint(
             $"luotsi replay open --artifacts {Quote(artifactRoot)}",
             "Open the local artifact browser for screenshots, logs, reports, and generated replay files.");
+        yield return new ReplayScrubCommandHint(
+            $"luotsi replay capsule --artifacts {Quote(artifactRoot)} --write-readme --write-json",
+            "Open the replay front door for this artifact root.");
 
         if (focus is not null)
         {
@@ -85,6 +88,13 @@ internal sealed class ReplayScrubService(ReplayTimelineService timelineService)
             yield return new ReplayScrubCommandHint(
                 $"luotsi replay search --artifacts {Quote(artifactRoot)} --contains {Quote(focus.Detail)}",
                 "Search the artifact bundle for the focused event detail.");
+
+            if (focus.FailureRelevant)
+            {
+                yield return new ReplayScrubCommandHint(
+                    $"luotsi replay graph --artifacts {Quote(artifactRoot)} --failed --write-json --write-markdown",
+                    "Open semantic graph context for the focused failure.");
+            }
         }
 
         if (previous is not null)

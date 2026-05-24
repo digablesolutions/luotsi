@@ -104,6 +104,7 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
             jsonPath,
             jsonlPath,
             markdownPath,
+            BuildCommandHints(artifacts.Root, events).ToArray(),
             events);
 
         if (jsonPath is not null)
@@ -135,6 +136,7 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
             result.EventCount,
             result.ScannedFileCount,
             result.Truncated,
+            result.Commands,
             null);
 
         foreach (var evt in result.Events)
@@ -143,6 +145,7 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
                 ResultSchemas.ReplayTimeline,
                 "event",
                 result.ArtifactRoot,
+                null,
                 null,
                 null,
                 null,
@@ -162,6 +165,17 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
         builder.AppendLine($"Events: `{result.EventCount}`");
         builder.AppendLine($"Timeline files scanned: `{result.ScannedFileCount}`");
         builder.AppendLine($"Truncated: `{result.Truncated.ToString().ToLowerInvariant()}`");
+        builder.AppendLine();
+        builder.AppendLine("## Commands");
+        builder.AppendLine();
+        foreach (var command in result.Commands)
+        {
+            builder.AppendLine($"- `{command.Command}`");
+            builder.AppendLine($"  {command.Description}");
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("## Events");
         builder.AppendLine();
         builder.AppendLine("| # | Time | Type | Failure | Detail | Source |");
         builder.AppendLine("|---:|---|---|---|---|---|");
@@ -183,6 +197,34 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
         }
 
         return builder.ToString();
+    }
+
+    private static IEnumerable<ReplayTimelineCommandHint> BuildCommandHints(
+        string artifactRoot,
+        IReadOnlyList<ReplayTimelineEventResult> events)
+    {
+        yield return new ReplayTimelineCommandHint(
+            "describe_replay_capsule",
+            "Open the replay front door for this artifact root.",
+            $"luotsi replay capsule --artifacts {Quote(artifactRoot)} --write-readme --write-json");
+
+        yield return new ReplayTimelineCommandHint(
+            "open_artifact_index",
+            "Open the artifact browser for screenshots, logs, reports, and generated replay files.",
+            $"luotsi replay open --artifacts {Quote(artifactRoot)}");
+
+        if (events.Any(static evt => evt.FailureRelevant))
+        {
+            yield return new ReplayTimelineCommandHint(
+                "scrub_failures",
+                "Open a focused previous/current/next failure timeline view.",
+                $"luotsi replay scrub --artifacts {Quote(artifactRoot)} --failures --context 3 --write-markdown");
+
+            yield return new ReplayTimelineCommandHint(
+                "graph_failures",
+                "Build semantic graph context for failure-relevant events.",
+                $"luotsi replay graph --artifacts {Quote(artifactRoot)} --failed --write-json --write-markdown");
+        }
     }
 
     private async Task<IReadOnlyList<ReplayTimelineEventResult>> ReadFileAsync(string artifactRoot, string file)
@@ -529,6 +571,9 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
             .Replace("\r", " ", StringComparison.Ordinal)
             .Replace("\n", " ", StringComparison.Ordinal);
 
+    private static string Quote(string value) =>
+        value.Contains(' ', StringComparison.Ordinal) ? "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"" : value;
+
     private sealed record ReplayTimelineJsonLine(
         string Schema,
         string Type,
@@ -536,5 +581,6 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
         int? EventCount,
         int? ScannedFileCount,
         bool? Truncated,
+        IReadOnlyList<ReplayTimelineCommandHint>? Commands,
         ReplayTimelineEventResult? Event);
 }
