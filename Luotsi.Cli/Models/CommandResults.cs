@@ -555,6 +555,7 @@ public sealed record ReplayGraphResult(
     ReplayGraphAgentSummaryResult AgentSummary,
     IReadOnlyList<ReplayGraphInsightResult> Insights,
     IReadOnlyList<ReplayGraphActionResult> Actions,
+    IReadOnlyList<ReplayGraphEvidenceResult> Evidence,
     IReadOnlyList<ReplayGraphFailurePathResult> FailurePaths,
     string? JsonPath,
     string? JsonlPath,
@@ -607,6 +608,14 @@ public sealed record ReplayGraphInsightResult(
 public sealed record ReplayGraphActionResult(
     string Kind,
     string Message,
+    string? Command);
+
+public sealed record ReplayGraphEvidenceResult(
+    string Kind,
+    string NodeId,
+    string Title,
+    string? Detail,
+    string? ArtifactPath,
     string? Command);
 
 public sealed record ReplayGraphFailurePathResult(

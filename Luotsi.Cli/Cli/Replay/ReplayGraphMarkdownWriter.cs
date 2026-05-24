@@ -21,6 +21,7 @@ internal static class ReplayGraphMarkdownWriter
         AppendAgentSummary(builder, graph);
         AppendFailureSummary(builder, graph);
         AppendActions(builder, graph);
+        AppendEvidence(builder, graph);
         AppendInsights(builder, graph);
         AppendFailurePaths(builder, graph);
         AppendTransitions(builder, graph);
@@ -122,6 +123,25 @@ internal static class ReplayGraphMarkdownWriter
             {
                 builder.AppendLine($"| {EscapeMarkdown(insight.Kind)} | {EscapeMarkdown(insight.Severity)} | {EscapeMarkdown(insight.Message)} | {EscapeMarkdown(string.Join(", ", insight.NodeIds.Take(5)))} |");
             }
+        }
+
+        builder.AppendLine();
+    }
+
+    private static void AppendEvidence(StringBuilder builder, ReplayGraphResult graph)
+    {
+        if (graph.Evidence.Count == 0)
+        {
+            return;
+        }
+
+        builder.AppendLine("## Evidence");
+        builder.AppendLine();
+        builder.AppendLine("| Kind | Node | Title | Detail | Artifact | Command |");
+        builder.AppendLine("|---|---|---|---|---|---|");
+        foreach (var evidence in graph.Evidence)
+        {
+            builder.AppendLine($"| {EscapeMarkdown(evidence.Kind)} | {EscapeMarkdown(evidence.NodeId)} | {EscapeMarkdown(evidence.Title)} | {EscapeMarkdown(evidence.Detail)} | {EscapeMarkdown(evidence.ArtifactPath)} | {EscapeMarkdown(evidence.Command)} |");
         }
 
         builder.AppendLine();

@@ -1354,6 +1354,8 @@ public sealed partial class AppTests
         Assert.Contains("action-to-failure", data.GetProperty("agent_summary").GetProperty("what_changed").GetString(), StringComparison.Ordinal);
         Assert.Contains("luotsi replay", data.GetProperty("agent_summary").GetProperty("what_can_act_on").GetString(), StringComparison.Ordinal);
         Assert.Contains(data.GetProperty("actions").EnumerateArray(), action => action.GetProperty("kind").GetString() == "scrub_failures");
+        Assert.Contains(data.GetProperty("evidence").EnumerateArray(), evidence => evidence.GetProperty("kind").GetString() == "failure");
+        Assert.Contains(data.GetProperty("evidence").EnumerateArray(), evidence => evidence.GetProperty("kind").GetString() == "artifact");
         Assert.True(data.GetProperty("failure_paths").GetArrayLength() >= 1);
         Assert.Equal(Path.Join(replayRoot, "replay-graph.json"), data.GetProperty("json_path").GetString());
         Assert.Equal(Path.Join(replayRoot, "replay-graph.jsonl"), data.GetProperty("jsonl_path").GetString());
@@ -1377,11 +1379,13 @@ public sealed partial class AppTests
         Assert.Contains("## Agent Summary", markdown, StringComparison.Ordinal);
         Assert.Contains("## What Failed", markdown, StringComparison.Ordinal);
         Assert.Contains("## What Agents Can Act On", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Evidence", markdown, StringComparison.Ordinal);
         Assert.Contains("## Failure Paths", markdown, StringComparison.Ordinal);
         Assert.Contains("## Transitions", markdown, StringComparison.Ordinal);
         Assert.Contains("## Query Examples", markdown, StringComparison.Ordinal);
         var jsonl = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-graph.jsonl"));
         Assert.Contains("\"type\":\"summary\"", jsonl, StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"evidence\"", jsonl, StringComparison.Ordinal);
         Assert.Contains("\"type\":\"node\"", jsonl, StringComparison.Ordinal);
         Assert.Contains("\"type\":\"edge\"", jsonl, StringComparison.Ordinal);
     }
@@ -1437,6 +1441,11 @@ public sealed partial class AppTests
         {
             using var document = JsonDocument.Parse(line);
             return document.RootElement.GetProperty("type").GetString() == "failure_path";
+        });
+        Assert.Contains(console.OutputLines, line =>
+        {
+            using var document = JsonDocument.Parse(line);
+            return document.RootElement.GetProperty("type").GetString() == "evidence";
         });
         Assert.Contains(console.OutputLines, line =>
         {
