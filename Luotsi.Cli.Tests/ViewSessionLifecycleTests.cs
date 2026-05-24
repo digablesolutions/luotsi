@@ -93,6 +93,7 @@ public sealed partial class AppTests
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
         host.ConnectedDevices.Add(new DeviceInfo("192.168.0.134:5555", "device", "Panel"));
         var artifacts = ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider);
+        using var stream = new MemoryStream();
         var session = CreateViewSession(
             host,
             artifacts,
@@ -100,7 +101,7 @@ public sealed partial class AppTests
             timeProvider,
             new FakeViewTransportBootstrap([new InvalidOperationException("transport should not start")]),
             new FakeViewBackendFactory(new FakeViewBackend("ffmpeg-native")),
-            new FakeViewStreamConnector(new MemoryStream()),
+            new FakeViewStreamConnector(stream),
             new ViewPacketStreamReader());
 
         var exitCode = await session.RunAsync(new ViewOptions("192.168.0.134:555", "adb", "h264", "ffmpeg", true, null, 1600, 60, "8M", false, false));

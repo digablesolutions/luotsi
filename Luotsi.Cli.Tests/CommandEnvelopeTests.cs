@@ -1986,7 +1986,8 @@ public sealed partial class AppTests
             signal.GetProperty("values").EnumerateArray().Single().GetString() == "waitVisible");
         Assert.Contains(signalComparisons, signal =>
             signal.GetProperty("name").GetString() == "message" &&
-            signal.GetProperty("stability").GetString() == "variable");
+            signal.GetProperty("stability").GetString() == "stable" &&
+            signal.GetProperty("values").EnumerateArray().Count() == 2);
         var hints = clusters[0].GetProperty("hints").EnumerateArray().ToArray();
         Assert.Contains(hints, hint => hint.GetProperty("kind").GetString() == "same_failure_shape");
         Assert.Contains(hints, hint => hint.GetProperty("kind").GetString() == "likely_repeated_selector_or_screen_state_failure");

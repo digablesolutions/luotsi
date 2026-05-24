@@ -305,10 +305,10 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
             return 1.0;
         }
 
-        var categoryScore = DistinctNormalized(instances.Select(static instance => instance.ErrorCategory)) == 1 ? 0.25 : 0.0;
-        var actionScore = DistinctNormalized(instances.Select(static instance => instance.Action)) == 1 ? 0.25 : 0.0;
-        var stepScore = DistinctNormalized(instances.Select(static instance => instance.Step)) == 1 ? 0.2 : 0.0;
-        var messageScore = DistinctNormalized(instances.Select(static instance => instance.ErrorMessage)) == 1 ? 0.3 : 0.15;
+        var categoryScore = IsStableSignal(instances.Select(static instance => instance.ErrorCategory)) ? 0.25 : 0.0;
+        var actionScore = IsStableSignal(instances.Select(static instance => instance.Action)) ? 0.25 : 0.0;
+        var stepScore = IsStableSignal(instances.Select(static instance => instance.Step)) ? 0.2 : 0.0;
+        var messageScore = IsStableSignal(instances.Select(static instance => instance.ErrorMessage)) ? 0.3 : 0.15;
         return Math.Round(categoryScore + actionScore + stepScore + messageScore, 2);
     }
 
@@ -375,24 +375,31 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
 
     private static ReplayFailureClusterSignalComparisonResult CompareSignal(string name, IEnumerable<string?> values)
     {
-        var normalized = values
+        var displayValues = values
             .Select(static value => string.IsNullOrWhiteSpace(value) ? "" : value.Trim())
             .Where(static value => value.Length > 0)
             .Distinct(StringComparer.Ordinal)
             .OrderBy(static value => value, StringComparer.Ordinal)
             .Take(8)
             .ToArray();
-        var stability = normalized.Length switch
+        var normalizedValues = displayValues
+            .Select(Normalize)
+            .Where(static value => value.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var stability = displayValues.Length == 0 ? "missing" : normalizedValues.Length switch
         {
-            0 => "missing",
             1 => "stable",
             _ => "variable"
         };
-        return new ReplayFailureClusterSignalComparisonResult(name, stability, normalized);
+        return new ReplayFailureClusterSignalComparisonResult(name, stability, displayValues);
     }
 
     private static int DistinctNormalized(IEnumerable<string?> values) =>
         values.Select(Normalize).Where(static value => value.Length > 0).Distinct(StringComparer.Ordinal).Count();
+
+    private static bool IsStableSignal(IEnumerable<string?> values) =>
+        DistinctNormalized(values) <= 1;
 
     private static void AddSignal(List<string> signals, string name, string? value)
     {

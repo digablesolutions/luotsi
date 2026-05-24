@@ -21,12 +21,9 @@ internal sealed class ViewDiagnosticCommandHost(ViewDiagnosticCommandHostDepende
         if (command.Action == ViewDiagnosticAction.Setup)
         {
             var repairSteps = new List<ViewSetupStep>();
-            if (command.Fix)
+            if (command.Fix && IsFfmpegDecoder(viewOptions))
             {
-                if (IsFfmpegDecoder(viewOptions))
-                {
-                    await _dependencies.FfmpegSetupProvisioner.StageAsync(repairSteps.Add).ConfigureAwait(false);
-                }
+                await _dependencies.FfmpegSetupProvisioner.StageAsync(repairSteps.Add).ConfigureAwait(false);
             }
 
             var setup = await _dependencies.ViewSetupFactory.Create(runner).SetupAsync(viewOptions, command.Fix).ConfigureAwait(false);
