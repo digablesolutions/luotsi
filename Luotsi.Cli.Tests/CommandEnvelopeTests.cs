@@ -1552,6 +1552,33 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayGraph_Filters_By_Contains_Text()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot, "--contains", "not visible", "--limit", "20"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("not visible", data.GetProperty("query").GetProperty("contains").GetString());
+        Assert.Contains(data.GetProperty("nodes").EnumerateArray(), node =>
+            node.GetProperty("properties").EnumerateObject().Any(property =>
+                property.Value.ValueKind == JsonValueKind.String &&
+                property.Value.GetString()!.Contains("not visible", StringComparison.Ordinal)));
+        Assert.Contains(data.GetProperty("nodes").EnumerateArray(), node => node.GetProperty("kind").GetString() == "failure");
+        Assert.Contains(data.GetProperty("edges").EnumerateArray(), edge => edge.GetProperty("kind").GetString() == "indicates");
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayGraph_Reports_Truncated_Query_When_Limit_Caps_Matches()
     {
         var console = new FakeConsole();

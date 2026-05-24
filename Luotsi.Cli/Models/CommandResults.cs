@@ -567,6 +567,7 @@ public sealed record ReplayGraphQueryResult(
     string? EdgeKind,
     string? Action,
     string? Selector,
+    string? Contains,
     string? Insight,
     string? Severity,
     string? Node,

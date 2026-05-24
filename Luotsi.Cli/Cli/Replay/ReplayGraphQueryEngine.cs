@@ -29,6 +29,7 @@ internal static class ReplayGraphQueryEngine
             NormalizeBlank(options.Get("edge-kind")),
             NormalizeBlank(options.Get("action")),
             NormalizeBlank(options.Get("selector")),
+            NormalizeBlank(options.Get("contains")),
             NormalizeBlank(options.Get("insight")),
             severity,
             NormalizeBlank(options.Get("node")),
@@ -56,9 +57,19 @@ internal static class ReplayGraphQueryEngine
             .Where(edge => nodeIds.Contains(edge.From) || nodeIds.Contains(edge.To))
             .ToArray();
 
-        if (query.EdgeKind is not null && query.NodeKind is null && query.Action is null && query.Selector is null && query.Node is null && !query.FailedOnly)
+        if ((query.EdgeKind is not null || query.Contains is not null) &&
+            query.NodeKind is null &&
+            query.Action is null &&
+            query.Selector is null &&
+            query.Node is null &&
+            !query.FailedOnly)
         {
             var edgeNodeIds = filteredEdges.SelectMany(static edge => new[] { edge.From, edge.To }).ToHashSet(StringComparer.Ordinal);
+            foreach (var node in filteredNodes)
+            {
+                edgeNodeIds.Add(node.Id);
+            }
+
             filteredNodes = nodes.Where(node => edgeNodeIds.Contains(node.Id)).ToArray();
             nodeIds = filteredNodes.Select(static node => node.Id).ToHashSet(StringComparer.Ordinal);
         }
@@ -89,6 +100,7 @@ internal static class ReplayGraphQueryEngine
         AddQueryPart(parts, "edge-kind", query.EdgeKind);
         AddQueryPart(parts, "action", query.Action);
         AddQueryPart(parts, "selector", query.Selector);
+        AddQueryPart(parts, "contains", query.Contains);
         AddQueryPart(parts, "insight", query.Insight);
         AddQueryPart(parts, "severity", query.Severity);
         AddQueryPart(parts, "node", query.Node);
@@ -193,6 +205,11 @@ internal static class ReplayGraphQueryEngine
             return false;
         }
 
+        if (query.Contains is not null && !NodeContains(node, query.Contains))
+        {
+            return false;
+        }
+
         if (query.FailedOnly && !ReplayGraphPredicates.IsFailureNode(node))
         {
             return false;
@@ -202,7 +219,24 @@ internal static class ReplayGraphQueryEngine
     }
 
     private static bool MatchesEdge(ReplayGraphEdgeResult edge, ReplayGraphQueryResult query) =>
-        query.EdgeKind is null || string.Equals(edge.Kind, query.EdgeKind, StringComparison.OrdinalIgnoreCase);
+        (query.EdgeKind is null || string.Equals(edge.Kind, query.EdgeKind, StringComparison.OrdinalIgnoreCase)) &&
+        (query.Contains is null || EdgeContains(edge, query.Contains));
+
+    private static bool NodeContains(ReplayGraphNodeResult node, string value) =>
+        ReplayGraphPredicates.Contains(node.Id, value) ||
+        ReplayGraphPredicates.Contains(node.Kind, value) ||
+        ReplayGraphPredicates.Contains(node.Label, value) ||
+        node.Properties.Any(property =>
+            ReplayGraphPredicates.Contains(property.Key, value) ||
+            ReplayGraphPredicates.Contains(property.Value, value));
+
+    private static bool EdgeContains(ReplayGraphEdgeResult edge, string value) =>
+        ReplayGraphPredicates.Contains(edge.From, value) ||
+        ReplayGraphPredicates.Contains(edge.To, value) ||
+        ReplayGraphPredicates.Contains(edge.Kind, value) ||
+        edge.Properties.Any(property =>
+            ReplayGraphPredicates.Contains(property.Key, value) ||
+            ReplayGraphPredicates.Contains(property.Value, value));
 
     private static bool PropertyContains(ReplayGraphNodeResult node, string propertyName, string value) =>
         node.Properties.Any(property =>
