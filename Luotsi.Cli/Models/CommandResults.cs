@@ -559,6 +559,7 @@ public sealed record ReplayGraphResult(
     IReadOnlyList<ReplayGraphEvidenceResult> Evidence,
     IReadOnlyList<ReplayGraphFactResult> Facts,
     IReadOnlyList<ReplayGraphCausalChainResult> CausalChains,
+    IReadOnlyList<ReplayGraphHypothesisResult> Hypotheses,
     IReadOnlyList<ReplayGraphFailurePathResult> FailurePaths,
     string? JsonPath,
     string? JsonlPath,
@@ -648,6 +649,15 @@ public sealed record ReplayGraphCausalHopResult(
     string Relation,
     string? Category,
     string? Detail);
+
+public sealed record ReplayGraphHypothesisResult(
+    string Kind,
+    string Severity,
+    string Summary,
+    double Confidence,
+    IReadOnlyList<string> EvidenceNodeIds,
+    IReadOnlyList<string> EdgeIds,
+    string? Command);
 
 public sealed record ReplayGraphFailurePathResult(
     string FailureNodeId,

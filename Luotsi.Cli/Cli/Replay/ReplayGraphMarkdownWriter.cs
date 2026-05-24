@@ -25,6 +25,7 @@ internal static class ReplayGraphMarkdownWriter
         AppendEvidence(builder, graph);
         AppendFacts(builder, graph);
         AppendCausalChains(builder, graph);
+        AppendHypotheses(builder, graph);
         AppendInsights(builder, graph);
         AppendFailurePaths(builder, graph);
         AppendTransitions(builder, graph);
@@ -202,6 +203,25 @@ internal static class ReplayGraphMarkdownWriter
                 var category = string.IsNullOrWhiteSpace(hop.Category) ? hop.Relation : hop.Relation + "/" + hop.Category;
                 builder.AppendLine($"  - `{EscapeMarkdown(hop.From)}` --{EscapeMarkdown(category)}--> `{EscapeMarkdown(hop.To)}` {EscapeMarkdown(hop.Detail)}");
             }
+        }
+
+        builder.AppendLine();
+    }
+
+    private static void AppendHypotheses(StringBuilder builder, ReplayGraphResult graph)
+    {
+        if (graph.Hypotheses.Count == 0)
+        {
+            return;
+        }
+
+        builder.AppendLine("## Hypotheses");
+        builder.AppendLine();
+        builder.AppendLine("| Kind | Severity | Confidence | Summary | Evidence | Command |");
+        builder.AppendLine("|---|---|---:|---|---|---|");
+        foreach (var hypothesis in graph.Hypotheses.Take(20))
+        {
+            builder.AppendLine($"| {EscapeMarkdown(hypothesis.Kind)} | {EscapeMarkdown(hypothesis.Severity)} | {hypothesis.Confidence:0.##} | {EscapeMarkdown(hypothesis.Summary)} | {EscapeMarkdown(string.Join(", ", hypothesis.EvidenceNodeIds.Take(5)))} | {EscapeMarkdown(hypothesis.Command)} |");
         }
 
         builder.AppendLine();

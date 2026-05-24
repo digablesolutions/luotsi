@@ -1382,6 +1382,9 @@ public sealed partial class AppTests
         Assert.Contains(causalChain.GetProperty("hops").EnumerateArray(), hop =>
             hop.GetProperty("relation").GetString() == "transitions_to" &&
             hop.GetProperty("category").GetString() == "action_to_failure");
+        Assert.Contains(data.GetProperty("hypotheses").EnumerateArray(), hypothesis =>
+            hypothesis.GetProperty("kind").GetString() == "action_to_failure" &&
+            hypothesis.GetProperty("evidence_node_ids").EnumerateArray().Any(id => id.GetString() == "failure:session-timeline.jsonl:1"));
         Assert.True(data.GetProperty("failure_paths").GetArrayLength() >= 1);
         Assert.Equal(Path.Join(replayRoot, "replay-graph.json"), data.GetProperty("json_path").GetString());
         Assert.Equal(Path.Join(replayRoot, "replay-graph.jsonl"), data.GetProperty("jsonl_path").GetString());
@@ -1412,6 +1415,8 @@ public sealed partial class AppTests
         Assert.Contains("## Facts", markdown, StringComparison.Ordinal);
         Assert.Contains("| Category | Subject | Predicate | Object | Confidence | Command |", markdown, StringComparison.Ordinal);
         Assert.Contains("## Causal Chains", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Hypotheses", markdown, StringComparison.Ordinal);
+        Assert.Contains("| Kind | Severity | Confidence | Summary | Evidence | Command |", markdown, StringComparison.Ordinal);
         Assert.Contains("## Evidence Kinds", markdown, StringComparison.Ordinal);
         Assert.Contains("## Failure Paths", markdown, StringComparison.Ordinal);
         Assert.Contains("## Transitions", markdown, StringComparison.Ordinal);
@@ -1420,6 +1425,7 @@ public sealed partial class AppTests
         Assert.Contains("\"type\":\"summary\"", jsonl, StringComparison.Ordinal);
         Assert.Contains("\"type\":\"evidence\"", jsonl, StringComparison.Ordinal);
         Assert.Contains("\"type\":\"causal_chain\"", jsonl, StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"hypothesis\"", jsonl, StringComparison.Ordinal);
         Assert.Contains("\"type\":\"fact\"", jsonl, StringComparison.Ordinal);
         Assert.Contains("\"type\":\"node\"", jsonl, StringComparison.Ordinal);
         Assert.Contains("\"type\":\"edge\"", jsonl, StringComparison.Ordinal);

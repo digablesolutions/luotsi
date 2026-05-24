@@ -44,6 +44,7 @@ Filtering returns a focused subgraph with one-hop context. `total_node_count` an
 | `evidence` | Compact promoted proof records from returned graph nodes: failures, artifacts, selectors, screen observations, telemetry signals, and generated steps. Each record includes nearby `edge_ids` so agents can trace why the proof is connected. |
 | `facts` | Compact subject-predicate-object facts derived from the returned graph view. Facts are the preferred agent input when the caller needs stable semantic statements instead of raw graph traversal. |
 | `causal_chains` | Compact causal paths from preceding timeline transitions into failure nodes. Use these before raw graph traversal when asking what led to a failure. |
+| `hypotheses` | Ranked likely-cause hints derived from causal chains and evidence. Each hypothesis includes severity, confidence, support IDs, and a follow-up command. |
 | `failure_paths` | Compact paths from nearby timeline context into failure nodes. |
 | `json_path`, `jsonl_path`, `markdown_path` | Artifact paths when `--write-json`, `--write-jsonl`, or `--write-markdown` are used. |
 | `nodes`, `edges` | Stable graph payload. |
@@ -120,6 +121,19 @@ Each `causal_chains[]` item has:
 | `hops` | Ordered edge-derived hops with `from`, `to`, `relation`, optional transition `category`, and optional detail text. |
 | `command` | Follow-up graph command that opens the failure neighborhood. |
 
+## Hypothesis Contract
+
+Each `hypotheses[]` item has:
+
+| Field | Meaning |
+|---|---|
+| `kind` | Hypothesis family such as `action_to_failure` or `failure_evidence`. |
+| `severity` | `info`, `warning`, or `error`. |
+| `summary` | Short likely-cause hint. |
+| `confidence` | Heuristic confidence from 0.0 to 1.0. |
+| `evidence_node_ids`, `edge_ids` | Supporting graph IDs. |
+| `command` | Follow-up command that opens supporting graph context. |
+
 ## Agent Queries
 
 ```text
@@ -139,6 +153,6 @@ luotsi replay graph --artifacts artifacts/run --edge-kind transitions_to --limit
 luotsi replay graph --artifacts artifacts/run --node failure:session-timeline.jsonl:3 --depth 2
 ```
 
-`replay-graph.md` starts with "Agent Summary", "What Failed", "What Agents Can Act On", "Evidence", "Facts", "Causal Chains", and "Insights" before the raw node and edge tables.
+`replay-graph.md` starts with "Agent Summary", "What Failed", "What Agents Can Act On", "Evidence", "Facts", "Causal Chains", "Hypotheses", and "Insights" before the raw node and edge tables.
 
-JSONL output includes `summary`, `failure_path`, `evidence`, `causal_chain`, `fact`, `insight`, `node`, and `edge` line types. The `summary` line includes `node_kinds`, `edge_kinds`, and `evidence_kinds` so agents can decide whether to consume later lines. Use `causal_chain` lines when an agent needs the shortest path into a failure; use `fact` lines when it needs concise semantic statements; use `evidence` lines when it needs proof before deciding whether to open the full graph.
+JSONL output includes `summary`, `failure_path`, `evidence`, `causal_chain`, `hypothesis`, `fact`, `insight`, `node`, and `edge` line types. The `summary` line includes `node_kinds`, `edge_kinds`, and `evidence_kinds` so agents can decide whether to consume later lines. Use `hypothesis` lines when an agent needs ranked likely-cause hints; use `causal_chain` lines when it needs the shortest path into a failure; use `fact` lines when it needs concise semantic statements; use `evidence` lines when it needs proof before deciding whether to open the full graph.

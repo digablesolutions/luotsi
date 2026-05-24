@@ -137,6 +137,7 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
             ReplayGraphFactBuilder.Build(artifacts.Root, orderedNodes, orderedEdges, evidence, failurePaths),
             query);
         var causalChains = ReplayGraphCausalChainBuilder.Build(artifacts.Root, failurePaths, allEdges);
+        var hypotheses = ReplayGraphHypothesisBuilder.Build(artifacts.Root, causalChains, evidence);
         var result = new ReplayGraphResult(
             ResultSchemas.ReplayGraph,
             artifacts.Root,
@@ -158,6 +159,7 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
             evidence,
             facts,
             causalChains,
+            hypotheses,
             failurePaths,
             jsonPath,
             jsonlPath,
@@ -279,6 +281,32 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
                 Node: null,
                 Edge: null,
                 CausalChain: chain);
+        }
+
+        foreach (var hypothesis in result.Hypotheses)
+        {
+            yield return new ReplayGraphJsonLine(
+                Schema: ResultSchemas.ReplayGraph,
+                Type: "hypothesis",
+                ArtifactRoot: result.ArtifactRoot,
+                NodeCount: null,
+                EdgeCount: null,
+                TotalNodeCount: null,
+                TotalEdgeCount: null,
+                Truncated: null,
+                Query: null,
+                AgentSummary: null,
+                NodeKinds: null,
+                EdgeKinds: null,
+                EvidenceKinds: null,
+                FailurePath: null,
+                Insight: null,
+                Evidence: null,
+                Fact: null,
+                Node: null,
+                Edge: null,
+                CausalChain: null,
+                Hypothesis: hypothesis);
         }
 
         foreach (var fact in result.Facts)
@@ -635,6 +663,7 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
         ReplayGraphFactResult? Fact,
         ReplayGraphNodeResult? Node,
         ReplayGraphEdgeResult? Edge,
-        ReplayGraphCausalChainResult? CausalChain = null);
+        ReplayGraphCausalChainResult? CausalChain = null,
+        ReplayGraphHypothesisResult? Hypothesis = null);
 
 }
