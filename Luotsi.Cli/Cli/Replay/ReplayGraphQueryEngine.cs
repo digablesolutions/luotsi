@@ -32,6 +32,7 @@ internal static class ReplayGraphQueryEngine
             NormalizeBlank(options.Get("contains")),
             NormalizeBlank(options.Get("insight")),
             severity,
+            NormalizeBlank(options.Get("evidence")),
             NormalizeBlank(options.Get("node")),
             options.Int("depth", 1),
             options.HasFlag("failed"),
@@ -103,6 +104,7 @@ internal static class ReplayGraphQueryEngine
         AddQueryPart(parts, "contains", query.Contains);
         AddQueryPart(parts, "insight", query.Insight);
         AddQueryPart(parts, "severity", query.Severity);
+        AddQueryPart(parts, "evidence", query.Evidence);
         AddQueryPart(parts, "node", query.Node);
         if (query.Node is not null)
         {
@@ -255,6 +257,20 @@ internal static class ReplayGraphQueryEngine
         return insights
             .Where(insight => query.Insight is null || ReplayGraphPredicates.Contains(insight.Kind, query.Insight))
             .Where(insight => query.Severity is null || string.Equals(insight.Severity, query.Severity, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+    }
+
+    public static IReadOnlyList<ReplayGraphEvidenceResult> ApplyEvidenceFilters(
+        IReadOnlyList<ReplayGraphEvidenceResult> evidence,
+        ReplayGraphQueryResult query)
+    {
+        if (query.Evidence is null)
+        {
+            return evidence;
+        }
+
+        return evidence
+            .Where(item => ReplayGraphPredicates.Contains(item.Kind, query.Evidence))
             .ToArray();
     }
 

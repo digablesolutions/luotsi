@@ -1588,6 +1588,31 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayGraph_Filters_Evidence_By_Kind()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot, "--evidence", "artifact"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("artifact", data.GetProperty("query").GetProperty("evidence").GetString());
+        var evidence = data.GetProperty("evidence").EnumerateArray().ToArray();
+        Assert.NotEmpty(evidence);
+        Assert.All(evidence, item => Assert.Equal("artifact", item.GetProperty("kind").GetString()));
+        Assert.Contains(data.GetProperty("nodes").EnumerateArray(), node => node.GetProperty("kind").GetString() == "failure");
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayGraph_Reports_Truncated_Query_When_Limit_Caps_Matches()
     {
         var console = new FakeConsole();

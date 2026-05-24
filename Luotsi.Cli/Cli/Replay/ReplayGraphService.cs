@@ -129,7 +129,9 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
             ReplayGraphInsightBuilder.Build(allNodes, allEdges),
             query);
         var actions = ReplayGraphInsightBuilder.BuildActions(artifacts.Root, query, allNodes);
-        var evidence = ReplayGraphEvidenceBuilder.Build(artifacts.Root, orderedNodes);
+        var evidence = ReplayGraphQueryEngine.ApplyEvidenceFilters(
+            ReplayGraphEvidenceBuilder.Build(artifacts.Root, orderedNodes),
+            query);
         var failurePaths = ReplayGraphFailurePathBuilder.Build(allNodes, allEdges);
         var result = new ReplayGraphResult(
             ResultSchemas.ReplayGraph,
