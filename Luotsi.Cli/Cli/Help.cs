@@ -197,7 +197,7 @@ Usage:
   luotsi replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--source-path <timeline-path>] [--sequence <n>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
   luotsi replay scrub --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--source-path <timeline-path>] [--sequence <n>] [--context <n>] [--limit 200] [--write-json] [--write-markdown]
   luotsi replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--contains <text>] [--insight <kind>] [--severity info|warning|error] [--evidence <kind>] [--fact <text>] [--node <id> --depth 1] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
-  luotsi replay cluster --artifacts <artifact-root> [--write-json] [--write-markdown]
+  luotsi replay cluster --artifacts <artifact-root> [--min-count <n>] [--similarity same_failure_shape|likely_same_cause|same_bucket] [--contains <text>] [--write-json] [--write-markdown]
   luotsi replay open --artifacts <artifact-root> [--dry-run]
   luotsi replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>] [--write-json] [--write-markdown]
   luotsi replay search --artifacts <artifact-root> --contains <text> [--limit 50]
@@ -220,6 +220,7 @@ Examples:
   luotsi replay graph --artifacts artifacts/20260518-100000-run --node-kind selector --write-markdown
   luotsi replay graph --artifacts artifacts/20260518-100000-run --node failure:session-timeline.jsonl:3 --depth 2
   luotsi replay cluster --artifacts artifacts/ci-runs --write-json --write-markdown
+  luotsi replay cluster --artifacts artifacts/ci-runs --min-count 2 --similarity same_failure_shape --contains waitVisible
   luotsi replay open --artifacts artifacts/20260518-100000-view
   luotsi replay scenario-draft --artifacts artifacts/20260518-100000-inspect --output scenarios/draft.json --write-markdown
   luotsi replay search --artifacts artifacts/20260518-100000-run --contains "not visible"
@@ -274,7 +275,8 @@ Notes:
   --depth, and --limit to return a focused subgraph with local context. Replay cluster groups failed replay sessions by normalized failure
   shape and returns cross-run intelligence: similarity, likely cause, stable
   versus variable signals, and graph/scrub/search commands for the latest
-  matching bundle.
+  matching bundle. Use --min-count, --similarity, and --contains to focus on
+  repeated high-signal clusters.
   Failures still use the normal error envelope.
 """,
         ["update"] = """

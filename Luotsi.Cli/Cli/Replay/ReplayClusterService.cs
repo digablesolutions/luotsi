@@ -21,6 +21,7 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(artifacts);
+        var query = CreateQuery(options);
 
         var allFiles = _fileSystem.GetFiles(artifacts.Root, "*", SearchOption.AllDirectories)
             .Select(path => Path.GetRelativePath(artifacts.Root, path))
@@ -37,6 +38,7 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
         var clusters = failures
             .GroupBy(static failure => failure.Signature, StringComparer.Ordinal)
             .Select(group => CreateCluster(artifacts.Root, group.Key, group.ToArray()))
+            .Where(cluster => MatchesCluster(cluster, query))
             .OrderByDescending(static cluster => cluster.Count)
             .ThenBy(static cluster => cluster.Signature, StringComparer.Ordinal)
             .ToArray();
@@ -53,6 +55,7 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
             summaries.Count,
             failures.Length,
             clusters.Length,
+            query,
             jsonPath,
             markdownPath,
             clusters);
@@ -69,6 +72,61 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
 
         return result;
     }
+
+    private static ReplayClusterQueryResult CreateQuery(CliOptions options)
+    {
+        var minCount = options.Int("min-count", 1);
+        if (minCount <= 0)
+        {
+            throw new UsageException("replay cluster requires --min-count greater than zero.");
+        }
+
+        var similarity = NormalizeBlank(options.Get("similarity"));
+        if (similarity is not null &&
+            !string.Equals(similarity, "same_failure_shape", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(similarity, "likely_same_cause", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(similarity, "same_bucket", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new UsageException("replay cluster --similarity must be same_failure_shape, likely_same_cause, or same_bucket.");
+        }
+
+        return new ReplayClusterQueryResult(minCount, similarity, NormalizeBlank(options.Get("contains")));
+    }
+
+    private static bool MatchesCluster(ReplayFailureClusterResult cluster, ReplayClusterQueryResult query)
+    {
+        if (cluster.Count < query.MinCount)
+        {
+            return false;
+        }
+
+        if (query.Similarity is not null &&
+            !string.Equals(cluster.Intelligence.Similarity, query.Similarity, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (query.Contains is not null && !ClusterContains(cluster, query.Contains))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool ClusterContains(ReplayFailureClusterResult cluster, string value) =>
+        Contains(cluster.Id, value) ||
+        Contains(cluster.Signature, value) ||
+        Contains(cluster.Category, value) ||
+        Contains(cluster.Message, value) ||
+        Contains(cluster.Action, value) ||
+        Contains(cluster.Step, value) ||
+        Contains(cluster.Intelligence.LikelyCause, value) ||
+        cluster.Intelligence.SupportingSignals.Any(signal => Contains(signal, value)) ||
+        cluster.Intelligence.SignalComparisons.Any(signal =>
+            Contains(signal.Name, value) ||
+            Contains(signal.Stability, value) ||
+            signal.Values.Any(signalValue => Contains(signalValue, value)));
 
     private static IEnumerable<FailureInstance> CreateFailureInstances(SessionReplaySummary summary)
     {
@@ -299,6 +357,12 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
         }
     }
 
+    private static bool Contains(string? value, string query) =>
+        value?.Contains(query, StringComparison.OrdinalIgnoreCase) == true;
+
+    private static string? NormalizeBlank(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
     private static ReplayFailureClusterInstanceResult ToResult(
         SessionReplaySummary summary,
         FailureCapsuleScenario scenario,
@@ -374,6 +438,7 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
         builder.AppendLine($"Sessions: `{result.SessionCount}`");
         builder.AppendLine($"Failures: `{result.FailureCount}`");
         builder.AppendLine($"Clusters: `{result.ClusterCount}`");
+        builder.AppendLine($"Query: `min-count={result.Query.MinCount}, similarity={result.Query.Similarity ?? "*"}, contains={result.Query.Contains ?? "*"}`");
         builder.AppendLine();
         builder.AppendLine("| Cluster | Count | Category | Action | Step | Message |");
         builder.AppendLine("|---|---:|---|---|---|---|");

@@ -1909,6 +1909,9 @@ public sealed partial class AppTests
         Assert.Equal(3, data.GetProperty("session_count").GetInt32());
         Assert.Equal(3, data.GetProperty("failure_count").GetInt32());
         Assert.Equal(2, data.GetProperty("cluster_count").GetInt32());
+        Assert.Equal(1, data.GetProperty("query").GetProperty("min_count").GetInt32());
+        Assert.False(data.GetProperty("query").TryGetProperty("similarity", out _));
+        Assert.False(data.GetProperty("query").TryGetProperty("contains", out _));
         var clusters = data.GetProperty("clusters").EnumerateArray().ToArray();
         Assert.Equal(2, clusters[0].GetProperty("count").GetInt32());
         Assert.Equal("selector_or_screen_state", clusters[0].GetProperty("category").GetString());
@@ -1950,6 +1953,36 @@ public sealed partial class AppTests
         Assert.Contains("Likely cause", markdown, StringComparison.Ordinal);
         Assert.Contains("| Signal | Stability | Values |", markdown, StringComparison.Ordinal);
         Assert.Contains("luotsi replay graph", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayCluster_Filters_By_MinCount_Similarity_And_Text()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = "/tmp/replay-cluster-filter-root";
+        fileSystem.CreateDirectory(replayRoot);
+        SeedClusterFailure(fileSystem, replayRoot, "run-a", "run-a-session", "2026-05-18T10:00:00Z", "not visible after 15 seconds");
+        SeedClusterFailure(fileSystem, replayRoot, "run-b", "run-b-session", "2026-05-18T11:00:00Z", "not visible after 30 seconds");
+        SeedClusterFailure(fileSystem, replayRoot, "run-c", "run-c-session", "2026-05-18T12:00:00Z", "permission denied");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "cluster", "--artifacts", replayRoot, "--min-count", "2", "--similarity", "same_failure_shape", "--contains", "waitVisible"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(2, data.GetProperty("query").GetProperty("min_count").GetInt32());
+        Assert.Equal("same_failure_shape", data.GetProperty("query").GetProperty("similarity").GetString());
+        Assert.Equal("waitVisible", data.GetProperty("query").GetProperty("contains").GetString());
+        var cluster = Assert.Single(data.GetProperty("clusters").EnumerateArray());
+        Assert.Equal(2, cluster.GetProperty("count").GetInt32());
+        Assert.Equal("waitVisible", cluster.GetProperty("action").GetString());
     }
 
     [Fact]

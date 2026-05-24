@@ -684,9 +684,15 @@ public sealed record ReplayClustersResult(
     int SessionCount,
     int FailureCount,
     int ClusterCount,
+    ReplayClusterQueryResult Query,
     string? JsonPath,
     string? MarkdownPath,
     IReadOnlyList<ReplayFailureClusterResult> Clusters);
+
+public sealed record ReplayClusterQueryResult(
+    int MinCount,
+    string? Similarity,
+    string? Contains);
 
 public sealed record ReplayFailureClusterResult(
     string Id,
