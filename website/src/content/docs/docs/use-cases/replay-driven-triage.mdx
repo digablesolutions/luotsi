@@ -22,7 +22,7 @@ That lets triage stay host-side and asynchronous instead of forcing another live
 ```bash
 luotsi replay summarize --artifacts ./artifacts/<run>
 luotsi replay open --artifacts ./artifacts/<run>
-luotsi replay search --artifacts ./artifacts/<run> --query "error"
+luotsi replay search --artifacts ./artifacts/<run> --contains "error"
 luotsi replay capsule --artifacts ./artifacts/<run>
 ```
 

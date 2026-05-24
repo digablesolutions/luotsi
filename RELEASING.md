@@ -25,8 +25,12 @@ The release workflow rejects tags outside that shape.
      `website/public/images/buggy-commands.png`.
    - Confirm the docs hub, AI agent workflows page, installation page, and
      replay page match the release.
-   - Prepare a handwritten release intro in `.github/release-notes/stable.md`,
-     `.github/release-notes/prerelease.md`, or `.github/release-notes/<tag>.md`.
+   - Prepare a handwritten release intro by copying
+     `.github/release-notes/stable.template.md` to
+     `.github/release-notes/stable.md`, copying
+     `.github/release-notes/prerelease.template.md` to
+     `.github/release-notes/prerelease.md`, or creating
+     `.github/release-notes/<tag>.md` directly.
 
 3. Create and push a signed or annotated tag:
 
@@ -46,7 +50,8 @@ The release workflow rejects tags outside that shape.
 The release workflow prepends optional checked-in text above GitHub-generated
 release notes.
 
-Use one of these files:
+The workflow only consumes non-template files. Use one of these active intro
+files:
 
 - `.github/release-notes/stable.md` for normal public releases.
 - `.github/release-notes/prerelease.md` for prereleases such as `-rc` tags.
@@ -55,9 +60,14 @@ Use one of these files:
 
 The tag-specific file wins over the stable or prerelease default.
 
-Use the matching template under `.github/release-notes/` and keep the intro
-short. The point is to add the top-level framing that generated release notes
-cannot infer:
+Copy from one of these templates under `.github/release-notes/` and keep the
+intro short:
+
+- `.github/release-notes/stable.template.md`
+- `.github/release-notes/prerelease.template.md`
+
+The point is to add the top-level framing that generated release notes cannot
+infer:
 
 1. What changed for agent builders.
 2. What changed for real-device engineers or CI users.

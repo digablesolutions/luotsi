@@ -14,7 +14,8 @@ Use the repository itself as the first distribution asset.
 ## Release-note shaping
 
 GitHub-generated release notes are now categorized through `.github/release.yml`.
-The release workflow also prepends optional checked-in handwritten intros from `.github/release-notes/stable.md`, `.github/release-notes/prerelease.md`, or `.github/release-notes/<tag>.md`.
+The release workflow prepends optional handwritten intros only from active intro files: `.github/release-notes/stable.md`, `.github/release-notes/prerelease.md`, or `.github/release-notes/<tag>.md`.
+Template files live alongside them at `.github/release-notes/stable.template.md` and `.github/release-notes/prerelease.template.md`.
 
 For each public release, add a short hand-written introduction above the generated notes with these three blocks when relevant:
 

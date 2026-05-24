@@ -50,7 +50,7 @@ Use [Scenario Playbooks](../../reference/scenario-playbooks/) for the JSON forma
 ```bash
 luotsi replay summarize --artifacts ./artifacts/<run>
 luotsi replay open --artifacts ./artifacts/<run>
-luotsi replay search --artifacts ./artifacts/<run> --query "error"
+luotsi replay search --artifacts ./artifacts/<run> --contains "error"
 ```
 
 The artifact root is the handoff point from live control to post-run analysis. Use replay once you already have the evidence you need instead of reconnecting to the device out of habit.
