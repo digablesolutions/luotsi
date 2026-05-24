@@ -388,6 +388,16 @@ EOF
     chmod +x "$shim_path"
 }
 
+json_string() {
+    value=$1
+    if command -v python3 >/dev/null 2>&1; then
+        JSON_VALUE=$value python3 -c 'import json, os; print(json.dumps(os.environ["JSON_VALUE"]))'
+        return
+    fi
+
+    printf '"%s"' "$(printf '%s' "$value" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+}
+
 write_manifest() {
     manifest_path=$1
     install_dir=$2
@@ -404,26 +414,42 @@ write_manifest() {
     ffmpeg_detail=${13}
     installed_at_utc=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
 
+    escaped_tag=$(json_string "$tag")
+    escaped_version=$(json_string "${tag#v}")
+    escaped_rid=$(json_string "$rid")
+    escaped_install_dir=$(json_string "$install_dir")
+    escaped_current_root=$(json_string "$install_dir/current")
+    escaped_bin_dir=$(json_string "$bin_dir")
+    escaped_command_path=$(json_string "$command_path")
+    escaped_helper_apk_path=$(json_string "$install_dir/current/Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release.apk")
+    escaped_archive_name=$(json_string "$archive_name")
+    escaped_archive_url=$(json_string "$archive_url")
+    escaped_checksum_url=$(json_string "$checksum_url")
+    escaped_view_extras=$(json_string "$view_extras")
+    escaped_ffmpeg_path=$(json_string "$ffmpeg_path")
+    escaped_ffmpeg_detail=$(json_string "$ffmpeg_detail")
+    escaped_installed_at_utc=$(json_string "$installed_at_utc")
+
     cat > "$manifest_path" <<EOF
 {
   "schema": "luotsi-install.v1",
   "tool": "luotsi",
-  "tag": "$tag",
-  "version": "${tag#v}",
-  "rid": "$rid",
-  "install_root": "$install_dir",
-  "current_root": "$install_dir/current",
-  "bin_directory": "$bin_dir",
-  "command_path": "$command_path",
-  "helper_apk_path": "$install_dir/current/Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release.apk",
-  "archive_name": "$archive_name",
-  "archive_url": "$archive_url",
-  "checksum_url": "$checksum_url",
-  "view_extras": "$view_extras",
+  "tag": $escaped_tag,
+  "version": $escaped_version,
+  "rid": $escaped_rid,
+  "install_root": $escaped_install_dir,
+  "current_root": $escaped_current_root,
+  "bin_directory": $escaped_bin_dir,
+  "command_path": $escaped_command_path,
+  "helper_apk_path": $escaped_helper_apk_path,
+  "archive_name": $escaped_archive_name,
+  "archive_url": $escaped_archive_url,
+  "checksum_url": $escaped_checksum_url,
+  "view_extras": $escaped_view_extras,
   "ffmpeg_staged": $ffmpeg_staged,
-  "ffmpeg_path": "$ffmpeg_path",
-  "ffmpeg_detail": "$ffmpeg_detail",
-  "installed_at_utc": "$installed_at_utc"
+  "ffmpeg_path": $escaped_ffmpeg_path,
+  "ffmpeg_detail": $escaped_ffmpeg_detail,
+  "installed_at_utc": $escaped_installed_at_utc
 }
 EOF
 }

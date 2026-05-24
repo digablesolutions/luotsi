@@ -45,6 +45,8 @@ public sealed partial class AppTests
 
         Assert.Contains("--skip-ffmpeg", script, StringComparison.Ordinal);
         Assert.Contains("\"ffmpeg_staged\": $ffmpeg_staged", script, StringComparison.Ordinal);
+        Assert.Contains("json_string()", script, StringComparison.Ordinal);
+        Assert.Contains("\"ffmpeg_detail\": $escaped_ffmpeg_detail", script, StringComparison.Ordinal);
 
         var restoreBlock = Slice(script, "restore_previous() {", "cleanup() {");
         Assert.Contains("if [ \"$install_committed\" -ne 0 ]; then", restoreBlock, StringComparison.Ordinal);
