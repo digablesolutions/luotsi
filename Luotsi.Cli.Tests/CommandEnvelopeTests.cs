@@ -1648,10 +1648,37 @@ public sealed partial class AppTests
         Assert.Equal(0, exitCode);
         var data = envelope.RootElement.GetProperty("data");
         Assert.Equal(1, data.GetProperty("node_count").GetInt32());
-        Assert.Equal(1, data.GetProperty("edge_count").GetInt32());
+        Assert.Equal(0, data.GetProperty("edge_count").GetInt32());
         Assert.True(data.GetProperty("matched_node_count").GetInt32() > data.GetProperty("node_count").GetInt32());
         Assert.True(data.GetProperty("matched_edge_count").GetInt32() > data.GetProperty("edge_count").GetInt32());
         Assert.True(data.GetProperty("truncated").GetBoolean());
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayGraph_Escapes_Quoted_Artifact_Root_In_Suggested_Commands()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem, "/tmp/replay \"quoted\" root");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Contains(data.GetProperty("actions").EnumerateArray(), action =>
+            action.GetProperty("command").GetString()!.Contains("\"/tmp/replay \\\"quoted\\\" root\"", StringComparison.Ordinal));
+        Assert.Contains(data.GetProperty("taxonomy").GetProperty("query_examples").EnumerateArray(), example =>
+            example.GetProperty("command").GetString()!.Contains("\"/tmp/replay \\\"quoted\\\" root\"", StringComparison.Ordinal));
+        Assert.Contains(data.GetProperty("evidence").EnumerateArray(), evidence =>
+            evidence.GetProperty("command").ValueKind == JsonValueKind.String &&
+            evidence.GetProperty("command").GetString()!.Contains("\"/tmp/replay \\\"quoted\\\" root\"", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -2754,9 +2781,8 @@ public sealed partial class AppTests
         return replayRoot;
     }
 
-    private static string SeedReplayCapsuleArtifacts(FakeFileSystem fileSystem)
+    private static string SeedReplayCapsuleArtifacts(FakeFileSystem fileSystem, string replayRoot = "/tmp/replay-capsule-root")
     {
-        var replayRoot = "/tmp/replay-capsule-root";
         fileSystem.CreateDirectory(replayRoot);
         fileSystem.CreateDirectory(Path.Join(replayRoot, "failures"));
         fileSystem.CreateDirectory(Path.Join(replayRoot, "logs"));

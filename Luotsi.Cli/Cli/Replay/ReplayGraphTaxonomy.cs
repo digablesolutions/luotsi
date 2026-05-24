@@ -57,5 +57,6 @@ internal static class ReplayGraphTaxonomy
             new("neighborhood", "Expand around a specific node id returned by a previous graph query.", $"luotsi replay graph --artifacts {Quote(artifactRoot)} --node <node-id> --depth 2")
         ]);
 
-    private static string Quote(string value) => value.Contains(' ', StringComparison.Ordinal) ? $"\"{value}\"" : value;
+    private static string Quote(string value) =>
+        value.Contains(' ', StringComparison.Ordinal) ? "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"" : value;
 }

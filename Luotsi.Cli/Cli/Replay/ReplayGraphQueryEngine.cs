@@ -86,9 +86,15 @@ internal static class ReplayGraphQueryEngine
 
         var matchedNodeCount = filteredNodes.Length;
         var matchedEdgeCount = filteredEdges.Length;
+        var limitedNodes = filteredNodes.Take(query.Limit).ToArray();
+        var limitedNodeIds = limitedNodes.Select(static node => node.Id).ToHashSet(StringComparer.Ordinal);
+        var limitedEdges = filteredEdges
+            .Where(edge => limitedNodeIds.Contains(edge.From) && limitedNodeIds.Contains(edge.To))
+            .Take(query.Limit)
+            .ToArray();
         return new ReplayGraphView(
-            filteredNodes.Take(query.Limit).ToArray(),
-            filteredEdges.Take(query.Limit).ToArray(),
+            limitedNodes,
+            limitedEdges,
             matchedNodeCount,
             matchedEdgeCount,
             matchedNodeCount > query.Limit || matchedEdgeCount > query.Limit);
