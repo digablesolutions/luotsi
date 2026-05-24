@@ -19,7 +19,7 @@ internal static class DeviceStatusResolver
 
         if (matchedDevice is null)
         {
-            throw new DeviceInventorySelectionException(selectedSerial ?? readiness.Serial);
+            throw new DeviceInventorySelectionException(string.IsNullOrWhiteSpace(selectedSerial) ? readiness.Serial : selectedSerial);
         }
 
         return new DeviceStatusResult(matchedDevice, readiness);
