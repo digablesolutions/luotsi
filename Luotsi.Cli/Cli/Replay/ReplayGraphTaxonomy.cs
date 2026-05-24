@@ -42,6 +42,7 @@ internal static class ReplayGraphTaxonomy
         QueryExamples:
         [
             new("failures", "Return failure-relevant graph context.", $"luotsi replay graph --artifacts {Quote(artifactRoot)} --failed --write-markdown"),
+            new("evidence", "Stream promoted proof records for agents.", $"luotsi replay graph --artifacts {Quote(artifactRoot)} --evidence artifact --format jsonl"),
             new("selectors", "List promoted selectors and local context.", $"luotsi replay graph --artifacts {Quote(artifactRoot)} --node-kind selector --write-markdown"),
             new("transitions", "List semantic timeline transitions.", $"luotsi replay graph --artifacts {Quote(artifactRoot)} --edge-kind transitions_to --limit 50"),
             new("neighborhood", "Expand around a specific node id returned by a previous graph query.", $"luotsi replay graph --artifacts {Quote(artifactRoot)} --node <node-id> --depth 2")

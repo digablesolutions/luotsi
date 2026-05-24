@@ -25,7 +25,8 @@ internal static class ReplayGraphInsightBuilder
         var actions = new List<ReplayGraphActionResult>
         {
             new("open_artifacts", "Open the browser index for screenshots, logs, reports, graph, and replay files.", $"luotsi replay open --artifacts {Quote(artifactRoot)} --dry-run"),
-            new("scrub_failures", "Review the failure timeline with previous/focused/next context.", $"luotsi replay scrub --artifacts {Quote(artifactRoot)} --failures --context 3 --write-markdown")
+            new("scrub_failures", "Review the failure timeline with previous/focused/next context.", $"luotsi replay scrub --artifacts {Quote(artifactRoot)} --failures --context 3 --write-markdown"),
+            new("stream_graph", "Emit line-oriented graph output for CI and agent consumers.", $"luotsi replay graph --artifacts {Quote(artifactRoot)} --format jsonl")
         };
 
         if (!query.FailedOnly && nodes.Any(ReplayGraphPredicates.IsFailureNode))
@@ -36,6 +37,11 @@ internal static class ReplayGraphInsightBuilder
         if (nodes.Any(static node => string.Equals(node.Kind, "selector", StringComparison.Ordinal)))
         {
             actions.Add(new ReplayGraphActionResult("filter_selectors", "List promoted selector nodes and the actions/events that mention them.", $"luotsi replay graph --artifacts {Quote(artifactRoot)} --node-kind selector --write-markdown"));
+        }
+
+        if (nodes.Any(static node => string.Equals(node.Kind, "artifact", StringComparison.Ordinal)))
+        {
+            actions.Add(new ReplayGraphActionResult("filter_artifact_evidence", "List promoted artifact evidence records without hiding graph context.", $"luotsi replay graph --artifacts {Quote(artifactRoot)} --evidence artifact --format jsonl"));
         }
 
         if (nodes.Any(static node => string.Equals(node.Kind, "scenario_draft", StringComparison.Ordinal)))

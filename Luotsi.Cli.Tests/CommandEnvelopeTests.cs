@@ -1354,6 +1354,8 @@ public sealed partial class AppTests
         Assert.Contains("action-to-failure", data.GetProperty("agent_summary").GetProperty("what_changed").GetString(), StringComparison.Ordinal);
         Assert.Contains("luotsi replay", data.GetProperty("agent_summary").GetProperty("what_can_act_on").GetString(), StringComparison.Ordinal);
         Assert.Contains(data.GetProperty("actions").EnumerateArray(), action => action.GetProperty("kind").GetString() == "scrub_failures");
+        Assert.Contains(data.GetProperty("actions").EnumerateArray(), action => action.GetProperty("kind").GetString() == "stream_graph");
+        Assert.Contains(data.GetProperty("actions").EnumerateArray(), action => action.GetProperty("kind").GetString() == "filter_artifact_evidence");
         Assert.True(data.GetProperty("evidence_kinds").GetProperty("artifact").GetInt32() >= 1);
         Assert.True(data.GetProperty("evidence_kinds").GetProperty("failure").GetInt32() >= 1);
         Assert.Contains(data.GetProperty("evidence").EnumerateArray(), evidence => evidence.GetProperty("kind").GetString() == "failure");
