@@ -71,8 +71,9 @@ public sealed class AndroidViewServerInstaller(
 
             var dump = await _adbClient.RunAsync(["shell", "pm", "dump", package.PackageName], cancellationToken).ConfigureAwait(false);
             dump.EnsureSuccess("view helper package verification failed");
+            var dumpOutput = CombineOutput(dump.Stdout, dump.Stderr);
             var serviceClassName = ToClassName(package.CaptureService);
-            if (!dump.Stdout.Contains(serviceClassName, StringComparison.Ordinal))
+            if (!ContainsComponent(dumpOutput, package.CaptureService))
             {
                 throw new InvalidOperationException($"Installed helper does not expose {serviceClassName}. The APK manifest may be stale or incomplete.");
             }
@@ -124,7 +125,11 @@ public sealed class AndroidViewServerInstaller(
 
     private static bool ContainsComponent(string output, string component) =>
         output.Contains(component, StringComparison.Ordinal) ||
-        output.Contains(ToClassName(component), StringComparison.Ordinal);
+        output.Contains(ToClassName(component), StringComparison.Ordinal) ||
+        output.Contains(ToShortClassName(component), StringComparison.Ordinal);
+
+    private static string CombineOutput(string stdout, string stderr) =>
+        string.IsNullOrWhiteSpace(stderr) ? stdout : stdout + "\n" + stderr;
 
     private static string ToClassName(string component)
     {
@@ -139,5 +144,11 @@ public sealed class AndroidViewServerInstaller(
         return className.StartsWith(".", StringComparison.Ordinal)
             ? packageName + className
             : className;
+    }
+
+    private static string ToShortClassName(string component)
+    {
+        var slashIndex = component.IndexOf('/', StringComparison.Ordinal);
+        return slashIndex < 0 ? component : component[(slashIndex + 1)..];
     }
 }

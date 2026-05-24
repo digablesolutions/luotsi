@@ -183,6 +183,13 @@ jobs:
             exit $LASTEXITCODE
           }
 
+      - name: Stage FFmpeg native libraries
+        shell: pwsh
+        run: >
+          ./ffmpeg/download-ffmpeg.ps1
+          -Platform ${{ matrix.rid }}
+          -Force
+
       - name: Publish CLI
         shell: pwsh
         run: >

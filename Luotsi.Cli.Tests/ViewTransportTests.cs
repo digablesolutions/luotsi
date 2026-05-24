@@ -94,6 +94,27 @@ public sealed class ViewTransportTests
     }
 
     [Fact]
+    public async Task AndroidViewServerInstaller_VerifyInstalledAsync_Accepts_Short_Service_Component_From_Dump()
+    {
+        var adb = new FakeAdbClient();
+        adb.EnqueueRunResult(new ProcessResult(0, "dev.luotsi.view/.ConsentActivity", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, """
+            Service Resolver Table:
+              Non-Data Actions:
+                  dev.luotsi.view/.CaptureService
+            Services:
+              ServiceRecord{abc dev.luotsi.view/.CaptureService}
+            """, string.Empty));
+        var locator = new FakeAndroidViewHelperPackageLocator(new AndroidViewHelperPackage("C:/tmp/helper.apk", "/data/local/tmp/luotsi-view-server.apk", "dev.luotsi.view.Main", "test-helper"));
+        var installer = new AndroidViewServerInstaller(adb, locator);
+
+        await installer.VerifyInstalledAsync(locator.Resolve());
+
+        Assert.Equal(["shell", "cmd", "package", "resolve-activity", "--brief", "dev.luotsi.view/.ConsentActivity"], adb.RunCommands[0]);
+        Assert.Equal(["shell", "pm", "dump", "dev.luotsi.view"], adb.RunCommands[1]);
+    }
+
+    [Fact]
     public async Task AndroidViewBootstrap_StartAsync_ShellQuotes_Screenrecord_Request_Values()
     {
         var adb = new FakeAdbClient();
