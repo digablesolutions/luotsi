@@ -9,7 +9,7 @@
 ## Command
 
 ```text
-luotsi replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--contains <text>] [--insight <kind>] [--severity info|warning|error] [--evidence <kind>] [--node <id> --depth 1] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
+luotsi replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--contains <text>] [--insight <kind>] [--severity info|warning|error] [--evidence <kind>] [--fact <text>] [--node <id> --depth 1] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
 ```
 
 Filtering returns a focused subgraph with one-hop context. `total_node_count` and `total_edge_count` describe the full graph before filtering; `node_count` and `edge_count` describe the returned view.
@@ -21,6 +21,8 @@ Filtering returns a focused subgraph with one-hop context. `total_node_count` an
 `--contains <text>` searches node IDs, kinds, labels, properties, edge endpoints, edge kinds, and edge properties. Use it as the broad first query when you only know a failure phrase, selector text, artifact name, or telemetry value.
 
 `--evidence <kind>` filters the promoted `evidence` array without changing the returned node and edge view. Current evidence kinds include `failure`, `artifact`, `selector`, `screen_state`, `telemetry_signal`, and `generated_step`.
+
+`--fact <text>` filters the promoted `facts` array without changing the returned node and edge view. It searches fact category, subject, predicate, object, and source graph IDs.
 
 ## Top-Level Fields
 
@@ -114,6 +116,7 @@ luotsi replay graph --artifacts artifacts/run --format jsonl
 luotsi replay graph --artifacts artifacts/run --write-jsonl
 luotsi replay graph --artifacts artifacts/run --contains "not visible" --write-markdown
 luotsi replay graph --artifacts artifacts/run --evidence artifact --format jsonl
+luotsi replay graph --artifacts artifacts/run --fact action_to_failure --format jsonl
 luotsi replay graph --artifacts artifacts/run --severity warning --write-markdown
 luotsi replay graph --artifacts artifacts/run --insight transition --severity warning --format json
 luotsi replay graph --artifacts artifacts/run --node-kind selector --write-markdown

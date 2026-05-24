@@ -33,6 +33,7 @@ internal static class ReplayGraphQueryEngine
             NormalizeBlank(options.Get("insight")),
             severity,
             NormalizeBlank(options.Get("evidence")),
+            NormalizeBlank(options.Get("fact")),
             NormalizeBlank(options.Get("node")),
             options.Int("depth", 1),
             options.HasFlag("failed"),
@@ -111,6 +112,7 @@ internal static class ReplayGraphQueryEngine
         AddQueryPart(parts, "insight", query.Insight);
         AddQueryPart(parts, "severity", query.Severity);
         AddQueryPart(parts, "evidence", query.Evidence);
+        AddQueryPart(parts, "fact", query.Fact);
         AddQueryPart(parts, "node", query.Node);
         if (query.Node is not null)
         {
@@ -277,6 +279,25 @@ internal static class ReplayGraphQueryEngine
 
         return evidence
             .Where(item => ReplayGraphPredicates.Contains(item.Kind, query.Evidence))
+            .ToArray();
+    }
+
+    public static IReadOnlyList<ReplayGraphFactResult> ApplyFactFilters(
+        IReadOnlyList<ReplayGraphFactResult> facts,
+        ReplayGraphQueryResult query)
+    {
+        if (query.Fact is null)
+        {
+            return facts;
+        }
+
+        return facts
+            .Where(fact => ReplayGraphPredicates.Contains(fact.Category, query.Fact) ||
+                ReplayGraphPredicates.Contains(fact.Subject, query.Fact) ||
+                ReplayGraphPredicates.Contains(fact.Predicate, query.Fact) ||
+                ReplayGraphPredicates.Contains(fact.Object, query.Fact) ||
+                fact.NodeIds.Any(nodeId => ReplayGraphPredicates.Contains(nodeId, query.Fact)) ||
+                fact.EdgeIds.Any(edgeId => ReplayGraphPredicates.Contains(edgeId, query.Fact)))
             .ToArray();
     }
 

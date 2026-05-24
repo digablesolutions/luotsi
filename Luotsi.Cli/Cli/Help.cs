@@ -196,7 +196,7 @@ Usage:
   luotsi replay capsule --artifacts <artifact-root> [--write-readme] [--write-json]
   luotsi replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--source-path <timeline-path>] [--sequence <n>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
   luotsi replay scrub --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--source-path <timeline-path>] [--sequence <n>] [--context <n>] [--limit 200] [--write-json] [--write-markdown]
-  luotsi replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--contains <text>] [--insight <kind>] [--severity info|warning|error] [--evidence <kind>] [--node <id> --depth 1] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
+  luotsi replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--contains <text>] [--insight <kind>] [--severity info|warning|error] [--evidence <kind>] [--fact <text>] [--node <id> --depth 1] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
   luotsi replay cluster --artifacts <artifact-root> [--write-json] [--write-markdown]
   luotsi replay open --artifacts <artifact-root> [--dry-run]
   luotsi replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>] [--write-json] [--write-markdown]
@@ -215,6 +215,7 @@ Examples:
   luotsi replay graph --artifacts artifacts/20260518-100000-run --failed --node-kind failure --write-markdown
   luotsi replay graph --artifacts artifacts/20260518-100000-run --contains "not visible" --write-markdown
   luotsi replay graph --artifacts artifacts/20260518-100000-run --evidence artifact --format jsonl
+  luotsi replay graph --artifacts artifacts/20260518-100000-run --fact action_to_failure --format jsonl
   luotsi replay graph --artifacts artifacts/20260518-100000-run --severity warning --write-markdown
   luotsi replay graph --artifacts artifacts/20260518-100000-run --node-kind selector --write-markdown
   luotsi replay graph --artifacts artifacts/20260518-100000-run --node failure:session-timeline.jsonl:3 --depth 2
@@ -268,7 +269,7 @@ Notes:
   jsonl, replay graph writes raw machine output instead of the command envelope.
   With --write-jsonl, it persists replay-graph.jsonl for CI and agent consumers.
   Use --failed, --node-kind, --edge-kind, --action, --selector, --contains,
-  --insight, --evidence,
+  --insight, --evidence, --fact,
   --severity, --node,
   --depth, and --limit to return a focused subgraph with local context. Replay cluster groups failed replay sessions by normalized failure
   shape and returns triage hints plus replay/search commands for the latest
@@ -529,7 +530,7 @@ Command groups:
     replay capsule --artifacts <artifact-root> [--write-readme] [--write-json]
     replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
     replay scrub --artifacts <artifact-root> [--failures] [--source-path <timeline-path>] [--sequence <n>] [--context <n>] [--write-json] [--write-markdown]
-    replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--contains <text>] [--insight <kind>] [--severity info|warning|error] [--evidence <kind>] [--node <id> --depth 1] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
+    replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--contains <text>] [--insight <kind>] [--severity info|warning|error] [--evidence <kind>] [--fact <text>] [--node <id> --depth 1] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
     replay cluster --artifacts <artifact-root> [--write-json] [--write-markdown]
     replay open --artifacts <artifact-root> [--dry-run]
     replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>] [--write-json] [--write-markdown]

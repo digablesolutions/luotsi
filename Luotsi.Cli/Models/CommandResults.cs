@@ -574,6 +574,7 @@ public sealed record ReplayGraphQueryResult(
     string? Insight,
     string? Severity,
     string? Evidence,
+    string? Fact,
     string? Node,
     int Depth,
     bool FailedOnly,

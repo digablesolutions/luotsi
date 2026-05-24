@@ -1642,6 +1642,35 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayGraph_Filters_Facts_By_Text()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot, "--fact", "action_to_failure", "--format", "jsonl"]);
+
+        Assert.Equal(0, exitCode);
+        var lines = console.OutputLines
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .Select(line => JsonDocument.Parse(line))
+            .ToArray();
+        Assert.Contains(lines, line => line.RootElement.GetProperty("type").GetString() == "summary");
+        var factLines = lines
+            .Where(line => line.RootElement.GetProperty("type").GetString() == "fact")
+            .ToArray();
+        var fact = Assert.Single(factLines);
+        Assert.Equal("transition", fact.RootElement.GetProperty("fact").GetProperty("category").GetString());
+        Assert.Equal("action_to_failure", fact.RootElement.GetProperty("fact").GetProperty("predicate").GetString());
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayGraph_Reports_Truncated_Query_When_Limit_Caps_Matches()
     {
         var console = new FakeConsole();
