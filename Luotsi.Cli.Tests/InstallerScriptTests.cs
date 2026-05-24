@@ -12,10 +12,14 @@ public sealed partial class AppTests
         AssertOrdered(
             script,
             "Move-Item -LiteralPath $payloadRoot -Destination $currentDirectory",
+            "$viewExtras = Install-ViewExtras $currentDirectory $rid $SkipFfmpeg.IsPresent",
             "Write-CommandShim $commandPath",
-            "Write-Manifest $manifestPath $resolvedInstallRoot $binDirectory $commandPath $resolvedTag $rid $archiveName $archiveUrl $checksumUrl",
+            "Write-Manifest $manifestPath $resolvedInstallRoot $binDirectory $commandPath $resolvedTag $rid $archiveName $archiveUrl $checksumUrl $viewExtras",
             "$installCommitted = $true",
             "Remove-Item -LiteralPath $previousDirectory -Recurse -Force -ErrorAction SilentlyContinue");
+
+        Assert.Contains("[switch]$SkipFfmpeg", script, StringComparison.Ordinal);
+        Assert.Contains("ffmpeg_staged = $ViewExtras.ffmpeg_staged", script, StringComparison.Ordinal);
 
         var catchBlock = Slice(script, "catch {", "finally {");
         Assert.Contains("if (-not $installCommitted)", catchBlock, StringComparison.Ordinal);
@@ -33,10 +37,14 @@ public sealed partial class AppTests
         AssertOrdered(
             script,
             "mv \"$payload_dir\" \"$CURRENT_DIR\"",
+            "install_view_extras \"$CURRENT_DIR\" \"$RID\" \"$SKIP_FFMPEG\"",
             "write_command_shim \"$COMMAND_PATH\"",
-            "write_manifest \"$MANIFEST_PATH\" \"$RESOLVED_INSTALL_ROOT\" \"$BIN_DIR\" \"$COMMAND_PATH\" \"$RESOLVED_TAG\" \"$RID\" \"$ARCHIVE_NAME\" \"$ARCHIVE_URL\" \"$CHECKSUM_URL\"",
+            "write_manifest \"$MANIFEST_PATH\" \"$RESOLVED_INSTALL_ROOT\" \"$BIN_DIR\" \"$COMMAND_PATH\" \"$RESOLVED_TAG\" \"$RID\" \"$ARCHIVE_NAME\" \"$ARCHIVE_URL\" \"$CHECKSUM_URL\" \"$VIEW_EXTRAS\" \"$FFMPEG_STAGED\" \"$FFMPEG_PATH\" \"$FFMPEG_DETAIL\"",
             "install_committed=1",
             "rm -rf \"$PREVIOUS_DIR\" || true");
+
+        Assert.Contains("--skip-ffmpeg", script, StringComparison.Ordinal);
+        Assert.Contains("\"ffmpeg_staged\": $ffmpeg_staged", script, StringComparison.Ordinal);
 
         var restoreBlock = Slice(script, "restore_previous() {", "cleanup() {");
         Assert.Contains("if [ \"$install_committed\" -ne 0 ]; then", restoreBlock, StringComparison.Ordinal);

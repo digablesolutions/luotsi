@@ -6,6 +6,7 @@ INSTALL_ROOT=""
 OWNER="digablesolutions"
 REPOSITORY="luotsi"
 SKIP_PATH_UPDATE=0
+SKIP_FFMPEG=0
 DRY_RUN=0
 
 usage() {
@@ -22,6 +23,7 @@ Options:
   --owner <name>        GitHub owner. Defaults to digablesolutions.
   --repo <name>         GitHub repository. Defaults to luotsi.
   --skip-path-update    Do not modify shell profile files.
+  --skip-ffmpeg         Do not install FFmpeg view extras after the core CLI.
   --dry-run             Print the resolved install plan without downloading or writing files.
   --help                Show this help.
 EOF
@@ -47,6 +49,10 @@ while [ "$#" -gt 0 ]; do
             ;;
         --skip-path-update)
             SKIP_PATH_UPDATE=1
+            shift
+            ;;
+        --skip-ffmpeg)
+            SKIP_FFMPEG=1
             shift
             ;;
         --dry-run)
@@ -123,6 +129,74 @@ download_file() {
     fi
 
     wget -qO "$destination" "$url"
+}
+
+install_view_extras() {
+    current_dir=$1
+    rid=$2
+    skip=$3
+    ffmpeg_root="$current_dir/ffmpeg"
+    ffmpeg_bin="$ffmpeg_root/bin"
+
+    VIEW_EXTRAS="unsupported"
+    FFMPEG_STAGED=0
+    FFMPEG_PATH=$ffmpeg_bin
+    FFMPEG_DETAIL="Automatic FFmpeg staging is not supported for $rid by this installer."
+
+    if [ "$skip" -eq 1 ]; then
+        VIEW_EXTRAS="skipped"
+        FFMPEG_DETAIL="Skipped by installer option."
+        return 0
+    fi
+
+    case "$rid" in
+        linux-x64)
+            archive_name='ffmpeg-n8.1-latest-linux64-lgpl-shared-8.1.tar.xz'
+            archive_url='https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.1-latest-linux64-lgpl-shared-8.1.tar.xz'
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+
+    require_command tar
+    printf 'Installing view extras...\n'
+    extras_root="$temp_root/view-extras"
+    extras_archive="$extras_root/$archive_name"
+    extras_extract="$extras_root/extract"
+    mkdir -p "$extras_extract" "$ffmpeg_bin"
+    if ! download_file "$archive_url" "$extras_archive"; then
+        VIEW_EXTRAS="failed"
+        FFMPEG_DETAIL="Failed to download FFmpeg archive from $archive_url."
+        return 0
+    fi
+
+    if ! tar -xf "$extras_archive" -C "$extras_extract"; then
+        VIEW_EXTRAS="failed"
+        FFMPEG_DETAIL="Failed to extract FFmpeg archive $archive_name."
+        return 0
+    fi
+
+    copied=0
+    lib_dir=$(find "$extras_extract" -type d -name lib | head -n 1)
+    if [ -n "$lib_dir" ]; then
+        for file in "$lib_dir"/*.so "$lib_dir"/*.so.*; do
+            if [ -f "$file" ]; then
+                cp "$file" "$ffmpeg_bin/"
+                copied=$((copied + 1))
+            fi
+        done
+    fi
+
+    if [ "$copied" -eq 0 ]; then
+        VIEW_EXTRAS="failed"
+        FFMPEG_DETAIL="FFmpeg archive did not contain shared libraries."
+        return 0
+    fi
+
+    VIEW_EXTRAS="installed"
+    FFMPEG_STAGED=1
+    FFMPEG_DETAIL="Extracted $copied FFmpeg native libraries to $ffmpeg_bin."
 }
 
 compute_sha256() {
@@ -324,6 +398,10 @@ write_manifest() {
     archive_name=$7
     archive_url=$8
     checksum_url=$9
+    view_extras=${10}
+    ffmpeg_staged=${11}
+    ffmpeg_path=${12}
+    ffmpeg_detail=${13}
     installed_at_utc=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
 
     cat > "$manifest_path" <<EOF
@@ -341,6 +419,10 @@ write_manifest() {
   "archive_name": "$archive_name",
   "archive_url": "$archive_url",
   "checksum_url": "$checksum_url",
+  "view_extras": "$view_extras",
+  "ffmpeg_staged": $ffmpeg_staged,
+  "ffmpeg_path": "$ffmpeg_path",
+  "ffmpeg_detail": "$ffmpeg_detail",
   "installed_at_utc": "$installed_at_utc"
 }
 EOF
@@ -373,6 +455,11 @@ printf '  Runtime:      %s\n' "$RID"
 printf '  Install root: %s\n' "$RESOLVED_INSTALL_ROOT"
 printf '  Command dir:  %s\n' "$BIN_DIR"
 printf '  Asset:        %s\n' "$ARCHIVE_NAME"
+if [ "$SKIP_FFMPEG" -eq 1 ]; then
+    printf '  View extras:  skip FFmpeg\n'
+else
+    printf '  View extras:  stage FFmpeg when supported\n'
+fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
     printf 'Dry run only. No files were downloaded or changed.\n'
@@ -450,8 +537,10 @@ if ! mv "$payload_dir" "$CURRENT_DIR"; then
     exit 1
 fi
 
+install_view_extras "$CURRENT_DIR" "$RID" "$SKIP_FFMPEG"
+
 write_command_shim "$COMMAND_PATH"
-write_manifest "$MANIFEST_PATH" "$RESOLVED_INSTALL_ROOT" "$BIN_DIR" "$COMMAND_PATH" "$RESOLVED_TAG" "$RID" "$ARCHIVE_NAME" "$ARCHIVE_URL" "$CHECKSUM_URL"
+write_manifest "$MANIFEST_PATH" "$RESOLVED_INSTALL_ROOT" "$BIN_DIR" "$COMMAND_PATH" "$RESOLVED_TAG" "$RID" "$ARCHIVE_NAME" "$ARCHIVE_URL" "$CHECKSUM_URL" "$VIEW_EXTRAS" "$FFMPEG_STAGED" "$FFMPEG_PATH" "$FFMPEG_DETAIL"
 install_committed=1
 
 if [ -e "$PREVIOUS_DIR" ]; then
@@ -473,6 +562,7 @@ fi
 
 printf 'Install complete.\n'
 printf '  Command: %s\n' "$COMMAND_PATH"
+printf '  View extras: %s\n' "$VIEW_EXTRAS"
 if [ "$SKIP_PATH_UPDATE" -eq 1 ]; then
     printf '  PATH was not modified. Add %s to your shell PATH to run luotsi.\n' "$BIN_DIR"
 elif [ "$path_updated" -eq 1 ]; then
