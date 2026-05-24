@@ -51,6 +51,10 @@ internal sealed class SelfUpdateService(
             manifest?.CommandPath,
             helperApk,
             helperApk is not null && _fileSystem.FileExists(helperApk),
+            manifest?.ViewExtras,
+            manifest?.FfmpegStaged,
+            manifest?.FfmpegPath,
+            manifest?.FfmpegDetail,
             manifest is not null);
     }
 
@@ -242,6 +246,10 @@ internal sealed record LuotsiVersionInfo(
     string? CommandPath,
     string? HelperApkPath,
     bool HelperApkPresent,
+    string? ViewExtras,
+    bool? FfmpegStaged,
+    string? FfmpegPath,
+    string? FfmpegDetail,
     bool InstalledManifestPresent);
 
 internal sealed record LuotsiUpdateResult(
@@ -271,4 +279,8 @@ internal sealed record LuotsiInstallManifest(
     [property: JsonPropertyName("install_root")] string InstallRoot,
     [property: JsonPropertyName("current_root")] string CurrentRoot,
     [property: JsonPropertyName("command_path")] string CommandPath,
-    [property: JsonPropertyName("helper_apk_path")] string? HelperApkPath = null);
+    [property: JsonPropertyName("helper_apk_path")] string? HelperApkPath = null,
+    [property: JsonPropertyName("view_extras")] string? ViewExtras = null,
+    [property: JsonPropertyName("ffmpeg_staged")] bool? FfmpegStaged = null,
+    [property: JsonPropertyName("ffmpeg_path")] string? FfmpegPath = null,
+    [property: JsonPropertyName("ffmpeg_detail")] string? FfmpegDetail = null);

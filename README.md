@@ -62,7 +62,7 @@ Quick install is per-user and does not require admin rights.
 iex (irm https://github.com/digablesolutions/luotsi/releases/latest/download/luotsi-install.ps1)
 ```
 
-The installer downloads the latest published release, installs Luotsi under `%LOCALAPPDATA%\Luotsi`, writes a `luotsi` command shim to `%LOCALAPPDATA%\Luotsi\bin`, and adds that directory to your user `PATH`. Open a new terminal after the install finishes.
+The installer downloads the latest published release, installs Luotsi under `%LOCALAPPDATA%\Luotsi`, writes a `luotsi` command shim to `%LOCALAPPDATA%\Luotsi\bin`, stages FFmpeg view extras under the install root, and adds the command directory to your user `PATH`. Open a new terminal after the install finishes.
 
 Verify the installed executable:
 
@@ -77,6 +77,7 @@ To pass installer options, use the scriptblock form:
 ```powershell
 & ([scriptblock]::Create((irm https://github.com/digablesolutions/luotsi/releases/latest/download/luotsi-install.ps1))) -Version v1.2.3 -DryRun
 & ([scriptblock]::Create((irm https://github.com/digablesolutions/luotsi/releases/latest/download/luotsi-install.ps1))) -InstallRoot 'D:\Tools\Luotsi' -SkipPathUpdate
+& ([scriptblock]::Create((irm https://github.com/digablesolutions/luotsi/releases/latest/download/luotsi-install.ps1))) -SkipFfmpeg
 ```
 
 **macOS / Linux:**
@@ -85,7 +86,7 @@ To pass installer options, use the scriptblock form:
 curl -fsSL https://github.com/digablesolutions/luotsi/releases/latest/download/luotsi-install.sh | sh
 ```
 
-The shell installer downloads the latest published release, installs Luotsi under `~/.local/share/luotsi`, writes a `luotsi` command shim to `~/.local/share/luotsi/bin`, and updates your shell profile unless you pass `--skip-path-update`. Open a new terminal after the install finishes.
+The shell installer downloads the latest published release, installs Luotsi under `~/.local/share/luotsi`, writes a `luotsi` command shim to `~/.local/share/luotsi/bin`, stages FFmpeg view extras on Linux, and updates your shell profile unless you pass `--skip-path-update`. Open a new terminal after the install finishes.
 
 Verify the installed executable:
 
@@ -100,9 +101,10 @@ To pass installer options:
 ```bash
 curl -fsSL https://github.com/digablesolutions/luotsi/releases/latest/download/luotsi-install.sh | sh -s -- --version v1.2.3 --dry-run
 curl -fsSL https://github.com/digablesolutions/luotsi/releases/latest/download/luotsi-install.sh | sh -s -- --install-root "$HOME/tools/luotsi" --skip-path-update
+curl -fsSL https://github.com/digablesolutions/luotsi/releases/latest/download/luotsi-install.sh | sh -s -- --skip-ffmpeg
 ```
 
-**Manual fallback.** Download a self-contained archive from [GitHub Releases](https://github.com/digablesolutions/luotsi/releases). Each archive contains the self-contained `luotsi` executable (`luotsi.exe` on Windows) plus any companion files emitted by `dotnet publish`, with no separate .NET runtime required.
+**Manual fallback.** Download a self-contained archive from [GitHub Releases](https://github.com/digablesolutions/luotsi/releases). Each archive contains the self-contained `luotsi` executable (`luotsi.exe` on Windows) plus any companion files emitted by `dotnet publish`, with no separate .NET runtime required. Release archives are intentionally core-only; run `luotsi doctor --fix` or use the installer to stage FFmpeg view extras for live view.
 
 ```bash
 # macOS / Linux

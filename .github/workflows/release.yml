@@ -160,19 +160,15 @@ jobs:
           - rid: win-x64
             archive_ext: zip
             runner: windows-latest
-            stage_ffmpeg: true
           - rid: linux-x64
             archive_ext: tar.gz
             runner: ubuntu-latest
-            stage_ffmpeg: true
           - rid: osx-x64
             archive_ext: tar.gz
             runner: ubuntu-latest
-            stage_ffmpeg: false
           - rid: osx-arm64
             archive_ext: tar.gz
             runner: ubuntu-latest
-            stage_ffmpeg: false
 
     steps:
       - name: Checkout
@@ -254,14 +250,6 @@ jobs:
           Get-ChildItem -LiteralPath $releaseApkDir | ForEach-Object {
             Write-Host "Android helper output: $($_.FullName)"
           }
-
-      - name: Stage FFmpeg native libraries
-        if: ${{ matrix.stage_ffmpeg == true }}
-        shell: pwsh
-        run: >
-          ./ffmpeg/download-ffmpeg.ps1
-          -Platform ${{ matrix.rid }}
-          -Force
 
       - name: Publish
         shell: pwsh

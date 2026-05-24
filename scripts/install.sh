@@ -6,6 +6,7 @@ INSTALL_ROOT=""
 OWNER="digablesolutions"
 REPOSITORY="luotsi"
 SKIP_PATH_UPDATE=0
+SKIP_FFMPEG=0
 DRY_RUN=0
 
 usage() {
@@ -22,6 +23,7 @@ Options:
   --owner <name>        GitHub owner. Defaults to digablesolutions.
   --repo <name>         GitHub repository. Defaults to luotsi.
   --skip-path-update    Do not modify shell profile files.
+  --skip-ffmpeg         Do not install FFmpeg view extras after the core CLI.
   --dry-run             Print the resolved install plan without downloading or writing files.
   --help                Show this help.
 EOF
@@ -47,6 +49,10 @@ while [ "$#" -gt 0 ]; do
             ;;
         --skip-path-update)
             SKIP_PATH_UPDATE=1
+            shift
+            ;;
+        --skip-ffmpeg)
+            SKIP_FFMPEG=1
             shift
             ;;
         --dry-run)
@@ -118,11 +124,79 @@ download_file() {
     url=$1
     destination=$2
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL "$url" -o "$destination"
-        return
+        curl -fsSL "$url" -o "$destination" || return 1
+        return 0
     fi
 
-    wget -qO "$destination" "$url"
+    wget -qO "$destination" "$url" || return 1
+}
+
+install_view_extras() {
+    current_dir=$1
+    rid=$2
+    skip=$3
+    ffmpeg_root="$current_dir/ffmpeg"
+    ffmpeg_bin="$ffmpeg_root/bin"
+
+    VIEW_EXTRAS="unsupported"
+    FFMPEG_STAGED=false
+    FFMPEG_PATH=$ffmpeg_bin
+    FFMPEG_DETAIL="Automatic FFmpeg staging is not supported for $rid by this installer."
+
+    if [ "$skip" -eq 1 ]; then
+        VIEW_EXTRAS="skipped"
+        FFMPEG_DETAIL="Skipped by installer option."
+        return 0
+    fi
+
+    case "$rid" in
+        linux-x64)
+            archive_name='ffmpeg-n8.1-latest-linux64-lgpl-shared-8.1.tar.xz'
+            archive_url='https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.1-latest-linux64-lgpl-shared-8.1.tar.xz'
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+
+    require_command tar
+    printf 'Installing view extras...\n'
+    extras_root="$temp_root/view-extras"
+    extras_archive="$extras_root/$archive_name"
+    extras_extract="$extras_root/extract"
+    mkdir -p "$extras_extract" "$ffmpeg_bin"
+    if ! download_file "$archive_url" "$extras_archive"; then
+        VIEW_EXTRAS="failed"
+        FFMPEG_DETAIL="Failed to download FFmpeg archive from $archive_url."
+        return 0
+    fi
+
+    if ! tar -xf "$extras_archive" -C "$extras_extract"; then
+        VIEW_EXTRAS="failed"
+        FFMPEG_DETAIL="Failed to extract FFmpeg archive $archive_name."
+        return 0
+    fi
+
+    copied=0
+    lib_dir=$(find "$extras_extract" -type d -name lib | head -n 1)
+    if [ -n "$lib_dir" ]; then
+        for file in "$lib_dir"/*.so "$lib_dir"/*.so.*; do
+            if [ -f "$file" ]; then
+                cp "$file" "$ffmpeg_bin/"
+                copied=$((copied + 1))
+            fi
+        done
+    fi
+
+    if [ "$copied" -eq 0 ]; then
+        VIEW_EXTRAS="failed"
+        FFMPEG_DETAIL="FFmpeg archive did not contain shared libraries."
+        return 0
+    fi
+
+    VIEW_EXTRAS="installed"
+    FFMPEG_STAGED=true
+    FFMPEG_DETAIL="Extracted $copied FFmpeg native libraries to $ffmpeg_bin."
 }
 
 compute_sha256() {
@@ -314,6 +388,16 @@ EOF
     chmod +x "$shim_path"
 }
 
+json_string() {
+    value=$1
+    if command -v python3 >/dev/null 2>&1; then
+        JSON_VALUE=$value python3 -c 'import json, os; print(json.dumps(os.environ["JSON_VALUE"]))'
+        return
+    fi
+
+    printf '"%s"' "$(printf '%s' "$value" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+}
+
 write_manifest() {
     manifest_path=$1
     install_dir=$2
@@ -324,24 +408,48 @@ write_manifest() {
     archive_name=$7
     archive_url=$8
     checksum_url=$9
+    view_extras=${10}
+    ffmpeg_staged=${11}
+    ffmpeg_path=${12}
+    ffmpeg_detail=${13}
     installed_at_utc=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+
+    escaped_tag=$(json_string "$tag")
+    escaped_version=$(json_string "${tag#v}")
+    escaped_rid=$(json_string "$rid")
+    escaped_install_dir=$(json_string "$install_dir")
+    escaped_current_root=$(json_string "$install_dir/current")
+    escaped_bin_dir=$(json_string "$bin_dir")
+    escaped_command_path=$(json_string "$command_path")
+    escaped_helper_apk_path=$(json_string "$install_dir/current/Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release.apk")
+    escaped_archive_name=$(json_string "$archive_name")
+    escaped_archive_url=$(json_string "$archive_url")
+    escaped_checksum_url=$(json_string "$checksum_url")
+    escaped_view_extras=$(json_string "$view_extras")
+    escaped_ffmpeg_path=$(json_string "$ffmpeg_path")
+    escaped_ffmpeg_detail=$(json_string "$ffmpeg_detail")
+    escaped_installed_at_utc=$(json_string "$installed_at_utc")
 
     cat > "$manifest_path" <<EOF
 {
   "schema": "luotsi-install.v1",
   "tool": "luotsi",
-  "tag": "$tag",
-  "version": "${tag#v}",
-  "rid": "$rid",
-  "install_root": "$install_dir",
-  "current_root": "$install_dir/current",
-  "bin_directory": "$bin_dir",
-  "command_path": "$command_path",
-  "helper_apk_path": "$install_dir/current/Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release.apk",
-  "archive_name": "$archive_name",
-  "archive_url": "$archive_url",
-  "checksum_url": "$checksum_url",
-  "installed_at_utc": "$installed_at_utc"
+  "tag": $escaped_tag,
+  "version": $escaped_version,
+  "rid": $escaped_rid,
+  "install_root": $escaped_install_dir,
+  "current_root": $escaped_current_root,
+  "bin_directory": $escaped_bin_dir,
+  "command_path": $escaped_command_path,
+  "helper_apk_path": $escaped_helper_apk_path,
+  "archive_name": $escaped_archive_name,
+  "archive_url": $escaped_archive_url,
+  "checksum_url": $escaped_checksum_url,
+  "view_extras": $escaped_view_extras,
+  "ffmpeg_staged": $ffmpeg_staged,
+  "ffmpeg_path": $escaped_ffmpeg_path,
+  "ffmpeg_detail": $escaped_ffmpeg_detail,
+  "installed_at_utc": $escaped_installed_at_utc
 }
 EOF
 }
@@ -373,6 +481,11 @@ printf '  Runtime:      %s\n' "$RID"
 printf '  Install root: %s\n' "$RESOLVED_INSTALL_ROOT"
 printf '  Command dir:  %s\n' "$BIN_DIR"
 printf '  Asset:        %s\n' "$ARCHIVE_NAME"
+if [ "$SKIP_FFMPEG" -eq 1 ]; then
+    printf '  View extras:  skip FFmpeg\n'
+else
+    printf '  View extras:  stage FFmpeg when supported\n'
+fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
     printf 'Dry run only. No files were downloaded or changed.\n'
@@ -450,8 +563,10 @@ if ! mv "$payload_dir" "$CURRENT_DIR"; then
     exit 1
 fi
 
+install_view_extras "$CURRENT_DIR" "$RID" "$SKIP_FFMPEG"
+
 write_command_shim "$COMMAND_PATH"
-write_manifest "$MANIFEST_PATH" "$RESOLVED_INSTALL_ROOT" "$BIN_DIR" "$COMMAND_PATH" "$RESOLVED_TAG" "$RID" "$ARCHIVE_NAME" "$ARCHIVE_URL" "$CHECKSUM_URL"
+write_manifest "$MANIFEST_PATH" "$RESOLVED_INSTALL_ROOT" "$BIN_DIR" "$COMMAND_PATH" "$RESOLVED_TAG" "$RID" "$ARCHIVE_NAME" "$ARCHIVE_URL" "$CHECKSUM_URL" "$VIEW_EXTRAS" "$FFMPEG_STAGED" "$FFMPEG_PATH" "$FFMPEG_DETAIL"
 install_committed=1
 
 if [ -e "$PREVIOUS_DIR" ]; then
@@ -473,6 +588,7 @@ fi
 
 printf 'Install complete.\n'
 printf '  Command: %s\n' "$COMMAND_PATH"
+printf '  View extras: %s\n' "$VIEW_EXTRAS"
 if [ "$SKIP_PATH_UPDATE" -eq 1 ]; then
     printf '  PATH was not modified. Add %s to your shell PATH to run luotsi.\n' "$BIN_DIR"
 elif [ "$path_updated" -eq 1 ]; then

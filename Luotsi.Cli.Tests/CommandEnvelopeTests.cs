@@ -146,6 +146,8 @@ public sealed partial class AppTests
         Assert.Equal("win-x64", data.GetProperty("rid").GetString());
         Assert.True(data.GetProperty("installed_manifest_present").GetBoolean());
         Assert.True(data.GetProperty("helper_apk_present").GetBoolean());
+        Assert.Equal("installed", data.GetProperty("view_extras").GetString());
+        Assert.True(data.GetProperty("ffmpeg_staged").GetBoolean());
     }
 
     [Fact]
@@ -2922,7 +2924,11 @@ public sealed partial class AppTests
           "install_root": "{{JsonEncodedText.Encode(installRoot)}}",
           "current_root": "{{JsonEncodedText.Encode(currentRoot)}}",
           "command_path": "{{JsonEncodedText.Encode(commandPath)}}",
-          "helper_apk_path": "{{JsonEncodedText.Encode(helperApk)}}"
+          "helper_apk_path": "{{JsonEncodedText.Encode(helperApk)}}",
+          "view_extras": "installed",
+          "ffmpeg_staged": true,
+          "ffmpeg_path": "{{JsonEncodedText.Encode(Path.Join(currentRoot, "ffmpeg", "bin"))}}",
+          "ffmpeg_detail": "Extracted native libraries."
         }
         """);
         fileSystem.AddFile(helperApk, "apk");
