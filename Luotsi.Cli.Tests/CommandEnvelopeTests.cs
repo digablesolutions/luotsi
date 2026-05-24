@@ -1347,6 +1347,9 @@ public sealed partial class AppTests
         Assert.False(data.GetProperty("truncated").GetBoolean());
         Assert.Equal(200, data.GetProperty("query").GetProperty("limit").GetInt32());
         Assert.True(data.GetProperty("insights").GetArrayLength() >= 1);
+        Assert.Contains(data.GetProperty("taxonomy").GetProperty("node_kinds").EnumerateArray(), kind => kind.GetProperty("kind").GetString() == "failure");
+        Assert.Contains(data.GetProperty("taxonomy").GetProperty("edge_kinds").EnumerateArray(), kind => kind.GetProperty("kind").GetString() == "transitions_to");
+        Assert.Contains(data.GetProperty("taxonomy").GetProperty("query_examples").EnumerateArray(), example => example.GetProperty("kind").GetString() == "neighborhood");
         Assert.Contains(data.GetProperty("actions").EnumerateArray(), action => action.GetProperty("kind").GetString() == "scrub_failures");
         Assert.True(data.GetProperty("failure_paths").GetArrayLength() >= 1);
         Assert.Equal(Path.Join(replayRoot, "replay-graph.json"), data.GetProperty("json_path").GetString());
@@ -1368,6 +1371,7 @@ public sealed partial class AppTests
         Assert.Contains("## What Agents Can Act On", markdown, StringComparison.Ordinal);
         Assert.Contains("## Failure Paths", markdown, StringComparison.Ordinal);
         Assert.Contains("## Transitions", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Query Examples", markdown, StringComparison.Ordinal);
     }
 
     [Fact]

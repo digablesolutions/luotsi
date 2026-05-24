@@ -28,6 +28,7 @@ Filtering returns a focused subgraph with one-hop context. `total_node_count` an
 | `matched_node_count`, `matched_edge_count` | Query match size before `--limit` is applied. |
 | `truncated` | `true` when `--limit` capped matched nodes or edges. |
 | `node_kinds`, `edge_kinds` | Counts for the returned graph view. |
+| `taxonomy` | Machine-readable node/edge kind descriptions and query examples. |
 | `insights` | Agent-readable highlights such as failures, selectors, telemetry, and scenario-draft provenance. |
 | `actions` | Suggested next commands for opening, scrubbing, or narrowing the graph. |
 | `failure_paths` | Compact paths from nearby timeline context into failure nodes. |

@@ -22,6 +22,7 @@ internal static class ReplayGraphMarkdownWriter
         AppendInsights(builder, graph);
         AppendFailurePaths(builder, graph);
         AppendTransitions(builder, graph);
+        AppendQueryExamples(builder, graph);
         AppendKindTables(builder, graph);
         AppendNodes(builder, graph);
         AppendEdges(builder, graph);
@@ -104,6 +105,24 @@ internal static class ReplayGraphMarkdownWriter
         foreach (var kind in graph.EdgeKinds)
         {
             builder.AppendLine($"| {EscapeMarkdown(kind.Key)} | {kind.Value} |");
+        }
+
+        builder.AppendLine();
+    }
+
+    private static void AppendQueryExamples(StringBuilder builder, ReplayGraphResult graph)
+    {
+        if (graph.Taxonomy.QueryExamples.Count == 0)
+        {
+            return;
+        }
+
+        builder.AppendLine("## Query Examples");
+        builder.AppendLine();
+        foreach (var example in graph.Taxonomy.QueryExamples)
+        {
+            builder.AppendLine($"- **{EscapeMarkdown(example.Kind)}**: {EscapeMarkdown(example.Description)}");
+            builder.AppendLine($"  `{EscapeMarkdown(example.Command)}`");
         }
 
         builder.AppendLine();

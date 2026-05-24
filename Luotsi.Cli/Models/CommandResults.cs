@@ -551,6 +551,7 @@ public sealed record ReplayGraphResult(
     bool Truncated,
     IReadOnlyDictionary<string, int> NodeKinds,
     IReadOnlyDictionary<string, int> EdgeKinds,
+    ReplayGraphTaxonomyResult Taxonomy,
     IReadOnlyList<ReplayGraphInsightResult> Insights,
     IReadOnlyList<ReplayGraphActionResult> Actions,
     IReadOnlyList<ReplayGraphFailurePathResult> FailurePaths,
@@ -568,6 +569,20 @@ public sealed record ReplayGraphQueryResult(
     int Depth,
     bool FailedOnly,
     int Limit);
+
+public sealed record ReplayGraphTaxonomyResult(
+    IReadOnlyList<ReplayGraphTaxonomyEntryResult> NodeKinds,
+    IReadOnlyList<ReplayGraphTaxonomyEntryResult> EdgeKinds,
+    IReadOnlyList<ReplayGraphQueryExampleResult> QueryExamples);
+
+public sealed record ReplayGraphTaxonomyEntryResult(
+    string Kind,
+    string Description);
+
+public sealed record ReplayGraphQueryExampleResult(
+    string Kind,
+    string Description,
+    string Command);
 
 public sealed record ReplayGraphInsightResult(
     string Kind,
