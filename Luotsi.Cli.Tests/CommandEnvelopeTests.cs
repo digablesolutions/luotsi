@@ -698,6 +698,10 @@ public sealed partial class AppTests
         Assert.Equal(0, sourceSummary.GetProperty("normalization_count").GetInt32());
         var suggestedCommands = data.GetProperty("suggested_commands").EnumerateArray().ToArray();
         Assert.Contains(suggestedCommands, command =>
+            command.GetProperty("command").GetString() == $"luotsi replay capsule --artifacts {replayRoot} --write-readme --write-json");
+        Assert.Contains(suggestedCommands, command =>
+            command.GetProperty("command").GetString() == $"luotsi replay graph --artifacts {replayRoot} --node-kind generated_step --write-markdown");
+        Assert.Contains(suggestedCommands, command =>
             command.GetProperty("command").GetString() == "luotsi scenario-validate --file /tmp/draft.json");
         Assert.Contains(suggestedCommands, command =>
             command.GetProperty("command").GetString()!.Contains("replay scrub", StringComparison.Ordinal));
