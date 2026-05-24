@@ -256,11 +256,13 @@ Notes:
   With --format json or --format jsonl, replay timeline writes raw machine
   output instead of the normal command envelope. With --write-json or
   --write-jsonl, it persists normalized timeline artifacts. With
-  --write-markdown, it writes replay-timeline.md for artifact browsing. These
+  --write-markdown, it writes replay-timeline.md for artifact browsing. Timeline
+  results include commands back into capsule, open, scrub, and graph when the
+  selected events support those follow-ups. These
   write options refresh the artifact index. Replay scrub uses the same timeline
   filters but returns a local previous/focused/next event view with exact
   commands to reopen the focused event, move to adjacent events, search the
-  focused detail, or open the artifact browser. With --write-json and
+  focused detail, open capsule/graph context, or open the artifact browser. With --write-json and
   --write-markdown, it writes replay-scrub.json and replay-scrub.md into the
   artifact root. Replay graph emits a stable node
   and edge model over sessions, timeline events, failures, scenarios,

@@ -529,7 +529,13 @@ public sealed record ReplayTimelineResult(
     string? JsonPath,
     string? JsonlPath,
     string? MarkdownPath,
+    IReadOnlyList<ReplayTimelineCommandHint> Commands,
     IReadOnlyList<ReplayTimelineEventResult> Events);
+
+public sealed record ReplayTimelineCommandHint(
+    string Kind,
+    string Description,
+    string Command);
 
 public sealed record ReplayTimelineEventResult(
     string Path,

@@ -1194,6 +1194,12 @@ public sealed partial class AppTests
         Assert.Equal(ResultSchemas.ReplayTimeline, data.GetProperty("schema").GetString());
         Assert.Equal(1, data.GetProperty("event_count").GetInt32());
         Assert.Equal(1, data.GetProperty("scanned_file_count").GetInt32());
+        var commands = data.GetProperty("commands").EnumerateArray().ToArray();
+        Assert.Contains(commands, command =>
+            command.GetProperty("kind").GetString() == "describe_replay_capsule" &&
+            command.GetProperty("command").GetString() == $"luotsi replay capsule --artifacts {replayRoot} --write-readme --write-json");
+        Assert.Contains(commands, command => command.GetProperty("kind").GetString() == "scrub_failures");
+        Assert.Contains(commands, command => command.GetProperty("kind").GetString() == "graph_failures");
         var evt = Assert.Single(data.GetProperty("events").EnumerateArray());
         Assert.Equal("session-timeline.jsonl", evt.GetProperty("path").GetString());
         Assert.Equal(1, evt.GetProperty("sequence").GetInt32());
@@ -1233,6 +1239,10 @@ public sealed partial class AppTests
         Assert.Contains(data.GetProperty("commands").EnumerateArray(), command =>
             command.GetProperty("command").GetString()!.Contains("replay search", StringComparison.Ordinal) &&
             command.GetProperty("command").GetString()!.Contains("not visible", StringComparison.Ordinal));
+        Assert.Contains(data.GetProperty("commands").EnumerateArray(), command =>
+            command.GetProperty("command").GetString() == $"luotsi replay capsule --artifacts {replayRoot} --write-readme --write-json");
+        Assert.Contains(data.GetProperty("commands").EnumerateArray(), command =>
+            command.GetProperty("command").GetString() == $"luotsi replay graph --artifacts {replayRoot} --failed --write-json --write-markdown");
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-scrub.json")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-scrub.md")));
         var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-scrub.md"));
@@ -2040,6 +2050,8 @@ public sealed partial class AppTests
         Assert.Equal(ResultSchemas.ReplayTimeline, summaryLine.RootElement.GetProperty("schema").GetString());
         Assert.Equal("summary", summaryLine.RootElement.GetProperty("type").GetString());
         Assert.Equal(1, summaryLine.RootElement.GetProperty("event_count").GetInt32());
+        Assert.Contains(summaryLine.RootElement.GetProperty("commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "describe_replay_capsule");
         Assert.Equal(ResultSchemas.ReplayTimeline, eventLine.RootElement.GetProperty("schema").GetString());
         Assert.Equal("event", eventLine.RootElement.GetProperty("type").GetString());
         Assert.Equal("scenario_step_failed", eventLine.RootElement.GetProperty("event").GetProperty("type").GetString());
@@ -2057,6 +2069,8 @@ public sealed partial class AppTests
         Assert.Equal("event", jsonlEventLine.RootElement.GetProperty("type").GetString());
         var markdownArtifact = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-timeline.md"));
         Assert.Contains("# Luotsi Replay Timeline", markdownArtifact, StringComparison.Ordinal);
+        Assert.Contains("## Commands", markdownArtifact, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay capsule", markdownArtifact, StringComparison.Ordinal);
         Assert.Contains("scenario_step_failed", markdownArtifact, StringComparison.Ordinal);
     }
 
