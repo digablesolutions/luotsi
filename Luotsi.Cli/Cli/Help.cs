@@ -272,7 +272,8 @@ Notes:
   --insight, --evidence, --fact,
   --severity, --node,
   --depth, and --limit to return a focused subgraph with local context. Replay cluster groups failed replay sessions by normalized failure
-  shape and returns triage hints plus replay/search commands for the latest
+  shape and returns cross-run intelligence: similarity, likely cause, stable
+  versus variable signals, and graph/scrub/search commands for the latest
   matching bundle.
   Failures still use the normal error envelope.
 """,
