@@ -28,6 +28,7 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         }
 
         AppendReplaySessionsMarkdown(builder, replaySummaries);
+        AppendReplayWorkflowMarkdown(builder, replaySummaries);
 
         foreach (var group in files.GroupBy(GetArtifactCategory))
         {
@@ -95,6 +96,7 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         else
         {
             AppendReplaySessionsHtml(builder, replaySummaries);
+            AppendReplayWorkflowHtml(builder, replaySummaries);
 
             foreach (var group in files.GroupBy(GetArtifactCategory))
             {
@@ -567,6 +569,24 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         }
     }
 
+    private void AppendReplayWorkflowMarkdown(StringBuilder builder, IReadOnlyList<SessionReplaySummary> replaySummaries)
+    {
+        if (replaySummaries.Count == 0)
+        {
+            return;
+        }
+
+        builder.AppendLine("## Replay Workflow");
+        builder.AppendLine();
+        foreach (var command in BuildReplayWorkflowCommands(replaySummaries))
+        {
+            builder.AppendLine($"- `{command.Command}`");
+            builder.AppendLine($"  - {command.Purpose}");
+        }
+
+        builder.AppendLine();
+    }
+
     private void AppendReplaySessionsHtml(StringBuilder builder, IReadOnlyList<SessionReplaySummary> replaySummaries)
     {
         if (replaySummaries.Count == 0)
@@ -616,6 +636,55 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         builder.AppendLine("    </section>");
     }
 
+    private void AppendReplayWorkflowHtml(StringBuilder builder, IReadOnlyList<SessionReplaySummary> replaySummaries)
+    {
+        if (replaySummaries.Count == 0)
+        {
+            return;
+        }
+
+        builder.AppendLine("    <section>");
+        builder.AppendLine("      <h2>Replay Workflow</h2>");
+        builder.AppendLine("      <ul>");
+        foreach (var command in BuildReplayWorkflowCommands(replaySummaries))
+        {
+            builder.AppendLine("        <li>");
+            builder.AppendLine("          <div>");
+            builder.AppendLine($"            <code>{HtmlEncode(command.Command)}</code>");
+            builder.AppendLine($"            <div class=\"root\">{HtmlEncode(command.Purpose)}</div>");
+            builder.AppendLine("          </div>");
+            builder.AppendLine($"          <span class=\"kind\">{HtmlEncode(command.Kind)}</span>");
+            builder.AppendLine("        </li>");
+        }
+
+        builder.AppendLine("      </ul>");
+        builder.AppendLine("    </section>");
+    }
+
+    private IEnumerable<ReplayWorkflowCommand> BuildReplayWorkflowCommands(IReadOnlyList<SessionReplaySummary> replaySummaries)
+    {
+        yield return new ReplayWorkflowCommand(
+            "CAPSULE",
+            $"luotsi replay capsule --artifacts {Quote(_root)} --write-readme --write-json",
+            "Start here: summarize failures, artifacts, and recommended replay next steps.");
+
+        if (replaySummaries.Any(static summary => summary.HasFailureSignals))
+        {
+            yield return new ReplayWorkflowCommand(
+                "SCRUB",
+                $"luotsi replay scrub --artifacts {Quote(_root)} --failures --context 3 --write-markdown",
+                "Review the focused failure window with previous/current/next timeline events.");
+            yield return new ReplayWorkflowCommand(
+                "GRAPH",
+                $"luotsi replay graph --artifacts {Quote(_root)} --failed --write-json --write-markdown",
+                "Open semantic failure context with evidence, facts, causal chains, and hypotheses.");
+            yield return new ReplayWorkflowCommand(
+                "CLUSTER",
+                $"luotsi replay cluster --artifacts {Quote(ResolveClusterRoot(_root))} --min-count 2 --write-markdown",
+                "Look for matching failure shapes across sibling replay bundles.");
+        }
+    }
+
     private static string BuildReplayTitle(SessionReplaySummary summary) =>
         string.IsNullOrWhiteSpace(summary.Target)
             ? summary.SessionKind
@@ -663,7 +732,18 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
     private static string EscapeHtmlLink(string path) =>
         Uri.EscapeDataString(path.Replace("\\", "/", StringComparison.Ordinal)).Replace("%2F", "/", StringComparison.Ordinal);
 
+    private static string Quote(string value) =>
+        value.Contains(' ', StringComparison.Ordinal) ? "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"" : value;
+
+    private static string ResolveClusterRoot(string artifactRoot)
+    {
+        var parent = Path.GetDirectoryName(artifactRoot);
+        return string.IsNullOrWhiteSpace(parent) ? artifactRoot : parent;
+    }
+
     private static string HtmlEncode(string value) => WebUtility.HtmlEncode(value);
 
     private static string HtmlAttributeEncode(string value) => WebUtility.HtmlEncode(value);
+
+    private sealed record ReplayWorkflowCommand(string Kind, string Command, string Purpose);
 }
