@@ -46,7 +46,13 @@ Typical view events:
 
 ## Replay export exception
 
-`replay summarize --format json|jsonl` is the other intentional exception. It can emit raw replay output for CI-oriented consumers instead of the normal envelope.
+`replay summarize --format json|jsonl` and `replay timeline --format json|jsonl` are intentional exceptions. They can emit raw replay output for CI-oriented consumers instead of the normal envelope.
+
+Replay commands that keep the normal envelope put their command-specific contract under `data`:
+
+- `replay capsule` returns a failure-capsule summary with `primary_failure`, `failure_timeline`, `artifact_manifest`, optional scenario draft summary fields, and `suggested_commands`.
+- `replay scenario-draft` returns draft metadata, warnings, suggestions, review items, source summaries, step origins, normalizations, and the generated output paths.
+- `replay graph` and `replay cluster` are seed contracts for later semantic debugging and cross-run failure intelligence. Treat them as useful triage data, not as a replacement for the replay capsule workflow yet.
 
 ## Error categories
 

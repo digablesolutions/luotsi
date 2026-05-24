@@ -381,6 +381,7 @@ jobs:
 
       - name: Upload publish binlog
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: release-publish-binlog-${{ matrix.rid }}

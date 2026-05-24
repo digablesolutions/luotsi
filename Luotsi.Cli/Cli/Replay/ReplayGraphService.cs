@@ -57,6 +57,8 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
             }
         }
 
+        new ReplayGraphScenarioDraftAppender(_fileSystem).Add(artifacts.Root, allFiles, nodes, edges);
+
         ReplayTimelineEventResult? previousEvent = null;
         foreach (var evt in timeline.Events)
         {
@@ -367,4 +369,5 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
         (value ?? string.Empty).Replace("|", "\\|", StringComparison.Ordinal)
             .Replace("\r", " ", StringComparison.Ordinal)
             .Replace("\n", " ", StringComparison.Ordinal);
+
 }

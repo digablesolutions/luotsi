@@ -133,11 +133,12 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         {
             "Screenshots" => 0,
             "Recordings" => 1,
-            "Reports" => 2,
-            "Logs" => 3,
-            "Screen State" => 4,
-            "Hierarchy" => 5,
-            _ => 6
+            "Replay" => 2,
+            "Reports" => 3,
+            "Logs" => 4,
+            "Screen State" => 5,
+            "Hierarchy" => 6,
+            _ => 7
         };
 
     private static string GetArtifactCategory(string path)
@@ -155,6 +156,13 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
             string.Equals(extension, ".webm", StringComparison.OrdinalIgnoreCase))
         {
             return "Recordings";
+        }
+
+        if (fileName.Contains("replay", StringComparison.OrdinalIgnoreCase) ||
+            fileName.Contains("scenario-draft", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(fileName, SessionReplayArtifacts.TimelineFileName, StringComparison.OrdinalIgnoreCase))
+        {
+            return "Replay";
         }
 
         if (fileName.Contains("session-replay", StringComparison.OrdinalIgnoreCase) ||
@@ -220,6 +228,21 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
             }
 
             var schemaName = schema.GetString();
+            if (string.Equals(schemaName, ResultSchemas.ReplayCapsule, StringComparison.Ordinal))
+            {
+                return BuildReplayCapsuleSummary(root);
+            }
+
+            if (string.Equals(schemaName, ResultSchemas.ScenarioDraft, StringComparison.Ordinal))
+            {
+                return BuildScenarioDraftSummary(root);
+            }
+
+            if (string.Equals(schemaName, ResultSchemas.ReplayScrub, StringComparison.Ordinal))
+            {
+                return BuildReplayScrubSummary(root);
+            }
+
             if (string.Equals(schemaName, "luotsi-scenario-run-report.v1", StringComparison.Ordinal))
             {
                 return BuildScenarioRunReportSummary(root);
@@ -244,6 +267,54 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         AddJsonProperty(parts, root, "failed");
         AddJsonProperty(parts, root, "skipped");
         AddJsonProperty(parts, root, "durationMs", "duration_ms");
+        return parts.Count == 0 ? null : string.Join(" | ", parts);
+    }
+
+    private static string? BuildReplayCapsuleSummary(JsonElement root)
+    {
+        var parts = new List<string>();
+        AddJsonProperty(parts, root, "sessionCount", "session_count");
+        AddJsonProperty(parts, root, "failureCount", "failure_count");
+        AddJsonProperty(parts, root, "scenarioDraftAvailable", "scenario_draft_available");
+        AddJsonProperty(parts, root, "scenarioDraftReason", "scenario_draft_reason");
+        AddArrayCount(parts, root, "artifactManifest", "artifact_manifest");
+        AddArrayCount(parts, root, "failureTimeline", "failure_timeline");
+        return parts.Count == 0 ? null : string.Join(" | ", parts);
+    }
+
+    private static string? BuildReplayScrubSummary(JsonElement root)
+    {
+        var parts = new List<string>();
+        AddJsonProperty(parts, root, "eventCount", "event_count");
+        AddJsonProperty(parts, root, "focusIndex", "focus_index");
+        AddJsonProperty(parts, root, "markdownPath", "markdown_path");
+        if (root.TryGetProperty("focusEvent", out var focusEvent) ||
+            root.TryGetProperty("focus_event", out focusEvent))
+        {
+            AddJsonProperty(parts, focusEvent, "type", "focus_type");
+            AddJsonProperty(parts, focusEvent, "detail", "focus_detail");
+        }
+
+        AddArrayCount(parts, root, "commands");
+        return parts.Count == 0 ? null : string.Join(" | ", parts);
+    }
+
+    private static string? BuildScenarioDraftSummary(JsonElement root)
+    {
+        var parts = new List<string>();
+        AddJsonProperty(parts, root, "confidence");
+        AddArrayCount(parts, root, "sourceSummaries", "source_summaries");
+        if (root.TryGetProperty("scenario", out var scenario) &&
+            scenario.ValueKind == JsonValueKind.Object &&
+            scenario.TryGetProperty("steps", out var steps) &&
+            steps.ValueKind == JsonValueKind.Array)
+        {
+            parts.Add($"steps={steps.GetArrayLength()}");
+        }
+
+        AddArrayCount(parts, root, "warnings");
+        AddArrayCount(parts, root, "reviewItems", "review_items");
+        AddArrayCount(parts, root, "normalizations");
         return parts.Count == 0 ? null : string.Join(" | ", parts);
     }
 

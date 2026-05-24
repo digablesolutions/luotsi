@@ -359,13 +359,59 @@ public sealed record ReplayScenarioDraftResult(
     string Confidence,
     IReadOnlyList<string> Warnings,
     ScenarioFile Scenario,
-    IReadOnlyList<ReplayScenarioDraftSuggestion> Suggestions);
+    IReadOnlyList<ReplayScenarioDraftSuggestion> Suggestions,
+    IReadOnlyList<ReplayScenarioDraftReviewItem> ReviewItems,
+    IReadOnlyList<ReplayScenarioDraftSourceSummary> SourceSummaries,
+    IReadOnlyList<ReplayScenarioDraftStepOrigin> StepOrigins,
+    IReadOnlyList<ReplayScenarioDraftNormalization> Normalizations,
+    IReadOnlyList<ReplayScenarioDraftCommandHint> SuggestedCommands);
+
+public sealed record ReplayScenarioDraftCommandHint(
+    string Command,
+    string Purpose);
 
 public sealed record ReplayScenarioDraftSuggestion(
     int StepIndex,
     string Kind,
     string Confidence,
     string Message);
+
+public sealed record ReplayScenarioDraftReviewItem(
+    string Severity,
+    string Category,
+    int? StepIndex,
+    string Message,
+    string? Command);
+
+public sealed record ReplayScenarioDraftSourceSummary(
+    string Source,
+    int StepCount,
+    int NormalizationCount,
+    IReadOnlyList<string> EventTypes,
+    string Confidence);
+
+public sealed record ReplayScenarioDraftStepOrigin(
+    int StepIndex,
+    string Source,
+    string EventType,
+    string? Command,
+    string? Detail,
+    string Confidence,
+    string? SourcePath,
+    int? Sequence,
+    DateTimeOffset? Timestamp,
+    string? SourceCommand);
+
+public sealed record ReplayScenarioDraftNormalization(
+    string Kind,
+    string Detail,
+    string Source,
+    string EventType,
+    string Confidence,
+    string? SourcePath,
+    int? Sequence,
+    DateTimeOffset? Timestamp,
+    string? SourceCommand);
 
 public sealed record ReplaySearchResult(
     string Schema,
@@ -388,10 +434,16 @@ public sealed record ReplayCapsuleResult(
     int SessionCount,
     int FailureCount,
     bool HasFailureCapsule,
+    bool ScenarioDraftAvailable,
+    string ScenarioDraftReason,
+    ReplayCapsuleScenarioDraftArtifacts ScenarioDraftArtifacts,
+    ReplayCapsuleScenarioDraftSummary? ScenarioDraftSummary,
     string? ReadmePath,
     string? JsonPath,
     ReplayCapsulePrimaryFailureResult? PrimaryFailure,
     ReplayCapsuleArtifactCounts ArtifactCounts,
+    IReadOnlyList<ReplayCapsuleArtifactManifestEntry> ArtifactManifest,
+    IReadOnlyList<ReplayCapsuleTimelineHighlightResult> FailureTimeline,
     IReadOnlyList<ReplayCapsuleCommandHint> SuggestedCommands);
 
 public sealed record ReplayCapsulePrimaryFailureResult(
@@ -400,7 +452,22 @@ public sealed record ReplayCapsulePrimaryFailureResult(
     string? Action,
     string? Message,
     string? FailureCapsulePath,
-    string? TimelinePath);
+    string? TimelinePath,
+    string? SourceCommand);
+
+public sealed record ReplayCapsuleScenarioDraftArtifacts(
+    string? SummaryPath,
+    string? MarkdownPath,
+    string? ScenarioPath);
+
+public sealed record ReplayCapsuleScenarioDraftSummary(
+    string? Confidence,
+    int StepCount,
+    int WarningCount,
+    int ReviewItemCount,
+    int NormalizationCount,
+    IReadOnlyList<string> Warnings,
+    IReadOnlyList<ReplayScenarioDraftReviewItem> ReviewItems);
 
 public sealed record ReplayCapsuleArtifactCounts(
     int Screenshots,
@@ -410,6 +477,25 @@ public sealed record ReplayCapsuleArtifactCounts(
     int ScreenStates,
     int Reports,
     int Timelines);
+
+public sealed record ReplayCapsuleArtifactManifestEntry(
+    string Path,
+    string Kind,
+    string Role,
+    string? Session);
+
+public sealed record ReplayCapsuleTimelineHighlightResult(
+    string MetadataPath,
+    string TimelinePath,
+    int Sequence,
+    DateTimeOffset? Timestamp,
+    string Type,
+    string Detail,
+    bool FailureRelevant,
+    string? ScenarioId,
+    string? Scenario,
+    int? StepIndex,
+    string SourceCommand);
 
 public sealed record ReplayCapsuleCommandHint(
     string Command,
@@ -434,6 +520,23 @@ public sealed record ReplayTimelineEventResult(
     bool FailureRelevant,
     string Detail,
     IReadOnlyDictionary<string, string?> Properties);
+
+public sealed record ReplayScrubResult(
+    string Schema,
+    string ArtifactRoot,
+    int EventCount,
+    int FocusIndex,
+    string? JsonPath,
+    string? MarkdownPath,
+    ReplayTimelineEventResult? FocusEvent,
+    ReplayTimelineEventResult? PreviousEvent,
+    ReplayTimelineEventResult? NextEvent,
+    IReadOnlyList<ReplayTimelineEventResult> Events,
+    IReadOnlyList<ReplayScrubCommandHint> Commands);
+
+public sealed record ReplayScrubCommandHint(
+    string Command,
+    string Purpose);
 
 public sealed record ReplayGraphResult(
     string Schema,

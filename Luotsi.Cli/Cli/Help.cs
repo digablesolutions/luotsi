@@ -194,7 +194,8 @@ Luotsi help: replay
 Usage:
   luotsi replay summarize --artifacts <artifact-root> [--format json|jsonl]
   luotsi replay capsule --artifacts <artifact-root> [--write-readme] [--write-json]
-  luotsi replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
+  luotsi replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--source-path <timeline-path>] [--sequence <n>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
+  luotsi replay scrub --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--source-path <timeline-path>] [--sequence <n>] [--context <n>] [--limit 200] [--write-json] [--write-markdown]
   luotsi replay graph --artifacts <artifact-root> [--write-json] [--write-markdown]
   luotsi replay cluster --artifacts <artifact-root> [--write-json] [--write-markdown]
   luotsi replay open --artifacts <artifact-root> [--dry-run]
@@ -207,6 +208,8 @@ Examples:
   luotsi replay summarize --artifacts artifacts/20260518-100000-view --format jsonl
   luotsi replay capsule --artifacts artifacts/20260518-100000-run --write-readme --write-json
   luotsi replay timeline --artifacts artifacts/20260518-100000-run --failures --format jsonl --write-jsonl --write-markdown
+  luotsi replay timeline --artifacts artifacts/20260518-100000-run --source-path session-timeline.jsonl --sequence 1
+  luotsi replay scrub --artifacts artifacts/20260518-100000-run --failures --context 3 --write-markdown
   luotsi replay graph --artifacts artifacts/20260518-100000-run --write-json --write-markdown
   luotsi replay cluster --artifacts artifacts/ci-runs --write-json --write-markdown
   luotsi replay open --artifacts artifacts/20260518-100000-view
@@ -223,26 +226,35 @@ Notes:
   reports and failure artifacts. Replay open refreshes index.html/index.md for
   the artifact root and opens index.html in the local browser. Replay
   scenario-draft turns inspect/replay action events into a conservative draft
-  scenario with warnings and suggestions for cleanup. With --write-json and
+  scenario with warnings and suggestions for cleanup. The result includes
+  source_summaries, step_origins, and normalizations so reviewers can see
+  which steps came from inspect commands, screen deltas, view events,
+  telemetry, or existing scenario events. With --write-json and
   --write-markdown, it writes review artifacts into the replay root. Replay search scans
   text-like replay artifacts, reports, logcat, hierarchies, screen-state JSON,
   and timelines for a case-insensitive string. Replay capsule returns a compact
-  bundle manifest with artifact counts, primary failure, and suggested next
-  commands. With --write-readme, replay capsule writes replay-capsule.md into
+  bundle manifest with artifact counts, an artifact_manifest, primary failure,
+  existing scenario draft artifact paths, and suggested next commands. With --write-readme, replay capsule writes replay-capsule.md into
   the artifact root. With --write-json, it writes replay-capsule-summary.json.
   Both options refresh the artifact index. Replay timeline returns ordered
   session-timeline.jsonl events with stable detail text for CI and agents.
   Use --contains to filter normalized event type/detail text. Use --since and
-  --until with ISO-8601 timestamps to narrow by event time. Use --context to
-  include neighboring events around filtered matches.
+  --until with ISO-8601 timestamps to narrow by event time. Use --source-path
+  and --sequence to reopen a specific event referenced by scenario-draft
+  provenance. Use --context to include neighboring events around filtered matches.
   With --format json or --format jsonl, replay timeline writes raw machine
   output instead of the normal command envelope. With --write-json or
   --write-jsonl, it persists normalized timeline artifacts. With
   --write-markdown, it writes replay-timeline.md for artifact browsing. These
-  write options refresh the artifact index. Replay graph emits a stable node
+  write options refresh the artifact index. Replay scrub uses the same timeline
+  filters but returns a local previous/focused/next event view with exact
+  commands to reopen the focused event, move to adjacent events, search the
+  focused detail, or open the artifact browser. With --write-json and
+  --write-markdown, it writes replay-scrub.json and replay-scrub.md into the
+  artifact root. Replay graph emits a stable node
   and edge model over sessions, timeline events, failures, scenarios,
-  artifacts, actions, text selectors, screen observations, and telemetry
-  signals. Its result includes node_kinds and edge_kinds counts so agents can
+  artifacts, actions, text selectors, screen observations, telemetry
+  signals, and generated scenario draft provenance. Its result includes node_kinds and edge_kinds counts so agents can
   quickly understand what semantic material is available before traversing the
   graph. Replay cluster groups failed replay sessions by normalized failure
   shape and returns triage hints plus replay/search commands for the latest
@@ -502,6 +514,7 @@ Command groups:
     replay summarize --artifacts <artifact-root> [--format json|jsonl]
     replay capsule --artifacts <artifact-root> [--write-readme] [--write-json]
     replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
+    replay scrub --artifacts <artifact-root> [--failures] [--source-path <timeline-path>] [--sequence <n>] [--context <n>] [--write-json] [--write-markdown]
     replay graph --artifacts <artifact-root> [--write-json] [--write-markdown]
     replay cluster --artifacts <artifact-root> [--write-json] [--write-markdown]
     replay open --artifacts <artifact-root> [--dry-run]

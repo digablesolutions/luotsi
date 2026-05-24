@@ -171,7 +171,7 @@ public sealed partial class AppTests
         Assert.Contains("view_share_client_connected | endpoint=127.0.0.1:9000 | remote_endpoint=10.0.0.25:40122 | observer_count=1 | reason=observer_joined", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("view_stats | decoded_frames=120 | presented_frames=118 | dropped_frames=2 | decode_fps=29.5 | present_fps=29.0 | end_to_end_latency_ms=142", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("view_error | error=transport: Unexpected end of stream", markdownIndex, StringComparison.Ordinal);
-        Assert.Contains("## Reports", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("## Replay", markdownIndex, StringComparison.Ordinal);
 
         Assert.Contains("<h2>Replay Sessions</h2>", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("<strong>view 192.168.0.134:5555</strong>", htmlIndex, StringComparison.Ordinal);
@@ -296,6 +296,75 @@ public sealed partial class AppTests
         Assert.Contains("status=failed | scenarios=1 | failed_scenarios=broken scenario | failed_steps=waitVisible | screenshots=1 | logcat=1 | hierarchies=1 | screen_states=1 | failure_bundles=1", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("href=\"failure-capsule.json\"", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("status=failed | scenarios=1 | failed_scenarios=broken scenario | failed_steps=waitVisible | screenshots=1 | logcat=1 | hierarchies=1 | screen_states=1 | failure_bundles=1", htmlIndex, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ArtifactSession_Index_Summarizes_Replay_Capsule_And_Scenario_Draft()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-18T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var session = ArtifactSession.Create(CliOptions.Parse(["replay"]), fileSystem, timeProvider);
+
+        await session.WriteJsonAsync("replay-capsule-summary.json", new
+        {
+            schema = ResultSchemas.ReplayCapsule,
+            artifactRoot = session.Root,
+            sessionCount = 2,
+            failureCount = 1,
+            hasFailureCapsule = true,
+            scenarioDraftAvailable = true,
+            scenarioDraftReason = "Found command_result:tap_text source in inspect/session-timeline.jsonl.",
+            artifactManifest = new[] { new { path = "session-timeline.jsonl", kind = "timeline", role = "session" } }
+        });
+        await session.WriteJsonAsync("scenario-draft-summary.json", new
+        {
+            schema = ResultSchemas.ScenarioDraft,
+            confidence = "medium",
+            sourceSummaries = new[] { new { source = "inspect_command", stepCount = 2, normalizationCount = 0 } },
+            warnings = new[] { "Review generated selectors before CI use." },
+            normalizations = new[] { new { kind = "duplicate_wait" } },
+            scenario = new
+            {
+                name = "draft",
+                steps = new object[]
+                {
+                    new { action = "tapText", text = "Sign in" },
+                    new { action = "waitVisible", text = "Welcome" }
+                }
+            }
+        });
+        await session.WriteJsonAsync("replay-scrub.json", new
+        {
+            schema = ResultSchemas.ReplayScrub,
+            eventCount = 3,
+            focusIndex = 1,
+            markdownPath = Path.Join(session.Root, "replay-scrub.md"),
+            focusEvent = new
+            {
+                type = "scenario_step_failed",
+                detail = "step=wait login button error_message=not visible"
+            },
+            commands = new[]
+            {
+                new { command = "luotsi replay timeline --artifacts root --source-path session-timeline.jsonl --sequence 1 --context 5" }
+            }
+        });
+
+        var markdownIndex = await fileSystem.ReadAllTextAsync(Path.Join(session.Root, "index.md"));
+        var htmlIndex = await fileSystem.ReadAllTextAsync(Path.Join(session.Root, "index.html"));
+
+        Assert.Contains("## Replay", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("- [replay-capsule-summary.json](replay-capsule-summary.json)", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("- [scenario-draft-summary.json](scenario-draft-summary.json)", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("- [replay-scrub.json](replay-scrub.json)", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("session_count=2 | failure_count=1 | scenario_draft_available=true | scenario_draft_reason=Found command_result:tap_text source in inspect/session-timeline.jsonl. | artifact_manifest=1", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("confidence=medium | source_summaries=1 | steps=2 | warnings=1 | normalizations=1", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("event_count=3 | focus_index=1 | markdown_path=", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("focus_type=scenario_step_failed | focus_detail=step=wait login button error_message=not visible | commands=1", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("<h2>Replay</h2>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("session_count=2 | failure_count=1 | scenario_draft_available=true | scenario_draft_reason=Found command_result:tap_text source in inspect/session-timeline.jsonl. | artifact_manifest=1", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("confidence=medium | source_summaries=1 | steps=2 | warnings=1 | normalizations=1", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("focus_type=scenario_step_failed | focus_detail=step=wait login button error_message=not visible | commands=1", htmlIndex, StringComparison.Ordinal);
     }
 
     [Fact]

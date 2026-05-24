@@ -18,6 +18,8 @@ Artifacts are part of the Luotsi contract. Commands, scenario runs, inspect sess
 ```bash
 luotsi replay summarize --artifacts ./artifacts/my-run
 luotsi replay timeline --artifacts ./artifacts/my-run --failures
+luotsi replay timeline --artifacts ./artifacts/my-run --source-path session-timeline.jsonl --sequence 1
+luotsi replay scrub --artifacts ./artifacts/my-run --failures --context 3 --write-markdown
 luotsi replay search --artifacts ./artifacts/my-run --contains "timeout"
 luotsi replay open --artifacts ./artifacts/my-run
 ```
@@ -25,10 +27,11 @@ luotsi replay open --artifacts ./artifacts/my-run
 ## What each command is for
 
 - `replay summarize`: condensed session-level overview, including failure capsule linkage
-- `replay timeline`: ordered timeline events with type, timestamps, detail text, and filtering
+- `replay timeline`: ordered timeline events with type, timestamps, detail text, and filters for failures, time windows, or exact source path/sequence
+- `replay scrub`: local previous/focused/next event view with exact commands to move through replay evidence
 - `replay search`: text search across timelines and text-like artifacts
 - `replay open`: regenerate and open the artifact browser locally
-- `replay capsule`: compact manifest with primary failure and suggested next commands
+- `replay capsule`: compact manifest with primary failure reopen command, failure timeline with exact reopen commands, existing scenario draft artifacts and summary counts, artifact manifest, and suggested next commands
 - `replay scenario-draft`: turn inspect or replay actions into a conservative starter scenario
 
 ## Newer semantic triage helpers
@@ -38,7 +41,23 @@ luotsi replay graph --artifacts ./artifacts/my-run
 luotsi replay cluster --artifacts ./artifacts/my-run
 ```
 
-Use `replay graph` when you want a stable node or edge model across sessions, failures, artifacts, actions, and telemetry signals. Use `replay cluster` when you need repeated failure shapes grouped into triage buckets.
+Use `replay graph` when you want a stable node or edge model across sessions, failures, artifacts, actions, telemetry signals, and generated scenario draft provenance. Use `replay cluster` when you need repeated failure shapes grouped into triage buckets.
+
+## Explore to scenario
+
+`replay scenario-draft` is intentionally conservative. It promotes replay evidence into a starter scenario and keeps review data next to the generated steps:
+
+- `review_items` is the short human checklist for selectors, telemetry, visual assertions, low-confidence provenance, and normalizations.
+- `source_summaries` shows how many steps came from inspect commands, screen deltas, view events, telemetry, or existing scenario events.
+- `step_origins` maps every generated step back to its source event, timeline file, sequence, timestamp, confidence, and an exact `replay timeline` command.
+- `normalizations` records cleanup decisions such as dropping adjacent duplicate inferred waits.
+
+```bash
+luotsi replay scenario-draft --artifacts ./artifacts/my-inspect --output ./scenarios/draft.json --write-json --write-markdown
+luotsi scenario-validate --file ./scenarios/draft.json
+```
+
+Use the generated markdown review before committing a draft. Coordinate taps and visual assertions are especially device-specific and should be tightened before CI use.
 
 ## Practical workflow
 
@@ -46,6 +65,55 @@ Use `replay graph` when you want a stable node or edge model across sessions, fa
 2. Use `replay summarize` to confirm what happened at the session level.
 3. Move to `replay timeline` or `replay search` to narrow the failure window.
 4. Open the local browser index when you want screenshots, logs, or replay markdown in one place.
+
+## MVP contract
+
+This workflow is the first stable slice of Luotsi's replay plan. It is intentionally narrower than a full semantic debugger, but it should be enough for a developer or CI job to preserve a failure, reopen it, and turn useful exploration evidence into a reviewed scenario draft.
+
+### Unified session timeline
+
+Every replayable session should preserve ordered timeline evidence in `session-timeline.jsonl`. Consumers can depend on:
+
+- `replay timeline` returning stable `path`, `sequence`, `timestamp`, `type`, `is_failure`, `detail`, and scalar `properties` fields.
+- `--source-path` plus `--sequence` reopening the exact event referenced by another replay artifact.
+- `--context` expanding a filtered result with neighboring events so a triage note can show what happened immediately before and after the failure.
+- `--format json|jsonl` providing raw replay output when a script does not want the normal command envelope.
+
+Timeline events are still evidence, not assertions. They preserve what Luotsi observed so replay, draft generation, and future semantic graph work can build on the same substrate.
+
+### Failure replay capsule
+
+`replay capsule` is the CI-triage entry point. A credible capsule includes:
+
+- `primary_failure` with an exact `source_command` that reopens the failing event.
+- `failure_timeline` entries with their own exact `replay timeline` commands.
+- `artifact_manifest` and `artifact_counts` for screenshots, videos, logs, reports, timelines, and generated replay files.
+- `scenario_draft_artifacts` and `scenario_draft_summary` when a draft has already been generated, including a bounded preview of warnings and review items.
+- `suggested_commands` that lead the operator from summary to timeline, scrub, search, open, or scenario draft without guessing paths.
+
+Use `--write-readme --write-json` for shareable artifacts. That writes `replay-capsule.md` for humans and `replay-capsule-summary.json` for automation, then refreshes the artifact index.
+
+### Explore to scenario
+
+`replay scenario-draft` is the first Explore-to-Scenario slice. It only promotes evidence that can be traced back to timeline events, and it keeps uncertainty visible:
+
+- The generated scenario JSON is meant to be validated and edited, not blindly committed.
+- `scenario-draft-summary.json` gives confidence, warning, review, normalization, and step counts.
+- `scenario-draft-review.md` lists review items, source summaries, normalizations, step origins, and the draft steps.
+- `step_origins` and `normalizations` include `source_path`, `sequence`, `timestamp`, and `source_command` so every generated step can be audited with `replay timeline`.
+
+This is enough for the near-term authoring loop: explore a flow, generate a draft, review selectors and coordinates, validate it, then harden it into a scenario.
+
+## CI triage recipe
+
+```bash
+luotsi replay capsule --artifacts ./artifacts/failing-run --write-readme --write-json
+luotsi replay timeline --artifacts ./artifacts/failing-run --failures --context 3 --write-markdown
+luotsi replay scrub --artifacts ./artifacts/failing-run --failures --context 3 --write-markdown
+luotsi replay scenario-draft --artifacts ./artifacts/failing-run --output ./scenarios/recovered-draft.json --write-json --write-markdown
+luotsi scenario-validate --file ./scenarios/recovered-draft.json
+luotsi replay open --artifacts ./artifacts/failing-run
+```
 
 ## Related pages
 

@@ -59,6 +59,7 @@ internal static class AppHostedCommandCompositionBuilder
             new ReplaySearchService(dependencies.FileSystem),
             new ReplayCapsuleService(dependencies.FileSystem),
             replayTimelineService,
+            new ReplayScrubService(replayTimelineService),
             new ReplayGraphService(dependencies.FileSystem, replayTimelineService),
             new ReplayClusterService(dependencies.FileSystem)));
 

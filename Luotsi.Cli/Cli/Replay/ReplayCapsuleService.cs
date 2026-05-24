@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
@@ -32,9 +33,14 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         var primaryFailureSession = failureSessions.FirstOrDefault();
         var primaryFailure = primaryFailureSession is null
             ? null
-            : CreatePrimaryFailure(primaryFailureSession);
+            : CreatePrimaryFailure(artifacts.Root, primaryFailureSession);
         var artifactCounts = CountArtifacts(files);
-        var commandHints = BuildCommandHints(artifacts.Root, primaryFailure).ToArray();
+        var artifactManifest = ReplayCapsuleArtifactManifestBuilder.Build(files).ToArray();
+        var failureTimeline = BuildFailureTimeline(artifacts.Root, failureSessions).ToArray();
+        var scenarioDraft = InspectScenarioDraftReadiness(artifacts.Root, files);
+        var scenarioDraftArtifacts = FindScenarioDraftArtifacts(files);
+        var scenarioDraftSummary = ReadScenarioDraftSummary(artifacts.Root, scenarioDraftArtifacts.SummaryPath);
+        var commandHints = BuildCommandHints(artifacts.Root, primaryFailure, scenarioDraft.Available, scenarioDraftArtifacts).ToArray();
         var readmePath = options.HasFlag("write-readme")
             ? Path.Join(artifacts.Root, CapsuleReadmeFileName)
             : null;
@@ -47,10 +53,16 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             summaries.Count,
             failureSessions.Length,
             summaries.Any(static summary => summary.FailureCapsule is not null),
+            scenarioDraft.Available,
+            scenarioDraft.Reason,
+            scenarioDraftArtifacts,
+            scenarioDraftSummary,
             readmePath,
             jsonPath,
             primaryFailure,
             artifactCounts,
+            artifactManifest,
+            failureTimeline,
             commandHints);
 
         if (jsonPath is not null)
@@ -60,25 +72,27 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
 
         if (readmePath is not null)
         {
-            await artifacts.WriteTextAsync(CapsuleReadmeFileName, BuildReadme(artifacts.Root, summaries.Count, failureSessions.Length, primaryFailure, artifactCounts, commandHints)).ConfigureAwait(false);
+            await artifacts.WriteTextAsync(CapsuleReadmeFileName, BuildReadme(artifacts.Root, summaries.Count, failureSessions.Length, scenarioDraft, scenarioDraftArtifacts, scenarioDraftSummary, primaryFailure, artifactCounts, artifactManifest, failureTimeline, commandHints)).ConfigureAwait(false);
         }
 
         return result;
     }
 
-    private static ReplayCapsulePrimaryFailureResult CreatePrimaryFailure(SessionReplaySummary summary)
+    private static ReplayCapsulePrimaryFailureResult CreatePrimaryFailure(string artifactRoot, SessionReplaySummary summary)
     {
         var failedScenario = summary.FailureCapsule?.Scenarios.FirstOrDefault();
         var failedStep = failedScenario?.FailedStep;
+        var failureHighlight = summary.TimelineHighlights.FirstOrDefault(static entry => entry.IsFailureRelevant);
         var message = failedScenario?.Error?.Message ??
-            summary.TimelineHighlights.FirstOrDefault(static entry => entry.IsFailureRelevant)?.Detail;
+            failureHighlight?.Detail;
         return new ReplayCapsulePrimaryFailureResult(
             failedScenario?.Scenario,
             failedStep?.Name,
             failedStep?.Action,
             message,
             summary.FailureCapsulePath,
-            summary.TimelinePath);
+            summary.TimelinePath,
+            failureHighlight is null ? null : BuildTimelineSourceCommand(artifactRoot, summary.TimelinePath, failureHighlight.Sequence));
     }
 
     private static ReplayCapsuleArtifactCounts CountArtifacts(IReadOnlyList<string> files) =>
@@ -91,10 +105,47 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             Count(files, IsReport),
             Count(files, static path => Path.GetFileName(path).Equals(SessionReplayArtifacts.TimelineFileName, StringComparison.OrdinalIgnoreCase)));
 
-    private static IEnumerable<ReplayCapsuleCommandHint> BuildCommandHints(string artifactRoot, ReplayCapsulePrimaryFailureResult? primaryFailure)
+    private static IEnumerable<ReplayCapsuleTimelineHighlightResult> BuildFailureTimeline(
+        string artifactRoot,
+        IEnumerable<SessionReplaySummary> failureSessions)
+    {
+        foreach (var summary in failureSessions)
+        {
+            foreach (var highlight in summary.TimelineHighlights.Where(static highlight => highlight.IsFailureRelevant))
+            {
+                yield return new ReplayCapsuleTimelineHighlightResult(
+                    summary.MetadataPath,
+                    summary.TimelinePath,
+                    highlight.Sequence,
+                    highlight.Timestamp,
+                    highlight.Type,
+                    highlight.Detail,
+                    highlight.IsFailureRelevant,
+                    highlight.ScenarioId,
+                    highlight.Scenario,
+                    highlight.StepIndex,
+                    BuildTimelineSourceCommand(artifactRoot, summary.TimelinePath, highlight.Sequence));
+            }
+        }
+    }
+
+    private IEnumerable<ReplayCapsuleCommandHint> BuildCommandHints(
+        string artifactRoot,
+        ReplayCapsulePrimaryFailureResult? primaryFailure,
+        bool scenarioDraftAvailable,
+        ReplayCapsuleScenarioDraftArtifacts scenarioDraftArtifacts)
     {
         yield return new ReplayCapsuleCommandHint($"luotsi replay open --artifacts {Quote(artifactRoot)}", "Open the local artifact browser.");
         yield return new ReplayCapsuleCommandHint($"luotsi replay summarize --artifacts {Quote(artifactRoot)}", "Read session summaries and failure capsule links.");
+        yield return new ReplayCapsuleCommandHint(
+            $"luotsi replay timeline --artifacts {Quote(artifactRoot)} --failures --context 3 --write-json --write-markdown",
+            "Write the failure-focused timeline with nearby context for offline triage.");
+        yield return new ReplayCapsuleCommandHint(
+            $"luotsi replay scrub --artifacts {Quote(artifactRoot)} --failures --context 3 --write-json --write-markdown",
+            "Write a local previous/focused/next event scrub view for the primary failure window.");
+        yield return new ReplayCapsuleCommandHint(
+            $"luotsi replay graph --artifacts {Quote(artifactRoot)} --write-json --write-markdown",
+            "Write the semantic debug graph for agents and local inspection.");
 
         if (!string.IsNullOrWhiteSpace(primaryFailure?.Message))
         {
@@ -103,9 +154,123 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
                 "Find the primary failure message across timeline, reports, and logs.");
         }
 
-        yield return new ReplayCapsuleCommandHint(
-            $"luotsi replay scenario-draft --artifacts {Quote(artifactRoot)} --output draft-scenario.json",
-            "Create a starter scenario from captured inspect/action history when available.");
+        if (scenarioDraftAvailable)
+        {
+            yield return new ReplayCapsuleCommandHint(
+                $"luotsi replay scenario-draft --artifacts {Quote(artifactRoot)} --output draft-scenario.json --write-json --write-markdown",
+                "Create a starter scenario from captured inspect, screen-delta, view, or telemetry history.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(scenarioDraftArtifacts.MarkdownPath))
+        {
+            yield return new ReplayCapsuleCommandHint(
+                $"luotsi replay search --artifacts {Quote(artifactRoot)} --contains \"Review Checklist\"",
+                "Find the generated scenario draft review checklist.");
+        }
+    }
+
+    private static ReplayCapsuleScenarioDraftArtifacts FindScenarioDraftArtifacts(IReadOnlyList<string> files)
+    {
+        var summary = files.FirstOrDefault(static file => Path.GetFileName(file).Equals("scenario-draft-summary.json", StringComparison.OrdinalIgnoreCase));
+        var markdown = files.FirstOrDefault(static file => Path.GetFileName(file).Equals("scenario-draft.md", StringComparison.OrdinalIgnoreCase));
+        var scenario = files.FirstOrDefault(IsDraftScenarioFile);
+        return new ReplayCapsuleScenarioDraftArtifacts(summary, markdown, scenario);
+    }
+
+    private static bool IsDraftScenarioFile(string file)
+    {
+        var fileName = Path.GetFileName(file);
+        return fileName.Contains("draft", StringComparison.OrdinalIgnoreCase) &&
+            fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase) &&
+            !fileName.Equals("scenario-draft-summary.json", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private ReplayCapsuleScenarioDraftSummary? ReadScenarioDraftSummary(string artifactRoot, string? summaryPath)
+    {
+        if (string.IsNullOrWhiteSpace(summaryPath))
+        {
+            return null;
+        }
+
+        var fullPath = Path.Join(artifactRoot, summaryPath.Replace('/', Path.DirectorySeparatorChar));
+        try
+        {
+            using var stream = _fileSystem.OpenRead(fullPath);
+            using var document = JsonDocument.Parse(stream);
+            var root = document.RootElement;
+            return new ReplayCapsuleScenarioDraftSummary(
+                TryGetString(root, "confidence", out var confidence) ? confidence : null,
+                CountScenarioSteps(root),
+                CountArray(root, "warnings"),
+                CountArray(root, "reviewItems"),
+                CountArray(root, "normalizations"),
+                ReadStringArray(root, "warnings", 5),
+                ReadReviewItems(root, 5));
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private ReplayCapsuleScenarioDraftReadiness InspectScenarioDraftReadiness(string artifactRoot, IReadOnlyList<string> files)
+    {
+        var timelineCount = 0;
+        foreach (var file in files.Where(static file => Path.GetFileName(file).Equals(SessionReplayArtifacts.TimelineFileName, StringComparison.OrdinalIgnoreCase)))
+        {
+            timelineCount++;
+            var path = Path.Join(artifactRoot, file.Replace('/', Path.DirectorySeparatorChar));
+            using var stream = _fileSystem.OpenRead(path);
+            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 4096);
+            while (reader.ReadLine() is { } line)
+            {
+                var source = TryReadScenarioDraftSource(line);
+                if (source is not null)
+                {
+                    return new ReplayCapsuleScenarioDraftReadiness(true, $"Found {source} source in {file}.");
+                }
+            }
+        }
+
+        return timelineCount == 0
+            ? new ReplayCapsuleScenarioDraftReadiness(false, "No session-timeline.jsonl files were found for scenario draft generation.")
+            : new ReplayCapsuleScenarioDraftReadiness(false, "No inspect/view action, screen-delta, or telemetry events were found for scenario draft generation.");
+    }
+
+    private static string? TryReadScenarioDraftSource(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(line);
+            var root = document.RootElement;
+            if (!TryGetString(root, "type", out var type))
+            {
+                return null;
+            }
+
+            if (type is "screen_delta" or "view_screenshot_captured" or "view_key_command_sent")
+            {
+                return type;
+            }
+
+            if (string.Equals(type, "command_result", StringComparison.Ordinal) &&
+                TryGetString(root, "command", out var command) &&
+                command is "tap_text" or "wait_visible" or "type_text" or "keyevent" or "screenshot" or "take_screenshot" or "telemetry_tail" or "telemetry_watch")
+            {
+                return "command_result:" + command;
+            }
+
+            return null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private static int Count(IEnumerable<string> files, Func<string, bool> predicate) =>
@@ -115,8 +280,13 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         string artifactRoot,
         int sessionCount,
         int failureCount,
+        ReplayCapsuleScenarioDraftReadiness scenarioDraft,
+        ReplayCapsuleScenarioDraftArtifacts scenarioDraftArtifacts,
+        ReplayCapsuleScenarioDraftSummary? scenarioDraftSummary,
         ReplayCapsulePrimaryFailureResult? primaryFailure,
         ReplayCapsuleArtifactCounts artifactCounts,
+        IReadOnlyList<ReplayCapsuleArtifactManifestEntry> artifactManifest,
+        IReadOnlyList<ReplayCapsuleTimelineHighlightResult> failureTimeline,
         IReadOnlyList<ReplayCapsuleCommandHint> commandHints)
     {
         var builder = new StringBuilder();
@@ -125,6 +295,53 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         builder.AppendLine($"Artifact root: `{artifactRoot}`");
         builder.AppendLine($"Sessions: `{sessionCount}`");
         builder.AppendLine($"Failures: `{failureCount}`");
+        builder.AppendLine($"Scenario draft available: `{scenarioDraft.Available}`");
+        builder.AppendLine($"Scenario draft reason: `{scenarioDraft.Reason}`");
+        AppendField(builder, "Scenario draft summary", scenarioDraftArtifacts.SummaryPath);
+        AppendField(builder, "Scenario draft review", scenarioDraftArtifacts.MarkdownPath);
+        AppendField(builder, "Scenario draft file", scenarioDraftArtifacts.ScenarioPath);
+        if (scenarioDraftSummary is not null)
+        {
+            AppendField(builder, "Scenario draft confidence", scenarioDraftSummary.Confidence);
+            builder.AppendLine($"- Scenario draft steps: `{scenarioDraftSummary.StepCount}`");
+            builder.AppendLine($"- Scenario draft warnings: `{scenarioDraftSummary.WarningCount}`");
+            builder.AppendLine($"- Scenario draft review items: `{scenarioDraftSummary.ReviewItemCount}`");
+            builder.AppendLine($"- Scenario draft normalizations: `{scenarioDraftSummary.NormalizationCount}`");
+            if (scenarioDraftSummary.Warnings.Count > 0)
+            {
+                builder.AppendLine();
+                builder.AppendLine("### Scenario Draft Warning Preview");
+                builder.AppendLine();
+                foreach (var warning in scenarioDraftSummary.Warnings)
+                {
+                    builder.AppendLine("- " + EscapeMarkdown(warning));
+                }
+            }
+
+            if (scenarioDraftSummary.ReviewItems.Count > 0)
+            {
+                builder.AppendLine();
+                builder.AppendLine("### Scenario Draft Review Preview");
+                builder.AppendLine();
+                builder.AppendLine("| Severity | Category | Step | Message | Command |");
+                builder.AppendLine("|---|---|---|---|---|");
+                foreach (var item in scenarioDraftSummary.ReviewItems)
+                {
+                    builder.Append("| ");
+                    builder.Append(EscapeMarkdown(item.Severity));
+                    builder.Append(" | ");
+                    builder.Append(EscapeMarkdown(item.Category));
+                    builder.Append(" | ");
+                    builder.Append(EscapeMarkdown(item.StepIndex?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty));
+                    builder.Append(" | ");
+                    builder.Append(EscapeMarkdown(item.Message));
+                    builder.Append(" | ");
+                    builder.Append(EscapeMarkdown(item.Command ?? string.Empty));
+                    builder.AppendLine(" |");
+                }
+            }
+        }
+
         builder.AppendLine();
         builder.AppendLine("## Primary Failure");
         builder.AppendLine();
@@ -140,6 +357,36 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             AppendField(builder, "Message", primaryFailure.Message);
             AppendField(builder, "Failure capsule", primaryFailure.FailureCapsulePath);
             AppendField(builder, "Timeline", primaryFailure.TimelinePath);
+            AppendField(builder, "Reopen", primaryFailure.SourceCommand);
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("## Failure Timeline");
+        builder.AppendLine();
+        if (failureTimeline.Count == 0)
+        {
+            builder.AppendLine("No failure-relevant timeline events were found.");
+        }
+        else
+        {
+            builder.AppendLine("| Time | Type | Scenario | Step | Detail | Reopen |");
+            builder.AppendLine("|---|---|---|---|---|---|");
+            foreach (var entry in failureTimeline)
+            {
+                builder.Append("| ");
+                builder.Append(EscapeMarkdown(entry.Timestamp?.ToString("O") ?? string.Empty));
+                builder.Append(" | ");
+                builder.Append(EscapeMarkdown(entry.Type));
+                builder.Append(" | ");
+                builder.Append(EscapeMarkdown(entry.Scenario ?? string.Empty));
+                builder.Append(" | ");
+                builder.Append(EscapeMarkdown(entry.StepIndex?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty));
+                builder.Append(" | ");
+                builder.Append(EscapeMarkdown(entry.Detail));
+                builder.Append(" | ");
+                builder.Append(EscapeMarkdown(entry.SourceCommand));
+                builder.AppendLine(" |");
+            }
         }
 
         builder.AppendLine();
@@ -152,6 +399,24 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         builder.AppendLine($"- Screen states: `{artifactCounts.ScreenStates}`");
         builder.AppendLine($"- Reports: `{artifactCounts.Reports}`");
         builder.AppendLine($"- Timelines: `{artifactCounts.Timelines}`");
+        builder.AppendLine();
+        builder.AppendLine("## Artifact Manifest");
+        builder.AppendLine();
+        builder.AppendLine("| Kind | Role | Session | Path |");
+        builder.AppendLine("|---|---|---|---|");
+        foreach (var artifact in artifactManifest)
+        {
+            builder.Append("| ");
+            builder.Append(EscapeMarkdown(artifact.Kind));
+            builder.Append(" | ");
+            builder.Append(EscapeMarkdown(artifact.Role));
+            builder.Append(" | ");
+            builder.Append(EscapeMarkdown(artifact.Session ?? string.Empty));
+            builder.Append(" | ");
+            builder.Append(EscapeMarkdown(artifact.Path));
+            builder.AppendLine(" |");
+        }
+
         builder.AppendLine();
         builder.AppendLine("## Next Commands");
         builder.AppendLine();
@@ -213,6 +478,99 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             fileName.Equals("junit.xml", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static string EscapeMarkdown(string value) =>
+        value.Replace("|", "\\|", StringComparison.Ordinal)
+            .Replace("\r", " ", StringComparison.Ordinal)
+            .Replace("\n", " ", StringComparison.Ordinal);
+
+    private static bool TryGetString(JsonElement root, string name, out string value)
+    {
+        value = string.Empty;
+        if (!root.TryGetProperty(name, out var property) || property.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        value = property.GetString() ?? string.Empty;
+        return !string.IsNullOrWhiteSpace(value);
+    }
+
+    private static int CountScenarioSteps(JsonElement root)
+    {
+        if (!root.TryGetProperty("scenario", out var scenario) ||
+            scenario.ValueKind != JsonValueKind.Object ||
+            !scenario.TryGetProperty("steps", out var steps) ||
+            steps.ValueKind != JsonValueKind.Array)
+        {
+            return 0;
+        }
+
+        return steps.GetArrayLength();
+    }
+
+    private static int CountArray(JsonElement root, string name) =>
+        root.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.Array
+            ? property.GetArrayLength()
+            : 0;
+
+    private static IReadOnlyList<string> ReadStringArray(JsonElement root, string name, int limit)
+    {
+        if (!root.TryGetProperty(name, out var property) || property.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return property.EnumerateArray()
+            .Where(static item => item.ValueKind == JsonValueKind.String)
+            .Select(static item => item.GetString() ?? string.Empty)
+            .Where(static item => !string.IsNullOrWhiteSpace(item))
+            .Take(limit)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<ReplayScenarioDraftReviewItem> ReadReviewItems(JsonElement root, int limit)
+    {
+        if (!root.TryGetProperty("reviewItems", out var property) || property.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var items = new List<ReplayScenarioDraftReviewItem>();
+        foreach (var item in property.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            items.Add(new ReplayScenarioDraftReviewItem(
+                TryGetString(item, "severity", out var severity) ? severity : "info",
+                TryGetString(item, "category", out var category) ? category : "general",
+                TryGetInt(item, "stepIndex", out var stepIndex) ? stepIndex : null,
+                TryGetString(item, "message", out var message) ? message : string.Empty,
+                TryGetString(item, "command", out var command) ? command : null));
+            if (items.Count == limit)
+            {
+                break;
+            }
+        }
+
+        return items;
+    }
+
+    private static bool TryGetInt(JsonElement root, string name, out int value)
+    {
+        value = 0;
+        return root.TryGetProperty(name, out var property) &&
+            property.ValueKind == JsonValueKind.Number &&
+            property.TryGetInt32(out value);
+    }
+
     private static string Quote(string value) =>
         value.Contains(' ', StringComparison.Ordinal) ? "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"" : value;
+
+    private static string BuildTimelineSourceCommand(string artifactRoot, string timelinePath, int sequence) =>
+        $"luotsi replay timeline --artifacts {Quote(artifactRoot)} --source-path {Quote(timelinePath)} --sequence {sequence} --context 3";
+
+    private sealed record ReplayCapsuleScenarioDraftReadiness(bool Available, string Reason);
 }
