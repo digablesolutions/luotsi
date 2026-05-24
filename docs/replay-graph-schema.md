@@ -102,4 +102,4 @@ luotsi replay graph --artifacts artifacts/run --node failure:session-timeline.js
 
 `replay-graph.md` starts with "Agent Summary", "What Failed", "What Agents Can Act On", "Evidence", and "Insights" before the raw node and edge tables.
 
-JSONL output includes `summary`, `failure_path`, `evidence`, `insight`, `node`, and `edge` line types. Use `evidence` lines when an agent needs concise proof before deciding whether to open the full graph.
+JSONL output includes `summary`, `failure_path`, `evidence`, `insight`, `node`, and `edge` line types. The `summary` line includes `node_kinds`, `edge_kinds`, and `evidence_kinds` so agents can decide whether to consume later lines. Use `evidence` lines when an agent needs concise proof before deciding whether to open the full graph.

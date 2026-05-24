@@ -1449,6 +1449,9 @@ public sealed partial class AppTests
         Assert.Equal(ResultSchemas.ReplayGraph, summary.RootElement.GetProperty("schema").GetString());
         Assert.Equal("summary", summary.RootElement.GetProperty("type").GetString());
         Assert.True(summary.RootElement.TryGetProperty("agent_summary", out _));
+        Assert.True(summary.RootElement.GetProperty("node_kinds").GetProperty("failure").GetInt32() >= 1);
+        Assert.True(summary.RootElement.GetProperty("edge_kinds").GetProperty("has_artifact").GetInt32() >= 1);
+        Assert.True(summary.RootElement.GetProperty("evidence_kinds").GetProperty("artifact").GetInt32() >= 1);
         Assert.Contains(console.OutputLines, line =>
         {
             using var document = JsonDocument.Parse(line);
