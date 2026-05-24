@@ -1,8 +1,9 @@
-using System.Text;
 using System.Text.RegularExpressions;
+using System.Text.Json;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.Infrastructure.Serialization;
 using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Cli.Replay;
@@ -10,7 +11,9 @@ namespace Luotsi.Cli.Cli.Replay;
 internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineService timelineService)
 {
     private const string GraphJsonFileName = "replay-graph.json";
+    private const string GraphJsonlFileName = "replay-graph.jsonl";
     private const string GraphMarkdownFileName = "replay-graph.md";
+    private static readonly JsonSerializerOptions JsonLineOptions = new(AppJson.Options) { WriteIndented = false };
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
     private readonly ReplayTimelineService _timelineService = timelineService ?? throw new ArgumentNullException(nameof(timelineService));
     private static readonly Regex StableIdChars = new("[^a-zA-Z0-9._:-]+", RegexOptions.Compiled);
@@ -79,11 +82,9 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
 
             if (previousEvent is not null && string.Equals(previousEvent.Path, evt.Path, StringComparison.Ordinal))
             {
-                edges.Add(new ReplayGraphEdgeResult(
-                    "event:" + previousEvent.Path + ":" + previousEvent.Sequence.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    eventId,
-                    "next",
-                    new Dictionary<string, string?>()));
+                var previousEventId = "event:" + previousEvent.Path + ":" + previousEvent.Sequence.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                edges.Add(new ReplayGraphEdgeResult(previousEventId, eventId, "next", new Dictionary<string, string?>()));
+                edges.Add(new ReplayGraphEdgeResult(previousEventId, eventId, "transitions_to", BuildTransitionProperties(previousEvent, evt)));
             }
 
             if (evt.FailureRelevant)
@@ -105,26 +106,63 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
             previousEvent = evt;
         }
 
-        var orderedNodes = nodes.Values.OrderBy(static node => node.Id, StringComparer.Ordinal).ToArray();
-        var orderedEdges = edges
+        var query = ReplayGraphQueryEngine.Create(options);
+        var allNodes = nodes.Values.OrderBy(static node => node.Id, StringComparer.Ordinal).ToArray();
+        var allEdges = edges
             .OrderBy(static edge => edge.From, StringComparer.Ordinal)
             .ThenBy(static edge => edge.Kind, StringComparer.Ordinal)
             .ThenBy(static edge => edge.To, StringComparer.Ordinal)
             .ToArray();
+        var filtered = ReplayGraphQueryEngine.Apply(allNodes, allEdges, query);
+        var orderedNodes = filtered.Nodes;
+        var orderedEdges = filtered.Edges;
         var jsonPath = options.HasFlag("write-json")
             ? Path.Join(artifacts.Root, GraphJsonFileName)
+            : null;
+        var jsonlPath = options.HasFlag("write-jsonl")
+            ? Path.Join(artifacts.Root, GraphJsonlFileName)
             : null;
         var markdownPath = options.HasFlag("write-markdown")
             ? Path.Join(artifacts.Root, GraphMarkdownFileName)
             : null;
+        var insights = ReplayGraphQueryEngine.ApplyInsightFilters(
+            ReplayGraphInsightBuilder.Build(allNodes, allEdges),
+            query);
+        var actions = ReplayGraphInsightBuilder.BuildActions(artifacts.Root, query, allNodes);
+        var evidence = ReplayGraphQueryEngine.ApplyEvidenceFilters(
+            ReplayGraphEvidenceBuilder.Build(artifacts.Root, orderedNodes, orderedEdges),
+            query);
+        var failurePaths = ReplayGraphFailurePathBuilder.Build(allNodes, allEdges);
+        var facts = ReplayGraphQueryEngine.ApplyFactFilters(
+            ReplayGraphFactBuilder.Build(artifacts.Root, orderedNodes, orderedEdges, evidence, failurePaths),
+            query);
+        var causalChains = ReplayGraphCausalChainBuilder.Build(artifacts.Root, failurePaths, allEdges);
+        var hypotheses = ReplayGraphHypothesisBuilder.Build(artifacts.Root, causalChains, evidence);
         var result = new ReplayGraphResult(
             ResultSchemas.ReplayGraph,
             artifacts.Root,
-            nodes.Count,
-            edges.Count,
+            query,
+            orderedNodes.Count,
+            orderedEdges.Count,
+            allNodes.Length,
+            allEdges.Length,
+            filtered.MatchedNodeCount,
+            filtered.MatchedEdgeCount,
+            filtered.Truncated,
             CountKinds(orderedNodes),
             CountKinds(orderedEdges),
+            ReplayGraphTaxonomy.Build(artifacts.Root),
+            ReplayGraphAgentSummaryBuilder.Build(allNodes, allEdges, failurePaths, evidence, actions),
+            insights,
+            actions,
+            CountKinds(evidence),
+            evidence,
+            facts,
+            causalChains,
+            hypotheses,
+            failurePaths,
             jsonPath,
+            jsonlPath,
             markdownPath,
             orderedNodes,
             orderedEdges);
@@ -134,13 +172,242 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
             await artifacts.WriteJsonAsync(GraphJsonFileName, result).ConfigureAwait(false);
         }
 
+        if (jsonlPath is not null)
+        {
+            await artifacts.WriteTextAsync(GraphJsonlFileName, ToJsonLines(result)).ConfigureAwait(false);
+        }
+
         if (markdownPath is not null)
         {
-            await artifacts.WriteTextAsync(GraphMarkdownFileName, BuildMarkdown(result)).ConfigureAwait(false);
+            await artifacts.WriteTextAsync(GraphMarkdownFileName, ReplayGraphMarkdownWriter.Build(result)).ConfigureAwait(false);
         }
 
         return result;
     }
+
+    public static IEnumerable<object> ToJsonLineObjects(ReplayGraphResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+
+        yield return new ReplayGraphJsonLine(
+            ResultSchemas.ReplayGraph,
+            "summary",
+            result.ArtifactRoot,
+            result.NodeCount,
+            result.EdgeCount,
+            result.TotalNodeCount,
+            result.TotalEdgeCount,
+            result.Truncated,
+            result.Query,
+            result.AgentSummary,
+            result.NodeKinds,
+            result.EdgeKinds,
+            result.EvidenceKinds,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null);
+
+        foreach (var path in result.FailurePaths)
+        {
+            yield return new ReplayGraphJsonLine(
+                ResultSchemas.ReplayGraph,
+                "failure_path",
+                result.ArtifactRoot,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                path,
+                null,
+                null,
+                null,
+                null,
+                null);
+        }
+
+        foreach (var evidence in result.Evidence)
+        {
+            yield return new ReplayGraphJsonLine(
+                ResultSchemas.ReplayGraph,
+                "evidence",
+                result.ArtifactRoot,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                evidence,
+                null,
+                null,
+                null);
+        }
+
+        foreach (var chain in result.CausalChains)
+        {
+            yield return new ReplayGraphJsonLine(
+                Schema: ResultSchemas.ReplayGraph,
+                Type: "causal_chain",
+                ArtifactRoot: result.ArtifactRoot,
+                NodeCount: null,
+                EdgeCount: null,
+                TotalNodeCount: null,
+                TotalEdgeCount: null,
+                Truncated: null,
+                Query: null,
+                AgentSummary: null,
+                NodeKinds: null,
+                EdgeKinds: null,
+                EvidenceKinds: null,
+                FailurePath: null,
+                Insight: null,
+                Evidence: null,
+                Fact: null,
+                Node: null,
+                Edge: null,
+                CausalChain: chain);
+        }
+
+        foreach (var hypothesis in result.Hypotheses)
+        {
+            yield return new ReplayGraphJsonLine(
+                Schema: ResultSchemas.ReplayGraph,
+                Type: "hypothesis",
+                ArtifactRoot: result.ArtifactRoot,
+                NodeCount: null,
+                EdgeCount: null,
+                TotalNodeCount: null,
+                TotalEdgeCount: null,
+                Truncated: null,
+                Query: null,
+                AgentSummary: null,
+                NodeKinds: null,
+                EdgeKinds: null,
+                EvidenceKinds: null,
+                FailurePath: null,
+                Insight: null,
+                Evidence: null,
+                Fact: null,
+                Node: null,
+                Edge: null,
+                CausalChain: null,
+                Hypothesis: hypothesis);
+        }
+
+        foreach (var fact in result.Facts)
+        {
+            yield return new ReplayGraphJsonLine(
+                ResultSchemas.ReplayGraph,
+                "fact",
+                result.ArtifactRoot,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                fact,
+                null,
+                null);
+        }
+
+        foreach (var insight in result.Insights)
+        {
+            yield return new ReplayGraphJsonLine(
+                ResultSchemas.ReplayGraph,
+                "insight",
+                result.ArtifactRoot,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                insight,
+                null,
+                null,
+                null,
+                null);
+        }
+
+        foreach (var node in result.Nodes)
+        {
+            yield return new ReplayGraphJsonLine(
+                ResultSchemas.ReplayGraph,
+                "node",
+                result.ArtifactRoot,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                node,
+                null);
+        }
+
+        foreach (var edge in result.Edges)
+        {
+            yield return new ReplayGraphJsonLine(
+                ResultSchemas.ReplayGraph,
+                "edge",
+                result.ArtifactRoot,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                edge);
+        }
+    }
+
+    private static string ToJsonLines(ReplayGraphResult result) =>
+        string.Join('\n', ToJsonLineObjects(result).Select(static line => JsonSerializer.Serialize(line, JsonLineOptions))) + "\n";
 
     private static void AddFailureCapsule(
         SessionReplaySummary summary,
@@ -304,6 +571,63 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
         return stable.Length == 0 ? "value" : stable.ToLowerInvariant();
     }
 
+    private static IReadOnlyDictionary<string, string?> BuildTransitionProperties(ReplayTimelineEventResult from, ReplayTimelineEventResult to)
+    {
+        var properties = new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["from_type"] = from.Type,
+            ["to_type"] = to.Type,
+            ["from_detail"] = from.Detail,
+            ["to_detail"] = to.Detail,
+            ["category"] = ClassifyTransition(from, to)
+        };
+
+        if (from.Timestamp is not null && to.Timestamp is not null)
+        {
+            properties["elapsed_ms"] = (to.Timestamp.Value - from.Timestamp.Value).TotalMilliseconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        var fromAction = FirstProperty(from, "action", "command");
+        var toAction = FirstProperty(to, "action", "command");
+        if (!string.IsNullOrWhiteSpace(fromAction))
+        {
+            properties["from_action"] = fromAction;
+        }
+
+        if (!string.IsNullOrWhiteSpace(toAction))
+        {
+            properties["to_action"] = toAction;
+        }
+
+        return properties;
+    }
+
+    private static string ClassifyTransition(ReplayTimelineEventResult from, ReplayTimelineEventResult to)
+    {
+        if (to.FailureRelevant)
+        {
+            var action = FirstProperty(from, "action", "command") ?? FirstProperty(to, "action", "command");
+            return string.IsNullOrWhiteSpace(action) ? "to_failure" : "action_to_failure";
+        }
+
+        if (from.FailureRelevant)
+        {
+            return "from_failure";
+        }
+
+        if (IsScreenStateEvent(to))
+        {
+            return "screen_changed";
+        }
+
+        if (IsTelemetryEvent(to))
+        {
+            return "telemetry_observed";
+        }
+
+        return "progression";
+    }
+
     private static IReadOnlyDictionary<string, int> CountKinds(IReadOnlyList<ReplayGraphNodeResult> nodes) =>
         nodes.GroupBy(static node => node.Kind, StringComparer.Ordinal)
             .OrderBy(static group => group.Key, StringComparer.Ordinal)
@@ -314,60 +638,32 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
             .OrderBy(static group => group.Key, StringComparer.Ordinal)
             .ToDictionary(static group => group.Key, static group => group.Count(), StringComparer.Ordinal);
 
-    private static string BuildMarkdown(ReplayGraphResult graph)
-    {
-        var builder = new StringBuilder();
-        builder.AppendLine("# Luotsi Replay Graph");
-        builder.AppendLine();
-        builder.AppendLine($"Artifact root: `{graph.ArtifactRoot}`");
-        builder.AppendLine($"Nodes: `{graph.NodeCount}`");
-        builder.AppendLine($"Edges: `{graph.EdgeCount}`");
-        builder.AppendLine();
-        builder.AppendLine("## Node Kinds");
-        builder.AppendLine();
-        builder.AppendLine("| Kind | Count |");
-        builder.AppendLine("|---|---:|");
-        foreach (var kind in graph.NodeKinds)
-        {
-            builder.AppendLine($"| {EscapeMarkdown(kind.Key)} | {kind.Value} |");
-        }
+    private static IReadOnlyDictionary<string, int> CountKinds(IReadOnlyList<ReplayGraphEvidenceResult> evidence) =>
+        evidence.GroupBy(static item => item.Kind, StringComparer.Ordinal)
+            .OrderBy(static group => group.Key, StringComparer.Ordinal)
+            .ToDictionary(static group => group.Key, static group => group.Count(), StringComparer.Ordinal);
 
-        builder.AppendLine();
-        builder.AppendLine("## Edge Kinds");
-        builder.AppendLine();
-        builder.AppendLine("| Kind | Count |");
-        builder.AppendLine("|---|---:|");
-        foreach (var kind in graph.EdgeKinds)
-        {
-            builder.AppendLine($"| {EscapeMarkdown(kind.Key)} | {kind.Value} |");
-        }
-
-        builder.AppendLine();
-        builder.AppendLine("## Nodes");
-        builder.AppendLine();
-        builder.AppendLine("| Id | Kind | Label |");
-        builder.AppendLine("|---|---|---|");
-        foreach (var node in graph.Nodes)
-        {
-            builder.AppendLine($"| {EscapeMarkdown(node.Id)} | {EscapeMarkdown(node.Kind)} | {EscapeMarkdown(node.Label)} |");
-        }
-
-        builder.AppendLine();
-        builder.AppendLine("## Edges");
-        builder.AppendLine();
-        builder.AppendLine("| From | Kind | To |");
-        builder.AppendLine("|---|---|---|");
-        foreach (var edge in graph.Edges)
-        {
-            builder.AppendLine($"| {EscapeMarkdown(edge.From)} | {EscapeMarkdown(edge.Kind)} | {EscapeMarkdown(edge.To)} |");
-        }
-
-        return builder.ToString();
-    }
-
-    private static string EscapeMarkdown(string? value) =>
-        (value ?? string.Empty).Replace("|", "\\|", StringComparison.Ordinal)
-            .Replace("\r", " ", StringComparison.Ordinal)
-            .Replace("\n", " ", StringComparison.Ordinal);
+    private sealed record ReplayGraphJsonLine(
+        string Schema,
+        string Type,
+        string ArtifactRoot,
+        int? NodeCount,
+        int? EdgeCount,
+        int? TotalNodeCount,
+        int? TotalEdgeCount,
+        bool? Truncated,
+        ReplayGraphQueryResult? Query,
+        ReplayGraphAgentSummaryResult? AgentSummary,
+        IReadOnlyDictionary<string, int>? NodeKinds,
+        IReadOnlyDictionary<string, int>? EdgeKinds,
+        IReadOnlyDictionary<string, int>? EvidenceKinds,
+        ReplayGraphFailurePathResult? FailurePath,
+        ReplayGraphInsightResult? Insight,
+        ReplayGraphEvidenceResult? Evidence,
+        ReplayGraphFactResult? Fact,
+        ReplayGraphNodeResult? Node,
+        ReplayGraphEdgeResult? Edge,
+        ReplayGraphCausalChainResult? CausalChain = null,
+        ReplayGraphHypothesisResult? Hypothesis = null);
 
 }

@@ -73,7 +73,19 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         if (IsGraphCommand(options))
         {
             var graphResult = await _dependencies.GraphService.CreateAsync(options, artifacts).ConfigureAwait(false);
-            _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, graphResult, artifacts.ToData());
+            switch (ParseOutputMode(options, "replay graph"))
+            {
+                case ReplayOutputMode.Json:
+                    _dependencies.JsonWriter.Write(graphResult);
+                    break;
+                case ReplayOutputMode.Jsonl:
+                    _dependencies.JsonWriter.WriteLines(ReplayGraphService.ToJsonLineObjects(graphResult));
+                    break;
+                default:
+                    _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, graphResult, artifacts.ToData());
+                    break;
+            }
+
             return 0;
         }
 

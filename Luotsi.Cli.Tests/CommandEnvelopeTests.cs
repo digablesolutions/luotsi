@@ -1332,7 +1332,7 @@ public sealed partial class AppTests
             DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
         });
 
-        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot, "--write-json", "--write-markdown"]);
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot, "--write-json", "--write-jsonl", "--write-markdown"]);
         using var envelope = console.ParseSingleOutputAsJson();
 
         Assert.Equal(0, exitCode);
@@ -1340,7 +1340,54 @@ public sealed partial class AppTests
         Assert.Equal(ResultSchemas.ReplayGraph, data.GetProperty("schema").GetString());
         Assert.True(data.GetProperty("node_count").GetInt32() >= 6);
         Assert.True(data.GetProperty("edge_count").GetInt32() >= 4);
+        Assert.True(data.GetProperty("total_node_count").GetInt32() >= data.GetProperty("node_count").GetInt32());
+        Assert.True(data.GetProperty("total_edge_count").GetInt32() >= data.GetProperty("edge_count").GetInt32());
+        Assert.Equal(data.GetProperty("node_count").GetInt32(), data.GetProperty("matched_node_count").GetInt32());
+        Assert.Equal(data.GetProperty("edge_count").GetInt32(), data.GetProperty("matched_edge_count").GetInt32());
+        Assert.False(data.GetProperty("truncated").GetBoolean());
+        Assert.Equal(200, data.GetProperty("query").GetProperty("limit").GetInt32());
+        Assert.True(data.GetProperty("insights").GetArrayLength() >= 1);
+        Assert.Contains(data.GetProperty("taxonomy").GetProperty("node_kinds").EnumerateArray(), kind => kind.GetProperty("kind").GetString() == "failure");
+        Assert.Contains(data.GetProperty("taxonomy").GetProperty("edge_kinds").EnumerateArray(), kind => kind.GetProperty("kind").GetString() == "transitions_to");
+        Assert.Contains(data.GetProperty("taxonomy").GetProperty("evidence_kinds").EnumerateArray(), kind => kind.GetProperty("kind").GetString() == "artifact");
+        Assert.Contains(data.GetProperty("taxonomy").GetProperty("query_examples").EnumerateArray(), example => example.GetProperty("kind").GetString() == "neighborhood");
+        Assert.Contains("scenario_step_failed", data.GetProperty("agent_summary").GetProperty("what_failed").GetString(), StringComparison.Ordinal);
+        Assert.Contains("action-to-failure", data.GetProperty("agent_summary").GetProperty("what_changed").GetString(), StringComparison.Ordinal);
+        Assert.Contains("luotsi replay", data.GetProperty("agent_summary").GetProperty("what_can_act_on").GetString(), StringComparison.Ordinal);
+        Assert.Contains(data.GetProperty("agent_summary").GetProperty("evidence_node_ids").EnumerateArray(), id => id.GetString()!.StartsWith("failure:", StringComparison.Ordinal));
+        Assert.Contains(data.GetProperty("actions").EnumerateArray(), action => action.GetProperty("kind").GetString() == "scrub_failures");
+        Assert.Contains(data.GetProperty("actions").EnumerateArray(), action => action.GetProperty("kind").GetString() == "stream_graph");
+        Assert.Contains(data.GetProperty("actions").EnumerateArray(), action => action.GetProperty("kind").GetString() == "filter_artifact_evidence");
+        Assert.True(data.GetProperty("evidence_kinds").GetProperty("artifact").GetInt32() >= 1);
+        Assert.True(data.GetProperty("evidence_kinds").GetProperty("failure").GetInt32() >= 1);
+        Assert.Contains(data.GetProperty("evidence").EnumerateArray(), evidence =>
+            evidence.GetProperty("kind").GetString() == "failure" &&
+            evidence.GetProperty("edge_ids").GetArrayLength() >= 1);
+        Assert.Contains(data.GetProperty("evidence").EnumerateArray(), evidence =>
+            evidence.GetProperty("kind").GetString() == "artifact" &&
+            evidence.GetProperty("edge_ids").GetArrayLength() >= 1);
+        Assert.Contains(data.GetProperty("facts").EnumerateArray(), fact =>
+            fact.GetProperty("category").GetString() == "failure" &&
+            fact.GetProperty("predicate").GetString() == "has_failure_path");
+        Assert.Contains(data.GetProperty("facts").EnumerateArray(), fact =>
+            fact.GetProperty("category").GetString() == "transition" &&
+            fact.GetProperty("predicate").GetString() == "action_to_failure");
+        Assert.Contains(data.GetProperty("facts").EnumerateArray(), fact =>
+            fact.GetProperty("category").GetString() == "action" &&
+            fact.GetProperty("object").GetString() == "waitVisible");
+        var causalChain = Assert.Single(data.GetProperty("causal_chains").EnumerateArray());
+        Assert.Equal("failure:session-timeline.jsonl:1", causalChain.GetProperty("failure_node_id").GetString());
+        Assert.Contains("scenario_step_failed", causalChain.GetProperty("summary").GetString(), StringComparison.Ordinal);
+        Assert.True(causalChain.GetProperty("hops").GetArrayLength() >= 1);
+        Assert.Contains(causalChain.GetProperty("hops").EnumerateArray(), hop =>
+            hop.GetProperty("relation").GetString() == "transitions_to" &&
+            hop.GetProperty("category").GetString() == "action_to_failure");
+        Assert.Contains(data.GetProperty("hypotheses").EnumerateArray(), hypothesis =>
+            hypothesis.GetProperty("kind").GetString() == "action_to_failure" &&
+            hypothesis.GetProperty("evidence_node_ids").EnumerateArray().Any(id => id.GetString() == "failure:session-timeline.jsonl:1"));
+        Assert.True(data.GetProperty("failure_paths").GetArrayLength() >= 1);
         Assert.Equal(Path.Join(replayRoot, "replay-graph.json"), data.GetProperty("json_path").GetString());
+        Assert.Equal(Path.Join(replayRoot, "replay-graph.jsonl"), data.GetProperty("jsonl_path").GetString());
         Assert.Equal(Path.Join(replayRoot, "replay-graph.md"), data.GetProperty("markdown_path").GetString());
         Assert.Contains(data.GetProperty("nodes").EnumerateArray(), node => node.GetProperty("kind").GetString() == "failure");
         Assert.Contains(data.GetProperty("nodes").EnumerateArray(), node => node.GetProperty("kind").GetString() == "artifact");
@@ -1348,11 +1395,371 @@ public sealed partial class AppTests
         Assert.Equal(1, data.GetProperty("node_kinds").GetProperty("action").GetInt32());
         Assert.Contains(data.GetProperty("edges").EnumerateArray(), edge => edge.GetProperty("kind").GetString() == "has_artifact");
         Assert.Contains(data.GetProperty("edges").EnumerateArray(), edge => edge.GetProperty("kind").GetString() == "describes_action");
+        Assert.Contains(data.GetProperty("edges").EnumerateArray(), edge => edge.GetProperty("kind").GetString() == "transitions_to");
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-graph.json")));
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-graph.jsonl")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-graph.md")));
         Assert.False(fileSystem.FileExists(Path.Join(replayRoot, "replay-timeline.json")));
         Assert.False(fileSystem.FileExists(Path.Join(replayRoot, "replay-timeline.md")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.md")));
+        var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-graph.md"));
+        Assert.Contains("## Output Artifacts", markdown, StringComparison.Ordinal);
+        Assert.Contains("replay-graph.jsonl", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Agent Summary", markdown, StringComparison.Ordinal);
+        Assert.Contains("Evidence nodes", markdown, StringComparison.Ordinal);
+        Assert.Contains("## What Failed", markdown, StringComparison.Ordinal);
+        Assert.Contains("## What Agents Can Act On", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Evidence", markdown, StringComparison.Ordinal);
+        Assert.Contains("Kinds:", markdown, StringComparison.Ordinal);
+        Assert.Contains("| Kind | Node | Title | Detail | Artifact | Edges | Command |", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Facts", markdown, StringComparison.Ordinal);
+        Assert.Contains("| Category | Subject | Predicate | Object | Confidence | Command |", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Causal Chains", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Hypotheses", markdown, StringComparison.Ordinal);
+        Assert.Contains("| Kind | Severity | Confidence | Summary | Evidence | Command |", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Evidence Kinds", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Failure Paths", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Transitions", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Query Examples", markdown, StringComparison.Ordinal);
+        var jsonl = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-graph.jsonl"));
+        Assert.Contains("\"type\":\"summary\"", jsonl, StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"evidence\"", jsonl, StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"causal_chain\"", jsonl, StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"hypothesis\"", jsonl, StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"fact\"", jsonl, StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"node\"", jsonl, StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"edge\"", jsonl, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayGraph_Reports_Failure_Path()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        var path = Assert.Single(data.GetProperty("failure_paths").EnumerateArray(), item =>
+            item.GetProperty("failure_node_id").GetString() == "failure:session-timeline.jsonl:1");
+        Assert.Equal("event:session-timeline.jsonl:1", path.GetProperty("failure_event_node_id").GetString());
+        Assert.Contains("scenario_step_failed", path.GetProperty("summary").GetString(), StringComparison.Ordinal);
+        Assert.Contains(path.GetProperty("node_ids").EnumerateArray(), node => node.GetString() == "failure:session-timeline.jsonl:1");
+        Assert.Contains(path.GetProperty("edge_ids").EnumerateArray(), edge => edge.GetString()!.Contains("indicates", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayGraph_Can_Write_Raw_Jsonl()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot, "--format", "jsonl"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.True(console.OutputLines.Count > 3);
+        using var summary = JsonDocument.Parse(console.OutputLines[0]);
+        Assert.Equal(ResultSchemas.ReplayGraph, summary.RootElement.GetProperty("schema").GetString());
+        Assert.Equal("summary", summary.RootElement.GetProperty("type").GetString());
+        Assert.True(summary.RootElement.TryGetProperty("agent_summary", out _));
+        Assert.True(summary.RootElement.GetProperty("node_kinds").GetProperty("failure").GetInt32() >= 1);
+        Assert.True(summary.RootElement.GetProperty("edge_kinds").GetProperty("has_artifact").GetInt32() >= 1);
+        Assert.True(summary.RootElement.GetProperty("evidence_kinds").GetProperty("artifact").GetInt32() >= 1);
+        Assert.Contains(console.OutputLines, line =>
+        {
+            using var document = JsonDocument.Parse(line);
+            return document.RootElement.GetProperty("type").GetString() == "failure_path";
+        });
+        Assert.Contains(console.OutputLines, line =>
+        {
+            using var document = JsonDocument.Parse(line);
+            return document.RootElement.GetProperty("type").GetString() == "evidence";
+        });
+        Assert.Contains(console.OutputLines, line =>
+        {
+            using var document = JsonDocument.Parse(line);
+            return document.RootElement.GetProperty("type").GetString() == "node";
+        });
+        Assert.Contains(console.OutputLines, line =>
+        {
+            using var document = JsonDocument.Parse(line);
+            return document.RootElement.GetProperty("type").GetString() == "edge";
+        });
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayGraph_Classifies_Action_To_Failure_Transitions()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot, "--edge-kind", "transitions_to"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        var transition = Assert.Single(data.GetProperty("edges").EnumerateArray(), edge =>
+            edge.GetProperty("properties").TryGetProperty("category", out var category) &&
+            category.GetString() == "action_to_failure");
+        Assert.Equal("scenario_run_started", transition.GetProperty("properties").GetProperty("from_type").GetString());
+        Assert.Equal("scenario_step_failed", transition.GetProperty("properties").GetProperty("to_type").GetString());
+        Assert.Contains(data.GetProperty("insights").EnumerateArray(), insight => insight.GetProperty("kind").GetString() == "transition");
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayGraph_Filters_Insights_By_Kind_And_Severity()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot, "--insight", "transition", "--severity", "warning"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("transition", data.GetProperty("query").GetProperty("insight").GetString());
+        Assert.Equal("warning", data.GetProperty("query").GetProperty("severity").GetString());
+        var insight = Assert.Single(data.GetProperty("insights").EnumerateArray());
+        Assert.Equal("transition", insight.GetProperty("kind").GetString());
+        Assert.Equal("warning", insight.GetProperty("severity").GetString());
+        Assert.True(data.GetProperty("node_count").GetInt32() > 0);
+        Assert.True(data.GetProperty("edge_count").GetInt32() > 0);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayGraph_Rejects_Invalid_Insight_Severity()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot, "--severity", "critical"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("--severity must be info, warning, or error", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayGraph_Filters_By_Failure_And_Node_Kind()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot, "--failed", "--node-kind", "failure", "--limit", "10"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.True(data.GetProperty("query").GetProperty("failed_only").GetBoolean());
+        Assert.Equal("failure", data.GetProperty("query").GetProperty("node_kind").GetString());
+        Assert.Equal(10, data.GetProperty("query").GetProperty("limit").GetInt32());
+        Assert.True(data.GetProperty("node_count").GetInt32() <= 10);
+        Assert.Contains(data.GetProperty("nodes").EnumerateArray(), node => node.GetProperty("kind").GetString() == "failure");
+        Assert.True(data.GetProperty("total_node_count").GetInt32() > data.GetProperty("node_count").GetInt32());
+        Assert.False(data.GetProperty("truncated").GetBoolean());
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayGraph_Filters_By_Contains_Text()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot, "--contains", "not visible", "--limit", "20"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("not visible", data.GetProperty("query").GetProperty("contains").GetString());
+        Assert.Contains(data.GetProperty("nodes").EnumerateArray(), node =>
+            node.GetProperty("properties").EnumerateObject().Any(property =>
+                property.Value.ValueKind == JsonValueKind.String &&
+                property.Value.GetString()!.Contains("not visible", StringComparison.Ordinal)));
+        Assert.Contains(data.GetProperty("nodes").EnumerateArray(), node => node.GetProperty("kind").GetString() == "failure");
+        Assert.Contains(data.GetProperty("edges").EnumerateArray(), edge => edge.GetProperty("kind").GetString() == "indicates");
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayGraph_Filters_Evidence_By_Kind()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot, "--evidence", "artifact"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("artifact", data.GetProperty("query").GetProperty("evidence").GetString());
+        var evidence = data.GetProperty("evidence").EnumerateArray().ToArray();
+        Assert.NotEmpty(evidence);
+        Assert.All(evidence, item => Assert.Equal("artifact", item.GetProperty("kind").GetString()));
+        Assert.Contains(data.GetProperty("nodes").EnumerateArray(), node => node.GetProperty("kind").GetString() == "failure");
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayGraph_Filters_Facts_By_Text()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot, "--fact", "action_to_failure", "--format", "jsonl"]);
+
+        Assert.Equal(0, exitCode);
+        var lines = console.OutputLines
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .Select(line => JsonDocument.Parse(line))
+            .ToArray();
+        Assert.Contains(lines, line => line.RootElement.GetProperty("type").GetString() == "summary");
+        var factLines = lines
+            .Where(line => line.RootElement.GetProperty("type").GetString() == "fact")
+            .ToArray();
+        var fact = Assert.Single(factLines);
+        Assert.Equal("transition", fact.RootElement.GetProperty("fact").GetProperty("category").GetString());
+        Assert.Equal("action_to_failure", fact.RootElement.GetProperty("fact").GetProperty("predicate").GetString());
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayGraph_Reports_Truncated_Query_When_Limit_Caps_Matches()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot, "--limit", "1"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(1, data.GetProperty("node_count").GetInt32());
+        Assert.Equal(0, data.GetProperty("edge_count").GetInt32());
+        Assert.True(data.GetProperty("matched_node_count").GetInt32() > data.GetProperty("node_count").GetInt32());
+        Assert.True(data.GetProperty("matched_edge_count").GetInt32() > data.GetProperty("edge_count").GetInt32());
+        Assert.True(data.GetProperty("truncated").GetBoolean());
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayGraph_Escapes_Quoted_Artifact_Root_In_Suggested_Commands()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem, "/tmp/replay \"quoted\" root");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Contains(data.GetProperty("actions").EnumerateArray(), action =>
+            action.GetProperty("command").GetString()!.Contains("\"/tmp/replay \\\"quoted\\\" root\"", StringComparison.Ordinal));
+        Assert.Contains(data.GetProperty("taxonomy").GetProperty("query_examples").EnumerateArray(), example =>
+            example.GetProperty("command").GetString()!.Contains("\"/tmp/replay \\\"quoted\\\" root\"", StringComparison.Ordinal));
+        Assert.Contains(data.GetProperty("evidence").EnumerateArray(), evidence =>
+            evidence.GetProperty("command").ValueKind == JsonValueKind.String &&
+            evidence.GetProperty("command").GetString()!.Contains("\"/tmp/replay \\\"quoted\\\" root\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayGraph_Returns_Node_Neighborhood()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot, "--node", "failure:session-timeline.jsonl:1", "--depth", "1"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("failure:session-timeline.jsonl:1", data.GetProperty("query").GetProperty("node").GetString());
+        Assert.Equal(1, data.GetProperty("query").GetProperty("depth").GetInt32());
+        Assert.Contains(data.GetProperty("nodes").EnumerateArray(), node => node.GetProperty("id").GetString() == "failure:session-timeline.jsonl:1");
+        Assert.Contains(data.GetProperty("nodes").EnumerateArray(), node => node.GetProperty("id").GetString() == "event:session-timeline.jsonl:1");
+        Assert.Contains(data.GetProperty("edges").EnumerateArray(), edge => edge.GetProperty("kind").GetString() == "indicates");
     }
 
     [Fact]
@@ -2430,9 +2837,8 @@ public sealed partial class AppTests
         return replayRoot;
     }
 
-    private static string SeedReplayCapsuleArtifacts(FakeFileSystem fileSystem)
+    private static string SeedReplayCapsuleArtifacts(FakeFileSystem fileSystem, string replayRoot = "/tmp/replay-capsule-root")
     {
-        var replayRoot = "/tmp/replay-capsule-root";
         fileSystem.CreateDirectory(replayRoot);
         fileSystem.CreateDirectory(Path.Join(replayRoot, "failures"));
         fileSystem.CreateDirectory(Path.Join(replayRoot, "logs"));

@@ -541,14 +541,130 @@ public sealed record ReplayScrubCommandHint(
 public sealed record ReplayGraphResult(
     string Schema,
     string ArtifactRoot,
+    ReplayGraphQueryResult Query,
     int NodeCount,
     int EdgeCount,
+    int TotalNodeCount,
+    int TotalEdgeCount,
+    int MatchedNodeCount,
+    int MatchedEdgeCount,
+    bool Truncated,
     IReadOnlyDictionary<string, int> NodeKinds,
     IReadOnlyDictionary<string, int> EdgeKinds,
+    ReplayGraphTaxonomyResult Taxonomy,
+    ReplayGraphAgentSummaryResult AgentSummary,
+    IReadOnlyList<ReplayGraphInsightResult> Insights,
+    IReadOnlyList<ReplayGraphActionResult> Actions,
+    IReadOnlyDictionary<string, int> EvidenceKinds,
+    IReadOnlyList<ReplayGraphEvidenceResult> Evidence,
+    IReadOnlyList<ReplayGraphFactResult> Facts,
+    IReadOnlyList<ReplayGraphCausalChainResult> CausalChains,
+    IReadOnlyList<ReplayGraphHypothesisResult> Hypotheses,
+    IReadOnlyList<ReplayGraphFailurePathResult> FailurePaths,
     string? JsonPath,
+    string? JsonlPath,
     string? MarkdownPath,
     IReadOnlyList<ReplayGraphNodeResult> Nodes,
     IReadOnlyList<ReplayGraphEdgeResult> Edges);
+
+public sealed record ReplayGraphQueryResult(
+    string? NodeKind,
+    string? EdgeKind,
+    string? Action,
+    string? Selector,
+    string? Contains,
+    string? Insight,
+    string? Severity,
+    string? Evidence,
+    string? Fact,
+    string? Node,
+    int Depth,
+    bool FailedOnly,
+    int Limit);
+
+public sealed record ReplayGraphTaxonomyResult(
+    IReadOnlyList<ReplayGraphTaxonomyEntryResult> NodeKinds,
+    IReadOnlyList<ReplayGraphTaxonomyEntryResult> EdgeKinds,
+    IReadOnlyList<ReplayGraphTaxonomyEntryResult> EvidenceKinds,
+    IReadOnlyList<ReplayGraphQueryExampleResult> QueryExamples);
+
+public sealed record ReplayGraphTaxonomyEntryResult(
+    string Kind,
+    string Description);
+
+public sealed record ReplayGraphQueryExampleResult(
+    string Kind,
+    string Description,
+    string Command);
+
+public sealed record ReplayGraphAgentSummaryResult(
+    string WhatFailed,
+    string WhatChanged,
+    string WhatCanActOn,
+    IReadOnlyList<string> FailureNodeIds,
+    IReadOnlyList<string> TransitionEdgeIds,
+    IReadOnlyList<string> EvidenceNodeIds,
+    IReadOnlyList<string> Commands);
+
+public sealed record ReplayGraphInsightResult(
+    string Kind,
+    string Severity,
+    string Message,
+    IReadOnlyList<string> NodeIds,
+    IReadOnlyList<string> EdgeIds);
+
+public sealed record ReplayGraphActionResult(
+    string Kind,
+    string Message,
+    string? Command);
+
+public sealed record ReplayGraphEvidenceResult(
+    string Kind,
+    string NodeId,
+    string Title,
+    string? Detail,
+    string? ArtifactPath,
+    string? Command,
+    IReadOnlyList<string> EdgeIds);
+
+public sealed record ReplayGraphFactResult(
+    string Category,
+    string Subject,
+    string Predicate,
+    string Object,
+    double Confidence,
+    IReadOnlyList<string> NodeIds,
+    IReadOnlyList<string> EdgeIds,
+    string? Command);
+
+public sealed record ReplayGraphCausalChainResult(
+    string FailureNodeId,
+    string Summary,
+    IReadOnlyList<ReplayGraphCausalHopResult> Hops,
+    string? Command);
+
+public sealed record ReplayGraphCausalHopResult(
+    string From,
+    string To,
+    string Relation,
+    string? Category,
+    string? Detail);
+
+public sealed record ReplayGraphHypothesisResult(
+    string Kind,
+    string Severity,
+    string Summary,
+    double Confidence,
+    IReadOnlyList<string> EvidenceNodeIds,
+    IReadOnlyList<string> EdgeIds,
+    string? Command);
+
+public sealed record ReplayGraphFailurePathResult(
+    string FailureNodeId,
+    string? FailureEventNodeId,
+    string Summary,
+    IReadOnlyList<string> NodeIds,
+    IReadOnlyList<string> EdgeIds);
 
 public sealed record ReplayGraphNodeResult(
     string Id,
