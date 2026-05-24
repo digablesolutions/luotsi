@@ -181,6 +181,19 @@ internal static class ReplayGraphMarkdownWriter
         }
 
         builder.AppendLine();
+        if (graph.Taxonomy.EvidenceKinds.Count > 0)
+        {
+            builder.AppendLine("## Evidence Kinds");
+            builder.AppendLine();
+            builder.AppendLine("| Kind | Description |");
+            builder.AppendLine("|---|---|");
+            foreach (var kind in graph.Taxonomy.EvidenceKinds)
+            {
+                builder.AppendLine($"| {EscapeMarkdown(kind.Kind)} | {EscapeMarkdown(kind.Description)} |");
+            }
+
+            builder.AppendLine();
+        }
     }
 
     private static void AppendQueryExamples(StringBuilder builder, ReplayGraphResult graph)

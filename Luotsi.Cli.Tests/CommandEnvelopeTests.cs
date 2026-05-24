@@ -1349,6 +1349,7 @@ public sealed partial class AppTests
         Assert.True(data.GetProperty("insights").GetArrayLength() >= 1);
         Assert.Contains(data.GetProperty("taxonomy").GetProperty("node_kinds").EnumerateArray(), kind => kind.GetProperty("kind").GetString() == "failure");
         Assert.Contains(data.GetProperty("taxonomy").GetProperty("edge_kinds").EnumerateArray(), kind => kind.GetProperty("kind").GetString() == "transitions_to");
+        Assert.Contains(data.GetProperty("taxonomy").GetProperty("evidence_kinds").EnumerateArray(), kind => kind.GetProperty("kind").GetString() == "artifact");
         Assert.Contains(data.GetProperty("taxonomy").GetProperty("query_examples").EnumerateArray(), example => example.GetProperty("kind").GetString() == "neighborhood");
         Assert.Contains("scenario_step_failed", data.GetProperty("agent_summary").GetProperty("what_failed").GetString(), StringComparison.Ordinal);
         Assert.Contains("action-to-failure", data.GetProperty("agent_summary").GetProperty("what_changed").GetString(), StringComparison.Ordinal);
@@ -1392,6 +1393,7 @@ public sealed partial class AppTests
         Assert.Contains("## Evidence", markdown, StringComparison.Ordinal);
         Assert.Contains("Kinds:", markdown, StringComparison.Ordinal);
         Assert.Contains("| Kind | Node | Title | Detail | Artifact | Edges | Command |", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Evidence Kinds", markdown, StringComparison.Ordinal);
         Assert.Contains("## Failure Paths", markdown, StringComparison.Ordinal);
         Assert.Contains("## Transitions", markdown, StringComparison.Ordinal);
         Assert.Contains("## Query Examples", markdown, StringComparison.Ordinal);

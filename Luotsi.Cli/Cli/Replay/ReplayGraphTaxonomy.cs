@@ -39,6 +39,15 @@ internal static class ReplayGraphTaxonomy
             new("uses_source", "Scenario draft uses a source family."),
             new("applies_normalization", "Scenario draft applied a normalization.")
         ],
+        EvidenceKinds:
+        [
+            new("failure", "Failure node proof with nearby graph edge IDs and scrub command."),
+            new("artifact", "Linked artifact proof such as screenshots, logs, reports, hierarchies, or metadata."),
+            new("selector", "Promoted selector proof with a graph query command for local context."),
+            new("screen_state", "Screen or screenshot observation proof."),
+            new("telemetry_signal", "Semantic telemetry proof observed in timeline events."),
+            new("generated_step", "Scenario-draft generated step proof with provenance context.")
+        ],
         QueryExamples:
         [
             new("failures", "Return failure-relevant graph context.", $"luotsi replay graph --artifacts {Quote(artifactRoot)} --failed --write-markdown"),

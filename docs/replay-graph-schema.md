@@ -34,7 +34,7 @@ Filtering returns a focused subgraph with one-hop context. `total_node_count` an
 | `matched_node_count`, `matched_edge_count` | Query match size before `--limit` is applied. |
 | `truncated` | `true` when `--limit` capped matched nodes or edges. |
 | `node_kinds`, `edge_kinds` | Counts for the returned graph view. |
-| `taxonomy` | Machine-readable node/edge kind descriptions and query examples. |
+| `taxonomy` | Machine-readable node, edge, and evidence kind descriptions plus query examples. |
 | `agent_summary` | Compact answers for what failed, what changed, what command to run next, and the first promoted evidence node IDs. |
 | `insights` | Agent-readable highlights such as failures, selectors, telemetry, and scenario-draft provenance. |
 | `actions` | Suggested next commands for opening, scrubbing, or narrowing the graph. |
@@ -81,6 +81,17 @@ Filtering returns a focused subgraph with one-hop context. `total_node_count` an
 | `derived_from` | Generated step came from a source event family. |
 | `uses_source` | Scenario draft uses a source family. |
 | `applies_normalization` | Scenario draft applied a normalization. |
+
+## Evidence Taxonomy
+
+| Kind | Meaning |
+|---|---|
+| `failure` | Failure node proof with nearby graph edge IDs and a scrub command. |
+| `artifact` | Linked artifact proof such as screenshots, logs, reports, hierarchies, or metadata. |
+| `selector` | Promoted selector proof with a graph query command for local context. |
+| `screen_state` | Screen or screenshot observation proof. |
+| `telemetry_signal` | Semantic telemetry proof observed in timeline events. |
+| `generated_step` | Scenario-draft generated step proof with provenance context. |
 
 ## Agent Queries
 

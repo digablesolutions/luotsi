@@ -581,6 +581,7 @@ public sealed record ReplayGraphQueryResult(
 public sealed record ReplayGraphTaxonomyResult(
     IReadOnlyList<ReplayGraphTaxonomyEntryResult> NodeKinds,
     IReadOnlyList<ReplayGraphTaxonomyEntryResult> EdgeKinds,
+    IReadOnlyList<ReplayGraphTaxonomyEntryResult> EvidenceKinds,
     IReadOnlyList<ReplayGraphQueryExampleResult> QueryExamples);
 
 public sealed record ReplayGraphTaxonomyEntryResult(
