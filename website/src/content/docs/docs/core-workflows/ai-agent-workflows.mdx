@@ -1,0 +1,96 @@
+---
+title: AI Agent Workflows
+description: Build agent loops on top of Luotsi's JSONL sessions, scenario runs, and replay artifacts without adding a second device control plane.
+---
+
+Luotsi is useful for agent builders because it exposes the same real-device runtime through machine-readable JSON and JSONL that engineers already use interactively. The control loop stays on the host machine, the Android helper stays thin, and you can move from exploration to repeatable runs without swapping stacks.
+
+## Pick the right surface
+
+| Surface | Use it when | Primary output |
+| --- | --- | --- |
+| `inspect` | The agent needs to explore the current screen, issue commands, and react to structured deltas. | JSONL session events |
+| `view` | A human operator still wants the mirrored device window while the agent consumes stream state and artifacts. | SDL window plus JSONL session events |
+| `run` | The flow is stable enough to codify as a scenario and run repeatedly in CI or a lab. | One JSON envelope plus artifact root |
+| `replay` | The device session is already over and the next question is triage, summarization, or report generation. | JSON or JSONL derived from artifacts |
+
+If you only remember one rule, start with `inspect`, promote stable behavior into `run`, and use `replay` whenever you do not need the device attached anymore.
+
+## Recommended agent loop
+
+### 1. Prove the device path first
+
+```bash
+luotsi doctor --device <serial> --fix
+```
+
+This avoids spending tokens and engineer time on missing adb visibility, stale helper state, or missing live-view prerequisites.
+
+### 2. Explore through `inspect`
+
+```bash
+luotsi inspect --device <serial>
+```
+
+`inspect` emits structured JSONL events such as `session_started`, `screen_snapshot`, `command_result`, `screen_delta`, and `session_ended`. That makes it the best default surface when an agent needs to reason step by step instead of jumping straight into a scenario file.
+
+### 3. Promote stable behavior into a scenario
+
+Once the flow is no longer exploratory, move it into a JSON scenario so the same device path can run without an interactive loop.
+
+```bash
+luotsi scenario-validate --path scenarios
+luotsi run --path scenarios --device <serial>
+```
+
+Use [Scenario Playbooks](../../reference/scenario-playbooks/) for the JSON format and [Output Envelopes](../../reference/output-envelopes/) when you need to distinguish one-shot command envelopes from long-lived JSONL sessions.
+
+### 4. Triage through replay, not through a second device session
+
+```bash
+luotsi replay summarize --artifacts ./artifacts/<run>
+luotsi replay open --artifacts ./artifacts/<run>
+luotsi replay search --artifacts ./artifacts/<run> --query "error"
+```
+
+The artifact root is the handoff point from live control to post-run analysis. Use replay once you already have the evidence you need instead of reconnecting to the device out of habit.
+
+## Contracts that matter for agent builders
+
+- `inspect` and `view` are long-lived JSONL sessions.
+- Most direct commands return one final JSON envelope.
+- Scenario runs keep the normal envelope but also write artifact-rich replay material to disk.
+- Failure handling is part of the contract: screenshots, hierarchy captures, logcat, metadata, and replay summaries are meant to survive the run.
+
+The public references that matter most are:
+
+- [Output Envelopes](../../reference/output-envelopes/)
+- [CLI Command Groups](../../reference/cli-command-groups/)
+- [Replay and Artifacts](../replay-and-artifacts/)
+- [Inspect and Scenarios](../inspect-and-scenarios/)
+
+## Retrieval and planning entry points
+
+Start retrieval from these public surfaces before dropping into source code:
+
+- Docs hub: [`/docs/`](https://digablesolutions.github.io/luotsi/docs/)
+- Agent-focused entry point: [`/docs/core-workflows/ai-agent-workflows/`](https://digablesolutions.github.io/luotsi/docs/core-workflows/ai-agent-workflows/)
+- LLM retrieval index: [`/llms.txt`](https://digablesolutions.github.io/luotsi/llms.txt)
+- Command-map reference: [CLI Command Groups](../../reference/cli-command-groups/)
+
+## When to add `view`
+
+`view` is not the default just because it looks visual. Use it when the operator needs the live mirror, hotkeys, or observer sharing layer at the same time the agent needs machine-readable session state.
+
+```bash
+luotsi view --device <serial>
+```
+
+If nobody needs the window, `inspect` is usually the simpler integration point.
+
+## Related pages
+
+- [Inspect and Scenarios](../inspect-and-scenarios/)
+- [Replay and Artifacts](../replay-and-artifacts/)
+- [Output Envelopes](../../reference/output-envelopes/)
+- [CLI Command Groups](../../reference/cli-command-groups/)

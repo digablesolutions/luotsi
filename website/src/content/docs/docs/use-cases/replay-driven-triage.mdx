@@ -1,0 +1,45 @@
+---
+title: Replay-Driven Triage
+description: Use Luotsi when the main question is how to triage Android automation failures from artifacts after the run has already ended.
+---
+
+If you searched for replay-driven triage, the important distinction is whether the artifact root is good enough to answer the next question without reconnecting to the device. Luotsi is built around that assumption.
+
+## Why the artifact root matters
+
+Luotsi writes replay-friendly material so the session can be examined after the device is gone:
+
+- `session-timeline.jsonl`
+- `session-replay.json`
+- screenshots and hierarchy captures
+- logcat and metadata
+- report and failure bundle outputs
+
+That lets triage stay host-side and asynchronous instead of forcing another live session just to see what happened.
+
+## Recommended commands
+
+```bash
+luotsi replay summarize --artifacts ./artifacts/<run>
+luotsi replay open --artifacts ./artifacts/<run>
+luotsi replay search --artifacts ./artifacts/<run> --query "error"
+luotsi replay capsule --artifacts ./artifacts/<run>
+```
+
+## Strong fit when
+
+- The device session is expensive or impossible to repeat immediately.
+- Engineers or agents need to search, summarize, and inspect artifacts after the run.
+- You want failure evidence that can move between local debugging, code review, and CI.
+
+## Weaker fit when
+
+- The workflow depends entirely on live interaction and leaves no meaningful artifacts behind.
+- Your team only needs a pass or fail bit from CI and never revisits failed runs.
+
+## Open these next
+
+- [Replay and Artifacts](../../core-workflows/replay-and-artifacts/)
+- [Replay Graph And Clusters](../../reference/replay-graph-and-clusters/)
+- [Output Envelopes](../../reference/output-envelopes/)
+- [AI Agent Workflows](../../core-workflows/ai-agent-workflows/)

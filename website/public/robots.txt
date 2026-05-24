@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://digablesolutions.github.io/luotsi/sitemap-index.xml

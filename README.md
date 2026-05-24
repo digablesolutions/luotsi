@@ -11,9 +11,37 @@
 
 # Luotsi
 
-Luotsi is a host-driven CLI for Android device automation, inspection, and live view. It runs on the engineer or CI machine, talks to real devices over ADB, and returns structured JSON results plus artifacts. Orchestration, policy, and diagnostics stay on the host; the on-device helper stays thin and purpose-built.
+Luotsi is a host-driven CLI for Android device automation, inspection, live view, and replay. It runs on the engineer or CI machine, talks to real devices over ADB, and returns structured JSON or JSONL plus artifacts. It is aimed at AI agent builders, mobile engineers, and device-lab or CI workflows that need machine-readable state instead of browser-only mocks. Orchestration, policy, and diagnostics stay on the host; the on-device helper stays thin and purpose-built.
 
 Docs site: [https://digablesolutions.github.io/luotsi/](https://digablesolutions.github.io/luotsi/)
+
+Start here:
+
+- Installation: [docs/getting-started/installation](https://digablesolutions.github.io/luotsi/docs/getting-started/installation/)
+- Quickstart: [docs/getting-started/quickstart](https://digablesolutions.github.io/luotsi/docs/getting-started/quickstart/)
+- AI agent workflows: [docs/core-workflows/ai-agent-workflows](https://digablesolutions.github.io/luotsi/docs/core-workflows/ai-agent-workflows/)
+- Engineering lead evaluation: [docs/use-cases/android-automation-for-engineering-leads](https://digablesolutions.github.io/luotsi/docs/use-cases/android-automation-for-engineering-leads/)
+- Live view: [docs/core-workflows/live-view](https://digablesolutions.github.io/luotsi/docs/core-workflows/live-view/)
+- Inspect and scenarios: [docs/core-workflows/inspect-and-scenarios](https://digablesolutions.github.io/luotsi/docs/core-workflows/inspect-and-scenarios/)
+- Replay and artifacts: [docs/core-workflows/replay-and-artifacts](https://digablesolutions.github.io/luotsi/docs/core-workflows/replay-and-artifacts/)
+
+## Why Luotsi
+
+- Agent-readable sessions. `inspect` and `view` emit structured JSONL events that agent loops and tooling can consume directly.
+- Agent-builder guidance. The public docs now include a dedicated AI workflow guide that maps `inspect`, `view`, `run`, and `replay` to the job each surface is meant to solve.
+- Real-device focus. Luotsi operates over ADB against physical Android devices instead of browser-only surrogates.
+- Replayable failures. Scenario runs leave screenshots, hierarchy captures, logcat, telemetry, and replay bundles for later triage.
+- Host-driven control. The CLI, policy, and diagnostics stay on the operator or CI machine while the Android helper remains thin.
+
+## Use-case entry pages
+
+- When Luotsi fits: [docs/use-cases/when-luotsi-fits](https://digablesolutions.github.io/luotsi/docs/use-cases/when-luotsi-fits/)
+- Luotsi alternatives and comparison: [docs/use-cases/luotsi-alternatives-and-comparison](https://digablesolutions.github.io/luotsi/docs/use-cases/luotsi-alternatives-and-comparison/)
+- AI agent Android automation: [docs/use-cases/ai-agent-android-automation](https://digablesolutions.github.io/luotsi/docs/use-cases/ai-agent-android-automation/)
+- Android CI device lab workflows: [docs/use-cases/android-ci-device-lab-workflows](https://digablesolutions.github.io/luotsi/docs/use-cases/android-ci-device-lab-workflows/)
+- Replay-driven triage: [docs/use-cases/replay-driven-triage](https://digablesolutions.github.io/luotsi/docs/use-cases/replay-driven-triage/)
+- Live remote device inspection: [docs/use-cases/live-remote-device-inspection](https://digablesolutions.github.io/luotsi/docs/use-cases/live-remote-device-inspection/)
+- Scenario-based Android automation: [docs/use-cases/scenario-based-android-automation](https://digablesolutions.github.io/luotsi/docs/use-cases/scenario-based-android-automation/)
 
 ## How it works
 
