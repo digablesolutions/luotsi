@@ -99,13 +99,13 @@ That makes it the right command when:
 
 - a CI directory contains multiple failing artifact roots
 - you need grouped failure shapes instead of one-run detail
-- you want the latest matching bundle plus the next replay/search commands for that cluster
+- you want the best representative bundle plus the next replay/search commands for that cluster
 
 Use it as a triage reducer, not as a replacement for `replay capsule` or `replay graph`. In practice the flow is:
 
 1. Run `replay cluster` on a directory of replayable artifact roots.
 2. Pick the cluster that matches the failure class you care about.
-3. Follow the suggested replay commands into `replay capsule`, `replay graph`, `replay scrub`, or `replay search` for the latest matching bundle.
+3. Follow the suggested replay commands into `replay capsule`, `replay graph`, `replay scrub`, or `replay search` for the best representative bundle.
 
 ## Practical triage loop
 

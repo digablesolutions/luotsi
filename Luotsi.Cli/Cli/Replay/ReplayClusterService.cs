@@ -194,25 +194,25 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
         string artifactRoot,
         IReadOnlyList<ReplayFailureClusterInstanceResult> instances)
     {
-        var latest = instances[0];
-        var latestRoot = ResolveInstanceArtifactRoot(artifactRoot, latest.MetadataPath);
+        var representative = SelectBestReplayInstance(instances);
+        var representativeRoot = ResolveInstanceArtifactRoot(artifactRoot, representative.MetadataPath);
         var score = CalculateSimilarityScore(instances);
         return new ReplayFailureClusterIntelligenceResult(
             ClassifySimilarity(score),
             score,
             BuildLikelyCause(instances),
-            latestRoot,
-            $"luotsi replay graph --artifacts {Quote(latestRoot)} --failed --write-json --write-markdown",
-            $"luotsi replay scrub --artifacts {Quote(latestRoot)} --failures --context 3 --write-markdown",
-            BuildSupportingSignals(instances),
+            representativeRoot,
+            $"luotsi replay graph --artifacts {Quote(representativeRoot)} --failed --write-json --write-markdown",
+            $"luotsi replay scrub --artifacts {Quote(representativeRoot)} --failures --context 3 --write-markdown",
+            BuildSupportingSignals(instances, representative),
             BuildSignalComparisons(instances));
     }
 
     private static IReadOnlyList<ReplayFailureClusterHintResult> CreateHints(string artifactRoot, IReadOnlyList<ReplayFailureClusterInstanceResult> instances)
     {
         var hints = new List<ReplayFailureClusterHintResult>();
-        var latest = instances[0];
-        var latestRoot = ResolveInstanceArtifactRoot(artifactRoot, latest.MetadataPath);
+        var representative = SelectBestReplayInstance(instances);
+        var representativeRoot = ResolveInstanceArtifactRoot(artifactRoot, representative.MetadataPath);
         if (instances.Count > 1)
         {
             hints.Add(new ReplayFailureClusterHintResult(
@@ -221,43 +221,81 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
                 null));
         }
 
-        if (instances.Count > 1 && string.Equals(latest.ErrorCategory, "selector_or_screen_state", StringComparison.OrdinalIgnoreCase))
+        if (instances.Count > 1 && string.Equals(representative.ErrorCategory, "selector_or_screen_state", StringComparison.OrdinalIgnoreCase))
         {
             hints.Add(new ReplayFailureClusterHintResult(
                 "likely_repeated_selector_or_screen_state_failure",
                 "Repeated selector or screen-state failures usually deserve a stronger wait, alternate selector, or visual fallback.",
-                $"luotsi replay graph --artifacts {Quote(latestRoot)} --failed --write-json --write-markdown"));
+                $"luotsi replay graph --artifacts {Quote(representativeRoot)} --failed --write-json --write-markdown"));
         }
 
         hints.Add(new ReplayFailureClusterHintResult(
             "inspect_best_failure_graph",
-            "Open the semantic graph for the best/latest representative failure in this cluster.",
-            $"luotsi replay graph --artifacts {Quote(latestRoot)} --failed --write-json --write-markdown"));
+            "Open the semantic graph for the best representative failure in this cluster.",
+            $"luotsi replay graph --artifacts {Quote(representativeRoot)} --failed --write-json --write-markdown"));
 
         hints.Add(new ReplayFailureClusterHintResult(
             "scrub_best_failure",
-            "Scrub the best/latest representative failure timeline with local context.",
-            $"luotsi replay scrub --artifacts {Quote(latestRoot)} --failures --context 3 --write-markdown"));
+            "Scrub the best representative failure timeline with local context.",
+            $"luotsi replay scrub --artifacts {Quote(representativeRoot)} --failures --context 3 --write-markdown"));
 
         hints.Add(new ReplayFailureClusterHintResult(
             "describe_best_replay_capsule",
-            "Open the replay front door for the best/latest representative failure.",
-            $"luotsi replay capsule --artifacts {Quote(latestRoot)} --write-readme --write-json"));
+            "Open the replay front door for the best representative failure.",
+            $"luotsi replay capsule --artifacts {Quote(representativeRoot)} --write-readme --write-json"));
 
         hints.Add(new ReplayFailureClusterHintResult(
-            "open_latest_replay",
-            "Open the latest matching replay bundle locally.",
-            $"luotsi replay open --artifacts {Quote(latestRoot)}"));
+            "open_best_replay",
+            "Open the best matching replay bundle locally.",
+            $"luotsi replay open --artifacts {Quote(representativeRoot)}"));
 
-        if (!string.IsNullOrWhiteSpace(latest.ErrorMessage))
+        if (!string.IsNullOrWhiteSpace(representative.ErrorMessage))
         {
             hints.Add(new ReplayFailureClusterHintResult(
-                "search_latest_failure_text",
-                "Search the latest replay bundle for the representative failure text.",
-                $"luotsi replay search --artifacts {Quote(latestRoot)} --contains {Quote(latest.ErrorMessage)}"));
+                "search_best_failure_text",
+                "Search the best replay bundle for the representative failure text.",
+                $"luotsi replay search --artifacts {Quote(representativeRoot)} --contains {Quote(representative.ErrorMessage)}"));
         }
 
         return hints;
+    }
+
+    private static ReplayFailureClusterInstanceResult SelectBestReplayInstance(IReadOnlyList<ReplayFailureClusterInstanceResult> instances) =>
+        instances
+            .OrderByDescending(ReplayEvidenceScore)
+            .ThenByDescending(static instance => instance.StartedAt)
+            .ThenBy(static instance => instance.MetadataPath, StringComparer.Ordinal)
+            .First();
+
+    private static int ReplayEvidenceScore(ReplayFailureClusterInstanceResult instance)
+    {
+        var score = 0;
+        if (!string.IsNullOrWhiteSpace(instance.FailureCapsulePath))
+        {
+            score += 5;
+        }
+
+        if (!string.IsNullOrWhiteSpace(instance.ErrorMessage))
+        {
+            score += 2;
+        }
+
+        if (!string.IsNullOrWhiteSpace(instance.Action))
+        {
+            score++;
+        }
+
+        if (!string.IsNullOrWhiteSpace(instance.Step))
+        {
+            score++;
+        }
+
+        if (!string.IsNullOrWhiteSpace(instance.Scenario))
+        {
+            score++;
+        }
+
+        return score;
     }
 
     private static double CalculateSimilarityScore(IReadOnlyList<ReplayFailureClusterInstanceResult> instances)
@@ -302,21 +340,23 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
             return $"Repeated failure around action '{latest.Action}'; inspect causal graph and timeline around that action.";
         }
 
-        return "Repeated failure shape; inspect latest replay graph and search the representative error text.";
+        return "Repeated failure shape; inspect the best representative replay graph and search the representative error text.";
     }
 
-    private static IReadOnlyList<string> BuildSupportingSignals(IReadOnlyList<ReplayFailureClusterInstanceResult> instances)
+    private static IReadOnlyList<string> BuildSupportingSignals(
+        IReadOnlyList<ReplayFailureClusterInstanceResult> instances,
+        ReplayFailureClusterInstanceResult representative)
     {
-        var latest = instances[0];
         var signals = new List<string>
         {
-            "instances=" + instances.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            "instances=" + instances.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "best_replay_evidence_score=" + ReplayEvidenceScore(representative).ToString(System.Globalization.CultureInfo.InvariantCulture)
         };
 
-        AddSignal(signals, "category", latest.ErrorCategory);
-        AddSignal(signals, "action", latest.Action);
-        AddSignal(signals, "step", latest.Step);
-        AddSignal(signals, "message", latest.ErrorMessage);
+        AddSignal(signals, "category", representative.ErrorCategory);
+        AddSignal(signals, "action", representative.Action);
+        AddSignal(signals, "step", representative.Step);
+        AddSignal(signals, "message", representative.ErrorMessage);
         return signals;
     }
 

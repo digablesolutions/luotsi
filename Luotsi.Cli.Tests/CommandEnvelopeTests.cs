@@ -1974,6 +1974,7 @@ public sealed partial class AppTests
         Assert.Contains("replay graph", intelligence.GetProperty("best_graph_command").GetString(), StringComparison.Ordinal);
         Assert.Contains("replay scrub", intelligence.GetProperty("best_scrub_command").GetString(), StringComparison.Ordinal);
         Assert.Contains(intelligence.GetProperty("supporting_signals").EnumerateArray(), signal => signal.GetString() == "instances=2");
+        Assert.Contains(intelligence.GetProperty("supporting_signals").EnumerateArray(), signal => signal.GetString() == "best_replay_evidence_score=10");
         var signalComparisons = intelligence.GetProperty("signal_comparisons").EnumerateArray().ToArray();
         Assert.Contains(signalComparisons, signal =>
             signal.GetProperty("name").GetString() == "action" &&
@@ -1991,10 +1992,10 @@ public sealed partial class AppTests
             hint.GetProperty("kind").GetString() == "describe_best_replay_capsule" &&
             hint.GetProperty("command").GetString() == "luotsi replay capsule --artifacts /tmp/replay-cluster-root\\run-b --write-readme --write-json");
         Assert.Contains(hints, hint =>
-            hint.GetProperty("kind").GetString() == "open_latest_replay" &&
+            hint.GetProperty("kind").GetString() == "open_best_replay" &&
             hint.GetProperty("command").GetString() == "luotsi replay open --artifacts /tmp/replay-cluster-root\\run-b");
         Assert.Contains(hints, hint =>
-            hint.GetProperty("kind").GetString() == "search_latest_failure_text" &&
+            hint.GetProperty("kind").GetString() == "search_best_failure_text" &&
             hint.GetProperty("command").GetString()!.Contains("not visible after 30 seconds", StringComparison.Ordinal));
         Assert.Equal(Path.Join(replayRoot, "replay-clusters.json"), data.GetProperty("json_path").GetString());
         Assert.Equal(Path.Join(replayRoot, "replay-clusters.md"), data.GetProperty("markdown_path").GetString());
