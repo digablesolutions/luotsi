@@ -279,9 +279,62 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         AddJsonProperty(parts, root, "failureCount", "failure_count");
         AddJsonProperty(parts, root, "scenarioDraftAvailable", "scenario_draft_available");
         AddJsonProperty(parts, root, "scenarioDraftReason", "scenario_draft_reason");
+        AddReplayCapsulePrimaryFailureSummary(parts, root);
+        AddReplayCapsuleNextStepSummary(parts, root);
         AddArrayCount(parts, root, "artifactManifest", "artifact_manifest");
         AddArrayCount(parts, root, "failureTimeline", "failure_timeline");
         return parts.Count == 0 ? null : string.Join(" | ", parts);
+    }
+
+    private static void AddReplayCapsulePrimaryFailureSummary(List<string> parts, JsonElement root)
+    {
+        if (!TryGetProperty(root, "primaryFailure", "primary_failure", out var primaryFailure) ||
+            primaryFailure.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        var summary = new[]
+            {
+                TryGetString(primaryFailure, "scenario"),
+                TryGetString(primaryFailure, "step"),
+                TryGetString(primaryFailure, "action"),
+                TryGetString(primaryFailure, "message")
+            }
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Take(3)
+            .ToArray();
+        if (summary.Length > 0)
+        {
+            parts.Add("primary_failure=" + string.Join(" / ", summary));
+        }
+    }
+
+    private static void AddReplayCapsuleNextStepSummary(List<string> parts, JsonElement root)
+    {
+        if (!TryGetProperty(root, "recommendedNextSteps", "recommended_next_steps", out var nextSteps) ||
+            nextSteps.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        var firstStep = nextSteps.EnumerateArray().FirstOrDefault();
+        if (firstStep.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        var title = TryGetString(firstStep, "title");
+        var command = TryGetString(firstStep, "command");
+        if (!string.IsNullOrWhiteSpace(title))
+        {
+            parts.Add("next_step=" + title);
+        }
+
+        if (!string.IsNullOrWhiteSpace(command))
+        {
+            parts.Add("next_command=" + command);
+        }
     }
 
     private static string? BuildReplayScrubSummary(JsonElement root)
@@ -497,6 +550,9 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
 
         return property.GetString();
     }
+
+    private static bool TryGetProperty(JsonElement root, string name, string alternateName, out JsonElement property) =>
+        root.TryGetProperty(name, out property) || root.TryGetProperty(alternateName, out property);
 
     private static string? TryGetObjectString(JsonElement root, string objectName, string propertyName)
     {
