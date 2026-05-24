@@ -198,6 +198,12 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
                 "Search the bundle for the failure text",
                 "Find matching logcat, timeline, hierarchy, report, or markdown references.",
                 $"luotsi replay search --artifacts {Quote(artifactRoot)} --contains {Quote(primaryFailure.Message)}");
+
+            yield return new ReplayCapsuleNextStep(
+                "cluster_similar_failures",
+                "Find similar failures across replay bundles",
+                "Use this when the current artifact root sits under a larger CI or local artifacts directory.",
+                $"luotsi replay cluster --artifacts {Quote(ResolveClusterRoot(artifactRoot))} --min-count 2 --contains {Quote(primaryFailure.Message)} --write-markdown");
         }
 
         yield return new ReplayCapsuleNextStep(
@@ -626,6 +632,12 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
 
     private static string Quote(string value) =>
         value.Contains(' ', StringComparison.Ordinal) ? "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"" : value;
+
+    private static string ResolveClusterRoot(string artifactRoot)
+    {
+        var parent = Path.GetDirectoryName(artifactRoot);
+        return string.IsNullOrWhiteSpace(parent) ? artifactRoot : parent;
+    }
 
     private static string BuildTimelineSourceCommand(string artifactRoot, string timelinePath, int sequence) =>
         $"luotsi replay timeline --artifacts {Quote(artifactRoot)} --source-path {Quote(timelinePath)} --sequence {sequence} --context 3";

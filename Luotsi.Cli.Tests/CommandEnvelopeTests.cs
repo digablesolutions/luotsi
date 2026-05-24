@@ -1014,6 +1014,10 @@ public sealed partial class AppTests
         Assert.Equal("graph_failure", nextSteps[1].GetProperty("kind").GetString());
         Assert.Contains("--failed", nextSteps[1].GetProperty("command").GetString(), StringComparison.Ordinal);
         Assert.Contains(nextSteps, step => step.GetProperty("kind").GetString() == "search_failure_text");
+        Assert.Contains(nextSteps, step =>
+            step.GetProperty("kind").GetString() == "cluster_similar_failures" &&
+            step.GetProperty("command").GetString()!.Contains("replay cluster", StringComparison.Ordinal) &&
+            step.GetProperty("command").GetString()!.Contains("--min-count 2", StringComparison.Ordinal));
         Assert.Contains(nextSteps, step => step.GetProperty("kind").GetString() == "open_artifacts");
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-capsule.md")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-capsule-summary.json")));
@@ -1031,6 +1035,7 @@ public sealed partial class AppTests
         Assert.Contains("failures/wait-login-button.png", readme, StringComparison.Ordinal);
         Assert.Contains("## Recommended Next Steps", readme, StringComparison.Ordinal);
         Assert.Contains("Scrub the failure window", readme, StringComparison.Ordinal);
+        Assert.Contains("Find similar failures", readme, StringComparison.Ordinal);
         Assert.Contains("luotsi replay timeline", readme, StringComparison.Ordinal);
         Assert.Contains("luotsi replay scrub", readme, StringComparison.Ordinal);
         Assert.Contains("luotsi replay graph", readme, StringComparison.Ordinal);
