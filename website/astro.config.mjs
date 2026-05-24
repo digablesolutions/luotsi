@@ -41,6 +41,7 @@ export default defineConfig({
 					items: [
 						{ label: 'CLI Command Groups', slug: 'docs/reference/cli-command-groups' },
 						{ label: 'Lab And Device Claims', slug: 'docs/reference/lab-and-device-claims' },
+						{ label: 'Shared Lab Operations', slug: 'docs/reference/shared-lab-operations' },
 						{ label: 'Scenario Playbooks', slug: 'docs/reference/scenario-playbooks' },
 						{ label: 'Replay Graph And Clusters', slug: 'docs/reference/replay-graph-and-clusters' },
 						{ label: 'Wireless And Port Forwarding', slug: 'docs/reference/wireless-and-port-forwarding' },
