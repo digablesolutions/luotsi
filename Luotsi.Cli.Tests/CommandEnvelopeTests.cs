@@ -2006,6 +2006,11 @@ public sealed partial class AppTests
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-clusters.json")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-clusters.md")));
         var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-clusters.md"));
+        Assert.Contains("## Start Here", markdown, StringComparison.Ordinal);
+        Assert.Contains("Top cluster:", markdown, StringComparison.Ordinal);
+        Assert.Contains("Open capsule: `luotsi replay capsule --artifacts /tmp/replay-cluster-root\\run-b --write-readme --write-json`", markdown, StringComparison.Ordinal);
+        Assert.Contains("Scrub failure: `luotsi replay scrub --artifacts /tmp/replay-cluster-root\\run-b --failures --context 3 --write-markdown`", markdown, StringComparison.Ordinal);
+        Assert.Contains("Inspect graph: `luotsi replay graph --artifacts /tmp/replay-cluster-root\\run-b --failed --write-json --write-markdown`", markdown, StringComparison.Ordinal);
         Assert.Contains("### Intelligence", markdown, StringComparison.Ordinal);
         Assert.Contains("Likely cause", markdown, StringComparison.Ordinal);
         Assert.Contains("| Signal | Stability | Values |", markdown, StringComparison.Ordinal);

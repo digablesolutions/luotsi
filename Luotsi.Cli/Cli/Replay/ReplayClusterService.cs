@@ -485,6 +485,8 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
         builder.AppendLine($"Clusters: `{result.ClusterCount}`");
         builder.AppendLine($"Query: `min-count={result.Query.MinCount}, similarity={result.Query.Similarity ?? "*"}, contains={result.Query.Contains ?? "*"}`");
         builder.AppendLine();
+        AppendStartHere(builder, result.Clusters.FirstOrDefault());
+        builder.AppendLine();
         builder.AppendLine("| Cluster | Count | Category | Action | Step | Message |");
         builder.AppendLine("|---|---:|---|---|---|---|");
         foreach (var cluster in result.Clusters)
@@ -557,6 +559,37 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
         }
 
         return builder.ToString();
+    }
+
+    private static void AppendStartHere(StringBuilder builder, ReplayFailureClusterResult? cluster)
+    {
+        builder.AppendLine("## Start Here");
+        builder.AppendLine();
+        if (cluster is null)
+        {
+            builder.AppendLine("No repeated failure clusters matched the query.");
+            return;
+        }
+
+        builder.AppendLine($"- Top cluster: `{EscapeMarkdown(cluster.Id)}` ({cluster.Count} failures)");
+        builder.AppendLine($"- Similarity: `{EscapeMarkdown(cluster.Intelligence.Similarity)}` (`{cluster.Intelligence.SimilarityScore:0.##}`)");
+        builder.AppendLine($"- Likely cause: {EscapeMarkdown(cluster.Intelligence.LikelyCause)}");
+        builder.AppendLine($"- Best replay bundle: `{EscapeMarkdown(cluster.Intelligence.BestReplayArtifactRoot)}`");
+        var capsuleHint = cluster.Hints.FirstOrDefault(static hint => string.Equals(hint.Kind, "describe_best_replay_capsule", StringComparison.Ordinal));
+        if (capsuleHint is not null)
+        {
+            builder.AppendLine($"- Open capsule: `{EscapeMarkdown(capsuleHint.Command)}`");
+        }
+
+        if (!string.IsNullOrWhiteSpace(cluster.Intelligence.BestScrubCommand))
+        {
+            builder.AppendLine($"- Scrub failure: `{EscapeMarkdown(cluster.Intelligence.BestScrubCommand)}`");
+        }
+
+        if (!string.IsNullOrWhiteSpace(cluster.Intelligence.BestGraphCommand))
+        {
+            builder.AppendLine($"- Inspect graph: `{EscapeMarkdown(cluster.Intelligence.BestGraphCommand)}`");
+        }
     }
 
     private static string MarkdownLink(string? path) =>
