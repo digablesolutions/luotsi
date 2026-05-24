@@ -426,6 +426,23 @@ public sealed class ViewTransportTests
     }
 
     [Fact]
+    public void LibavNativeLibraryLoader_Prefers_Published_App_Ffmpeg_Before_Working_Directory()
+    {
+        var appFfmpeg = Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "ffmpeg", "bin"));
+        var binder = new FakeLibavNativeLibraryBinder();
+        binder.SucceedFor(appFfmpeg);
+        var loader = new LibavNativeLibraryLoader(
+            new FakeEnvironmentVariables(new Dictionary<string, string>()),
+            binder);
+
+        var resolvedRoot = loader.EnsureLoaded();
+
+        Assert.Equal(appFfmpeg, resolvedRoot);
+        Assert.Equal(appFfmpeg, binder.AttemptedRoots[0]);
+        Assert.Single(binder.AttemptedRoots);
+    }
+
+    [Fact]
     public void LibavNativeLibraryLoader_Missing_Libraries_Throws_Clear_Error()
     {
         var loader = new LibavNativeLibraryLoader(
