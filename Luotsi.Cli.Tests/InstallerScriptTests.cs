@@ -45,6 +45,9 @@ public sealed partial class AppTests
 
         Assert.Contains("--skip-ffmpeg", script, StringComparison.Ordinal);
         Assert.Contains("\"ffmpeg_staged\": $ffmpeg_staged", script, StringComparison.Ordinal);
+        Assert.Contains("FFMPEG_STAGED=false", script, StringComparison.Ordinal);
+        Assert.Contains("FFMPEG_STAGED=true", script, StringComparison.Ordinal);
+        Assert.Contains("curl -fsSL \"$url\" -o \"$destination\" || return 1", script, StringComparison.Ordinal);
         Assert.Contains("json_string()", script, StringComparison.Ordinal);
         Assert.Contains("\"ffmpeg_detail\": $escaped_ffmpeg_detail", script, StringComparison.Ordinal);
 

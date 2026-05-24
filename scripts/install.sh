@@ -124,11 +124,11 @@ download_file() {
     url=$1
     destination=$2
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL "$url" -o "$destination"
-        return
+        curl -fsSL "$url" -o "$destination" || return 1
+        return 0
     fi
 
-    wget -qO "$destination" "$url"
+    wget -qO "$destination" "$url" || return 1
 }
 
 install_view_extras() {
@@ -139,7 +139,7 @@ install_view_extras() {
     ffmpeg_bin="$ffmpeg_root/bin"
 
     VIEW_EXTRAS="unsupported"
-    FFMPEG_STAGED=0
+    FFMPEG_STAGED=false
     FFMPEG_PATH=$ffmpeg_bin
     FFMPEG_DETAIL="Automatic FFmpeg staging is not supported for $rid by this installer."
 
@@ -195,7 +195,7 @@ install_view_extras() {
     fi
 
     VIEW_EXTRAS="installed"
-    FFMPEG_STAGED=1
+    FFMPEG_STAGED=true
     FFMPEG_DETAIL="Extracted $copied FFmpeg native libraries to $ffmpeg_bin."
 }
 
