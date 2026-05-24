@@ -150,6 +150,7 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
             ReplayGraphAgentSummaryBuilder.Build(allNodes, allEdges, failurePaths, actions),
             insights,
             actions,
+            CountKinds(evidence),
             evidence,
             failurePaths,
             jsonPath,
@@ -527,6 +528,11 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
 
     private static IReadOnlyDictionary<string, int> CountKinds(IReadOnlyList<ReplayGraphEdgeResult> edges) =>
         edges.GroupBy(static edge => edge.Kind, StringComparer.Ordinal)
+            .OrderBy(static group => group.Key, StringComparer.Ordinal)
+            .ToDictionary(static group => group.Key, static group => group.Count(), StringComparer.Ordinal);
+
+    private static IReadOnlyDictionary<string, int> CountKinds(IReadOnlyList<ReplayGraphEvidenceResult> evidence) =>
+        evidence.GroupBy(static item => item.Kind, StringComparer.Ordinal)
             .OrderBy(static group => group.Key, StringComparer.Ordinal)
             .ToDictionary(static group => group.Key, static group => group.Count(), StringComparer.Ordinal);
 

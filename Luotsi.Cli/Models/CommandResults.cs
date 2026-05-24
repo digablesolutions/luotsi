@@ -555,6 +555,7 @@ public sealed record ReplayGraphResult(
     ReplayGraphAgentSummaryResult AgentSummary,
     IReadOnlyList<ReplayGraphInsightResult> Insights,
     IReadOnlyList<ReplayGraphActionResult> Actions,
+    IReadOnlyDictionary<string, int> EvidenceKinds,
     IReadOnlyList<ReplayGraphEvidenceResult> Evidence,
     IReadOnlyList<ReplayGraphFailurePathResult> FailurePaths,
     string? JsonPath,

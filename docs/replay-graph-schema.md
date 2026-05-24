@@ -38,6 +38,7 @@ Filtering returns a focused subgraph with one-hop context. `total_node_count` an
 | `agent_summary` | Compact answers for what failed, what changed, and what command to run next. |
 | `insights` | Agent-readable highlights such as failures, selectors, telemetry, and scenario-draft provenance. |
 | `actions` | Suggested next commands for opening, scrubbing, or narrowing the graph. |
+| `evidence_kinds` | Counts for promoted evidence records in the returned graph view. |
 | `evidence` | Compact promoted proof records from returned graph nodes: failures, artifacts, selectors, screen observations, telemetry signals, and generated steps. |
 | `failure_paths` | Compact paths from nearby timeline context into failure nodes. |
 | `json_path`, `jsonl_path`, `markdown_path` | Artifact paths when `--write-json`, `--write-jsonl`, or `--write-markdown` are used. |

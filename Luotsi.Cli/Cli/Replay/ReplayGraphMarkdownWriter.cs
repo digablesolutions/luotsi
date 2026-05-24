@@ -13,6 +13,7 @@ internal static class ReplayGraphMarkdownWriter
         builder.AppendLine($"Artifact root: `{graph.ArtifactRoot}`");
         builder.AppendLine($"Nodes: `{graph.NodeCount}` of `{graph.TotalNodeCount}`");
         builder.AppendLine($"Edges: `{graph.EdgeCount}` of `{graph.TotalEdgeCount}`");
+        builder.AppendLine($"Evidence: `{graph.Evidence.Count}`");
         builder.AppendLine($"Matched: `{graph.MatchedNodeCount}` nodes, `{graph.MatchedEdgeCount}` edges");
         builder.AppendLine($"Truncated: `{graph.Truncated.ToString().ToLowerInvariant()}`");
         builder.AppendLine($"Query: `{ReplayGraphQueryEngine.Describe(graph.Query)}`");
@@ -137,6 +138,12 @@ internal static class ReplayGraphMarkdownWriter
 
         builder.AppendLine("## Evidence");
         builder.AppendLine();
+        if (graph.EvidenceKinds.Count > 0)
+        {
+            builder.AppendLine("Kinds: " + string.Join(", ", graph.EvidenceKinds.Select(static kind => $"`{kind.Key}`={kind.Value}")));
+            builder.AppendLine();
+        }
+
         builder.AppendLine("| Kind | Node | Title | Detail | Artifact | Command |");
         builder.AppendLine("|---|---|---|---|---|---|");
         foreach (var evidence in graph.Evidence)
