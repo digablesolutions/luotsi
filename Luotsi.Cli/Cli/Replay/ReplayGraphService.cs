@@ -133,6 +133,7 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
             ReplayGraphEvidenceBuilder.Build(artifacts.Root, orderedNodes, orderedEdges),
             query);
         var failurePaths = ReplayGraphFailurePathBuilder.Build(allNodes, allEdges);
+        var facts = ReplayGraphFactBuilder.Build(artifacts.Root, orderedNodes, orderedEdges, evidence, failurePaths);
         var result = new ReplayGraphResult(
             ResultSchemas.ReplayGraph,
             artifacts.Root,
@@ -152,6 +153,7 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
             actions,
             CountKinds(evidence),
             evidence,
+            facts,
             failurePaths,
             jsonPath,
             jsonlPath,
@@ -199,6 +201,7 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
             null,
             null,
             null,
+            null,
             null);
 
         foreach (var path in result.FailurePaths)
@@ -218,6 +221,7 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
                 null,
                 null,
                 path,
+                null,
                 null,
                 null,
                 null,
@@ -244,6 +248,31 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
                 null,
                 evidence,
                 null,
+                null,
+                null);
+        }
+
+        foreach (var fact in result.Facts)
+        {
+            yield return new ReplayGraphJsonLine(
+                ResultSchemas.ReplayGraph,
+                "fact",
+                result.ArtifactRoot,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                fact,
+                null,
                 null);
         }
 
@@ -265,6 +294,7 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
                 null,
                 null,
                 insight,
+                null,
                 null,
                 null,
                 null);
@@ -289,6 +319,7 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
                 null,
                 null,
                 null,
+                null,
                 node,
                 null);
         }
@@ -299,6 +330,7 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
                 ResultSchemas.ReplayGraph,
                 "edge",
                 result.ArtifactRoot,
+                null,
                 null,
                 null,
                 null,
@@ -571,6 +603,7 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
         ReplayGraphFailurePathResult? FailurePath,
         ReplayGraphInsightResult? Insight,
         ReplayGraphEvidenceResult? Evidence,
+        ReplayGraphFactResult? Fact,
         ReplayGraphNodeResult? Node,
         ReplayGraphEdgeResult? Edge);
 

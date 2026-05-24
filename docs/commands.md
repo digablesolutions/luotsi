@@ -102,6 +102,8 @@ View screenshots and operator-triggered recordings are written to the artifact r
 
 ## Replay & Artifact Triage
 
+`replay graph` exposes `facts` in addition to raw graph nodes and edges. Facts are compact subject-predicate-object statements for agents that need failure paths, transitions, selectors, actions, and evidence without traversing the full graph.
+
 | Command | Description |
 |---|---|
 | `replay summarize --artifacts <artifact-root> [--format json|jsonl]` | Read `session-replay.json` and `session-timeline.jsonl` under an existing artifact root and emit condensed replay summaries, including failure-capsule linkage for failed scenario runs |

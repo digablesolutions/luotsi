@@ -23,6 +23,7 @@ internal static class ReplayGraphMarkdownWriter
         AppendFailureSummary(builder, graph);
         AppendActions(builder, graph);
         AppendEvidence(builder, graph);
+        AppendFacts(builder, graph);
         AppendInsights(builder, graph);
         AppendFailurePaths(builder, graph);
         AppendTransitions(builder, graph);
@@ -154,6 +155,25 @@ internal static class ReplayGraphMarkdownWriter
         foreach (var evidence in graph.Evidence)
         {
             builder.AppendLine($"| {EscapeMarkdown(evidence.Kind)} | {EscapeMarkdown(evidence.NodeId)} | {EscapeMarkdown(evidence.Title)} | {EscapeMarkdown(evidence.Detail)} | {EscapeMarkdown(evidence.ArtifactPath)} | {EscapeMarkdown(string.Join(", ", evidence.EdgeIds.Take(3)))} | {EscapeMarkdown(evidence.Command)} |");
+        }
+
+        builder.AppendLine();
+    }
+
+    private static void AppendFacts(StringBuilder builder, ReplayGraphResult graph)
+    {
+        if (graph.Facts.Count == 0)
+        {
+            return;
+        }
+
+        builder.AppendLine("## Facts");
+        builder.AppendLine();
+        builder.AppendLine("| Category | Subject | Predicate | Object | Confidence | Command |");
+        builder.AppendLine("|---|---|---|---|---:|---|");
+        foreach (var fact in graph.Facts.Take(40))
+        {
+            builder.AppendLine($"| {EscapeMarkdown(fact.Category)} | {EscapeMarkdown(fact.Subject)} | {EscapeMarkdown(fact.Predicate)} | {EscapeMarkdown(fact.Object)} | {fact.Confidence:0.##} | {EscapeMarkdown(fact.Command)} |");
         }
 
         builder.AppendLine();

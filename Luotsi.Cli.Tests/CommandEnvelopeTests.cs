@@ -1366,6 +1366,15 @@ public sealed partial class AppTests
         Assert.Contains(data.GetProperty("evidence").EnumerateArray(), evidence =>
             evidence.GetProperty("kind").GetString() == "artifact" &&
             evidence.GetProperty("edge_ids").GetArrayLength() >= 1);
+        Assert.Contains(data.GetProperty("facts").EnumerateArray(), fact =>
+            fact.GetProperty("category").GetString() == "failure" &&
+            fact.GetProperty("predicate").GetString() == "has_failure_path");
+        Assert.Contains(data.GetProperty("facts").EnumerateArray(), fact =>
+            fact.GetProperty("category").GetString() == "transition" &&
+            fact.GetProperty("predicate").GetString() == "action_to_failure");
+        Assert.Contains(data.GetProperty("facts").EnumerateArray(), fact =>
+            fact.GetProperty("category").GetString() == "action" &&
+            fact.GetProperty("object").GetString() == "waitVisible");
         Assert.True(data.GetProperty("failure_paths").GetArrayLength() >= 1);
         Assert.Equal(Path.Join(replayRoot, "replay-graph.json"), data.GetProperty("json_path").GetString());
         Assert.Equal(Path.Join(replayRoot, "replay-graph.jsonl"), data.GetProperty("jsonl_path").GetString());
@@ -1393,6 +1402,8 @@ public sealed partial class AppTests
         Assert.Contains("## Evidence", markdown, StringComparison.Ordinal);
         Assert.Contains("Kinds:", markdown, StringComparison.Ordinal);
         Assert.Contains("| Kind | Node | Title | Detail | Artifact | Edges | Command |", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Facts", markdown, StringComparison.Ordinal);
+        Assert.Contains("| Category | Subject | Predicate | Object | Confidence | Command |", markdown, StringComparison.Ordinal);
         Assert.Contains("## Evidence Kinds", markdown, StringComparison.Ordinal);
         Assert.Contains("## Failure Paths", markdown, StringComparison.Ordinal);
         Assert.Contains("## Transitions", markdown, StringComparison.Ordinal);
@@ -1400,6 +1411,7 @@ public sealed partial class AppTests
         var jsonl = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-graph.jsonl"));
         Assert.Contains("\"type\":\"summary\"", jsonl, StringComparison.Ordinal);
         Assert.Contains("\"type\":\"evidence\"", jsonl, StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"fact\"", jsonl, StringComparison.Ordinal);
         Assert.Contains("\"type\":\"node\"", jsonl, StringComparison.Ordinal);
         Assert.Contains("\"type\":\"edge\"", jsonl, StringComparison.Ordinal);
     }

@@ -40,6 +40,7 @@ Filtering returns a focused subgraph with one-hop context. `total_node_count` an
 | `actions` | Suggested next commands for opening, scrubbing, or narrowing the graph. |
 | `evidence_kinds` | Counts for promoted evidence records in the returned graph view. |
 | `evidence` | Compact promoted proof records from returned graph nodes: failures, artifacts, selectors, screen observations, telemetry signals, and generated steps. Each record includes nearby `edge_ids` so agents can trace why the proof is connected. |
+| `facts` | Compact subject-predicate-object facts derived from the returned graph view. Facts are the preferred agent input when the caller needs stable semantic statements instead of raw graph traversal. |
 | `failure_paths` | Compact paths from nearby timeline context into failure nodes. |
 | `json_path`, `jsonl_path`, `markdown_path` | Artifact paths when `--write-json`, `--write-jsonl`, or `--write-markdown` are used. |
 | `nodes`, `edges` | Stable graph payload. |
@@ -93,6 +94,18 @@ Filtering returns a focused subgraph with one-hop context. `total_node_count` an
 | `telemetry_signal` | Semantic telemetry proof observed in timeline events. |
 | `generated_step` | Scenario-draft generated step proof with provenance context. |
 
+## Fact Contract
+
+Each `facts[]` item has:
+
+| Field | Meaning |
+|---|---|
+| `category` | Fact family: `failure`, `transition`, `evidence`, `selector`, or `action`. |
+| `subject`, `predicate`, `object` | Stable semantic statement derived from graph nodes and edges. |
+| `confidence` | Heuristic confidence from 0.0 to 1.0. Failure paths and direct evidence are highest confidence. |
+| `node_ids`, `edge_ids` | Source graph IDs that justify the fact. |
+| `command` | Optional follow-up command that reopens or narrows the context for the fact. |
+
 ## Agent Queries
 
 ```text
@@ -111,6 +124,6 @@ luotsi replay graph --artifacts artifacts/run --edge-kind transitions_to --limit
 luotsi replay graph --artifacts artifacts/run --node failure:session-timeline.jsonl:3 --depth 2
 ```
 
-`replay-graph.md` starts with "Agent Summary", "What Failed", "What Agents Can Act On", "Evidence", and "Insights" before the raw node and edge tables.
+`replay-graph.md` starts with "Agent Summary", "What Failed", "What Agents Can Act On", "Evidence", "Facts", and "Insights" before the raw node and edge tables.
 
-JSONL output includes `summary`, `failure_path`, `evidence`, `insight`, `node`, and `edge` line types. The `summary` line includes `node_kinds`, `edge_kinds`, and `evidence_kinds` so agents can decide whether to consume later lines. Use `evidence` lines when an agent needs concise proof before deciding whether to open the full graph.
+JSONL output includes `summary`, `failure_path`, `evidence`, `fact`, `insight`, `node`, and `edge` line types. The `summary` line includes `node_kinds`, `edge_kinds`, and `evidence_kinds` so agents can decide whether to consume later lines. Use `fact` lines when an agent needs concise semantic statements; use `evidence` lines when it needs proof before deciding whether to open the full graph.
