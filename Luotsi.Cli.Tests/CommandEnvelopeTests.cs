@@ -1953,6 +1953,9 @@ public sealed partial class AppTests
         Assert.Contains(hints, hint => hint.GetProperty("kind").GetString() == "inspect_best_failure_graph");
         Assert.Contains(hints, hint => hint.GetProperty("kind").GetString() == "scrub_best_failure");
         Assert.Contains(hints, hint =>
+            hint.GetProperty("kind").GetString() == "describe_best_replay_capsule" &&
+            hint.GetProperty("command").GetString() == "luotsi replay capsule --artifacts /tmp/replay-cluster-root\\run-b --write-readme --write-json");
+        Assert.Contains(hints, hint =>
             hint.GetProperty("kind").GetString() == "open_latest_replay" &&
             hint.GetProperty("command").GetString() == "luotsi replay open --artifacts /tmp/replay-cluster-root\\run-b");
         Assert.Contains(hints, hint =>

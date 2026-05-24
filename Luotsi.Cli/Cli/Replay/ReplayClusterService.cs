@@ -240,6 +240,11 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
             $"luotsi replay scrub --artifacts {Quote(latestRoot)} --failures --context 3 --write-markdown"));
 
         hints.Add(new ReplayFailureClusterHintResult(
+            "describe_best_replay_capsule",
+            "Open the replay front door for the best/latest representative failure.",
+            $"luotsi replay capsule --artifacts {Quote(latestRoot)} --write-readme --write-json"));
+
+        hints.Add(new ReplayFailureClusterHintResult(
             "open_latest_replay",
             "Open the latest matching replay bundle locally.",
             $"luotsi replay open --artifacts {Quote(latestRoot)}"));

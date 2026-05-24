@@ -274,7 +274,7 @@ Notes:
   --severity, --node,
   --depth, and --limit to return a focused subgraph with local context. Replay cluster groups failed replay sessions by normalized failure
   shape and returns cross-run intelligence: similarity, likely cause, stable
-  versus variable signals, and graph/scrub/search commands for the latest
+  versus variable signals, and capsule/graph/scrub/search commands for the latest
   matching bundle. Use --min-count, --similarity, and --contains to focus on
   repeated high-signal clusters.
   Failures still use the normal error envelope.
