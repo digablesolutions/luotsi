@@ -12,11 +12,8 @@ description: Use replay graph for semantic triage within one artifact root and r
 ## Commands
 
 ```bash
+luotsi replay graph --artifacts ./artifacts/my-run
 luotsi replay graph --artifacts ./artifacts/my-run --write-json --write-markdown
-luotsi replay graph --artifacts ./artifacts/my-run --failed --node-kind failure --write-markdown
-luotsi replay graph --artifacts ./artifacts/my-run --node-kind selector --write-markdown
-luotsi replay graph --artifacts ./artifacts/my-run --action waitVisible --limit 50
-luotsi replay graph --artifacts ./artifacts/my-run --selector "Sign in" --limit 50
 luotsi replay cluster --artifacts ./artifacts/ci-runs --write-json --write-markdown
 ```
 
@@ -30,17 +27,12 @@ The top-level fields that matter most are:
 |---|---|
 | `schema` | Always `luotsi-replay-graph.v1` |
 | `artifact_root` | Root directory the graph was built from |
-| `query` | Applied filters: failure-only, node kind, edge kind, action, selector, and limit |
-| `node_count`, `edge_count` | Returned graph size after filtering |
-| `total_node_count`, `total_edge_count` | Full graph size before filters |
-| `matched_node_count`, `matched_edge_count` | Query match size before `--limit` is applied |
-| `truncated` | `true` when `--limit` capped the matched result |
-| `node_kinds`, `edge_kinds` | Counts for the returned graph view |
-| `insights` | Agent-readable highlights about failures, selectors, telemetry, and draft provenance |
-| `actions` | Suggested next commands for opening, scrubbing, or narrowing the graph |
-| `nodes`, `edges` | Stable graph payload |
+| `node_count`, `edge_count` | Total promoted graph size for this artifact root |
+| `node_kinds`, `edge_kinds` | Counts by node kind and edge kind for quick triage |
+| `json_path`, `markdown_path` | Paths written only when `--write-json` or `--write-markdown` is requested |
+| `nodes`, `edges` | Full graph payload for the artifact root |
 
-Filtering returns a focused subgraph with one-hop context, so the result stays useful instead of becoming a full replay dump.
+On this branch, `replay graph` returns the promoted graph for one artifact root rather than a filterable subgraph. Use `replay capsule`, `replay timeline`, `replay scrub`, or `replay search` to narrow the failure window first, then use the graph when you want the semantic node-and-edge view over that same bundle.
 
 ## Node kinds
 
@@ -83,15 +75,15 @@ Edges describe how those promoted nodes relate to one another:
 | `uses_source` | Scenario draft uses a source family |
 | `applies_normalization` | Scenario draft applied a normalization |
 
-## Useful graph queries
+## How to narrow before graph
 
-These are the practical queries that usually answer the next question fastest:
+These commands usually answer the next question fastest before you open the full graph:
 
-- `--failed` when you want only failure-relevant nodes and their local context
-- `--node-kind selector` when the question is which text selectors or labels are actually present in the replay evidence
-- `--node-kind generated_step` when you are auditing `replay scenario-draft` output back to its origins
-- `--action <text>` when you want to follow a particular wait or interaction across the replay evidence
-- `--selector <text>` when you want one label or control name narrowed across events, actions, and failures
+- `replay capsule` when you want the shortest path to the primary failure and the suggested next commands
+- `replay timeline --failures` when you need the exact failure-relevant event window
+- `replay scrub --failures --context 3` when you want the local before/focus/after view around one failure
+- `replay search --contains <text>` when you are hunting a selector, message, or other text evidence across the artifact root
+- `replay graph` after the failure window is already clear and you want the promoted nodes and edges for that same root
 
 ## Replay cluster contract
 
@@ -113,8 +105,8 @@ Use it as a triage reducer, not as a replacement for `replay capsule` or `replay
 
 ```bash
 luotsi replay capsule --artifacts ./artifacts/failing-run --write-readme --write-json
-luotsi replay graph --artifacts ./artifacts/failing-run --failed --write-markdown
-luotsi replay graph --artifacts ./artifacts/failing-run --node-kind selector --write-markdown
+luotsi replay timeline --artifacts ./artifacts/failing-run --failures --context 3 --write-markdown
+luotsi replay graph --artifacts ./artifacts/failing-run --write-markdown
 luotsi replay cluster --artifacts ./artifacts/ci-runs --write-markdown
 ```
 

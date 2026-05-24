@@ -65,7 +65,7 @@ Replay commands that keep the normal envelope put their command-specific contrac
 
 - `replay capsule` returns a failure-capsule summary with `primary_failure`, `failure_timeline`, `artifact_manifest`, optional scenario draft summary fields, and `suggested_commands`.
 - `replay scenario-draft` returns draft metadata, warnings, suggestions, review items, source summaries, step origins, normalizations, and the generated output paths. When persisted, the main review artifacts are `scenario-draft-summary.json` and `scenario-draft.md`.
-- `replay graph` returns a stable graph payload with `query`, `node_count`, `edge_count`, `node_kinds`, `edge_kinds`, `insights`, `actions`, `nodes`, and `edges`.
+- `replay graph` returns a stable graph payload with `node_count`, `edge_count`, `node_kinds`, `edge_kinds`, optional `json_path` and `markdown_path`, plus the full `nodes` and `edges` arrays.
 - `replay cluster` groups failed replay sessions by normalized failure shape and returns cluster summaries plus suggested next triage commands.
 
 ## Error categories

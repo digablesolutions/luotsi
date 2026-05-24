@@ -34,7 +34,7 @@ The useful public keys are:
 Two fields are especially useful in shared labs:
 
 - `state=online` narrows to transports that adb currently considers usable
-- `availability=available` narrows to devices that are not offline, leased, or otherwise unavailable for selection
+- `availability=available` mirrors the adb-derived availability field from `luotsi devices`; lease and quarantine gates are still applied separately by `lab status`, `lab plan`, `lab claim`, and `run --claim-device`
 
 If you want raw inventory, use `luotsi devices`. If you want selection semantics, use `lab status` or `lab plan`. `devices` intentionally does not accept `--device-query`.
 
@@ -44,7 +44,7 @@ If you want raw inventory, use `luotsi devices`. If you want selection semantics
 |---|---|
 | Any online physical device | `state=online,type=physical` |
 | One specific shared phone model | `state=online,type=physical,model=Pixel_9` |
-| Only currently available pool hardware | `state=online,type=physical,availability=available` |
+| Only adb-available pool hardware | `state=online,type=physical,availability=available` |
 | One Wi-Fi attached device class | `state=online,transport=wifi,model=Pixel_9` |
 | One emulator lane | `state=online,type=emulator` |
 
@@ -63,6 +63,8 @@ luotsi lab plan --device-query state=online,type=physical,availability=available
 ```
 
 Use `lab plan` as the decision point before claiming or starting a CI run. It is the safest way to turn a broad pool into one explicit target and it already returns `recommended_commands` when the selection is blocked.
+
+That matters because `availability=available` only reflects adb-level readiness. Lease and quarantine blockers are surfaced by the lab commands themselves.
 
 ## Workflow: one engineer, several attached devices
 
@@ -151,7 +153,7 @@ If the unit of ownership is the scenario run itself, prefer `run --claim-device`
 ## Common operator rules
 
 - Prefer `state=online` over guessing from raw adb status text.
-- Prefer `availability=available` when the pool is shared and leases matter.
+- Prefer `lab status` or `lab plan` when the pool is shared and lease or quarantine state matters; `availability=available` only reflects adb-level readiness.
 - Use `lab status` for explanation, `lab plan` for dry-run allocation, `lab claim` for longer-lived reservation, and `run --claim-device` for run-scoped reservation.
 - Use either `--device` or `--device-query`, never both.
 

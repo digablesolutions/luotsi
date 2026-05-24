@@ -109,7 +109,7 @@ luotsi run --path scenarios --device <serial> --report-junit junit.xml
 luotsi replay summarize --artifacts ./artifacts/my-run
 luotsi replay capsule --artifacts ./artifacts/my-run --write-readme --write-json
 luotsi replay timeline --artifacts ./artifacts/my-run --failures
-luotsi replay graph --artifacts ./artifacts/my-run --failed --write-markdown
+luotsi replay graph --artifacts ./artifacts/my-run --write-markdown
 luotsi replay cluster --artifacts ./artifacts/ci-runs --write-markdown
 luotsi replay search --artifacts ./artifacts/my-run --contains timeout
 luotsi replay scenario-draft --artifacts ./artifacts/my-run --output scenarios/recovered.json --write-markdown

@@ -50,7 +50,7 @@ The public distinction that matters is:
 - `replay graph` is the agent- and debugger-facing node/edge model for that same root
 - `replay cluster` is the cross-run grouping view when the same failure shape keeps returning in CI
 
-`replay graph` returns a stable query/result shape with `query`, `node_count`, `edge_count`, `node_kinds`, `edge_kinds`, `insights`, and `actions`. The promoted node kinds that matter most in practice are `failure`, `action`, `selector`, `screen_state`, `telemetry_signal`, `scenario_draft`, and `generated_step`. Filtering with `--failed`, `--node-kind`, `--edge-kind`, `--action`, or `--selector` keeps one-hop context around the returned slice so the graph stays readable instead of dumping the whole root.
+`replay graph` returns the promoted graph for one artifact root with `node_count`, `edge_count`, `node_kinds`, `edge_kinds`, optional `json_path` and `markdown_path`, plus the full `nodes` and `edges` arrays. The promoted node kinds that matter most in practice are `failure`, `action`, `selector`, `screen_state`, `telemetry_signal`, `scenario_draft`, and `generated_step`. On this branch it does not narrow by query, so use `replay timeline`, `replay scrub`, or `replay search` to isolate the failure window before you read the graph.
 
 `replay cluster` works one level up. Point it at a directory of replayable artifact roots when you need Luotsi to group failed sessions by normalized failure shape and return triage hints plus the next replay/search commands for the latest matching bundle.
 
@@ -80,7 +80,7 @@ When you persist draft review artifacts, Luotsi currently writes:
 1. Run the command or scenario with an explicit artifact root if you want a stable location.
 2. Use `replay summarize` to confirm what happened at the session level.
 3. Move to `replay timeline` or `replay search` to narrow the failure window.
-4. Use `replay graph` when you need promoted selectors/actions/telemetry or `replay cluster` when the question is whether the same failure shape is repeating across runs.
+4. Use `replay graph` when `replay timeline`, `replay scrub`, or `replay search` has already narrowed the question and you now need promoted selectors/actions/telemetry, or `replay cluster` when the question is whether the same failure shape is repeating across runs.
 5. Open the local browser index when you want screenshots, logs, replay markdown, and draft review artifacts in one place.
 
 ## MVP contract
