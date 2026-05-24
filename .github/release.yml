@@ -20,3 +20,6 @@ changelog:
         - github_actions
         - dependencies
         - java
+    - title: Other changes
+      labels:
+        - "*"
