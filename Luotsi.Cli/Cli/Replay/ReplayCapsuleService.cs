@@ -396,6 +396,8 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             }
         }
 
+        AppendStartHere(builder, primaryFailure, nextSteps);
+
         builder.AppendLine();
         builder.AppendLine("## Primary Failure");
         builder.AppendLine();
@@ -491,6 +493,48 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         }
 
         return builder.ToString();
+    }
+
+    private static void AppendStartHere(
+        StringBuilder builder,
+        ReplayCapsulePrimaryFailureResult? primaryFailure,
+        IReadOnlyList<ReplayCapsuleNextStep> nextSteps)
+    {
+        builder.AppendLine();
+        builder.AppendLine("## Start Here");
+        builder.AppendLine();
+        if (primaryFailure is not null)
+        {
+            var summary = new[]
+                {
+                    primaryFailure.Scenario,
+                    primaryFailure.Step,
+                    primaryFailure.Action,
+                    primaryFailure.Message
+                }
+                .Where(static value => !string.IsNullOrWhiteSpace(value))
+                .Take(4)
+                .ToArray();
+            if (summary.Length > 0)
+            {
+                builder.AppendLine("- Primary failure: " + EscapeMarkdown(string.Join(" / ", summary)));
+            }
+            else
+            {
+                builder.AppendLine("- Primary failure: details unavailable");
+            }
+        }
+        else
+        {
+            builder.AppendLine("- Primary failure: none detected");
+        }
+
+        var firstStep = nextSteps.FirstOrDefault();
+        if (firstStep is not null)
+        {
+            builder.AppendLine($"- Best next step: {EscapeMarkdown(firstStep.Title)} (`{EscapeMarkdown(firstStep.Kind)}`)");
+            builder.AppendLine($"- Run: `{EscapeMarkdown(firstStep.Command)}`");
+        }
     }
 
     private static void AppendField(StringBuilder builder, string label, string? value)

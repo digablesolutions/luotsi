@@ -1043,6 +1043,10 @@ public sealed partial class AppTests
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-capsule-summary.json")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.md")));
         var readme = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-capsule.md"));
+        Assert.Contains("## Start Here", readme, StringComparison.Ordinal);
+        Assert.Contains("- Primary failure:", readme, StringComparison.Ordinal);
+        Assert.Contains("waitVisible", readme, StringComparison.Ordinal);
+        Assert.Contains("Best next step: Scrub the failure window (`scrub_failure`)", readme, StringComparison.Ordinal);
         Assert.Contains("## Primary Failure", readme, StringComparison.Ordinal);
         Assert.Contains("not visible", readme, StringComparison.Ordinal);
         Assert.Contains("Reopen:", readme, StringComparison.Ordinal);
