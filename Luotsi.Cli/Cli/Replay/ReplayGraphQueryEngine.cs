@@ -15,11 +15,22 @@ internal static class ReplayGraphQueryEngine
             throw new UsageException("replay graph requires --limit greater than zero.");
         }
 
+        var severity = NormalizeBlank(options.Get("severity"));
+        if (severity is not null &&
+            !string.Equals(severity, "info", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(severity, "warning", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(severity, "error", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new UsageException("replay graph --severity must be info, warning, or error.");
+        }
+
         return new ReplayGraphQueryResult(
             NormalizeBlank(options.Get("node-kind")),
             NormalizeBlank(options.Get("edge-kind")),
             NormalizeBlank(options.Get("action")),
             NormalizeBlank(options.Get("selector")),
+            NormalizeBlank(options.Get("insight")),
+            severity,
             NormalizeBlank(options.Get("node")),
             options.Int("depth", 1),
             options.HasFlag("failed"),
@@ -78,6 +89,8 @@ internal static class ReplayGraphQueryEngine
         AddQueryPart(parts, "edge-kind", query.EdgeKind);
         AddQueryPart(parts, "action", query.Action);
         AddQueryPart(parts, "selector", query.Selector);
+        AddQueryPart(parts, "insight", query.Insight);
+        AddQueryPart(parts, "severity", query.Severity);
         AddQueryPart(parts, "node", query.Node);
         if (query.Node is not null)
         {
@@ -195,6 +208,21 @@ internal static class ReplayGraphQueryEngine
         node.Properties.Any(property =>
             property.Key.EndsWith(propertyName, StringComparison.OrdinalIgnoreCase) &&
             ReplayGraphPredicates.Contains(property.Value, value));
+
+    public static IReadOnlyList<ReplayGraphInsightResult> ApplyInsightFilters(
+        IReadOnlyList<ReplayGraphInsightResult> insights,
+        ReplayGraphQueryResult query)
+    {
+        if (query.Insight is null && query.Severity is null)
+        {
+            return insights;
+        }
+
+        return insights
+            .Where(insight => query.Insight is null || ReplayGraphPredicates.Contains(insight.Kind, query.Insight))
+            .Where(insight => query.Severity is null || string.Equals(insight.Severity, query.Severity, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+    }
 
     private static string? NormalizeBlank(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

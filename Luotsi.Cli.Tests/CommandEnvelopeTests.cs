@@ -1477,6 +1477,54 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayGraph_Filters_Insights_By_Kind_And_Severity()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot, "--insight", "transition", "--severity", "warning"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("transition", data.GetProperty("query").GetProperty("insight").GetString());
+        Assert.Equal("warning", data.GetProperty("query").GetProperty("severity").GetString());
+        var insight = Assert.Single(data.GetProperty("insights").EnumerateArray());
+        Assert.Equal("transition", insight.GetProperty("kind").GetString());
+        Assert.Equal("warning", insight.GetProperty("severity").GetString());
+        Assert.True(data.GetProperty("node_count").GetInt32() > 0);
+        Assert.True(data.GetProperty("edge_count").GetInt32() > 0);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayGraph_Rejects_Invalid_Insight_Severity()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot, "--severity", "critical"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("--severity must be info, warning, or error", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayGraph_Filters_By_Failure_And_Node_Kind()
     {
         var console = new FakeConsole();

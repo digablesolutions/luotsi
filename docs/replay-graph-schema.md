@@ -9,12 +9,14 @@
 ## Command
 
 ```text
-luotsi replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--node <id> --depth 1] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
+luotsi replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--insight <kind>] [--severity info|warning|error] [--node <id> --depth 1] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
 ```
 
 Filtering returns a focused subgraph with one-hop context. `total_node_count` and `total_edge_count` describe the full graph before filtering; `node_count` and `edge_count` describe the returned view.
 
 `--node <id> --depth <n>` returns a deterministic neighborhood around a graph node. Use it after a broad query finds a failure, selector, artifact, or generated step ID.
+
+`--insight <kind>` and `--severity <level>` filter the `insights` array without changing the returned node and edge view. Use them when an agent only needs high-signal findings such as warning transitions or error failures.
 
 ## Top-Level Fields
 
@@ -80,6 +82,8 @@ Filtering returns a focused subgraph with one-hop context. `total_node_count` an
 luotsi replay graph --artifacts artifacts/run --failed --write-markdown
 luotsi replay graph --artifacts artifacts/run --format jsonl
 luotsi replay graph --artifacts artifacts/run --write-jsonl
+luotsi replay graph --artifacts artifacts/run --severity warning --write-markdown
+luotsi replay graph --artifacts artifacts/run --insight transition --severity warning --format json
 luotsi replay graph --artifacts artifacts/run --node-kind selector --write-markdown
 luotsi replay graph --artifacts artifacts/run --action waitVisible --limit 50
 luotsi replay graph --artifacts artifacts/run --selector "Sign in" --limit 50
