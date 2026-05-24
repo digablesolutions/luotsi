@@ -273,6 +273,8 @@ Notes:
   understand what failed and what to do next. With --format json or --format
   jsonl, replay graph writes raw machine output instead of the command envelope.
   With --write-jsonl, it persists replay-graph.jsonl for CI and agent consumers.
+  Graph actions start with a replay capsule command so semantic context can
+  route back to the bundle front door.
   Use --failed, --node-kind, --edge-kind, --action, --selector, --contains,
   --insight, --evidence, --fact,
   --severity, --node,

@@ -1395,6 +1395,11 @@ public sealed partial class AppTests
         Assert.Contains("action-to-failure", data.GetProperty("agent_summary").GetProperty("what_changed").GetString(), StringComparison.Ordinal);
         Assert.Contains("luotsi replay", data.GetProperty("agent_summary").GetProperty("what_can_act_on").GetString(), StringComparison.Ordinal);
         Assert.Contains(data.GetProperty("agent_summary").GetProperty("evidence_node_ids").EnumerateArray(), id => id.GetString()!.StartsWith("failure:", StringComparison.Ordinal));
+        Assert.Contains(data.GetProperty("agent_summary").GetProperty("commands").EnumerateArray(), command =>
+            command.GetString() == $"luotsi replay capsule --artifacts {replayRoot} --write-readme --write-json");
+        Assert.Contains(data.GetProperty("actions").EnumerateArray(), action =>
+            action.GetProperty("kind").GetString() == "describe_replay_capsule" &&
+            action.GetProperty("command").GetString() == $"luotsi replay capsule --artifacts {replayRoot} --write-readme --write-json");
         Assert.Contains(data.GetProperty("actions").EnumerateArray(), action => action.GetProperty("kind").GetString() == "scrub_failures");
         Assert.Contains(data.GetProperty("actions").EnumerateArray(), action => action.GetProperty("kind").GetString() == "stream_graph");
         Assert.Contains(data.GetProperty("actions").EnumerateArray(), action => action.GetProperty("kind").GetString() == "filter_artifact_evidence");
