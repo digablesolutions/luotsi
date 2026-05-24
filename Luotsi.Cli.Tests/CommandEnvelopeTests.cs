@@ -688,6 +688,13 @@ public sealed partial class AppTests
         Assert.Equal("inspect_command", sourceSummary.GetProperty("source").GetString());
         Assert.Equal(4, sourceSummary.GetProperty("step_count").GetInt32());
         Assert.Equal(0, sourceSummary.GetProperty("normalization_count").GetInt32());
+        var suggestedCommands = data.GetProperty("suggested_commands").EnumerateArray().ToArray();
+        Assert.Contains(suggestedCommands, command =>
+            command.GetProperty("command").GetString() == "luotsi scenario-validate --file /tmp/draft.json");
+        Assert.Contains(suggestedCommands, command =>
+            command.GetProperty("command").GetString()!.Contains("replay scrub", StringComparison.Ordinal));
+        Assert.Contains(suggestedCommands, command =>
+            command.GetProperty("command").GetString() == "luotsi replay timeline --artifacts <artifact-root> --source-path session-timeline.jsonl --sequence 1 --context 2");
         Assert.True(fileSystem.FileExists("/tmp/draft.json"));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "scenario-draft-summary.json")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "scenario-draft.md")));
@@ -699,6 +706,8 @@ public sealed partial class AppTests
         Assert.Contains("luotsi screen-state", review, StringComparison.Ordinal);
         Assert.Contains("## Source Summary", review, StringComparison.Ordinal);
         Assert.Contains("## Step Origins", review, StringComparison.Ordinal);
+        Assert.Contains("## Next Commands", review, StringComparison.Ordinal);
+        Assert.Contains("luotsi scenario-validate --file /tmp/draft.json", review, StringComparison.Ordinal);
         Assert.Contains("session-timeline.jsonl", review, StringComparison.Ordinal);
         Assert.Contains("luotsi replay timeline --artifacts", review, StringComparison.Ordinal);
         Assert.Contains("inspect_command", review, StringComparison.Ordinal);

@@ -72,7 +72,8 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
             reviewItems,
             sourceSummaries,
             origins,
-            normalizationNotes);
+            normalizationNotes,
+            BuildCommandHints(output, artifacts.Root, markdownPath, origins).ToArray());
 
         if (!string.IsNullOrWhiteSpace(output))
         {
@@ -274,6 +275,15 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
         }
 
         builder.AppendLine();
+        builder.AppendLine("## Next Commands");
+        builder.AppendLine();
+        foreach (var command in result.SuggestedCommands)
+        {
+            builder.AppendLine($"- `{command.Command}`");
+            builder.AppendLine($"  {command.Purpose}");
+        }
+
+        builder.AppendLine();
         builder.AppendLine("## Source Summary");
         builder.AppendLine();
         builder.AppendLine("| Source | Steps | Normalizations | Events | Confidence |");
@@ -359,6 +369,43 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
         }
 
         return builder.ToString();
+    }
+
+    private static IEnumerable<ReplayScenarioDraftCommandHint> BuildCommandHints(
+        string? output,
+        string artifactRoot,
+        string? markdownPath,
+        IReadOnlyList<ReplayScenarioDraftStepOrigin> origins)
+    {
+        yield return new ReplayScenarioDraftCommandHint(
+            $"luotsi replay open --artifacts {Quote(artifactRoot)}",
+            "Open the artifact browser for screenshots, timelines, and generated draft review files.");
+
+        yield return new ReplayScenarioDraftCommandHint(
+            $"luotsi replay scrub --artifacts {Quote(artifactRoot)} --context 3 --write-markdown",
+            "Write a scrub view around the same evidence before editing the draft.");
+
+        if (!string.IsNullOrWhiteSpace(output))
+        {
+            yield return new ReplayScenarioDraftCommandHint(
+                $"luotsi scenario-validate --file {Quote(output)}",
+                "Validate the generated scenario before committing or running it.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(markdownPath))
+        {
+            yield return new ReplayScenarioDraftCommandHint(
+                $"luotsi replay search --artifacts {Quote(artifactRoot)} --contains \"Review Checklist\"",
+                "Find the generated review checklist in replay artifacts.");
+        }
+
+        var firstOrigin = origins.FirstOrDefault(static origin => !string.IsNullOrWhiteSpace(origin.SourceCommand));
+        if (!string.IsNullOrWhiteSpace(firstOrigin?.SourceCommand))
+        {
+            yield return new ReplayScenarioDraftCommandHint(
+                firstOrigin.SourceCommand,
+                "Reopen the first generated step's source timeline event.");
+        }
     }
 
     private static string EscapeMarkdown(string value) =>

@@ -363,7 +363,12 @@ public sealed record ReplayScenarioDraftResult(
     IReadOnlyList<ReplayScenarioDraftReviewItem> ReviewItems,
     IReadOnlyList<ReplayScenarioDraftSourceSummary> SourceSummaries,
     IReadOnlyList<ReplayScenarioDraftStepOrigin> StepOrigins,
-    IReadOnlyList<ReplayScenarioDraftNormalization> Normalizations);
+    IReadOnlyList<ReplayScenarioDraftNormalization> Normalizations,
+    IReadOnlyList<ReplayScenarioDraftCommandHint> SuggestedCommands);
+
+public sealed record ReplayScenarioDraftCommandHint(
+    string Command,
+    string Purpose);
 
 public sealed record ReplayScenarioDraftSuggestion(
     int StepIndex,
