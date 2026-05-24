@@ -1332,7 +1332,7 @@ public sealed partial class AppTests
             DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
         });
 
-        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot, "--write-json", "--write-markdown"]);
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot, "--write-json", "--write-jsonl", "--write-markdown"]);
         using var envelope = console.ParseSingleOutputAsJson();
 
         Assert.Equal(0, exitCode);
@@ -1356,6 +1356,7 @@ public sealed partial class AppTests
         Assert.Contains(data.GetProperty("actions").EnumerateArray(), action => action.GetProperty("kind").GetString() == "scrub_failures");
         Assert.True(data.GetProperty("failure_paths").GetArrayLength() >= 1);
         Assert.Equal(Path.Join(replayRoot, "replay-graph.json"), data.GetProperty("json_path").GetString());
+        Assert.Equal(Path.Join(replayRoot, "replay-graph.jsonl"), data.GetProperty("jsonl_path").GetString());
         Assert.Equal(Path.Join(replayRoot, "replay-graph.md"), data.GetProperty("markdown_path").GetString());
         Assert.Contains(data.GetProperty("nodes").EnumerateArray(), node => node.GetProperty("kind").GetString() == "failure");
         Assert.Contains(data.GetProperty("nodes").EnumerateArray(), node => node.GetProperty("kind").GetString() == "artifact");
@@ -1365,6 +1366,7 @@ public sealed partial class AppTests
         Assert.Contains(data.GetProperty("edges").EnumerateArray(), edge => edge.GetProperty("kind").GetString() == "describes_action");
         Assert.Contains(data.GetProperty("edges").EnumerateArray(), edge => edge.GetProperty("kind").GetString() == "transitions_to");
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-graph.json")));
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-graph.jsonl")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-graph.md")));
         Assert.False(fileSystem.FileExists(Path.Join(replayRoot, "replay-timeline.json")));
         Assert.False(fileSystem.FileExists(Path.Join(replayRoot, "replay-timeline.md")));
@@ -1376,6 +1378,10 @@ public sealed partial class AppTests
         Assert.Contains("## Failure Paths", markdown, StringComparison.Ordinal);
         Assert.Contains("## Transitions", markdown, StringComparison.Ordinal);
         Assert.Contains("## Query Examples", markdown, StringComparison.Ordinal);
+        var jsonl = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-graph.jsonl"));
+        Assert.Contains("\"type\":\"summary\"", jsonl, StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"node\"", jsonl, StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"edge\"", jsonl, StringComparison.Ordinal);
     }
 
     [Fact]

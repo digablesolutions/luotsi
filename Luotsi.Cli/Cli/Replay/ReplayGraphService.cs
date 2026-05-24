@@ -1,7 +1,9 @@
 using System.Text.RegularExpressions;
+using System.Text.Json;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.Infrastructure.Serialization;
 using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Cli.Replay;
@@ -9,7 +11,9 @@ namespace Luotsi.Cli.Cli.Replay;
 internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineService timelineService)
 {
     private const string GraphJsonFileName = "replay-graph.json";
+    private const string GraphJsonlFileName = "replay-graph.jsonl";
     private const string GraphMarkdownFileName = "replay-graph.md";
+    private static readonly JsonSerializerOptions JsonLineOptions = new(AppJson.Options) { WriteIndented = false };
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
     private readonly ReplayTimelineService _timelineService = timelineService ?? throw new ArgumentNullException(nameof(timelineService));
     private static readonly Regex StableIdChars = new("[^a-zA-Z0-9._:-]+", RegexOptions.Compiled);
@@ -115,6 +119,9 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
         var jsonPath = options.HasFlag("write-json")
             ? Path.Join(artifacts.Root, GraphJsonFileName)
             : null;
+        var jsonlPath = options.HasFlag("write-jsonl")
+            ? Path.Join(artifacts.Root, GraphJsonlFileName)
+            : null;
         var markdownPath = options.HasFlag("write-markdown")
             ? Path.Join(artifacts.Root, GraphMarkdownFileName)
             : null;
@@ -140,6 +147,7 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
             actions,
             failurePaths,
             jsonPath,
+            jsonlPath,
             markdownPath,
             orderedNodes,
             orderedEdges);
@@ -147,6 +155,11 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
         if (jsonPath is not null)
         {
             await artifacts.WriteJsonAsync(GraphJsonFileName, result).ConfigureAwait(false);
+        }
+
+        if (jsonlPath is not null)
+        {
+            await artifacts.WriteTextAsync(GraphJsonlFileName, ToJsonLines(result)).ConfigureAwait(false);
         }
 
         if (markdownPath is not null)
@@ -253,6 +266,9 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
                 edge);
         }
     }
+
+    private static string ToJsonLines(ReplayGraphResult result) =>
+        string.Join('\n', ToJsonLineObjects(result).Select(static line => JsonSerializer.Serialize(line, JsonLineOptions))) + "\n";
 
     private static void AddFailureCapsule(
         SessionReplaySummary summary,

@@ -9,7 +9,7 @@
 ## Command
 
 ```text
-luotsi replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--node <id> --depth 1] [--limit 200] [--format json|jsonl] [--write-json] [--write-markdown]
+luotsi replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--node <id> --depth 1] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
 ```
 
 Filtering returns a focused subgraph with one-hop context. `total_node_count` and `total_edge_count` describe the full graph before filtering; `node_count` and `edge_count` describe the returned view.
@@ -33,6 +33,7 @@ Filtering returns a focused subgraph with one-hop context. `total_node_count` an
 | `insights` | Agent-readable highlights such as failures, selectors, telemetry, and scenario-draft provenance. |
 | `actions` | Suggested next commands for opening, scrubbing, or narrowing the graph. |
 | `failure_paths` | Compact paths from nearby timeline context into failure nodes. |
+| `json_path`, `jsonl_path`, `markdown_path` | Artifact paths when `--write-json`, `--write-jsonl`, or `--write-markdown` are used. |
 | `nodes`, `edges` | Stable graph payload. |
 
 ## Node Taxonomy
@@ -78,6 +79,7 @@ Filtering returns a focused subgraph with one-hop context. `total_node_count` an
 ```text
 luotsi replay graph --artifacts artifacts/run --failed --write-markdown
 luotsi replay graph --artifacts artifacts/run --format jsonl
+luotsi replay graph --artifacts artifacts/run --write-jsonl
 luotsi replay graph --artifacts artifacts/run --node-kind selector --write-markdown
 luotsi replay graph --artifacts artifacts/run --action waitVisible --limit 50
 luotsi replay graph --artifacts artifacts/run --selector "Sign in" --limit 50

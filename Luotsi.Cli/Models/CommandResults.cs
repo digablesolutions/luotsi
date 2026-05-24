@@ -557,6 +557,7 @@ public sealed record ReplayGraphResult(
     IReadOnlyList<ReplayGraphActionResult> Actions,
     IReadOnlyList<ReplayGraphFailurePathResult> FailurePaths,
     string? JsonPath,
+    string? JsonlPath,
     string? MarkdownPath,
     IReadOnlyList<ReplayGraphNodeResult> Nodes,
     IReadOnlyList<ReplayGraphEdgeResult> Edges);
