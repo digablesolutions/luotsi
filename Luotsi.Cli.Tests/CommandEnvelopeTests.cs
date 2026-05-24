@@ -1342,6 +1342,9 @@ public sealed partial class AppTests
         Assert.True(data.GetProperty("edge_count").GetInt32() >= 4);
         Assert.True(data.GetProperty("total_node_count").GetInt32() >= data.GetProperty("node_count").GetInt32());
         Assert.True(data.GetProperty("total_edge_count").GetInt32() >= data.GetProperty("edge_count").GetInt32());
+        Assert.Equal(data.GetProperty("node_count").GetInt32(), data.GetProperty("matched_node_count").GetInt32());
+        Assert.Equal(data.GetProperty("edge_count").GetInt32(), data.GetProperty("matched_edge_count").GetInt32());
+        Assert.False(data.GetProperty("truncated").GetBoolean());
         Assert.Equal(200, data.GetProperty("query").GetProperty("limit").GetInt32());
         Assert.True(data.GetProperty("insights").GetArrayLength() >= 1);
         Assert.Contains(data.GetProperty("actions").EnumerateArray(), action => action.GetProperty("kind").GetString() == "scrub_failures");
@@ -1387,6 +1390,32 @@ public sealed partial class AppTests
         Assert.True(data.GetProperty("node_count").GetInt32() <= 10);
         Assert.Contains(data.GetProperty("nodes").EnumerateArray(), node => node.GetProperty("kind").GetString() == "failure");
         Assert.True(data.GetProperty("total_node_count").GetInt32() > data.GetProperty("node_count").GetInt32());
+        Assert.False(data.GetProperty("truncated").GetBoolean());
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayGraph_Reports_Truncated_Query_When_Limit_Caps_Matches()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot, "--limit", "1"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(1, data.GetProperty("node_count").GetInt32());
+        Assert.Equal(1, data.GetProperty("edge_count").GetInt32());
+        Assert.True(data.GetProperty("matched_node_count").GetInt32() > data.GetProperty("node_count").GetInt32());
+        Assert.True(data.GetProperty("matched_edge_count").GetInt32() > data.GetProperty("edge_count").GetInt32());
+        Assert.True(data.GetProperty("truncated").GetBoolean());
     }
 
     [Fact]

@@ -23,6 +23,8 @@ Filtering returns a focused subgraph with one-hop context. `total_node_count` an
 | `query` | Applied graph query: node kind, edge kind, action text, selector text, failure-only flag, and limit. |
 | `node_count`, `edge_count` | Returned graph size after filters. |
 | `total_node_count`, `total_edge_count` | Full graph size before filters. |
+| `matched_node_count`, `matched_edge_count` | Query match size before `--limit` is applied. |
+| `truncated` | `true` when `--limit` capped matched nodes or edges. |
 | `node_kinds`, `edge_kinds` | Counts for the returned graph view. |
 | `insights` | Agent-readable highlights such as failures, selectors, telemetry, and scenario-draft provenance. |
 | `actions` | Suggested next commands for opening, scrubbing, or narrowing the graph. |

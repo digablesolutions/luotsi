@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.RegularExpressions;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Errors;
@@ -11,7 +10,6 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
 {
     private const string GraphJsonFileName = "replay-graph.json";
     private const string GraphMarkdownFileName = "replay-graph.md";
-    private const int DefaultLimit = 200;
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
     private readonly ReplayTimelineService _timelineService = timelineService ?? throw new ArgumentNullException(nameof(timelineService));
     private static readonly Regex StableIdChars = new("[^a-zA-Z0-9._:-]+", RegexOptions.Compiled);
@@ -106,14 +104,14 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
             previousEvent = evt;
         }
 
-        var query = CreateQuery(options);
+        var query = ReplayGraphQueryEngine.Create(options);
         var allNodes = nodes.Values.OrderBy(static node => node.Id, StringComparer.Ordinal).ToArray();
         var allEdges = edges
             .OrderBy(static edge => edge.From, StringComparer.Ordinal)
             .ThenBy(static edge => edge.Kind, StringComparer.Ordinal)
             .ThenBy(static edge => edge.To, StringComparer.Ordinal)
             .ToArray();
-        var filtered = ApplyQuery(allNodes, allEdges, query);
+        var filtered = ReplayGraphQueryEngine.Apply(allNodes, allEdges, query);
         var orderedNodes = filtered.Nodes;
         var orderedEdges = filtered.Edges;
         var jsonPath = options.HasFlag("write-json")
@@ -130,10 +128,13 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
             orderedEdges.Count,
             allNodes.Length,
             allEdges.Length,
+            filtered.MatchedNodeCount,
+            filtered.MatchedEdgeCount,
+            filtered.Truncated,
             CountKinds(orderedNodes),
             CountKinds(orderedEdges),
-            BuildInsights(allNodes, allEdges),
-            BuildActions(artifacts.Root, query, allNodes, allEdges),
+            ReplayGraphInsightBuilder.Build(allNodes, allEdges),
+            ReplayGraphInsightBuilder.BuildActions(artifacts.Root, query, allNodes),
             jsonPath,
             markdownPath,
             orderedNodes,
@@ -146,7 +147,7 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
 
         if (markdownPath is not null)
         {
-            await artifacts.WriteTextAsync(GraphMarkdownFileName, BuildMarkdown(result)).ConfigureAwait(false);
+            await artifacts.WriteTextAsync(GraphMarkdownFileName, ReplayGraphMarkdownWriter.Build(result)).ConfigureAwait(false);
         }
 
         return result;
@@ -323,342 +324,5 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
         edges.GroupBy(static edge => edge.Kind, StringComparer.Ordinal)
             .OrderBy(static group => group.Key, StringComparer.Ordinal)
             .ToDictionary(static group => group.Key, static group => group.Count(), StringComparer.Ordinal);
-
-    private static ReplayGraphQueryResult CreateQuery(CliOptions options)
-    {
-        var limit = options.Int("limit", DefaultLimit);
-        if (limit <= 0)
-        {
-            throw new UsageException("replay graph requires --limit greater than zero.");
-        }
-
-        return new ReplayGraphQueryResult(
-            NormalizeBlank(options.Get("node-kind")),
-            NormalizeBlank(options.Get("edge-kind")),
-            NormalizeBlank(options.Get("action")),
-            NormalizeBlank(options.Get("selector")),
-            options.HasFlag("failed"),
-            limit);
-    }
-
-    private static (IReadOnlyList<ReplayGraphNodeResult> Nodes, IReadOnlyList<ReplayGraphEdgeResult> Edges) ApplyQuery(
-        IReadOnlyList<ReplayGraphNodeResult> nodes,
-        IReadOnlyList<ReplayGraphEdgeResult> edges,
-        ReplayGraphQueryResult query)
-    {
-        var filteredNodes = nodes.Where(node => MatchesNode(node, query)).ToArray();
-        var nodeIds = filteredNodes.Select(static node => node.Id).ToHashSet(StringComparer.Ordinal);
-        var filteredEdges = edges
-            .Where(edge => MatchesEdge(edge, query))
-            .Where(edge => nodeIds.Contains(edge.From) || nodeIds.Contains(edge.To))
-            .ToArray();
-
-        if (query.EdgeKind is not null && query.NodeKind is null && query.Action is null && query.Selector is null && !query.FailedOnly)
-        {
-            var edgeNodeIds = filteredEdges.SelectMany(static edge => new[] { edge.From, edge.To }).ToHashSet(StringComparer.Ordinal);
-            filteredNodes = nodes.Where(node => edgeNodeIds.Contains(node.Id)).ToArray();
-            nodeIds = filteredNodes.Select(static node => node.Id).ToHashSet(StringComparer.Ordinal);
-        }
-
-        filteredNodes = ExpandOneHopContext(nodes, edges, filteredNodes, nodeIds, query);
-        nodeIds = filteredNodes.Select(static node => node.Id).ToHashSet(StringComparer.Ordinal);
-        filteredEdges = edges
-            .Where(edge => MatchesEdge(edge, query) || query.EdgeKind is null)
-            .Where(edge => nodeIds.Contains(edge.From) && nodeIds.Contains(edge.To))
-            .ToArray();
-
-        return (
-            filteredNodes.Take(query.Limit).ToArray(),
-            filteredEdges.Take(query.Limit).ToArray());
-    }
-
-    private static ReplayGraphNodeResult[] ExpandOneHopContext(
-        IReadOnlyList<ReplayGraphNodeResult> allNodes,
-        IReadOnlyList<ReplayGraphEdgeResult> allEdges,
-        IReadOnlyList<ReplayGraphNodeResult> filteredNodes,
-        HashSet<string> nodeIds,
-        ReplayGraphQueryResult query)
-    {
-        if (query.NodeKind is null && query.Action is null && query.Selector is null && !query.FailedOnly)
-        {
-            return filteredNodes.ToArray();
-        }
-
-        var contextIds = new HashSet<string>(nodeIds, StringComparer.Ordinal);
-        foreach (var edge in allEdges)
-        {
-            if (nodeIds.Contains(edge.From))
-            {
-                contextIds.Add(edge.To);
-            }
-
-            if (nodeIds.Contains(edge.To))
-            {
-                contextIds.Add(edge.From);
-            }
-        }
-
-        return allNodes.Where(node => contextIds.Contains(node.Id)).ToArray();
-    }
-
-    private static bool MatchesNode(ReplayGraphNodeResult node, ReplayGraphQueryResult query)
-    {
-        if (query.NodeKind is not null && !string.Equals(node.Kind, query.NodeKind, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        if (query.Action is not null && !Contains(node.Label, query.Action) && !PropertyContains(node, "action", query.Action))
-        {
-            return false;
-        }
-
-        if (query.Selector is not null && !Contains(node.Label, query.Selector) && !PropertyContains(node, "value", query.Selector))
-        {
-            return false;
-        }
-
-        if (query.FailedOnly && !IsFailureNode(node))
-        {
-            return false;
-        }
-
-        return true;
-    }
-
-    private static bool MatchesEdge(ReplayGraphEdgeResult edge, ReplayGraphQueryResult query) =>
-        query.EdgeKind is null || string.Equals(edge.Kind, query.EdgeKind, StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsFailureNode(ReplayGraphNodeResult node) =>
-        string.Equals(node.Kind, "failure", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(GetProperty(node, "status"), "failed", StringComparison.OrdinalIgnoreCase) ||
-        !string.IsNullOrWhiteSpace(GetProperty(node, "error_message")) ||
-        string.Equals(GetProperty(node, "failure_relevant"), "true", StringComparison.OrdinalIgnoreCase);
-
-    private static IReadOnlyList<ReplayGraphInsightResult> BuildInsights(
-        IReadOnlyList<ReplayGraphNodeResult> nodes,
-        IReadOnlyList<ReplayGraphEdgeResult> edges)
-    {
-        var insights = new List<ReplayGraphInsightResult>();
-        var failures = nodes.Where(IsFailureNode).Take(8).ToArray();
-        if (failures.Length > 0)
-        {
-            insights.Add(new ReplayGraphInsightResult(
-                "failure",
-                "error",
-                $"Graph contains {failures.Length} failure-relevant node(s). Start with `replay graph --failed --write-markdown` or `replay scrub --failures`.",
-                failures.Select(static node => node.Id).ToArray(),
-                []));
-        }
-
-        var selectors = nodes.Where(static node => string.Equals(node.Kind, "selector", StringComparison.Ordinal)).Take(8).ToArray();
-        if (selectors.Length > 0)
-        {
-            insights.Add(new ReplayGraphInsightResult(
-                "selector",
-                "info",
-                $"Graph promotes {selectors.Length} selector node(s) that agents can map back to actions and failures.",
-                selectors.Select(static node => node.Id).ToArray(),
-                edges.Where(edge => selectors.Any(selector => edge.From == selector.Id || edge.To == selector.Id)).Select(EdgeId).Take(8).ToArray()));
-        }
-
-        var telemetry = nodes.Where(static node => string.Equals(node.Kind, "telemetry_signal", StringComparison.Ordinal)).Take(8).ToArray();
-        if (telemetry.Length > 0)
-        {
-            insights.Add(new ReplayGraphInsightResult(
-                "telemetry",
-                "info",
-                $"Graph includes {telemetry.Length} telemetry signal node(s) for semantic assertions and waits.",
-                telemetry.Select(static node => node.Id).ToArray(),
-                []));
-        }
-
-        var drafts = nodes.Where(static node => string.Equals(node.Kind, "scenario_draft", StringComparison.Ordinal)).Take(8).ToArray();
-        if (drafts.Length > 0)
-        {
-            insights.Add(new ReplayGraphInsightResult(
-                "scenario_draft",
-                "info",
-                "Scenario draft provenance is present; use generated_step and draft_source edges to audit where each step came from.",
-                drafts.Select(static node => node.Id).ToArray(),
-                []));
-        }
-
-        return insights;
-    }
-
-    private static IReadOnlyList<ReplayGraphActionResult> BuildActions(
-        string artifactRoot,
-        ReplayGraphQueryResult query,
-        IReadOnlyList<ReplayGraphNodeResult> nodes,
-        IReadOnlyList<ReplayGraphEdgeResult> edges)
-    {
-        var actions = new List<ReplayGraphActionResult>
-        {
-            new("open_artifacts", "Open the browser index for screenshots, logs, reports, graph, and replay files.", $"luotsi replay open --artifacts {Quote(artifactRoot)} --dry-run"),
-            new("scrub_failures", "Review the failure timeline with previous/focused/next context.", $"luotsi replay scrub --artifacts {Quote(artifactRoot)} --failures --context 3 --write-markdown")
-        };
-
-        if (!query.FailedOnly && nodes.Any(IsFailureNode))
-        {
-            actions.Add(new ReplayGraphActionResult("filter_failures", "Narrow graph output to failure-relevant nodes and their local context.", $"luotsi replay graph --artifacts {Quote(artifactRoot)} --failed --write-markdown"));
-        }
-
-        if (nodes.Any(static node => string.Equals(node.Kind, "selector", StringComparison.Ordinal)))
-        {
-            actions.Add(new ReplayGraphActionResult("filter_selectors", "List promoted selector nodes and the actions/events that mention them.", $"luotsi replay graph --artifacts {Quote(artifactRoot)} --node-kind selector --write-markdown"));
-        }
-
-        if (nodes.Any(static node => string.Equals(node.Kind, "scenario_draft", StringComparison.Ordinal)))
-        {
-            actions.Add(new ReplayGraphActionResult("audit_draft", "Inspect generated scenario draft provenance.", $"luotsi replay graph --artifacts {Quote(artifactRoot)} --node-kind generated_step --write-markdown"));
-        }
-
-        return actions;
-    }
-
-    private static string BuildMarkdown(ReplayGraphResult graph)
-    {
-        var builder = new StringBuilder();
-        builder.AppendLine("# Luotsi Replay Graph");
-        builder.AppendLine();
-        builder.AppendLine($"Artifact root: `{graph.ArtifactRoot}`");
-        builder.AppendLine($"Nodes: `{graph.NodeCount}` of `{graph.TotalNodeCount}`");
-        builder.AppendLine($"Edges: `{graph.EdgeCount}` of `{graph.TotalEdgeCount}`");
-        builder.AppendLine($"Query: `{DescribeQuery(graph.Query)}`");
-        builder.AppendLine();
-        builder.AppendLine("## What Failed");
-        builder.AppendLine();
-        var failures = graph.Nodes.Where(IsFailureNode).Take(10).ToArray();
-        if (failures.Length == 0)
-        {
-            builder.AppendLine("No failure-relevant nodes are present in this graph view.");
-        }
-        else
-        {
-            foreach (var failure in failures)
-            {
-                builder.AppendLine($"- `{EscapeMarkdown(failure.Id)}` {EscapeMarkdown(failure.Label)}: {EscapeMarkdown(GetProperty(failure, "detail") ?? GetProperty(failure, "error_message"))}");
-            }
-        }
-
-        builder.AppendLine();
-        builder.AppendLine("## What Agents Can Act On");
-        builder.AppendLine();
-        foreach (var action in graph.Actions)
-        {
-            builder.AppendLine($"- **{EscapeMarkdown(action.Kind)}**: {EscapeMarkdown(action.Message)}");
-            if (!string.IsNullOrWhiteSpace(action.Command))
-            {
-                builder.AppendLine($"  `{EscapeMarkdown(action.Command)}`");
-            }
-        }
-
-        builder.AppendLine();
-        builder.AppendLine("## Insights");
-        builder.AppendLine();
-        if (graph.Insights.Count == 0)
-        {
-            builder.AppendLine("No semantic insights were derived from this graph.");
-        }
-        else
-        {
-            builder.AppendLine("| Kind | Severity | Message | Nodes |");
-            builder.AppendLine("|---|---|---|---|");
-            foreach (var insight in graph.Insights)
-            {
-                builder.AppendLine($"| {EscapeMarkdown(insight.Kind)} | {EscapeMarkdown(insight.Severity)} | {EscapeMarkdown(insight.Message)} | {EscapeMarkdown(string.Join(", ", insight.NodeIds.Take(5)))} |");
-            }
-        }
-
-        builder.AppendLine();
-        builder.AppendLine("## Node Kinds");
-        builder.AppendLine();
-        builder.AppendLine("| Kind | Count |");
-        builder.AppendLine("|---|---:|");
-        foreach (var kind in graph.NodeKinds)
-        {
-            builder.AppendLine($"| {EscapeMarkdown(kind.Key)} | {kind.Value} |");
-        }
-
-        builder.AppendLine();
-        builder.AppendLine("## Edge Kinds");
-        builder.AppendLine();
-        builder.AppendLine("| Kind | Count |");
-        builder.AppendLine("|---|---:|");
-        foreach (var kind in graph.EdgeKinds)
-        {
-            builder.AppendLine($"| {EscapeMarkdown(kind.Key)} | {kind.Value} |");
-        }
-
-        builder.AppendLine();
-        builder.AppendLine("## Nodes");
-        builder.AppendLine();
-        builder.AppendLine("| Id | Kind | Label |");
-        builder.AppendLine("|---|---|---|");
-        foreach (var node in graph.Nodes)
-        {
-            builder.AppendLine($"| {EscapeMarkdown(node.Id)} | {EscapeMarkdown(node.Kind)} | {EscapeMarkdown(node.Label)} |");
-        }
-
-        builder.AppendLine();
-        builder.AppendLine("## Edges");
-        builder.AppendLine();
-        builder.AppendLine("| From | Kind | To |");
-        builder.AppendLine("|---|---|---|");
-        foreach (var edge in graph.Edges)
-        {
-            builder.AppendLine($"| {EscapeMarkdown(edge.From)} | {EscapeMarkdown(edge.Kind)} | {EscapeMarkdown(edge.To)} |");
-        }
-
-        return builder.ToString();
-    }
-
-    private static string DescribeQuery(ReplayGraphQueryResult query)
-    {
-        var parts = new List<string>();
-        AddQueryPart(parts, "node-kind", query.NodeKind);
-        AddQueryPart(parts, "edge-kind", query.EdgeKind);
-        AddQueryPart(parts, "action", query.Action);
-        AddQueryPart(parts, "selector", query.Selector);
-        if (query.FailedOnly)
-        {
-            parts.Add("failed=true");
-        }
-
-        parts.Add("limit=" + query.Limit.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        return string.Join(", ", parts);
-    }
-
-    private static void AddQueryPart(List<string> parts, string name, string? value)
-    {
-        if (!string.IsNullOrWhiteSpace(value))
-        {
-            parts.Add(name + "=" + value);
-        }
-    }
-
-    private static string? NormalizeBlank(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-
-    private static bool Contains(string? source, string value) =>
-        source?.Contains(value, StringComparison.OrdinalIgnoreCase) == true;
-
-    private static bool PropertyContains(ReplayGraphNodeResult node, string propertyName, string value) =>
-        node.Properties.Any(property =>
-            property.Key.EndsWith(propertyName, StringComparison.OrdinalIgnoreCase) &&
-            Contains(property.Value, value));
-
-    private static string? GetProperty(ReplayGraphNodeResult node, string name) =>
-        node.Properties.TryGetValue(name, out var value) ? value : null;
-
-    private static string EdgeId(ReplayGraphEdgeResult edge) => edge.From + " -> " + edge.Kind + " -> " + edge.To;
-
-    private static string Quote(string value) => value.Contains(' ', StringComparison.Ordinal) ? $"\"{value}\"" : value;
-
-    private static string EscapeMarkdown(string? value) =>
-        (value ?? string.Empty).Replace("|", "\\|", StringComparison.Ordinal)
-            .Replace("\r", " ", StringComparison.Ordinal)
-            .Replace("\n", " ", StringComparison.Ordinal);
 
 }
