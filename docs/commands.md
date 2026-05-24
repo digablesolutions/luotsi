@@ -102,7 +102,7 @@ View screenshots and operator-triggered recordings are written to the artifact r
 
 ## Replay & Artifact Triage
 
-`replay graph` exposes `facts` in addition to raw graph nodes and edges. Facts are compact subject-predicate-object statements for agents that need failure paths, transitions, selectors, actions, and evidence without traversing the full graph.
+`replay graph` exposes `facts` and `causal_chains` in addition to raw graph nodes and edges. Facts are compact subject-predicate-object statements for agents that need failure paths, transitions, selectors, actions, and evidence without traversing the full graph. Causal chains summarize the shortest transition path into each failure node.
 
 | Command | Description |
 |---|---|

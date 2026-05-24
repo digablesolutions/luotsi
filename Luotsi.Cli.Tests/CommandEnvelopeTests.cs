@@ -1375,6 +1375,13 @@ public sealed partial class AppTests
         Assert.Contains(data.GetProperty("facts").EnumerateArray(), fact =>
             fact.GetProperty("category").GetString() == "action" &&
             fact.GetProperty("object").GetString() == "waitVisible");
+        var causalChain = Assert.Single(data.GetProperty("causal_chains").EnumerateArray());
+        Assert.Equal("failure:session-timeline.jsonl:1", causalChain.GetProperty("failure_node_id").GetString());
+        Assert.Contains("scenario_step_failed", causalChain.GetProperty("summary").GetString(), StringComparison.Ordinal);
+        Assert.True(causalChain.GetProperty("hops").GetArrayLength() >= 1);
+        Assert.Contains(causalChain.GetProperty("hops").EnumerateArray(), hop =>
+            hop.GetProperty("relation").GetString() == "transitions_to" &&
+            hop.GetProperty("category").GetString() == "action_to_failure");
         Assert.True(data.GetProperty("failure_paths").GetArrayLength() >= 1);
         Assert.Equal(Path.Join(replayRoot, "replay-graph.json"), data.GetProperty("json_path").GetString());
         Assert.Equal(Path.Join(replayRoot, "replay-graph.jsonl"), data.GetProperty("jsonl_path").GetString());
@@ -1404,6 +1411,7 @@ public sealed partial class AppTests
         Assert.Contains("| Kind | Node | Title | Detail | Artifact | Edges | Command |", markdown, StringComparison.Ordinal);
         Assert.Contains("## Facts", markdown, StringComparison.Ordinal);
         Assert.Contains("| Category | Subject | Predicate | Object | Confidence | Command |", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Causal Chains", markdown, StringComparison.Ordinal);
         Assert.Contains("## Evidence Kinds", markdown, StringComparison.Ordinal);
         Assert.Contains("## Failure Paths", markdown, StringComparison.Ordinal);
         Assert.Contains("## Transitions", markdown, StringComparison.Ordinal);
@@ -1411,6 +1419,7 @@ public sealed partial class AppTests
         var jsonl = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-graph.jsonl"));
         Assert.Contains("\"type\":\"summary\"", jsonl, StringComparison.Ordinal);
         Assert.Contains("\"type\":\"evidence\"", jsonl, StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"causal_chain\"", jsonl, StringComparison.Ordinal);
         Assert.Contains("\"type\":\"fact\"", jsonl, StringComparison.Ordinal);
         Assert.Contains("\"type\":\"node\"", jsonl, StringComparison.Ordinal);
         Assert.Contains("\"type\":\"edge\"", jsonl, StringComparison.Ordinal);
