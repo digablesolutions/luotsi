@@ -127,8 +127,26 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
             representative.ErrorMessage,
             representative.Action,
             representative.Step,
+            CreateIntelligence(artifactRoot, instances),
             CreateHints(artifactRoot, instances),
             instances);
+    }
+
+    private static ReplayFailureClusterIntelligenceResult CreateIntelligence(
+        string artifactRoot,
+        IReadOnlyList<ReplayFailureClusterInstanceResult> instances)
+    {
+        var latest = instances[0];
+        var latestRoot = ResolveInstanceArtifactRoot(artifactRoot, latest.MetadataPath);
+        var score = CalculateSimilarityScore(instances);
+        return new ReplayFailureClusterIntelligenceResult(
+            ClassifySimilarity(score),
+            score,
+            BuildLikelyCause(instances),
+            latestRoot,
+            $"luotsi replay graph --artifacts {Quote(latestRoot)} --failed --write-json --write-markdown",
+            $"luotsi replay scrub --artifacts {Quote(latestRoot)} --failures --context 3 --write-markdown",
+            BuildSupportingSignals(instances));
     }
 
     private static IReadOnlyList<ReplayFailureClusterHintResult> CreateHints(string artifactRoot, IReadOnlyList<ReplayFailureClusterInstanceResult> instances)
@@ -149,8 +167,18 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
             hints.Add(new ReplayFailureClusterHintResult(
                 "likely_repeated_selector_or_screen_state_failure",
                 "Repeated selector or screen-state failures usually deserve a stronger wait, alternate selector, or visual fallback.",
-                $"luotsi replay graph --artifacts {Quote(latestRoot)} --write-json --write-markdown"));
+                $"luotsi replay graph --artifacts {Quote(latestRoot)} --failed --write-json --write-markdown"));
         }
+
+        hints.Add(new ReplayFailureClusterHintResult(
+            "inspect_best_failure_graph",
+            "Open the semantic graph for the best/latest representative failure in this cluster.",
+            $"luotsi replay graph --artifacts {Quote(latestRoot)} --failed --write-json --write-markdown"));
+
+        hints.Add(new ReplayFailureClusterHintResult(
+            "scrub_best_failure",
+            "Scrub the best/latest representative failure timeline with local context.",
+            $"luotsi replay scrub --artifacts {Quote(latestRoot)} --failures --context 3 --write-markdown"));
 
         hints.Add(new ReplayFailureClusterHintResult(
             "open_latest_replay",
@@ -166,6 +194,77 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
         }
 
         return hints;
+    }
+
+    private static double CalculateSimilarityScore(IReadOnlyList<ReplayFailureClusterInstanceResult> instances)
+    {
+        if (instances.Count <= 1)
+        {
+            return 1.0;
+        }
+
+        var categoryScore = DistinctNormalized(instances.Select(static instance => instance.ErrorCategory)) == 1 ? 0.25 : 0.0;
+        var actionScore = DistinctNormalized(instances.Select(static instance => instance.Action)) == 1 ? 0.25 : 0.0;
+        var stepScore = DistinctNormalized(instances.Select(static instance => instance.Step)) == 1 ? 0.2 : 0.0;
+        var messageScore = DistinctNormalized(instances.Select(static instance => instance.ErrorMessage)) == 1 ? 0.3 : 0.15;
+        return Math.Round(categoryScore + actionScore + stepScore + messageScore, 2);
+    }
+
+    private static string ClassifySimilarity(double score)
+    {
+        if (score >= 0.9)
+        {
+            return "same_failure_shape";
+        }
+
+        if (score >= 0.7)
+        {
+            return "likely_same_cause";
+        }
+
+        return "same_bucket";
+    }
+
+    private static string BuildLikelyCause(IReadOnlyList<ReplayFailureClusterInstanceResult> instances)
+    {
+        var latest = instances[0];
+        if (string.Equals(latest.ErrorCategory, "selector_or_screen_state", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Repeated selector or screen-state failure; inspect the semantic graph for selector drift, missing wait condition, or visual fallback need.";
+        }
+
+        if (!string.IsNullOrWhiteSpace(latest.Action))
+        {
+            return $"Repeated failure around action '{latest.Action}'; inspect causal graph and timeline around that action.";
+        }
+
+        return "Repeated failure shape; inspect latest replay graph and search the representative error text.";
+    }
+
+    private static IReadOnlyList<string> BuildSupportingSignals(IReadOnlyList<ReplayFailureClusterInstanceResult> instances)
+    {
+        var latest = instances[0];
+        var signals = new List<string>
+        {
+            "instances=" + instances.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        };
+
+        AddSignal(signals, "category", latest.ErrorCategory);
+        AddSignal(signals, "action", latest.Action);
+        AddSignal(signals, "step", latest.Step);
+        AddSignal(signals, "message", latest.ErrorMessage);
+        return signals;
+    }
+
+    private static int DistinctNormalized(IEnumerable<string?> values) =>
+        values.Select(Normalize).Where(static value => value.Length > 0).Distinct(StringComparer.Ordinal).Count();
+
+    private static void AddSignal(List<string> signals, string name, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            signals.Add(name + "=" + value);
+        }
     }
 
     private static ReplayFailureClusterInstanceResult ToResult(
@@ -257,6 +356,27 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
             builder.AppendLine($"## {cluster.Id}");
             builder.AppendLine();
             builder.AppendLine($"Signature: `{EscapeMarkdown(cluster.Signature)}`");
+            builder.AppendLine();
+            builder.AppendLine("### Intelligence");
+            builder.AppendLine();
+            builder.AppendLine($"- Similarity: `{EscapeMarkdown(cluster.Intelligence.Similarity)}` (`{cluster.Intelligence.SimilarityScore:0.##}`)");
+            builder.AppendLine($"- Likely cause: {EscapeMarkdown(cluster.Intelligence.LikelyCause)}");
+            builder.AppendLine($"- Best replay: `{EscapeMarkdown(cluster.Intelligence.BestReplayArtifactRoot)}`");
+            if (!string.IsNullOrWhiteSpace(cluster.Intelligence.BestGraphCommand))
+            {
+                builder.AppendLine($"- Graph: `{EscapeMarkdown(cluster.Intelligence.BestGraphCommand)}`");
+            }
+
+            if (!string.IsNullOrWhiteSpace(cluster.Intelligence.BestScrubCommand))
+            {
+                builder.AppendLine($"- Scrub: `{EscapeMarkdown(cluster.Intelligence.BestScrubCommand)}`");
+            }
+
+            if (cluster.Intelligence.SupportingSignals.Count > 0)
+            {
+                builder.AppendLine("- Signals: " + EscapeMarkdown(string.Join(", ", cluster.Intelligence.SupportingSignals)));
+            }
+
             builder.AppendLine();
             builder.AppendLine("### Hints");
             builder.AppendLine();

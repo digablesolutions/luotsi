@@ -102,6 +102,8 @@ View screenshots and operator-triggered recordings are written to the artifact r
 
 ## Replay & Artifact Triage
 
+`replay cluster` now adds cross-run failure intelligence to each cluster: similarity class/score, likely cause, best replay artifact root, and graph/scrub commands for the latest representative bundle.
+
 `replay graph` exposes `facts`, `causal_chains`, and `hypotheses` in addition to raw graph nodes and edges. Facts are compact subject-predicate-object statements for agents that need failure paths, transitions, selectors, actions, and evidence without traversing the full graph. Causal chains summarize the shortest transition path into each failure node. Hypotheses rank likely-cause hints with confidence, support IDs, and a follow-up command.
 
 | Command | Description |
@@ -111,7 +113,7 @@ View screenshots and operator-triggered recordings are written to the artifact r
 | `replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--source-path <timeline-path>] [--sequence <n>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]` | Read ordered replay timeline events with stable details and optional failure/type/text/source/time filtering |
 | `replay scrub --artifacts <artifact-root> [--failures] [--source-path <timeline-path>] [--sequence <n>] [--context <n>] [--limit 200] [--write-json] [--write-markdown]` | Create a local previous/focused/next event scrub view with exact commands for moving through replay evidence |
 | `replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--contains <text>] [--insight <kind>] [--severity info|warning|error] [--evidence <kind>] [--fact <text>] [--node <id> --depth 1] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]` | Build or query a stable node/edge model over sessions, timeline events, failures, scenarios, artifacts, actions, selectors, screen observations, telemetry signals, and scenario-draft provenance |
-| `replay cluster --artifacts <artifact-root> [--write-json] [--write-markdown]` | Group failed replay sessions by normalized failure shape and emit triage hints plus replay/search commands |
+| `replay cluster --artifacts <artifact-root> [--write-json] [--write-markdown]` | Group failed replay sessions by normalized failure shape and emit triage intelligence, likely-cause hints, best replay commands, and replay/search commands |
 | `replay open --artifacts <artifact-root> [--dry-run]` | Refresh the artifact browser index and open `index.html` locally |
 | `replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>] [--write-json] [--write-markdown]` | Convert inspect/replay action events into a conservative starter scenario with review items, warnings, and cleanup suggestions |
 | `replay search --artifacts <artifact-root> --contains <text> [--limit 50]` | Search replay timelines and text-like artifacts for errors, labels, telemetry, or log lines |

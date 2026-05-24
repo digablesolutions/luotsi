@@ -696,8 +696,18 @@ public sealed record ReplayFailureClusterResult(
     string? Message,
     string? Action,
     string? Step,
+    ReplayFailureClusterIntelligenceResult Intelligence,
     IReadOnlyList<ReplayFailureClusterHintResult> Hints,
     IReadOnlyList<ReplayFailureClusterInstanceResult> Instances);
+
+public sealed record ReplayFailureClusterIntelligenceResult(
+    string Similarity,
+    double SimilarityScore,
+    string LikelyCause,
+    string BestReplayArtifactRoot,
+    string? BestGraphCommand,
+    string? BestScrubCommand,
+    IReadOnlyList<string> SupportingSignals);
 
 public sealed record ReplayFailureClusterHintResult(
     string Kind,

@@ -1914,9 +1914,19 @@ public sealed partial class AppTests
         Assert.Equal("selector_or_screen_state", clusters[0].GetProperty("category").GetString());
         Assert.Equal("waitVisible", clusters[0].GetProperty("action").GetString());
         Assert.Contains("not visible after 30 seconds", clusters[0].GetProperty("message").GetString(), StringComparison.Ordinal);
+        var intelligence = clusters[0].GetProperty("intelligence");
+        Assert.Equal("same_failure_shape", intelligence.GetProperty("similarity").GetString());
+        Assert.True(intelligence.GetProperty("similarity_score").GetDouble() >= 0.9);
+        Assert.Contains("selector", intelligence.GetProperty("likely_cause").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("/tmp/replay-cluster-root\\run-b", intelligence.GetProperty("best_replay_artifact_root").GetString());
+        Assert.Contains("replay graph", intelligence.GetProperty("best_graph_command").GetString(), StringComparison.Ordinal);
+        Assert.Contains("replay scrub", intelligence.GetProperty("best_scrub_command").GetString(), StringComparison.Ordinal);
+        Assert.Contains(intelligence.GetProperty("supporting_signals").EnumerateArray(), signal => signal.GetString() == "instances=2");
         var hints = clusters[0].GetProperty("hints").EnumerateArray().ToArray();
         Assert.Contains(hints, hint => hint.GetProperty("kind").GetString() == "same_failure_shape");
         Assert.Contains(hints, hint => hint.GetProperty("kind").GetString() == "likely_repeated_selector_or_screen_state_failure");
+        Assert.Contains(hints, hint => hint.GetProperty("kind").GetString() == "inspect_best_failure_graph");
+        Assert.Contains(hints, hint => hint.GetProperty("kind").GetString() == "scrub_best_failure");
         Assert.Contains(hints, hint =>
             hint.GetProperty("kind").GetString() == "open_latest_replay" &&
             hint.GetProperty("command").GetString() == "luotsi replay open --artifacts /tmp/replay-cluster-root\\run-b");
@@ -1927,6 +1937,10 @@ public sealed partial class AppTests
         Assert.Equal(Path.Join(replayRoot, "replay-clusters.md"), data.GetProperty("markdown_path").GetString());
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-clusters.json")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-clusters.md")));
+        var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-clusters.md"));
+        Assert.Contains("### Intelligence", markdown, StringComparison.Ordinal);
+        Assert.Contains("Likely cause", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay graph", markdown, StringComparison.Ordinal);
     }
 
     [Fact]
