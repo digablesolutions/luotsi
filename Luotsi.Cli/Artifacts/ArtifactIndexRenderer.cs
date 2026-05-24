@@ -632,7 +632,7 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
             return;
         }
 
-        builder.AppendLine("## Replay Workflow");
+        builder.AppendLine("## Replay Front Door");
         builder.AppendLine();
         foreach (var command in BuildReplayWorkflowCommands(replaySummaries))
         {
@@ -700,7 +700,7 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         }
 
         builder.AppendLine("    <section>");
-        builder.AppendLine("      <h2>Replay Workflow</h2>");
+        builder.AppendLine("      <h2>Replay Front Door</h2>");
         builder.AppendLine("      <ul>");
         foreach (var command in BuildReplayWorkflowCommands(replaySummaries))
         {
@@ -720,9 +720,13 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
     private IEnumerable<ReplayWorkflowCommand> BuildReplayWorkflowCommands(IReadOnlyList<SessionReplaySummary> replaySummaries)
     {
         yield return new ReplayWorkflowCommand(
+            "OPEN",
+            $"luotsi replay open --artifacts {Quote(_root)}",
+            "Start here: refresh the browser index and get the canonical replay workflow summary.");
+        yield return new ReplayWorkflowCommand(
             "CAPSULE",
             $"luotsi replay capsule --artifacts {Quote(_root)} --write-readme --write-json",
-            "Start here: summarize failures, artifacts, and recommended replay next steps.");
+            "Write the bundle summary, primary failure, artifact manifest, and recommended replay next steps.");
 
         if (replaySummaries.Any(static summary => summary.HasFailureSignals))
         {

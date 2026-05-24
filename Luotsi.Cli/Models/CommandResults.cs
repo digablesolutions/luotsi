@@ -352,9 +352,33 @@ public sealed record ReplayOpenResult(
     string ArtifactRoot,
     string IndexHtmlPath,
     string IndexMarkdownPath,
+    int SessionCount,
+    int FailureCount,
+    ReplayOpenPrimaryFailureResult? PrimaryFailure,
+    ReplayOpenNextActionResult? RecommendedNextAction,
+    IReadOnlyList<ReplayOpenCommandHintResult> Commands,
     bool Opened,
     string? Opener,
     IReadOnlyList<string> OpenerArgs);
+
+public sealed record ReplayOpenPrimaryFailureResult(
+    string? Scenario,
+    string? Step,
+    string? Action,
+    string? Message,
+    string? TimelinePath,
+    string? FailureCapsulePath);
+
+public sealed record ReplayOpenNextActionResult(
+    string Kind,
+    string Title,
+    string Reason,
+    string Command);
+
+public sealed record ReplayOpenCommandHintResult(
+    string Kind,
+    string Description,
+    string Command);
 
 public sealed record ReplayScenarioDraftResult(
     string Schema,

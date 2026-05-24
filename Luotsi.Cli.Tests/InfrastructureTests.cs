@@ -171,7 +171,8 @@ public sealed partial class AppTests
         Assert.Contains("view_share_client_connected | endpoint=127.0.0.1:9000 | remote_endpoint=10.0.0.25:40122 | observer_count=1 | reason=observer_joined", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("view_stats | decoded_frames=120 | presented_frames=118 | dropped_frames=2 | decode_fps=29.5 | present_fps=29.0 | end_to_end_latency_ms=142", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("view_error | error=transport: Unexpected end of stream", markdownIndex, StringComparison.Ordinal);
-        Assert.Contains("## Replay Workflow", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("## Replay Front Door", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay open --artifacts", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("luotsi replay capsule --artifacts", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("luotsi replay scrub --artifacts", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("luotsi replay graph --artifacts", markdownIndex, StringComparison.Ordinal);
@@ -179,7 +180,8 @@ public sealed partial class AppTests
         Assert.Contains("## Replay", markdownIndex, StringComparison.Ordinal);
 
         Assert.Contains("<h2>Replay Sessions</h2>", htmlIndex, StringComparison.Ordinal);
-        Assert.Contains("<h2>Replay Workflow</h2>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("<h2>Replay Front Door</h2>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay open --artifacts", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("luotsi replay capsule --artifacts", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("luotsi replay graph --artifacts", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("<strong>view 192.168.0.134:5555</strong>", htmlIndex, StringComparison.Ordinal);

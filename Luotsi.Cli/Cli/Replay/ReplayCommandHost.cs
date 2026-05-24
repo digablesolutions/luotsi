@@ -121,6 +121,13 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
 
         var indexHtmlPath = Path.Join(artifacts.Root, ArtifactSession.ArtifactHtmlIndexFileName);
         var indexMarkdownPath = Path.Join(artifacts.Root, ArtifactSession.ArtifactIndexFileName);
+        var files = _dependencies.FileSystem.GetFiles(artifacts.Root, "*", SearchOption.AllDirectories)
+            .Select(path => Path.GetRelativePath(artifacts.Root, path).Replace('\\', '/'))
+            .ToArray();
+        var summaries = new SessionReplaySummaryReader(artifacts.Root, _dependencies.FileSystem).ReadSummaries(files);
+        var primaryFailure = CreatePrimaryFailure(summaries);
+        var commands = BuildOpenCommandHints(artifacts.Root, summaries, primaryFailure).ToArray();
+        var nextAction = BuildRecommendedNextAction(artifacts.Root, summaries, primaryFailure, commands);
         var command = BuildOpenCommand(indexHtmlPath);
         if (options.HasFlag("dry-run"))
         {
@@ -129,6 +136,11 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
                 artifacts.Root,
                 indexHtmlPath,
                 indexMarkdownPath,
+                summaries.Count,
+                summaries.Count(static summary => summary.HasFailureSignals),
+                primaryFailure,
+                nextAction,
+                commands,
                 false,
                 command.FileName,
                 command.Args);
@@ -146,9 +158,115 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             artifacts.Root,
             indexHtmlPath,
             indexMarkdownPath,
+            summaries.Count,
+            summaries.Count(static summary => summary.HasFailureSignals),
+            primaryFailure,
+            nextAction,
+            commands,
             true,
             command.FileName,
             command.Args);
+    }
+
+    private static ReplayOpenPrimaryFailureResult? CreatePrimaryFailure(IReadOnlyList<SessionReplaySummary> summaries)
+    {
+        var summary = summaries.FirstOrDefault(static item => item.HasFailureSignals);
+        if (summary is null)
+        {
+            return null;
+        }
+
+        var failedScenario = summary.FailureCapsule?.Scenarios.FirstOrDefault();
+        var failedStep = failedScenario?.FailedStep;
+        var failureHighlight = summary.TimelineHighlights.FirstOrDefault(static entry => entry.IsFailureRelevant);
+        return new ReplayOpenPrimaryFailureResult(
+            failedScenario?.Scenario,
+            failedStep?.Name,
+            failedStep?.Action,
+            failedScenario?.Error?.Message ?? failureHighlight?.Detail,
+            summary.TimelinePath,
+            summary.FailureCapsulePath);
+    }
+
+    private static IEnumerable<ReplayOpenCommandHintResult> BuildOpenCommandHints(
+        string artifactRoot,
+        IReadOnlyList<SessionReplaySummary> summaries,
+        ReplayOpenPrimaryFailureResult? primaryFailure)
+    {
+        yield return new ReplayOpenCommandHintResult(
+            "capsule",
+            "Write the replay capsule summary and README for this bundle.",
+            $"luotsi replay capsule --artifacts {Quote(artifactRoot)} --write-readme --write-json");
+        yield return new ReplayOpenCommandHintResult(
+            "timeline",
+            "Read the ordered session timeline.",
+            $"luotsi replay timeline --artifacts {Quote(artifactRoot)} --context 3 --write-markdown");
+
+        if (summaries.Any(static summary => summary.HasFailureSignals))
+        {
+            yield return new ReplayOpenCommandHintResult(
+                "scrub",
+                "Scrub the focused failure window with previous/current/next events.",
+                $"luotsi replay scrub --artifacts {Quote(artifactRoot)} --failures --context 3 --write-markdown");
+            yield return new ReplayOpenCommandHintResult(
+                "graph",
+                "Build semantic failure context for agents and reviewers.",
+                $"luotsi replay graph --artifacts {Quote(artifactRoot)} --failed --write-json --write-markdown");
+
+            if (!string.IsNullOrWhiteSpace(primaryFailure?.Message))
+            {
+                yield return new ReplayOpenCommandHintResult(
+                    "search",
+                    "Search the bundle for the primary failure text.",
+                    $"luotsi replay search --artifacts {Quote(artifactRoot)} --contains {Quote(primaryFailure.Message)}");
+            }
+
+            yield return new ReplayOpenCommandHintResult(
+                "cluster",
+                "Look for matching failure shapes across sibling replay bundles.",
+                $"luotsi replay cluster --artifacts {Quote(ResolveClusterRoot(artifactRoot))} --min-count 2 --write-markdown");
+        }
+
+        if (summaries.Count > 0)
+        {
+            yield return new ReplayOpenCommandHintResult(
+                "scenario_draft",
+                "Draft a scenario from captured inspect, view, action, and telemetry events.",
+                $"luotsi replay scenario-draft --artifacts {Quote(artifactRoot)} --output draft-scenario.json --write-json --write-markdown");
+        }
+    }
+
+    private static ReplayOpenNextActionResult? BuildRecommendedNextAction(
+        string artifactRoot,
+        IReadOnlyList<SessionReplaySummary> summaries,
+        ReplayOpenPrimaryFailureResult? primaryFailure,
+        IReadOnlyList<ReplayOpenCommandHintResult> commands)
+    {
+        if (primaryFailure is not null)
+        {
+            var scrub = commands.First(static command => string.Equals(command.Kind, "scrub", StringComparison.Ordinal));
+            return new ReplayOpenNextActionResult(
+                "scrub_failure",
+                "Scrub the failure window",
+                "A failure signal was found; start with the smallest timeline window before opening broader artifacts.",
+                scrub.Command);
+        }
+
+        if (summaries.Count > 0)
+        {
+            var capsule = commands.First(static command => string.Equals(command.Kind, "capsule", StringComparison.Ordinal));
+            return new ReplayOpenNextActionResult(
+                "write_capsule",
+                "Write the replay capsule",
+                "No failure signal was found; create the capsule summary before deeper inspection.",
+                capsule.Command);
+        }
+
+        return new ReplayOpenNextActionResult(
+            "inspect_artifacts",
+            "Inspect the artifact index",
+            "No replay metadata was found; use the refreshed index to inspect available artifacts.",
+            $"luotsi replay open --artifacts {Quote(artifactRoot)} --dry-run");
     }
 
     private static ReplayOutputMode ParseOutputMode(CliOptions options, string commandName)
@@ -215,6 +333,15 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         return new ReplayOpenCommand("xdg-open", [indexHtmlPath]);
     }
 
+    private static string ResolveClusterRoot(string artifactRoot)
+    {
+        var parent = Path.GetDirectoryName(artifactRoot);
+        return string.IsNullOrWhiteSpace(parent) ? artifactRoot : parent;
+    }
+
+    private static string Quote(string value) =>
+        value.Contains(' ', StringComparison.Ordinal) ? "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"" : value;
+
     private static IEnumerable<object> CreateJsonLines(ReplaySummarizeResult result)
     {
         yield return new ReplaySummaryJsonLine(
@@ -262,6 +389,7 @@ internal sealed record ReplayCommandHostDependencies(
     AppCommandEnvelopeWriter EnvelopeWriter,
     AppCommandJsonWriter JsonWriter,
     Routing.ReplayCommandDispatcher CommandDispatcher,
+    IFileSystem FileSystem,
     IProcessRunner ProcessRunner,
     ReplayScenarioDraftService ScenarioDraftService,
     ReplaySearchService SearchService,
