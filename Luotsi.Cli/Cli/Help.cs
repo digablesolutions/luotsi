@@ -242,7 +242,8 @@ Notes:
   telemetry, or existing scenario events. With --write-json and
   --write-markdown, it writes review artifacts into the replay root. Replay search scans
   text-like replay artifacts, reports, logcat, hierarchies, screen-state JSON,
-  and timelines for a case-insensitive string. Replay capsule returns a compact
+  and timelines for a case-insensitive string, then returns commands back into
+  capsule, open, scrub, and graph when the matches support those next steps. Replay capsule returns a compact
   bundle manifest with artifact counts, an artifact_manifest, primary failure,
   existing scenario draft artifact paths, and suggested next commands. With --write-readme, replay capsule writes replay-capsule.md into
   the artifact root. With --write-json, it writes replay-capsule-summary.json.

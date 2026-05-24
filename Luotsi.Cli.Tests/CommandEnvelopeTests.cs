@@ -914,6 +914,14 @@ public sealed partial class AppTests
         Assert.Equal("not visible", data.GetProperty("query").GetString());
         Assert.Equal(3, data.GetProperty("match_count").GetInt32());
         Assert.False(data.GetProperty("truncated").GetBoolean());
+        var commands = data.GetProperty("commands").EnumerateArray().ToArray();
+        Assert.Contains(commands, command =>
+            command.GetProperty("kind").GetString() == "describe_replay_capsule" &&
+            command.GetProperty("command").GetString() == $"luotsi replay capsule --artifacts {replayRoot} --write-readme --write-json");
+        Assert.Contains(commands, command => command.GetProperty("kind").GetString() == "scrub_failures");
+        Assert.Contains(commands, command =>
+            command.GetProperty("kind").GetString() == "graph_matching_context" &&
+            command.GetProperty("command").GetString()!.Contains("--contains \"not visible\"", StringComparison.Ordinal));
         var matches = data.GetProperty("matches").EnumerateArray().ToArray();
         Assert.Contains(matches, match =>
             match.GetProperty("path").GetString() == "failure-capsule.json" &&

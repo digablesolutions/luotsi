@@ -426,7 +426,13 @@ public sealed record ReplaySearchResult(
     int MatchCount,
     int ScannedFileCount,
     bool Truncated,
+    IReadOnlyList<ReplaySearchCommandHint> Commands,
     IReadOnlyList<ReplaySearchMatchResult> Matches);
+
+public sealed record ReplaySearchCommandHint(
+    string Kind,
+    string Description,
+    string Command);
 
 public sealed record ReplaySearchMatchResult(
     string Path,
