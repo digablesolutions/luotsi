@@ -6,6 +6,8 @@
 - what changed or was observed around the failure
 - what command can I run next
 
+Graph is not the only replay entry point. `replay capsule` is still the front door for one artifact root, and graph actions intentionally include a capsule command so an agent can move from semantic context back to the bundle summary, artifacts, and recommended next steps.
+
 ## Command
 
 ```text
@@ -39,7 +41,7 @@ Filtering returns a focused subgraph with one-hop context. `total_node_count` an
 | `taxonomy` | Machine-readable node, edge, and evidence kind descriptions plus query examples. |
 | `agent_summary` | Compact answers for what failed, what changed, what command to run next, and the first promoted evidence node IDs. |
 | `insights` | Agent-readable highlights such as failures, selectors, telemetry, and scenario-draft provenance. |
-| `actions` | Suggested next commands for opening, scrubbing, or narrowing the graph. |
+| `actions` | Suggested next commands for capsule, opening artifacts, scrubbing, streaming, or narrowing the graph. |
 | `evidence_kinds` | Counts for promoted evidence records in the returned graph view. |
 | `evidence` | Compact promoted proof records from returned graph nodes: failures, artifacts, selectors, screen observations, telemetry signals, and generated steps. Each record includes nearby `edge_ids` so agents can trace why the proof is connected. |
 | `facts` | Compact subject-predicate-object facts derived from the returned graph view. Facts are the preferred agent input when the caller needs stable semantic statements instead of raw graph traversal. |
@@ -137,6 +139,7 @@ Each `hypotheses[]` item has:
 ## Agent Queries
 
 ```text
+luotsi replay capsule --artifacts artifacts/run --write-readme --write-json
 luotsi replay graph --artifacts artifacts/run --failed --write-markdown
 luotsi replay graph --artifacts artifacts/run --format jsonl
 luotsi replay graph --artifacts artifacts/run --write-jsonl
@@ -155,4 +158,4 @@ luotsi replay graph --artifacts artifacts/run --node failure:session-timeline.js
 
 `replay-graph.md` starts with "Agent Summary", "What Failed", "What Agents Can Act On", "Evidence", "Facts", "Causal Chains", "Hypotheses", and "Insights" before the raw node and edge tables.
 
-JSONL output includes `summary`, `failure_path`, `evidence`, `causal_chain`, `hypothesis`, `fact`, `insight`, `node`, and `edge` line types. The `summary` line includes `node_kinds`, `edge_kinds`, and `evidence_kinds` so agents can decide whether to consume later lines. Use `hypothesis` lines when an agent needs ranked likely-cause hints; use `causal_chain` lines when it needs the shortest path into a failure; use `fact` lines when it needs concise semantic statements; use `evidence` lines when it needs proof before deciding whether to open the full graph.
+JSONL output includes `summary`, `failure_path`, `evidence`, `causal_chain`, `hypothesis`, `fact`, `insight`, `node`, and `edge` line types. The `summary` line includes `agent_summary`, `node_kinds`, `edge_kinds`, and `evidence_kinds` so agents can decide whether to consume later lines. `agent_summary.commands` starts with the replay capsule command, then includes graph/scrub/open follow-ups from `actions`. Use `hypothesis` lines when an agent needs ranked likely-cause hints; use `causal_chain` lines when it needs the shortest path into a failure; use `fact` lines when it needs concise semantic statements; use `evidence` lines when it needs proof before deciding whether to open the full graph.

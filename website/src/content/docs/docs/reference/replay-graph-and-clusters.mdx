@@ -27,12 +27,17 @@ The top-level fields that matter most are:
 |---|---|
 | `schema` | Always `luotsi-replay-graph.v1` |
 | `artifact_root` | Root directory the graph was built from |
-| `node_count`, `edge_count` | Total promoted graph size for this artifact root |
+| `query` | Applied graph filters such as failure-only, node kind, edge kind, action, selector, text, evidence, fact, node neighborhood, and limit |
+| `node_count`, `edge_count` | Returned graph size after filters |
+| `total_node_count`, `total_edge_count` | Full graph size before filters |
+| `matched_node_count`, `matched_edge_count` | Query match size before `--limit` is applied |
+| `agent_summary` | Compact "what failed", "what changed", and "what can I run next" summary; commands start with `replay capsule` |
 | `node_kinds`, `edge_kinds` | Counts by node kind and edge kind for quick triage |
+| `insights`, `actions`, `evidence`, `facts`, `causal_chains`, `hypotheses` | Promoted semantic summaries for agents and reviewers |
 | `json_path`, `markdown_path` | Paths written only when `--write-json` or `--write-markdown` is requested |
-| `nodes`, `edges` | Full graph payload for the artifact root |
+| `nodes`, `edges` | Returned graph payload |
 
-On this branch, `replay graph` returns the promoted graph for one artifact root rather than a filterable subgraph. Use `replay capsule`, `replay timeline`, `replay scrub`, or `replay search` to narrow the failure window first, then use the graph when you want the semantic node-and-edge view over that same bundle.
+Use graph filters when you already know what you need: `--failed`, `--node-kind`, `--edge-kind`, `--action`, `--selector`, `--contains`, `--insight`, `--severity`, `--evidence`, `--fact`, or `--node <id> --depth <n>`. The default action list starts with `replay capsule`, then routes to artifact browsing, scrub, streaming JSONL, and narrower graph queries.
 
 ## Node kinds
 
@@ -62,6 +67,7 @@ Edges describe how those promoted nodes relate to one another:
 | Kind | Meaning |
 |---|---|
 | `next` | Timeline ordering within one source timeline file |
+| `transitions_to` | Semantic timeline transition with category and optional elapsed time |
 | `indicates` | Event points to a failure node |
 | `has_capsule` | Session has a failure capsule |
 | `contains` | Capsule contains a scenario |
@@ -75,15 +81,15 @@ Edges describe how those promoted nodes relate to one another:
 | `uses_source` | Scenario draft uses a source family |
 | `applies_normalization` | Scenario draft applied a normalization |
 
-## How to narrow before graph
+## How to move through one bundle
 
-These commands usually answer the next question fastest before you open the full graph:
+These commands usually answer the next question fastest:
 
 - `replay capsule` when you want the shortest path to the primary failure and the suggested next commands
 - `replay timeline --failures` when you need the exact failure-relevant event window
 - `replay scrub --failures --context 3` when you want the local before/focus/after view around one failure
 - `replay search --contains <text>` when you are hunting a selector, message, or other text evidence across the artifact root
-- `replay graph` after the failure window is already clear and you want the promoted nodes and edges for that same root
+- `replay graph` when you want promoted nodes, edges, facts, causal chains, hypotheses, and evidence for that same root
 
 ## Replay cluster contract
 
