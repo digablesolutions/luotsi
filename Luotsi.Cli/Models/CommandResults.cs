@@ -270,7 +270,13 @@ public sealed record ReplaySummarizeResult(
     string ArtifactRoot,
     int SessionCount,
     int FailureCount,
+    IReadOnlyList<ReplaySummaryCommandHintResult> Commands,
     IReadOnlyList<ReplaySessionSummaryResult> Sessions);
+
+public sealed record ReplaySummaryCommandHintResult(
+    string Kind,
+    string Description,
+    string Command);
 
 public sealed record ReplaySessionSummaryResult(
     string MetadataPath,

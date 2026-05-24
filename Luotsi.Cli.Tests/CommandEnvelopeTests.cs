@@ -388,6 +388,12 @@ public sealed partial class AppTests
         Assert.Equal(ResultSchemas.SessionReplaySummary, envelope.RootElement.GetProperty("data").GetProperty("schema").GetString());
         Assert.Equal(1, envelope.RootElement.GetProperty("data").GetProperty("session_count").GetInt32());
         Assert.Equal(1, envelope.RootElement.GetProperty("data").GetProperty("failure_count").GetInt32());
+        var commands = envelope.RootElement.GetProperty("data").GetProperty("commands").EnumerateArray().ToArray();
+        Assert.Contains(commands, command =>
+            command.GetProperty("kind").GetString() == "describe_replay_capsule" &&
+            command.GetProperty("command").GetString() == $"luotsi replay capsule --artifacts {replayRoot} --write-readme --write-json");
+        Assert.Contains(commands, command => command.GetProperty("kind").GetString() == "graph_failures");
+        Assert.Contains(commands, command => command.GetProperty("kind").GetString() == "cluster_failures");
 
         var session = envelope.RootElement.GetProperty("data").GetProperty("sessions")[0];
         Assert.Equal("view", session.GetProperty("session_kind").GetString());
@@ -586,6 +592,8 @@ public sealed partial class AppTests
         Assert.Equal(replayRoot, summaryLine.RootElement.GetProperty("artifact_root").GetString());
         Assert.Equal(1, summaryLine.RootElement.GetProperty("session_count").GetInt32());
         Assert.Equal(1, summaryLine.RootElement.GetProperty("failure_count").GetInt32());
+        Assert.Contains(summaryLine.RootElement.GetProperty("commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "describe_replay_capsule");
         Assert.Equal(ResultSchemas.SessionReplaySummary, sessionLine.RootElement.GetProperty("schema").GetString());
         Assert.Equal("session", sessionLine.RootElement.GetProperty("type").GetString());
         Assert.Equal(replayRoot, sessionLine.RootElement.GetProperty("artifact_root").GetString());

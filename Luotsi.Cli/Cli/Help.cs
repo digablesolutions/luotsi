@@ -230,7 +230,8 @@ Notes:
   existing artifact root. By default it returns the condensed failure timeline
   as a normal JSON command envelope. `--format json` writes the bare summary
   object, and `--format jsonl` writes one summary header line followed by one
-  session line per replay session. Failed scenario runs also expose
+  session line per replay session. The summary includes commands that point
+  into capsule, open, scrub, graph, and cluster follow-ups. Failed scenario runs also expose
   failure_capsule_path and an embedded failure_capsule summary with linked
   reports and failure artifacts. Replay open refreshes index.html/index.md for
   the artifact root and opens index.html in the local browser. Replay
