@@ -196,7 +196,7 @@ Usage:
   luotsi replay capsule --artifacts <artifact-root> [--write-readme] [--write-json]
   luotsi replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--source-path <timeline-path>] [--sequence <n>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
   luotsi replay scrub --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--source-path <timeline-path>] [--sequence <n>] [--context <n>] [--limit 200] [--write-json] [--write-markdown]
-  luotsi replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--node <id> --depth 1] [--limit 200] [--write-json] [--write-markdown]
+  luotsi replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--node <id> --depth 1] [--limit 200] [--format json|jsonl] [--write-json] [--write-markdown]
   luotsi replay cluster --artifacts <artifact-root> [--write-json] [--write-markdown]
   luotsi replay open --artifacts <artifact-root> [--dry-run]
   luotsi replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>] [--write-json] [--write-markdown]
@@ -211,6 +211,7 @@ Examples:
   luotsi replay timeline --artifacts artifacts/20260518-100000-run --source-path session-timeline.jsonl --sequence 1
   luotsi replay scrub --artifacts artifacts/20260518-100000-run --failures --context 3 --write-markdown
   luotsi replay graph --artifacts artifacts/20260518-100000-run --write-json --write-markdown
+  luotsi replay graph --artifacts artifacts/20260518-100000-run --format jsonl
   luotsi replay graph --artifacts artifacts/20260518-100000-run --failed --node-kind failure --write-markdown
   luotsi replay graph --artifacts artifacts/20260518-100000-run --node-kind selector --write-markdown
   luotsi replay graph --artifacts artifacts/20260518-100000-run --node failure:session-timeline.jsonl:3 --depth 2
@@ -258,8 +259,10 @@ Notes:
   and edge model over sessions, timeline events, failures, scenarios,
   artifacts, actions, text selectors, screen observations, telemetry
   signals, and generated scenario draft provenance. Its result includes query,
-  total_node_count, total_edge_count, node_kinds, edge_kinds, insights, and
-  actions so agents can quickly understand what failed and what to do next.
+  taxonomy, agent_summary, total_node_count, total_edge_count, node_kinds,
+  edge_kinds, insights, actions, and failure_paths so agents can quickly
+  understand what failed and what to do next. With --format json or --format
+  jsonl, replay graph writes raw machine output instead of the command envelope.
   Use --failed, --node-kind, --edge-kind, --action, --selector, --node,
   --depth, and --limit to return a focused subgraph with local context. Replay cluster groups failed replay sessions by normalized failure
   shape and returns triage hints plus replay/search commands for the latest
@@ -520,7 +523,7 @@ Command groups:
     replay capsule --artifacts <artifact-root> [--write-readme] [--write-json]
     replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
     replay scrub --artifacts <artifact-root> [--failures] [--source-path <timeline-path>] [--sequence <n>] [--context <n>] [--write-json] [--write-markdown]
-    replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--node <id> --depth 1] [--limit 200] [--write-json] [--write-markdown]
+    replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--node <id> --depth 1] [--limit 200] [--format json|jsonl] [--write-json] [--write-markdown]
     replay cluster --artifacts <artifact-root> [--write-json] [--write-markdown]
     replay open --artifacts <artifact-root> [--dry-run]
     replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>] [--write-json] [--write-markdown]

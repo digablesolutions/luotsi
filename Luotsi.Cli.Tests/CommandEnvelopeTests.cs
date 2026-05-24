@@ -1405,6 +1405,44 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayGraph_Can_Write_Raw_Jsonl()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot, "--format", "jsonl"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.True(console.OutputLines.Count > 3);
+        using var summary = JsonDocument.Parse(console.OutputLines[0]);
+        Assert.Equal(ResultSchemas.ReplayGraph, summary.RootElement.GetProperty("schema").GetString());
+        Assert.Equal("summary", summary.RootElement.GetProperty("type").GetString());
+        Assert.True(summary.RootElement.TryGetProperty("agent_summary", out _));
+        Assert.Contains(console.OutputLines, line =>
+        {
+            using var document = JsonDocument.Parse(line);
+            return document.RootElement.GetProperty("type").GetString() == "failure_path";
+        });
+        Assert.Contains(console.OutputLines, line =>
+        {
+            using var document = JsonDocument.Parse(line);
+            return document.RootElement.GetProperty("type").GetString() == "node";
+        });
+        Assert.Contains(console.OutputLines, line =>
+        {
+            using var document = JsonDocument.Parse(line);
+            return document.RootElement.GetProperty("type").GetString() == "edge";
+        });
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayGraph_Classifies_Action_To_Failure_Transitions()
     {
         var console = new FakeConsole();

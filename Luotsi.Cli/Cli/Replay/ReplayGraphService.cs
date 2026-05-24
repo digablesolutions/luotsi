@@ -157,6 +157,103 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
         return result;
     }
 
+    public static IEnumerable<object> ToJsonLineObjects(ReplayGraphResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+
+        yield return new ReplayGraphJsonLine(
+            ResultSchemas.ReplayGraph,
+            "summary",
+            result.ArtifactRoot,
+            result.NodeCount,
+            result.EdgeCount,
+            result.TotalNodeCount,
+            result.TotalEdgeCount,
+            result.Truncated,
+            result.Query,
+            result.AgentSummary,
+            null,
+            null,
+            null,
+            null);
+
+        foreach (var path in result.FailurePaths)
+        {
+            yield return new ReplayGraphJsonLine(
+                ResultSchemas.ReplayGraph,
+                "failure_path",
+                result.ArtifactRoot,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                path,
+                null,
+                null,
+                null);
+        }
+
+        foreach (var insight in result.Insights)
+        {
+            yield return new ReplayGraphJsonLine(
+                ResultSchemas.ReplayGraph,
+                "insight",
+                result.ArtifactRoot,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                insight,
+                null,
+                null);
+        }
+
+        foreach (var node in result.Nodes)
+        {
+            yield return new ReplayGraphJsonLine(
+                ResultSchemas.ReplayGraph,
+                "node",
+                result.ArtifactRoot,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                node,
+                null);
+        }
+
+        foreach (var edge in result.Edges)
+        {
+            yield return new ReplayGraphJsonLine(
+                ResultSchemas.ReplayGraph,
+                "edge",
+                result.ArtifactRoot,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                edge);
+        }
+    }
+
     private static void AddFailureCapsule(
         SessionReplaySummary summary,
         string sessionId,
@@ -385,5 +482,21 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
         edges.GroupBy(static edge => edge.Kind, StringComparer.Ordinal)
             .OrderBy(static group => group.Key, StringComparer.Ordinal)
             .ToDictionary(static group => group.Key, static group => group.Count(), StringComparer.Ordinal);
+
+    private sealed record ReplayGraphJsonLine(
+        string Schema,
+        string Type,
+        string ArtifactRoot,
+        int? NodeCount,
+        int? EdgeCount,
+        int? TotalNodeCount,
+        int? TotalEdgeCount,
+        bool? Truncated,
+        ReplayGraphQueryResult? Query,
+        ReplayGraphAgentSummaryResult? AgentSummary,
+        ReplayGraphFailurePathResult? FailurePath,
+        ReplayGraphInsightResult? Insight,
+        ReplayGraphNodeResult? Node,
+        ReplayGraphEdgeResult? Edge);
 
 }
