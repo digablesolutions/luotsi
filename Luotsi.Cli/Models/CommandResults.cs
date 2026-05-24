@@ -541,14 +541,39 @@ public sealed record ReplayScrubCommandHint(
 public sealed record ReplayGraphResult(
     string Schema,
     string ArtifactRoot,
+    ReplayGraphQueryResult Query,
     int NodeCount,
     int EdgeCount,
+    int TotalNodeCount,
+    int TotalEdgeCount,
     IReadOnlyDictionary<string, int> NodeKinds,
     IReadOnlyDictionary<string, int> EdgeKinds,
+    IReadOnlyList<ReplayGraphInsightResult> Insights,
+    IReadOnlyList<ReplayGraphActionResult> Actions,
     string? JsonPath,
     string? MarkdownPath,
     IReadOnlyList<ReplayGraphNodeResult> Nodes,
     IReadOnlyList<ReplayGraphEdgeResult> Edges);
+
+public sealed record ReplayGraphQueryResult(
+    string? NodeKind,
+    string? EdgeKind,
+    string? Action,
+    string? Selector,
+    bool FailedOnly,
+    int Limit);
+
+public sealed record ReplayGraphInsightResult(
+    string Kind,
+    string Severity,
+    string Message,
+    IReadOnlyList<string> NodeIds,
+    IReadOnlyList<string> EdgeIds);
+
+public sealed record ReplayGraphActionResult(
+    string Kind,
+    string Message,
+    string? Command);
 
 public sealed record ReplayGraphNodeResult(
     string Id,

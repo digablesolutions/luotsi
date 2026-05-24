@@ -196,7 +196,7 @@ Usage:
   luotsi replay capsule --artifacts <artifact-root> [--write-readme] [--write-json]
   luotsi replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--source-path <timeline-path>] [--sequence <n>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
   luotsi replay scrub --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--source-path <timeline-path>] [--sequence <n>] [--context <n>] [--limit 200] [--write-json] [--write-markdown]
-  luotsi replay graph --artifacts <artifact-root> [--write-json] [--write-markdown]
+  luotsi replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--limit 200] [--write-json] [--write-markdown]
   luotsi replay cluster --artifacts <artifact-root> [--write-json] [--write-markdown]
   luotsi replay open --artifacts <artifact-root> [--dry-run]
   luotsi replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>] [--write-json] [--write-markdown]
@@ -211,6 +211,8 @@ Examples:
   luotsi replay timeline --artifacts artifacts/20260518-100000-run --source-path session-timeline.jsonl --sequence 1
   luotsi replay scrub --artifacts artifacts/20260518-100000-run --failures --context 3 --write-markdown
   luotsi replay graph --artifacts artifacts/20260518-100000-run --write-json --write-markdown
+  luotsi replay graph --artifacts artifacts/20260518-100000-run --failed --node-kind failure --write-markdown
+  luotsi replay graph --artifacts artifacts/20260518-100000-run --node-kind selector --write-markdown
   luotsi replay cluster --artifacts artifacts/ci-runs --write-json --write-markdown
   luotsi replay open --artifacts artifacts/20260518-100000-view
   luotsi replay scenario-draft --artifacts artifacts/20260518-100000-inspect --output scenarios/draft.json --write-markdown
@@ -254,9 +256,11 @@ Notes:
   artifact root. Replay graph emits a stable node
   and edge model over sessions, timeline events, failures, scenarios,
   artifacts, actions, text selectors, screen observations, telemetry
-  signals, and generated scenario draft provenance. Its result includes node_kinds and edge_kinds counts so agents can
-  quickly understand what semantic material is available before traversing the
-  graph. Replay cluster groups failed replay sessions by normalized failure
+  signals, and generated scenario draft provenance. Its result includes query,
+  total_node_count, total_edge_count, node_kinds, edge_kinds, insights, and
+  actions so agents can quickly understand what failed and what to do next.
+  Use --failed, --node-kind, --edge-kind, --action, --selector, and --limit to
+  return a focused subgraph with one-hop context. Replay cluster groups failed replay sessions by normalized failure
   shape and returns triage hints plus replay/search commands for the latest
   matching bundle.
   Failures still use the normal error envelope.
@@ -515,7 +519,7 @@ Command groups:
     replay capsule --artifacts <artifact-root> [--write-readme] [--write-json]
     replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
     replay scrub --artifacts <artifact-root> [--failures] [--source-path <timeline-path>] [--sequence <n>] [--context <n>] [--write-json] [--write-markdown]
-    replay graph --artifacts <artifact-root> [--write-json] [--write-markdown]
+    replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--limit 200] [--write-json] [--write-markdown]
     replay cluster --artifacts <artifact-root> [--write-json] [--write-markdown]
     replay open --artifacts <artifact-root> [--dry-run]
     replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>] [--write-json] [--write-markdown]

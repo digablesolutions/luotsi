@@ -1340,6 +1340,11 @@ public sealed partial class AppTests
         Assert.Equal(ResultSchemas.ReplayGraph, data.GetProperty("schema").GetString());
         Assert.True(data.GetProperty("node_count").GetInt32() >= 6);
         Assert.True(data.GetProperty("edge_count").GetInt32() >= 4);
+        Assert.True(data.GetProperty("total_node_count").GetInt32() >= data.GetProperty("node_count").GetInt32());
+        Assert.True(data.GetProperty("total_edge_count").GetInt32() >= data.GetProperty("edge_count").GetInt32());
+        Assert.Equal(200, data.GetProperty("query").GetProperty("limit").GetInt32());
+        Assert.True(data.GetProperty("insights").GetArrayLength() >= 1);
+        Assert.Contains(data.GetProperty("actions").EnumerateArray(), action => action.GetProperty("kind").GetString() == "scrub_failures");
         Assert.Equal(Path.Join(replayRoot, "replay-graph.json"), data.GetProperty("json_path").GetString());
         Assert.Equal(Path.Join(replayRoot, "replay-graph.md"), data.GetProperty("markdown_path").GetString());
         Assert.Contains(data.GetProperty("nodes").EnumerateArray(), node => node.GetProperty("kind").GetString() == "failure");
@@ -1353,6 +1358,35 @@ public sealed partial class AppTests
         Assert.False(fileSystem.FileExists(Path.Join(replayRoot, "replay-timeline.json")));
         Assert.False(fileSystem.FileExists(Path.Join(replayRoot, "replay-timeline.md")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.md")));
+        var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-graph.md"));
+        Assert.Contains("## What Failed", markdown, StringComparison.Ordinal);
+        Assert.Contains("## What Agents Can Act On", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayGraph_Filters_By_Failure_And_Node_Kind()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "graph", "--artifacts", replayRoot, "--failed", "--node-kind", "failure", "--limit", "10"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.True(data.GetProperty("query").GetProperty("failed_only").GetBoolean());
+        Assert.Equal("failure", data.GetProperty("query").GetProperty("node_kind").GetString());
+        Assert.Equal(10, data.GetProperty("query").GetProperty("limit").GetInt32());
+        Assert.True(data.GetProperty("node_count").GetInt32() <= 10);
+        Assert.Contains(data.GetProperty("nodes").EnumerateArray(), node => node.GetProperty("kind").GetString() == "failure");
+        Assert.True(data.GetProperty("total_node_count").GetInt32() > data.GetProperty("node_count").GetInt32());
     }
 
     [Fact]
