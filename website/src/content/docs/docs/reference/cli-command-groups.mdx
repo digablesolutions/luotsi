@@ -30,6 +30,7 @@ Use these when you want a live mirrored device session.
 luotsi view --device <serial>
 luotsi view setup --device <serial>
 luotsi view-doctor --device <serial>
+luotsi view --device <serial> --share-bind 0.0.0.0:9000
 luotsi profile-list
 ```
 
@@ -37,6 +38,7 @@ Also in this family:
 
 - `reconnect` and `reconnect --profile <name>`
 - `view --join-share <host:port>` for observer sessions
+- `--stats-interval-ms` for JSONL cadence and `--renderer-stats-interval-ms` for renderer/title cadence
 - `profile-delete --name <name>` for saved view profiles
 
 ## Wireless and port forwarding
@@ -102,14 +104,19 @@ Use scenario files when you want a repeatable run, and replay commands when you 
 ```bash
 luotsi scenario-list --path scenarios
 luotsi scenario-explain --file scenarios/smoke.json
+luotsi run --path scenarios --dry-run --include-tag smoke
 luotsi run --path scenarios --device <serial> --report-junit junit.xml
 luotsi replay summarize --artifacts ./artifacts/my-run
+luotsi replay capsule --artifacts ./artifacts/my-run --write-readme --write-json
 luotsi replay timeline --artifacts ./artifacts/my-run --failures
+luotsi replay graph --artifacts ./artifacts/my-run --failed --write-markdown
+luotsi replay cluster --artifacts ./artifacts/ci-runs --write-markdown
 luotsi replay search --artifacts ./artifacts/my-run --contains timeout
+luotsi replay scenario-draft --artifacts ./artifacts/my-run --output scenarios/recovered.json --write-markdown
 luotsi replay open --artifacts ./artifacts/my-run
 ```
 
-Use `scenario-validate` or `scenario-explain` before you run. Reach for `replay` commands after a failure when the device is gone but the artifact root remains.
+Use `scenario-validate`, `scenario-explain`, or `run --dry-run` before you execute device work. Reach for `replay capsule` when one artifact root failed, `replay graph` when you need selector/action/telemetry context, and `replay cluster` when the same failure pattern is repeating across runs.
 
 ## Related pages
 
@@ -117,6 +124,7 @@ Pair this overview with the focused docs that explain the workflows behind each 
 
 - [Troubleshooting](../../getting-started/troubleshooting/)
 - [Device readiness](../../getting-started/device-readiness/)
+- [Lab and device claims](../lab-and-device-claims/)
 - [Live view](../../core-workflows/live-view/)
 - [Scenario playbooks](../scenario-playbooks/)
 - [Wireless and port forwarding](../wireless-and-port-forwarding/)

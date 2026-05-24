@@ -38,11 +38,24 @@ Typical inspect events:
 Typical view events:
 
 - `view_started`
+- `view_startup_phase`
+- `view_diagnostic`
 - `view_stats`
 - `view_reconnect_requested`
 - `view_reconnected`
+- `view_recording_started`
+- `view_recording_stopped`
+- `view_screenshot_captured`
+- `view_share_started`
+- `view_share_client_connected`
+- `view_artifacts_opened`
+- `view_file_pushed`
+- `view_file_pulled`
+- `view_package_installed`
 - `view_error`
 - `view_ended`
+
+Not every session emits every event family. Startup diagnostics appear during bring-up, share events only appear for shared sessions, and recording or file-transfer events only appear when the operator actually uses those controls.
 
 ## Replay export exception
 
@@ -51,8 +64,9 @@ Typical view events:
 Replay commands that keep the normal envelope put their command-specific contract under `data`:
 
 - `replay capsule` returns a failure-capsule summary with `primary_failure`, `failure_timeline`, `artifact_manifest`, optional scenario draft summary fields, and `suggested_commands`.
-- `replay scenario-draft` returns draft metadata, warnings, suggestions, review items, source summaries, step origins, normalizations, and the generated output paths.
-- `replay graph` and `replay cluster` are seed contracts for later semantic debugging and cross-run failure intelligence. Treat them as useful triage data, not as a replacement for the replay capsule workflow yet.
+- `replay scenario-draft` returns draft metadata, warnings, suggestions, review items, source summaries, step origins, normalizations, and the generated output paths. When persisted, the main review artifacts are `scenario-draft-summary.json` and `scenario-draft.md`.
+- `replay graph` returns a stable graph payload with `query`, `node_count`, `edge_count`, `node_kinds`, `edge_kinds`, `insights`, `actions`, `nodes`, and `edges`.
+- `replay cluster` groups failed replay sessions by normalized failure shape and returns cluster summaries plus suggested next triage commands.
 
 ## Error categories
 

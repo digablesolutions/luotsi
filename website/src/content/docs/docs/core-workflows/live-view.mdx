@@ -3,6 +3,8 @@ title: Live View
 description: Mirror a real Android device into a local SDL window and keep stream state machine-readable over JSONL.
 ---
 
+import commandsScreenshot from '../../../../assets/tutorials/buggy-controller-live-demo/commands-final.png';
+
 `luotsi view` opens a long-lived session that mirrors a connected Android device into a local SDL window while also emitting structured JSONL events on stdout.
 
 ```bash
@@ -10,6 +12,11 @@ luotsi view --device <serial> --preset safe
 luotsi view --profile desk
 luotsi view --last
 ```
+
+<figure>
+	<img src={commandsScreenshot.src} alt="Representative device content mirrored through Luotsi during the Buggy Controller walkthrough." />
+	<figcaption>The operator window is the visible part of the workflow, but the same session also writes replay metadata and JSONL events that stay useful after the device disconnects.</figcaption>
+</figure>
 
 ## What it is good at
 
@@ -22,7 +29,9 @@ luotsi view --last
 
 - `--preset safe` is the conservative launch tuning
 - `--capture-backend auto` prefers MediaProjection and falls back to `screenrecord`
-- `--stats-interval-ms 1000` controls JSONL stats cadence
+- `--stats-interval-ms 1000` controls JSONL `view_stats` cadence, and `0` disables those periodic stats events
+- `--renderer-stats-interval-ms 0` controls how often the local renderer/title consumes stats independently from JSONL emission
+- `--record <file.h264|file.mp4|file.mkv>` chooses a startup recording target; raw `.h264` does not require `ffmpeg`, container outputs do
 - Artifact roots default to a timestamped temp directory unless you pass `--artifacts`
 
 ## Useful commands
@@ -30,9 +39,12 @@ luotsi view --last
 ```bash
 luotsi view setup --device <serial>
 luotsi view-doctor --device <serial>
+luotsi view-doctor --device <serial> --fix
 luotsi view --device <serial> --save-profile kiosk
 luotsi reconnect --profile kiosk
 ```
+
+Use `view setup --dry-run` when you want Luotsi to explain what it would stage without changing the selected device. Use `view-doctor --fix` when you want the diagnostic entry point to continue into setup/repair instead of only reporting readiness.
 
 ## Operator controls that matter
 
@@ -40,6 +52,23 @@ luotsi reconnect --profile kiosk
 - `F9` toggles local recording and reuses the `--record` directory and naming pattern when you supplied one at startup.
 - `F10` or the help button reveals the in-window legend, which is the fastest way to teach a new operator the local shortcuts.
 - The toolbar mirrors the main hotkeys, and the multi-device shelf appears automatically when more than one adb-visible transport is available.
+
+## Session outputs that matter
+
+Every `view` session is both a local operator loop and a replayable artifact source.
+
+- `view_started` includes the resolved artifact root, negotiated stream settings, and stats cadence
+- `session-timeline.jsonl` mirrors the session event stream into the artifact root
+- `session-replay.json` gives replay-oriented metadata for later `replay summarize`, `replay capsule`, `replay timeline`, or `replay open` commands
+- Screenshot, recording, share, and file-transfer actions emit their own JSONL events so CI or agents can track behavior without scraping terminal text
+
+The higher-signal event families to watch are:
+
+- startup and diagnostics: `view_startup_phase`, `view_diagnostic`
+- stream health: `view_stats`, `view_reconnect_requested`, `view_reconnected`, `view_error`, `view_ended`
+- local capture: `view_screenshot_captured`, `view_recording_started`, `view_recording_stopped`, `view_artifacts_opened`
+- sharing and observers: `view_share_started`, `view_share_client_connected`
+- operator and file actions: `view_clipboard_pasted`, `view_file_pushed`, `view_file_pulled`, `view_package_installed`
 
 ## Sharing and observer sessions
 
@@ -51,6 +80,8 @@ luotsi view --join-share 192.168.0.10:9000
 ```
 
 Joined share sessions are forced into read-only observer mode. The stream renders, but input is blocked intentionally.
+
+Source sessions emit `view_share_started` when the relay is bound and `view_share_client_connected` when an observer joins. The shared transport also replays the cached bootstrap packets plus the latest keyframe to late observers so they do not connect into an undecodable stream.
 
 ## When to use something else
 

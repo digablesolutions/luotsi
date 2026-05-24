@@ -1,0 +1,116 @@
+---
+title: Lab And Device Claims
+description: Use lab selection, leases, quarantine, and scenario-run claims when Luotsi is operating against shared device pools instead of one personally owned transport.
+---
+
+Use the lab workflow when `adb devices` is not the whole story anymore.
+
+This is the right slice when:
+
+- multiple phones, tablets, or emulators are attached at once
+- CI and humans can collide on the same hardware
+- you need Luotsi to explain why a query selected, rejected, leased, or quarantined a device
+- scenario runs need a lease boundary instead of optimistic best-effort selection
+
+## Start with selection, not with claiming
+
+Lab commands are built around `--device-query`, which uses exact-match `key=value` clauses separated by commas.
+
+```bash
+luotsi lab status
+luotsi lab status --device-query state=online,type=physical
+luotsi lab plan --device-query model=Pixel_9
+luotsi lab doctor --device-query model=Pixel_9 --fix
+```
+
+The supported public query keys are:
+
+- `serial`
+- `state`
+- `status`
+- `transport`
+- `type`
+- `model`
+- `product`
+- `device`
+- `availability`
+
+Use `lab status` when you want Luotsi to explain why each visible transport matched or was rejected. Use `lab plan` when you want the dry-run allocator view for one query. Use `lab doctor` when selection is ambiguous or stale and you want recommended repair commands, with `--fix` when safe host-side recovery is appropriate.
+
+## The core lease workflow
+
+Claiming is the point where a candidate device becomes reserved for one operator, job, or automation loop.
+
+```bash
+luotsi lab claim --device-query model=Pixel_9 --owner ci-job-1 --ttl-sec 1800
+luotsi lab leases
+luotsi lab extend --serial emulator-5554 --ttl-sec 7200
+luotsi lab release --serial emulator-5554
+```
+
+What matters operationally:
+
+- `lab claim` must resolve to exactly one available device
+- `--ttl-sec` must be greater than zero
+- `lab leases` shows the active host-side lease records
+- `lab extend` refreshes an existing lease by lease id or serial
+- `lab release` clears the lease when the workflow is done
+
+Active leases are honored by `--device-query` selection. That is the whole point: another job should not quietly grab a device that is already claimed.
+
+Be explicit with `--owner` for CI or shared labs. `lab claim` falls back to the current user name when `--owner` is omitted, which is fine for local use but weak for multi-run automation.
+
+## Quarantine unhealthy devices
+
+Quarantine is the workflow for hardware that should stay visible but not selectable.
+
+```bash
+luotsi lab quarantine --device-query serial=emulator-5554 --reason "flaky touchscreen"
+luotsi lab quarantines
+luotsi lab unquarantine --serial emulator-5554
+```
+
+Use quarantine when the device is known-bad and should stay out of rotation until someone explicitly clears it. This is better than letting repeated runs rediscover the same broken hardware through trial and error.
+
+## Scenario-run integration
+
+If scenarios run against shared hardware, claim the device at run time instead of treating allocation as an out-of-band human promise.
+
+```bash
+luotsi run --path scenarios --device-query model=Pixel_9 --claim-device --owner ci-job-1 --ttl-sec 1800
+luotsi run --file scenarios/smoke.json --device emulator-5554 --claim-device --owner local-debug
+```
+
+Important behavior:
+
+- `run --claim-device` requires `--device` or `--device-query` so Luotsi can claim exactly one serial
+- the lease is created before the device work begins and released in the run's cleanup path
+- the default run owner is `luotsi-run` unless you pass `--owner`, so CI should usually set its own job or pipeline label
+
+This is the right path when the run itself is the unit of ownership and you do not want a separate `lab claim` step before every scenario batch.
+
+## Common failure shapes
+
+- Query matched multiple devices: run `luotsi lab status --device-query <query>` and add another clause.
+- Query matched no available device: run `luotsi lab status --device-query <query>` to see whether the miss is due to offline, leased, or quarantined candidates.
+- Query matched only leased devices: inspect `luotsi lab leases` and release or wait for the lease you no longer need.
+- Query matched only quarantined devices: inspect `luotsi lab quarantines` and unquarantine only after the hardware is healthy again.
+
+## Practical operator loop
+
+```bash
+luotsi lab status --device-query state=online,type=physical
+luotsi lab plan --device-query model=Pixel_9
+luotsi lab claim --device-query model=Pixel_9 --owner ci-job-1 --ttl-sec 1800
+luotsi run --path scenarios --device-query model=Pixel_9 --claim-device --owner ci-job-1 --ttl-sec 1800
+luotsi lab leases
+```
+
+Use explicit `lab claim` when the lease boundary is bigger than one command. Use `run --claim-device` when the scenario run itself should own the lease lifecycle.
+
+## Related pages
+
+- [Device readiness](../../getting-started/device-readiness/)
+- [Scenario playbooks](../scenario-playbooks/)
+- [CLI command groups](../cli-command-groups/)
+- [Troubleshooting](../../getting-started/troubleshooting/)
