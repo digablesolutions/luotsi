@@ -75,11 +75,11 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         builder.AppendLine("  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
         builder.AppendLine("  <title>Luotsi Artifacts</title>");
         builder.AppendLine("  <style>");
-        builder.AppendLine("    :root { color-scheme: light dark; --bg: #0b1018; --surface: #101923; --panel: #141f2b; --panel-strong: #192635; --text: #eef4f8; --muted: #9aa8b4; --line: #2a3a4b; --accent: #47c7a5; --accent-strong: #7dd3fc; --danger: #fb7185; --shadow: 0 18px 60px rgba(0,0,0,.32); }");
-        builder.AppendLine("    @media (prefers-color-scheme: light) { :root { --bg: #f4f7f8; --surface: #ffffff; --panel: #ffffff; --panel-strong: #eef5f4; --text: #132026; --muted: #60717c; --line: #d5e0e4; --accent: #087f68; --accent-strong: #0369a1; --danger: #be123c; --shadow: 0 16px 42px rgba(15,23,42,.1); } }");
+        builder.AppendLine("    :root { color-scheme: light dark; --bg: #0a0f14; --surface: #101820; --panel: #121d26; --panel-strong: #172531; --text: #eef5f6; --muted: #9aa9b0; --line: #263846; --accent: #35d0a8; --accent-strong: #7dd3fc; --warning: #fbbf24; --danger: #fb7185; --success: #4ade80; --shadow: 0 18px 60px rgba(0,0,0,.34); }");
+        builder.AppendLine("    @media (prefers-color-scheme: light) { :root { --bg: #f5f7f8; --surface: #ffffff; --panel: #ffffff; --panel-strong: #edf5f4; --text: #132026; --muted: #60717c; --line: #d5e0e4; --accent: #087f68; --accent-strong: #0369a1; --warning: #a16207; --danger: #be123c; --success: #15803d; --shadow: 0 16px 42px rgba(15,23,42,.1); } }");
         builder.AppendLine("    * { box-sizing: border-box; }");
         builder.AppendLine("    body { margin: 0; font: 14px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }");
-        builder.AppendLine("    body::before { content: \"\"; position: fixed; inset: 0 0 auto; height: 260px; background: linear-gradient(135deg, rgba(71,199,165,.18), rgba(125,211,252,.10) 48%, transparent); pointer-events: none; }");
+        builder.AppendLine("    body::before { content: \"\"; position: fixed; inset: 0 0 auto; height: 260px; background: linear-gradient(135deg, rgba(53,208,168,.18), rgba(125,211,252,.10) 48%, transparent); pointer-events: none; }");
         builder.AppendLine("    main { position: relative; max-width: 1180px; margin: 0 auto; padding: 34px 22px 56px; }");
         builder.AppendLine("    header { margin-bottom: 22px; padding: 24px; border: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 88%, transparent); border-radius: 12px; box-shadow: var(--shadow); }");
         builder.AppendLine("    .eyebrow { margin: 0 0 8px; color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }");
@@ -107,24 +107,43 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         builder.AppendLine("    .workflow li:first-child { border-top: 1px solid var(--line); }");
         builder.AppendLine("    .workflow .kind { display: inline-block; margin-bottom: 10px; color: var(--accent); }");
         builder.AppendLine("    .workflow code { margin-bottom: 9px; }");
+        builder.AppendLine("    .toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; margin: 18px 0 0; }");
+        builder.AppendLine("    .search { width: 100%; min-height: 40px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); }");
+        builder.AppendLine("    .jump-links { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }");
+        builder.AppendLine("    .jump-links a, .copy-command { display: inline-flex; align-items: center; min-height: 34px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--panel-strong) 78%, transparent); color: var(--text); font: inherit; cursor: pointer; text-decoration: none; }");
+        builder.AppendLine("    .jump-links a:hover, .copy-command:hover { border-color: var(--accent); text-decoration: none; }");
         builder.AppendLine("    .workbench { border-color: color-mix(in srgb, var(--danger) 42%, var(--line)); }");
         builder.AppendLine("    .workbench h2 { color: var(--text); }");
-        builder.AppendLine("    .workbench-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr); gap: 16px; padding: 16px; }");
+        builder.AppendLine("    .workbench-grid { display: grid; grid-template-columns: minmax(0, 1.18fr) minmax(300px, .82fr); gap: 16px; padding: 16px; }");
         builder.AppendLine("    .panel { padding: 15px; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--surface) 74%, transparent); }");
+        builder.AppendLine("    .hero-panel { display: grid; align-content: start; min-height: 100%; background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 86%, transparent), color-mix(in srgb, var(--danger) 8%, transparent)); }");
         builder.AppendLine("    .panel h3 { margin: 0 0 10px; font-size: 13px; line-height: 1.25; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }");
         builder.AppendLine("    .failure-title { margin: 0 0 8px; font-size: 21px; line-height: 1.2; letter-spacing: 0; }");
         builder.AppendLine("    .failure-message { margin: 10px 0 0; padding: 10px 12px; border-left: 3px solid var(--danger); border-radius: 6px; background: color-mix(in srgb, var(--danger) 14%, transparent); overflow-wrap: anywhere; }");
+        builder.AppendLine("    .chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }");
+        builder.AppendLine("    .chip { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 4px 9px; border: 1px solid var(--line); border-radius: 999px; background: rgba(0,0,0,.12); color: var(--muted); font-size: 12px; font-weight: 650; }");
+        builder.AppendLine("    .chip-danger { border-color: color-mix(in srgb, var(--danger) 58%, var(--line)); color: var(--danger); }");
+        builder.AppendLine("    .chip-success { border-color: color-mix(in srgb, var(--success) 48%, var(--line)); color: var(--success); }");
+        builder.AppendLine("    .chip-warning { border-color: color-mix(in srgb, var(--warning) 50%, var(--line)); color: var(--warning); }");
         builder.AppendLine("    .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-top: 12px; }");
         builder.AppendLine("    .meta { padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; background: rgba(0,0,0,.10); }");
         builder.AppendLine("    .meta span { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }");
         builder.AppendLine("    .meta strong { display: block; margin-top: 3px; font-weight: 680; overflow-wrap: anywhere; }");
         builder.AppendLine("    .evidence-list { display: grid; gap: 8px; margin: 0; padding: 0; }");
         builder.AppendLine("    .evidence-list li { display: block; padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; background: rgba(0,0,0,.10); }");
+        builder.AppendLine("    .evidence-list li.primary-evidence { border-color: color-mix(in srgb, var(--accent) 46%, var(--line)); background: color-mix(in srgb, var(--accent) 9%, transparent); }");
+        builder.AppendLine("    .triage-path { display: grid; gap: 10px; }");
+        builder.AppendLine("    .triage-step { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 10px; align-items: start; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: rgba(0,0,0,.10); }");
+        builder.AppendLine("    .step-number { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); font-weight: 760; }");
+        builder.AppendLine("    .step-title { font-weight: 720; }");
+        builder.AppendLine("    .command-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: start; margin-top: 8px; }");
+        builder.AppendLine("    .command-row code { display: block; width: 100%; white-space: nowrap; overflow-x: auto; overflow-y: hidden; }");
+        builder.AppendLine("    .command-row .copy-command { flex: 0 0 auto; }");
         builder.AppendLine("    .next-action { margin-top: 12px; }");
         builder.AppendLine("    .next-action code { margin-top: 7px; }");
         builder.AppendLine("    .empty { padding: 18px 16px; color: var(--muted); }");
-        builder.AppendLine("    @media (max-width: 820px) { .workbench-grid { grid-template-columns: 1fr; } }");
-        builder.AppendLine("    @media (max-width: 680px) { main { padding: 18px 12px 34px; } header { padding: 18px; } li { grid-template-columns: 1fr; } .badge { justify-self: start; } .workflow ul { grid-template-columns: 1fr; } }");
+        builder.AppendLine("    @media (max-width: 900px) { .workbench-grid { grid-template-columns: 1fr; } .toolbar { grid-template-columns: 1fr; } .jump-links { justify-content: flex-start; } }");
+        builder.AppendLine("    @media (max-width: 680px) { main { padding: 18px 12px 34px; } header { padding: 18px; } li { grid-template-columns: 1fr; } .badge { justify-self: start; } .workflow ul { grid-template-columns: 1fr; } .command-row { grid-template-columns: 1fr; } }");
         builder.AppendLine("  </style>");
         builder.AppendLine("</head>");
         builder.AppendLine("<body>");
@@ -134,6 +153,7 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         builder.AppendLine("      <h1>Luotsi Artifacts</h1>");
         builder.AppendLine($"      <div class=\"root\">{HtmlEncode(_root)}</div>");
         AppendHeaderStatsHtml(builder, files, replaySummaries);
+        AppendToolbarHtml(builder, replaySummaries);
         builder.AppendLine("    </header>");
 
         if (files.Count == 0)
@@ -173,6 +193,7 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         }
 
         builder.AppendLine("  </main>");
+        AppendIndexScriptHtml(builder);
         builder.AppendLine("</body>");
         builder.AppendLine("</html>");
         return builder.ToString();
@@ -766,6 +787,23 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         builder.AppendLine("        </div>");
     }
 
+    private static void AppendToolbarHtml(StringBuilder builder, IReadOnlyList<SessionReplaySummary> replaySummaries)
+    {
+        if (replaySummaries.Count == 0)
+        {
+            return;
+        }
+
+        builder.AppendLine("      <div class=\"toolbar\">");
+        builder.AppendLine("        <input class=\"search\" type=\"search\" placeholder=\"Filter artifacts, timeline, commands, and evidence\" aria-label=\"Filter artifact index\" data-filter-input>");
+        builder.AppendLine("        <nav class=\"jump-links\" aria-label=\"Artifact sections\">");
+        builder.AppendLine("          <a href=\"#failure-workbench\">Workbench</a>");
+        builder.AppendLine("          <a href=\"#replay-sessions\">Sessions</a>");
+        builder.AppendLine("          <a href=\"#replay-front-door\">Commands</a>");
+        builder.AppendLine("        </nav>");
+        builder.AppendLine("      </div>");
+    }
+
     private void AppendFailureWorkbenchHtml(StringBuilder builder, IReadOnlyList<SessionReplaySummary> replaySummaries)
     {
         var primary = SelectPrimaryFailure(replaySummaries);
@@ -783,11 +821,21 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
             : BuildReplayTitle(summary);
         var actionCommand = $"luotsi replay scrub --artifacts {Quote(_root)} --failures --context 3 --write-markdown";
 
-        builder.AppendLine("    <section class=\"workbench\">");
+        builder.AppendLine("    <section class=\"workbench\" id=\"failure-workbench\">");
         builder.AppendLine("      <h2>Failure Workbench</h2>");
         builder.AppendLine("      <div class=\"workbench-grid\">");
-        builder.AppendLine("        <div class=\"panel\">");
+        builder.AppendLine("        <div class=\"panel hero-panel\" data-filter-item>");
         builder.AppendLine("          <h3>Primary failure</h3>");
+        builder.AppendLine("          <div class=\"chip-row\">");
+        builder.AppendLine("            <span class=\"chip chip-danger\">needs triage</span>");
+        builder.AppendLine($"            <span class=\"chip\">{HtmlEncode(summary.SessionKind)}</span>");
+        builder.AppendLine($"            <span class=\"chip\">{HtmlEncode(summary.EventCount.ToString(System.Globalization.CultureInfo.InvariantCulture))} events</span>");
+        if (!string.IsNullOrWhiteSpace(summary.Target))
+        {
+            builder.AppendLine($"            <span class=\"chip\">{HtmlEncode(summary.Target)}</span>");
+        }
+
+        builder.AppendLine("          </div>");
         builder.AppendLine($"          <p class=\"failure-title\">{HtmlEncode(title)}</p>");
         builder.AppendLine("          <div class=\"meta-grid\">");
         AppendMetaHtml(builder, "Session", BuildReplayTitle(summary));
@@ -804,26 +852,30 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         builder.AppendLine("          <div class=\"next-action\">");
         builder.AppendLine("            <h3>Recommended next action</h3>");
         builder.AppendLine("            <div class=\"root\">Scrub the smallest timeline window before opening broader evidence.</div>");
-        builder.AppendLine($"            <code>{HtmlEncode(actionCommand)}</code>");
+        AppendCommandRowHtml(builder, actionCommand);
         builder.AppendLine("          </div>");
         builder.AppendLine("        </div>");
-        builder.AppendLine("        <div class=\"panel\">");
+        builder.AppendLine("        <div class=\"panel\" data-filter-item>");
+        builder.AppendLine("          <h3>Triage path</h3>");
+        AppendTriagePathHtml(builder, replaySummaries, actionCommand);
+        builder.AppendLine("        </div>");
+        builder.AppendLine("        <div class=\"panel\" data-filter-item>");
         builder.AppendLine("          <h3>Evidence</h3>");
         AppendEvidenceHtml(builder, summary, scenario);
         builder.AppendLine("        </div>");
-        builder.AppendLine("        <div class=\"panel\">");
+        builder.AppendLine("        <div class=\"panel\" data-filter-item>");
         builder.AppendLine("          <h3>Timeline preview</h3>");
         AppendTimelineHtml(builder, summary);
         builder.AppendLine("        </div>");
         AppendSemanticSignalsHtml(builder);
-        builder.AppendLine("        <div class=\"panel\">");
+        builder.AppendLine("        <div class=\"panel\" data-filter-item>");
         builder.AppendLine("          <h3>Replay actions</h3>");
         builder.AppendLine("          <ul class=\"evidence-list\">");
         foreach (var command in BuildReplayWorkflowCommands(replaySummaries).Take(4))
         {
             builder.AppendLine("            <li>");
             builder.AppendLine($"              <div class=\"kind\">{HtmlEncode(command.Kind)}</div>");
-            builder.AppendLine($"              <code>{HtmlEncode(command.Command)}</code>");
+            AppendCommandRowHtml(builder, command.Command, "              ");
             builder.AppendLine("            </li>");
         }
 
@@ -833,12 +885,60 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         builder.AppendLine("    </section>");
     }
 
+    private void AppendTriagePathHtml(
+        StringBuilder builder,
+        IReadOnlyList<SessionReplaySummary> replaySummaries,
+        string scrubCommand)
+    {
+        var graphCommand = BuildReplayWorkflowCommands(replaySummaries)
+            .FirstOrDefault(static command => string.Equals(command.Kind, "GRAPH", StringComparison.OrdinalIgnoreCase))
+            ?.Command;
+        var clusterCommand = BuildReplayWorkflowCommands(replaySummaries)
+            .FirstOrDefault(static command => string.Equals(command.Kind, "CLUSTER", StringComparison.OrdinalIgnoreCase))
+            ?.Command;
+
+        builder.AppendLine("          <div class=\"triage-path\">");
+        AppendTriageStepHtml(builder, 1, "Replay the failure window", "Start with the narrowest failing moment and adjacent events.", scrubCommand);
+        AppendTriageStepHtml(builder, 2, "Read semantic signals", "Use graph facts and hypotheses to separate app, device, and transport causes.", graphCommand);
+        AppendTriageStepHtml(builder, 3, "Check recurrence", "Compare sibling bundles before treating the failure as unique.", clusterCommand);
+        builder.AppendLine("          </div>");
+    }
+
+    private static void AppendTriageStepHtml(
+        StringBuilder builder,
+        int number,
+        string title,
+        string description,
+        string? command)
+    {
+        builder.AppendLine("            <div class=\"triage-step\">");
+        builder.AppendLine($"              <div class=\"step-number\">{number}</div>");
+        builder.AppendLine("              <div>");
+        builder.AppendLine($"                <div class=\"step-title\">{HtmlEncode(title)}</div>");
+        builder.AppendLine($"                <div class=\"root\">{HtmlEncode(description)}</div>");
+        if (!string.IsNullOrWhiteSpace(command))
+        {
+            AppendCommandRowHtml(builder, command, "                ");
+        }
+
+        builder.AppendLine("              </div>");
+        builder.AppendLine("            </div>");
+    }
+
     private static void AppendMetaHtml(StringBuilder builder, string label, string value)
     {
         builder.AppendLine("            <div class=\"meta\">");
         builder.AppendLine($"              <span>{HtmlEncode(label)}</span>");
         builder.AppendLine($"              <strong>{HtmlEncode(value)}</strong>");
         builder.AppendLine("            </div>");
+    }
+
+    private static void AppendCommandRowHtml(StringBuilder builder, string command, string indent = "            ")
+    {
+        builder.AppendLine($"{indent}<div class=\"command-row\">");
+        builder.AppendLine($"{indent}  <code>{HtmlEncode(command)}</code>");
+        builder.AppendLine($"{indent}  <button class=\"copy-command\" type=\"button\" data-copy=\"{HtmlAttributeEncode(command)}\">Copy</button>");
+        builder.AppendLine($"{indent}</div>");
     }
 
     private void AppendEvidenceHtml(StringBuilder builder, SessionReplaySummary summary, FailureCapsuleScenario? scenario)
@@ -862,16 +962,19 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         evidence.Add(new FailureCapsuleArtifactLink("metadata", summary.MetadataPath, null, null));
 
         builder.AppendLine("          <ul class=\"evidence-list\">");
+        var index = 0;
         foreach (var item in evidence
             .Where(static item => !string.IsNullOrWhiteSpace(item.Path))
             .GroupBy(static item => item.Path, StringComparer.OrdinalIgnoreCase)
             .Select(static group => group.First())
             .Take(8))
         {
-            builder.AppendLine("            <li>");
+            var evidenceClass = index == 0 ? " class=\"primary-evidence\"" : string.Empty;
+            builder.AppendLine($"            <li{evidenceClass} data-filter-item>");
             builder.AppendLine($"              <a href=\"{HtmlAttributeEncode(EscapeHtmlLink(item.Path))}\">{HtmlEncode(item.Path)}</a>");
             builder.AppendLine($"              <div class=\"root\">{HtmlEncode(item.Kind)}{FormatStepSuffix(item)}</div>");
             builder.AppendLine("            </li>");
+            index++;
         }
 
         builder.AppendLine("          </ul>");
@@ -902,17 +1005,17 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
             return;
         }
 
-        builder.AppendLine("        <div class=\"panel\">");
+        builder.AppendLine("        <div class=\"panel\" data-filter-item>");
         builder.AppendLine("          <h3>Semantic signals</h3>");
         builder.AppendLine("          <ul class=\"evidence-list\">");
         foreach (var item in signals.Items.Take(5))
         {
-            builder.AppendLine("            <li>");
+            builder.AppendLine("            <li data-filter-item>");
             builder.AppendLine($"              <div class=\"kind\">{HtmlEncode(item.Kind)}</div>");
             builder.AppendLine($"              <div>{HtmlEncode(item.Text)}</div>");
             if (!string.IsNullOrWhiteSpace(item.Command))
             {
-                builder.AppendLine($"              <code>{HtmlEncode(item.Command)}</code>");
+                AppendCommandRowHtml(builder, item.Command, "              ");
             }
 
             builder.AppendLine("            </li>");
@@ -948,7 +1051,7 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
             return;
         }
 
-        builder.AppendLine("    <section>");
+        builder.AppendLine("    <section id=\"replay-sessions\">");
         builder.AppendLine("      <h2>Replay Sessions</h2>");
         builder.AppendLine("      <ul>");
         foreach (var summary in replaySummaries)
@@ -997,7 +1100,7 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
             return;
         }
 
-        builder.AppendLine("    <section class=\"workflow\">");
+        builder.AppendLine("    <section class=\"workflow\" id=\"replay-front-door\">");
         builder.AppendLine("      <h2>Replay Front Door</h2>");
         builder.AppendLine("      <ul>");
         foreach (var command in BuildReplayWorkflowCommands(replaySummaries))
@@ -1011,6 +1114,37 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
 
         builder.AppendLine("      </ul>");
         builder.AppendLine("    </section>");
+    }
+
+    private static void AppendIndexScriptHtml(StringBuilder builder)
+    {
+        builder.AppendLine("  <script>");
+        builder.AppendLine("    (() => {");
+        builder.AppendLine("      const input = document.querySelector('[data-filter-input]');");
+        builder.AppendLine("      const items = Array.from(document.querySelectorAll('[data-filter-item]'));");
+        builder.AppendLine("      if (input) {");
+        builder.AppendLine("        input.addEventListener('input', () => {");
+        builder.AppendLine("          const query = input.value.trim().toLowerCase();");
+        builder.AppendLine("          for (const item of items) {");
+        builder.AppendLine("            item.hidden = query.length > 0 && !item.textContent.toLowerCase().includes(query);");
+        builder.AppendLine("          }");
+        builder.AppendLine("        });");
+        builder.AppendLine("      }");
+        builder.AppendLine("      for (const button of document.querySelectorAll('[data-copy]')) {");
+        builder.AppendLine("        button.addEventListener('click', async () => {");
+        builder.AppendLine("          const value = button.getAttribute('data-copy') || '';");
+        builder.AppendLine("          try {");
+        builder.AppendLine("            await navigator.clipboard.writeText(value);");
+        builder.AppendLine("            const label = button.textContent;");
+        builder.AppendLine("            button.textContent = 'Copied';");
+        builder.AppendLine("            setTimeout(() => { button.textContent = label; }, 1200);");
+        builder.AppendLine("          } catch {");
+        builder.AppendLine("            button.textContent = 'Select';");
+        builder.AppendLine("          }");
+        builder.AppendLine("        });");
+        builder.AppendLine("      }");
+        builder.AppendLine("    })();");
+        builder.AppendLine("  </script>");
     }
 
     private IEnumerable<ReplayWorkflowCommand> BuildReplayWorkflowCommands(IReadOnlyList<SessionReplaySummary> replaySummaries)

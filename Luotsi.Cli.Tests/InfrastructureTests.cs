@@ -211,9 +211,17 @@ public sealed partial class AppTests
 
         Assert.Contains("<h2>Replay Sessions</h2>", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("<h2>Failure Workbench</h2>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("Filter artifacts, timeline, commands, and evidence", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("href=\"#failure-workbench\"", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("<h3>Primary failure</h3>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("needs triage", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("<h3>Recommended next action</h3>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("<h3>Triage path</h3>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("Replay the failure window", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("Read semantic signals", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("Check recurrence", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("luotsi replay scrub --artifacts", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("data-copy=\"luotsi replay scrub --artifacts", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("<h3>Evidence</h3>", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("<h3>Timeline preview</h3>", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("<h3>Semantic signals</h3>", htmlIndex, StringComparison.Ordinal);
@@ -221,6 +229,7 @@ public sealed partial class AppTests
         Assert.Contains("The stream failed after reconnect; inspect transport evidence first.", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("Graph contains one transport failure.", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("<h2>Replay Front Door</h2>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("id=\"replay-front-door\"", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --artifacts", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("luotsi replay capsule --artifacts", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("luotsi replay graph --artifacts", htmlIndex, StringComparison.Ordinal);
