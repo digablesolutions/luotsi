@@ -627,6 +627,8 @@ public sealed partial class AppTests
         Assert.Equal(ResultSchemas.ReplayOpen, data.GetProperty("schema").GetString());
         Assert.Equal(replayRoot, data.GetProperty("artifact_root").GetString());
         Assert.False(data.GetProperty("opened").GetBoolean());
+        Assert.False(data.TryGetProperty("json_path", out _));
+        Assert.False(data.TryGetProperty("markdown_path", out _));
         Assert.Equal(1, data.GetProperty("session_count").GetInt32());
         Assert.Equal(1, data.GetProperty("failure_count").GetInt32());
         Assert.Equal("scrub_failure", data.GetProperty("recommended_next_action").GetProperty("kind").GetString());
@@ -670,6 +672,39 @@ public sealed partial class AppTests
         var call = Assert.Single(processRunner.Calls);
         Assert.Contains(call.Args, arg => arg.EndsWith("index.html", StringComparison.OrdinalIgnoreCase));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.html")));
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayOpen_WriteArtifacts_PersistsFrontDoorSummary()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var processRunner = new FakeProcessRunner();
+        var replayRoot = SeedReplaySummaryArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = processRunner,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "open", "--artifacts", replayRoot, "--dry-run", "--write-json", "--write-markdown"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(Path.Join(replayRoot, "replay-open-summary.json"), data.GetProperty("json_path").GetString());
+        Assert.Equal(Path.Join(replayRoot, "replay-open.md"), data.GetProperty("markdown_path").GetString());
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-open-summary.json")));
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-open.md")));
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.html")));
+        var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-open.md"));
+        Assert.Contains("# Luotsi Replay Front Door", markdown, StringComparison.Ordinal);
+        Assert.Contains("Scrub the failure window", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay graph", markdown, StringComparison.Ordinal);
+        var indexMarkdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "index.md"));
+        Assert.Contains("[replay-open.md](replay-open.md)", indexMarkdown, StringComparison.Ordinal);
     }
 
     [Fact]

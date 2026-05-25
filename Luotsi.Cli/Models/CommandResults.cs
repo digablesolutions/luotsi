@@ -352,6 +352,8 @@ public sealed record ReplayOpenResult(
     string ArtifactRoot,
     string IndexHtmlPath,
     string IndexMarkdownPath,
+    string? JsonPath,
+    string? MarkdownPath,
     int SessionCount,
     int FailureCount,
     ReplayOpenPrimaryFailureResult? PrimaryFailure,
