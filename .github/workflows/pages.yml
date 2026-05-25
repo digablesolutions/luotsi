@@ -33,7 +33,7 @@ jobs:
           cache-dependency-path: website/package-lock.json
 
       - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
 
       - name: Install website dependencies
         working-directory: website
