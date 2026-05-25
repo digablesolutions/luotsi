@@ -75,10 +75,10 @@ internal sealed class ReplayScrubService(ReplayTimelineService timelineService)
     {
         yield return new ReplayScrubCommandHint(
             $"luotsi replay open --artifacts {Quote(artifactRoot)}",
-            "Open the local artifact browser for screenshots, logs, reports, and generated replay files.");
+            "Open the replay front door for this artifact root.");
         yield return new ReplayScrubCommandHint(
             $"luotsi replay capsule --artifacts {Quote(artifactRoot)} --write-readme --write-json",
-            "Open the replay front door for this artifact root.");
+            "Write the replay capsule README and JSON summary.");
 
         if (focus is not null)
         {

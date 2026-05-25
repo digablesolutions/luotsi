@@ -104,11 +104,19 @@ public sealed class ArtifactSession
     /// </summary>
     public async Task RefreshIndexAsync()
     {
+        _ = await RefreshIndexWithSnapshotAsync().ConfigureAwait(false);
+    }
+
+    internal async Task<ArtifactIndexSnapshot> RefreshIndexWithSnapshotAsync()
+    {
         var files = GetIndexedFiles();
-        var markdownIndex = await _indexRenderer.BuildMarkdownIndexAsync(files).ConfigureAwait(false);
+        var replaySummaries = new SessionReplaySummaryReader(Root, _fileSystem).ReadSummaries(files);
+        var snapshot = new ArtifactIndexSnapshot(files, replaySummaries);
+        var markdownIndex = await _indexRenderer.BuildMarkdownIndexAsync(files, replaySummaries).ConfigureAwait(false);
         await _fileSystem.WriteAllTextAsync(GetArtifactPath(ArtifactIndexFileName), markdownIndex, Encoding.UTF8).ConfigureAwait(false);
-        var htmlIndex = await _indexRenderer.BuildHtmlIndexAsync(files).ConfigureAwait(false);
+        var htmlIndex = await _indexRenderer.BuildHtmlIndexAsync(files, replaySummaries).ConfigureAwait(false);
         await _fileSystem.WriteAllTextAsync(GetArtifactPath(ArtifactHtmlIndexFileName), htmlIndex, Encoding.UTF8).ConfigureAwait(false);
+        return snapshot;
     }
 
     /// <summary>
@@ -192,3 +200,7 @@ public sealed class ArtifactSession
             _ => throw new InvalidOperationException($"Unsupported poll artifact policy '{policy}'.")
         };
 }
+
+internal sealed record ArtifactIndexSnapshot(
+    IReadOnlyList<string> Files,
+    IReadOnlyList<SessionReplaySummary> ReplaySummaries);

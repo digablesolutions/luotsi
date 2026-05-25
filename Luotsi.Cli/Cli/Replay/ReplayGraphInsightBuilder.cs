@@ -24,8 +24,8 @@ internal static class ReplayGraphInsightBuilder
     {
         var actions = new List<ReplayGraphActionResult>
         {
-            new("describe_replay_capsule", "Open the replay front door with primary failure, artifacts, and recommended next steps.", $"luotsi replay capsule --artifacts {Quote(artifactRoot)} --write-readme --write-json"),
-            new("open_artifacts", "Open the browser index for screenshots, logs, reports, graph, and replay files.", $"luotsi replay open --artifacts {Quote(artifactRoot)} --dry-run"),
+            new("open_replay_front_door", "Open the replay front door with primary failure, artifacts, and recommended next steps.", $"luotsi replay open --artifacts {Quote(artifactRoot)} --dry-run"),
+            new("write_replay_capsule", "Write the replay capsule README and JSON summary.", $"luotsi replay capsule --artifacts {Quote(artifactRoot)} --write-readme --write-json"),
             new("scrub_failures", "Review the failure timeline with previous/focused/next context.", $"luotsi replay scrub --artifacts {Quote(artifactRoot)} --failures --context 3 --write-markdown"),
             new("stream_graph", "Emit line-oriented graph output for CI and agent consumers.", $"luotsi replay graph --artifacts {Quote(artifactRoot)} --format jsonl")
         };

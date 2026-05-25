@@ -240,14 +240,14 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
             $"luotsi replay scrub --artifacts {Quote(representativeRoot)} --failures --context 3 --write-markdown"));
 
         hints.Add(new ReplayFailureClusterHintResult(
-            "describe_best_replay_capsule",
+            "open_best_replay",
             "Open the replay front door for the best representative failure.",
-            $"luotsi replay capsule --artifacts {Quote(representativeRoot)} --write-readme --write-json"));
+            $"luotsi replay open --artifacts {Quote(representativeRoot)}"));
 
         hints.Add(new ReplayFailureClusterHintResult(
-            "open_best_replay",
-            "Open the best matching replay bundle locally.",
-            $"luotsi replay open --artifacts {Quote(representativeRoot)}"));
+            "write_best_replay_capsule",
+            "Write the replay capsule README and JSON summary for the best representative failure.",
+            $"luotsi replay capsule --artifacts {Quote(representativeRoot)} --write-readme --write-json"));
 
         if (!string.IsNullOrWhiteSpace(representative.ErrorMessage))
         {
@@ -582,10 +582,10 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
         builder.AppendLine($"- Similarity: `{EscapeMarkdown(cluster.Intelligence.Similarity)}` (`{cluster.Intelligence.SimilarityScore:0.##}`)");
         builder.AppendLine($"- Likely cause: {EscapeMarkdown(cluster.Intelligence.LikelyCause)}");
         builder.AppendLine($"- Best replay bundle: `{EscapeMarkdown(cluster.Intelligence.BestReplayArtifactRoot)}`");
-        var capsuleHint = cluster.Hints.FirstOrDefault(static hint => string.Equals(hint.Kind, "describe_best_replay_capsule", StringComparison.Ordinal));
-        if (capsuleHint is not null)
+        var openHint = cluster.Hints.FirstOrDefault(static hint => string.Equals(hint.Kind, "open_best_replay", StringComparison.Ordinal));
+        if (openHint is not null)
         {
-            builder.AppendLine($"- Open capsule: `{EscapeMarkdown(capsuleHint.Command)}`");
+            builder.AppendLine($"- Open front door: `{EscapeMarkdown(openHint.Command)}`");
         }
 
         if (!string.IsNullOrWhiteSpace(cluster.Intelligence.BestScrubCommand))
