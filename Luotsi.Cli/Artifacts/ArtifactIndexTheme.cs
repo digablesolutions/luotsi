@@ -64,6 +64,10 @@ internal static class ArtifactIndexTheme
     .timeline { list-style: none; margin: 8px 0 0; padding: 0; border-left: 1px solid var(--line); }
     .timeline li { display: block; position: relative; padding: 7px 0 0 14px; border-top: 0; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Consolas, Liberation Mono, monospace; font-size: 12px; }
     .timeline li::before { content: ""; position: absolute; left: -4px; top: 15px; width: 7px; height: 7px; border-radius: 999px; background: var(--accent); box-shadow: 0 0 0 3px var(--panel); }
+    .timeline li.timeline-failure { color: var(--text); }
+    .timeline li.timeline-failure::before { background: var(--danger); box-shadow: 0 0 0 3px var(--panel), 0 0 0 6px rgba(251,113,133,.12); }
+    .timeline-type { display: inline-block; margin-right: 6px; color: var(--accent-strong); font-weight: 760; }
+    .timeline-tags { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
     .kind { color: var(--muted); font-size: 10px; font-weight: 760; text-transform: uppercase; letter-spacing: .08em; }
     .badge { min-width: 74px; justify-self: end; padding: 4px 8px; border: 1px solid var(--line); border-radius: 999px; background: color-mix(in srgb, var(--panel-strong) 78%, transparent); text-align: center; }
     .workflow ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; padding: 14px; }
@@ -87,6 +91,10 @@ internal static class ArtifactIndexTheme
     .panel h3 { margin: 0 0 10px; font-size: 12px; line-height: 1.25; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
     .failure-title { margin: 0 0 8px; font-size: 22px; font-weight: 740; line-height: 1.2; letter-spacing: 0; }
     .failure-message { margin: 10px 0 0; padding: 10px 12px; border: 1px solid rgba(251,113,133,.42); border-left-width: 3px; border-radius: 6px; background: var(--danger-soft); overflow-wrap: anywhere; }
+    .failure-brief { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+    .brief-card { min-height: 92px; padding: 10px 11px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--panel-subtle); }
+    .brief-card span { display: block; margin-bottom: 6px; color: var(--muted); font-size: 10px; font-weight: 760; letter-spacing: .08em; text-transform: uppercase; }
+    .brief-card strong { display: block; color: var(--text); font-size: 12px; font-weight: 680; line-height: 1.35; overflow-wrap: anywhere; }
     .chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
     .chip { display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel-subtle); color: var(--muted); font-size: 12px; font-weight: 650; }
     .chip-danger { border-color: rgba(251,113,133,.58); color: var(--danger); }
@@ -99,6 +107,17 @@ internal static class ArtifactIndexTheme
     .evidence-list { display: grid; gap: 8px; margin: 0; padding: 0; }
     .evidence-list li { display: block; padding: 9px 10px; border: 1px solid var(--line-soft); border-radius: 7px; background: var(--panel-subtle); }
     .evidence-list li.primary-evidence { border-color: rgba(56,189,248,.46); background: var(--accent-soft); }
+    .filter-chips { display: flex; flex-wrap: wrap; gap: 7px; margin: 0 0 9px; }
+    .filter-chip { min-height: 28px; padding: 5px 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel-subtle); color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
+    .filter-chip:hover, .filter-chip.active { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+    .media-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 9px; margin: 0 0 12px; }
+    .media-tile { display: grid; gap: 6px; min-width: 0; padding: 8px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--panel-subtle); color: var(--text); text-decoration: none; }
+    .media-tile:hover { border-color: rgba(56,189,248,.5); text-decoration: none; }
+    .media-tile img, .media-tile video { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border: 1px solid var(--line-soft); border-radius: 6px; background: var(--code-bg); }
+    .media-tile span { color: var(--muted); font-size: 10px; font-weight: 760; letter-spacing: .08em; text-transform: uppercase; }
+    .media-tile strong { min-width: 0; font-size: 12px; overflow-wrap: anywhere; }
+    .media-placeholder { display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 9; border: 1px dashed var(--line); border-radius: 6px; color: var(--muted); background: var(--code-bg); }
+    .media-empty { margin: 0 0 10px; padding: 10px; border: 1px dashed var(--line); border-radius: 8px; }
     .triage-path { display: grid; gap: 10px; }
     .triage-step { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 10px; align-items: start; padding: 10px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--panel-subtle); }
     .step-number { display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid rgba(56,189,248,.42); border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 760; }
@@ -110,7 +129,7 @@ internal static class ArtifactIndexTheme
     .next-action code { margin-top: 7px; }
     .empty { padding: 18px 16px; color: var(--muted); }
     @media (max-width: 1100px) { .workbench-layout { grid-template-columns: 1fr; } .workbench-side { border-left: 0; border-top: 1px solid var(--line); } }
-    @media (max-width: 900px) { body.has-workbench { padding-left: 0; } .app-rail { display: none; } .workbench-main { grid-template-columns: 1fr; } .toolbar { grid-template-columns: 1fr; } .jump-links { justify-content: flex-start; } .workbench-header { grid-template-columns: 1fr; } .headline-metrics { grid-auto-flow: row; grid-template-columns: repeat(3, minmax(80px, 1fr)); text-align: left; } }
+    @media (max-width: 900px) { body.has-workbench { padding-left: 0; } .app-rail { display: none; } .workbench-main { grid-template-columns: 1fr; } .toolbar { grid-template-columns: 1fr; } .jump-links { justify-content: flex-start; } .workbench-header { grid-template-columns: 1fr; } .headline-metrics { grid-auto-flow: row; grid-template-columns: repeat(3, minmax(80px, 1fr)); text-align: left; } .failure-brief { grid-template-columns: 1fr; } }
     @media (max-width: 680px) { main { padding: 12px 10px 34px; } header { padding: 14px; } h1 { font-size: 26px; } li { grid-template-columns: 1fr; } .badge { justify-self: start; } .workflow ul { grid-template-columns: 1fr; } .command-row { grid-template-columns: 1fr; } }
     """;
 }

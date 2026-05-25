@@ -1,0 +1,19 @@
+{
+  "schema": "luotsi-session-replay.v1",
+  "sessionKind": "view",
+  "sessionId": "fixture-view",
+  "startedAt": "2026-05-18T10:00:00Z",
+  "endedAt": "2026-05-18T10:00:04Z",
+  "reason": "error",
+  "exitCode": 1,
+  "target": "192.168.0.134:5555",
+  "timelineFileName": "session-timeline.jsonl",
+  "eventCount": 5,
+  "eventTypes": [
+    "view_started",
+    "view_stats",
+    "view_diagnostic",
+    "view_error",
+    "view_ended"
+  ]
+}

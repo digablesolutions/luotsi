@@ -1,0 +1,5 @@
+{"type":"view_started","session_id":"fixture-view","started_at":"2026-05-18T10:00:00Z"}
+{"type":"view_stats","session_id":"fixture-view","observed_at":"2026-05-18T10:00:01Z","stats":{"decoded_frames":120,"presented_frames":118,"dropped_frames":2,"decode_fps":29.5,"present_fps":29.0,"end_to_end_latency_ms":142}}
+{"type":"view_diagnostic","session_id":"fixture-view","occurred_at":"2026-05-18T10:00:02Z","category":"transport","message":"Unexpected end of stream after reconnect"}
+{"type":"view_error","session_id":"fixture-view","occurred_at":"2026-05-18T10:00:03Z","error":{"category":"transport","message":"Unexpected end of stream"}}
+{"type":"view_ended","session_id":"fixture-view","ended_at":"2026-05-18T10:00:04Z","reason":"error"}
