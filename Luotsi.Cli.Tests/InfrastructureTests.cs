@@ -158,6 +158,36 @@ public sealed partial class AppTests
             eventCount = 7,
             eventTypes = new[] { "view_started", "view_reconnect_requested", "view_share_client_connected", "view_stats", "view_diagnostic", "view_error", "view_ended" }
         });
+        await session.WriteJsonAsync("replay-graph.json", new
+        {
+            schema = ResultSchemas.ReplayGraph,
+            agentSummary = new
+            {
+                whatFailed = "view_error -> failure:transport",
+                whatChanged = "Found one reconnect before the stream failed.",
+                whatCanActOn = "Start with: luotsi replay scrub --artifacts root --failures"
+            },
+            hypotheses = new[]
+            {
+                new
+                {
+                    kind = "transition_to_failure",
+                    severity = "warning",
+                    summary = "The stream failed after reconnect; inspect transport evidence first.",
+                    confidence = 0.84,
+                    command = "luotsi replay graph --artifacts root --failed"
+                }
+            },
+            insights = new[]
+            {
+                new
+                {
+                    kind = "failure",
+                    severity = "error",
+                    message = "Graph contains one transport failure."
+                }
+            }
+        });
 
         var markdownIndex = await fileSystem.ReadAllTextAsync(Path.Join(session.Root, "index.md"));
         var htmlIndex = await fileSystem.ReadAllTextAsync(Path.Join(session.Root, "index.html"));
@@ -186,6 +216,10 @@ public sealed partial class AppTests
         Assert.Contains("luotsi replay scrub --artifacts", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("<h3>Evidence</h3>", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("<h3>Timeline preview</h3>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("<h3>Semantic signals</h3>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("view_error -&gt; failure:transport", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("The stream failed after reconnect; inspect transport evidence first.", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("Graph contains one transport failure.", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("<h2>Replay Front Door</h2>", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --artifacts", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("luotsi replay capsule --artifacts", htmlIndex, StringComparison.Ordinal);

@@ -815,6 +815,7 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         builder.AppendLine("          <h3>Timeline preview</h3>");
         AppendTimelineHtml(builder, summary);
         builder.AppendLine("        </div>");
+        AppendSemanticSignalsHtml(builder);
         builder.AppendLine("        <div class=\"panel\">");
         builder.AppendLine("          <h3>Replay actions</h3>");
         builder.AppendLine("          <ul class=\"evidence-list\">");
@@ -891,6 +892,35 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         }
 
         builder.AppendLine("          </ul>");
+    }
+
+    private void AppendSemanticSignalsHtml(StringBuilder builder)
+    {
+        var signals = new ReplayGraphSignalReader(_root, _fileSystem).TryRead();
+        if (signals is null)
+        {
+            return;
+        }
+
+        builder.AppendLine("        <div class=\"panel\">");
+        builder.AppendLine("          <h3>Semantic signals</h3>");
+        builder.AppendLine("          <ul class=\"evidence-list\">");
+        foreach (var item in signals.Items.Take(5))
+        {
+            builder.AppendLine("            <li>");
+            builder.AppendLine($"              <div class=\"kind\">{HtmlEncode(item.Kind)}</div>");
+            builder.AppendLine($"              <div>{HtmlEncode(item.Text)}</div>");
+            if (!string.IsNullOrWhiteSpace(item.Command))
+            {
+                builder.AppendLine($"              <code>{HtmlEncode(item.Command)}</code>");
+            }
+
+            builder.AppendLine("            </li>");
+        }
+
+        builder.AppendLine("          </ul>");
+        builder.AppendLine($"          <div class=\"root\"><a href=\"{HtmlAttributeEncode(EscapeHtmlLink(signals.Path))}\">Open graph JSON</a></div>");
+        builder.AppendLine("        </div>");
     }
 
     private static (SessionReplaySummary Summary, FailureCapsuleScenario? Scenario)? SelectPrimaryFailure(
