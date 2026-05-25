@@ -180,6 +180,12 @@ public sealed partial class AppTests
         Assert.Contains("## Replay", markdownIndex, StringComparison.Ordinal);
 
         Assert.Contains("<h2>Replay Sessions</h2>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("<h2>Failure Workbench</h2>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("<h3>Primary failure</h3>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("<h3>Recommended next action</h3>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay scrub --artifacts", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("<h3>Evidence</h3>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("<h3>Timeline preview</h3>", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("<h2>Replay Front Door</h2>", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --artifacts", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("luotsi replay capsule --artifacts", htmlIndex, StringComparison.Ordinal);

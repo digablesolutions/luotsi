@@ -75,32 +75,65 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         builder.AppendLine("  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
         builder.AppendLine("  <title>Luotsi Artifacts</title>");
         builder.AppendLine("  <style>");
-        builder.AppendLine("    :root { color-scheme: light dark; --bg: #0f172a; --panel: #111827; --text: #e5e7eb; --muted: #9ca3af; --line: #334155; --accent: #38bdf8; }");
-        builder.AppendLine("    @media (prefers-color-scheme: light) { :root { --bg: #f8fafc; --panel: #ffffff; --text: #0f172a; --muted: #475569; --line: #cbd5e1; --accent: #0369a1; } }");
-        builder.AppendLine("    body { margin: 0; font: 14px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }");
-        builder.AppendLine("    main { max-width: 1040px; margin: 0 auto; padding: 32px 20px 48px; }");
-        builder.AppendLine("    header { margin-bottom: 24px; }");
-        builder.AppendLine("    h1 { margin: 0 0 8px; font-size: 28px; letter-spacing: 0; }");
-        builder.AppendLine("    .root { color: var(--muted); word-break: break-all; }");
-        builder.AppendLine("    section { margin-top: 22px; border: 1px solid var(--line); background: var(--panel); border-radius: 8px; overflow: hidden; }");
-        builder.AppendLine("    h2 { margin: 0; padding: 14px 16px; font-size: 16px; border-bottom: 1px solid var(--line); }");
+        builder.AppendLine("    :root { color-scheme: light dark; --bg: #0b1018; --surface: #101923; --panel: #141f2b; --panel-strong: #192635; --text: #eef4f8; --muted: #9aa8b4; --line: #2a3a4b; --accent: #47c7a5; --accent-strong: #7dd3fc; --danger: #fb7185; --shadow: 0 18px 60px rgba(0,0,0,.32); }");
+        builder.AppendLine("    @media (prefers-color-scheme: light) { :root { --bg: #f4f7f8; --surface: #ffffff; --panel: #ffffff; --panel-strong: #eef5f4; --text: #132026; --muted: #60717c; --line: #d5e0e4; --accent: #087f68; --accent-strong: #0369a1; --danger: #be123c; --shadow: 0 16px 42px rgba(15,23,42,.1); } }");
+        builder.AppendLine("    * { box-sizing: border-box; }");
+        builder.AppendLine("    body { margin: 0; font: 14px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }");
+        builder.AppendLine("    body::before { content: \"\"; position: fixed; inset: 0 0 auto; height: 260px; background: linear-gradient(135deg, rgba(71,199,165,.18), rgba(125,211,252,.10) 48%, transparent); pointer-events: none; }");
+        builder.AppendLine("    main { position: relative; max-width: 1180px; margin: 0 auto; padding: 34px 22px 56px; }");
+        builder.AppendLine("    header { margin-bottom: 22px; padding: 24px; border: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 88%, transparent); border-radius: 12px; box-shadow: var(--shadow); }");
+        builder.AppendLine("    .eyebrow { margin: 0 0 8px; color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }");
+        builder.AppendLine("    h1 { margin: 0 0 10px; font-size: clamp(28px, 4vw, 42px); line-height: 1.05; letter-spacing: 0; }");
+        builder.AppendLine("    .root { color: var(--muted); word-break: break-word; overflow-wrap: anywhere; }");
+        builder.AppendLine("    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 18px; }");
+        builder.AppendLine("    .stat { padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-strong); }");
+        builder.AppendLine("    .stat-value { display: block; font-size: 24px; font-weight: 720; line-height: 1.1; }");
+        builder.AppendLine("    .stat-label { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }");
+        builder.AppendLine("    section { margin-top: 18px; border: 1px solid var(--line); background: var(--panel); border-radius: 10px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,.12); }");
+        builder.AppendLine("    h2 { margin: 0; padding: 15px 18px; font-size: 15px; line-height: 1.2; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--panel-strong) 78%, transparent); letter-spacing: 0; }");
         builder.AppendLine("    ul { list-style: none; margin: 0; padding: 0; }");
-        builder.AppendLine("    li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; padding: 12px 16px; border-top: 1px solid var(--line); }");
+        builder.AppendLine("    li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: start; padding: 14px 18px; border-top: 1px solid var(--line); }");
         builder.AppendLine("    li:first-child { border-top: 0; }");
-        builder.AppendLine("    a { color: var(--accent); text-decoration: none; overflow-wrap: anywhere; }");
+        builder.AppendLine("    a { color: var(--accent-strong); text-decoration: none; overflow-wrap: anywhere; }");
         builder.AppendLine("    a:hover { text-decoration: underline; }");
-        builder.AppendLine("    .timeline-label { margin-top: 8px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }");
-        builder.AppendLine("    .timeline { list-style: none; margin: 6px 0 0; padding: 0; }");
-        builder.AppendLine("    .timeline li { display: block; padding: 4px 0 0; border-top: 0; }");
-        builder.AppendLine("    .kind { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }");
+        builder.AppendLine("    code { display: inline-block; max-width: 100%; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: rgba(0,0,0,.16); color: var(--text); overflow-wrap: anywhere; }");
+        builder.AppendLine("    .timeline-label { margin-top: 12px; color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }");
+        builder.AppendLine("    .timeline { list-style: none; margin: 7px 0 0; padding: 0 0 0 12px; border-left: 2px solid color-mix(in srgb, var(--accent) 48%, var(--line)); }");
+        builder.AppendLine("    .timeline li { display: block; padding: 5px 0 0 10px; border-top: 0; color: var(--muted); }");
+        builder.AppendLine("    .kind { color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }");
+        builder.AppendLine("    .badge { min-width: 74px; justify-self: end; padding: 4px 8px; border: 1px solid var(--line); border-radius: 999px; background: color-mix(in srgb, var(--panel-strong) 78%, transparent); text-align: center; }");
+        builder.AppendLine("    .workflow ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; padding: 14px; }");
+        builder.AppendLine("    .workflow li { display: block; min-height: 128px; padding: 15px; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--surface) 72%, transparent); }");
+        builder.AppendLine("    .workflow li:first-child { border-top: 1px solid var(--line); }");
+        builder.AppendLine("    .workflow .kind { display: inline-block; margin-bottom: 10px; color: var(--accent); }");
+        builder.AppendLine("    .workflow code { margin-bottom: 9px; }");
+        builder.AppendLine("    .workbench { border-color: color-mix(in srgb, var(--danger) 42%, var(--line)); }");
+        builder.AppendLine("    .workbench h2 { color: var(--text); }");
+        builder.AppendLine("    .workbench-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr); gap: 16px; padding: 16px; }");
+        builder.AppendLine("    .panel { padding: 15px; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--surface) 74%, transparent); }");
+        builder.AppendLine("    .panel h3 { margin: 0 0 10px; font-size: 13px; line-height: 1.25; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }");
+        builder.AppendLine("    .failure-title { margin: 0 0 8px; font-size: 21px; line-height: 1.2; letter-spacing: 0; }");
+        builder.AppendLine("    .failure-message { margin: 10px 0 0; padding: 10px 12px; border-left: 3px solid var(--danger); border-radius: 6px; background: color-mix(in srgb, var(--danger) 14%, transparent); overflow-wrap: anywhere; }");
+        builder.AppendLine("    .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-top: 12px; }");
+        builder.AppendLine("    .meta { padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; background: rgba(0,0,0,.10); }");
+        builder.AppendLine("    .meta span { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }");
+        builder.AppendLine("    .meta strong { display: block; margin-top: 3px; font-weight: 680; overflow-wrap: anywhere; }");
+        builder.AppendLine("    .evidence-list { display: grid; gap: 8px; margin: 0; padding: 0; }");
+        builder.AppendLine("    .evidence-list li { display: block; padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; background: rgba(0,0,0,.10); }");
+        builder.AppendLine("    .next-action { margin-top: 12px; }");
+        builder.AppendLine("    .next-action code { margin-top: 7px; }");
         builder.AppendLine("    .empty { padding: 18px 16px; color: var(--muted); }");
+        builder.AppendLine("    @media (max-width: 820px) { .workbench-grid { grid-template-columns: 1fr; } }");
+        builder.AppendLine("    @media (max-width: 680px) { main { padding: 18px 12px 34px; } header { padding: 18px; } li { grid-template-columns: 1fr; } .badge { justify-self: start; } .workflow ul { grid-template-columns: 1fr; } }");
         builder.AppendLine("  </style>");
         builder.AppendLine("</head>");
         builder.AppendLine("<body>");
         builder.AppendLine("  <main>");
         builder.AppendLine("    <header>");
+        builder.AppendLine("      <div class=\"eyebrow\">Replay artifacts</div>");
         builder.AppendLine("      <h1>Luotsi Artifacts</h1>");
         builder.AppendLine($"      <div class=\"root\">{HtmlEncode(_root)}</div>");
+        AppendHeaderStatsHtml(builder, files, replaySummaries);
         builder.AppendLine("    </header>");
 
         if (files.Count == 0)
@@ -109,6 +142,7 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         }
         else
         {
+            AppendFailureWorkbenchHtml(builder, replaySummaries);
             AppendReplaySessionsHtml(builder, replaySummaries);
             AppendReplayWorkflowHtml(builder, replaySummaries);
 
@@ -711,6 +745,172 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         builder.AppendLine();
     }
 
+    private static void AppendHeaderStatsHtml(
+        StringBuilder builder,
+        IReadOnlyList<string> files,
+        IReadOnlyList<SessionReplaySummary> replaySummaries)
+    {
+        builder.AppendLine("      <div class=\"stats\">");
+        AppendHeaderStatHtml(builder, replaySummaries.Count, "Replay sessions");
+        AppendHeaderStatHtml(builder, replaySummaries.Count(static summary => summary.HasFailureSignals), "Failure signals");
+        AppendHeaderStatHtml(builder, files.Count, "Artifacts");
+        AppendHeaderStatHtml(builder, files.Count(IsReportArtifact), "Reports");
+        builder.AppendLine("      </div>");
+    }
+
+    private static void AppendHeaderStatHtml(StringBuilder builder, int value, string label)
+    {
+        builder.AppendLine("        <div class=\"stat\">");
+        builder.AppendLine($"          <span class=\"stat-value\">{value}</span>");
+        builder.AppendLine($"          <span class=\"stat-label\">{HtmlEncode(label)}</span>");
+        builder.AppendLine("        </div>");
+    }
+
+    private void AppendFailureWorkbenchHtml(StringBuilder builder, IReadOnlyList<SessionReplaySummary> replaySummaries)
+    {
+        var primary = SelectPrimaryFailure(replaySummaries);
+        if (primary is null)
+        {
+            return;
+        }
+
+        var summary = primary.Value.Summary;
+        var scenario = primary.Value.Scenario;
+        var step = scenario?.FailedStep;
+        var error = scenario?.Error;
+        var title = scenario is not null
+            ? scenario.Scenario
+            : BuildReplayTitle(summary);
+        var actionCommand = $"luotsi replay scrub --artifacts {Quote(_root)} --failures --context 3 --write-markdown";
+
+        builder.AppendLine("    <section class=\"workbench\">");
+        builder.AppendLine("      <h2>Failure Workbench</h2>");
+        builder.AppendLine("      <div class=\"workbench-grid\">");
+        builder.AppendLine("        <div class=\"panel\">");
+        builder.AppendLine("          <h3>Primary failure</h3>");
+        builder.AppendLine($"          <p class=\"failure-title\">{HtmlEncode(title)}</p>");
+        builder.AppendLine("          <div class=\"meta-grid\">");
+        AppendMetaHtml(builder, "Session", BuildReplayTitle(summary));
+        AppendMetaHtml(builder, "Reason", summary.Reason);
+        AppendMetaHtml(builder, "Step", step?.Name ?? "unknown");
+        AppendMetaHtml(builder, "Action", step?.Action ?? "unknown");
+        builder.AppendLine("          </div>");
+        if (!string.IsNullOrWhiteSpace(error?.Message))
+        {
+            var category = string.IsNullOrWhiteSpace(error.Category) ? "failure" : error.Category;
+            builder.AppendLine($"          <div class=\"failure-message\"><strong>{HtmlEncode(category)}</strong>: {HtmlEncode(error.Message)}</div>");
+        }
+
+        builder.AppendLine("          <div class=\"next-action\">");
+        builder.AppendLine("            <h3>Recommended next action</h3>");
+        builder.AppendLine("            <div class=\"root\">Scrub the smallest timeline window before opening broader evidence.</div>");
+        builder.AppendLine($"            <code>{HtmlEncode(actionCommand)}</code>");
+        builder.AppendLine("          </div>");
+        builder.AppendLine("        </div>");
+        builder.AppendLine("        <div class=\"panel\">");
+        builder.AppendLine("          <h3>Evidence</h3>");
+        AppendEvidenceHtml(builder, summary, scenario);
+        builder.AppendLine("        </div>");
+        builder.AppendLine("        <div class=\"panel\">");
+        builder.AppendLine("          <h3>Timeline preview</h3>");
+        AppendTimelineHtml(builder, summary);
+        builder.AppendLine("        </div>");
+        builder.AppendLine("        <div class=\"panel\">");
+        builder.AppendLine("          <h3>Replay actions</h3>");
+        builder.AppendLine("          <ul class=\"evidence-list\">");
+        foreach (var command in BuildReplayWorkflowCommands(replaySummaries).Take(4))
+        {
+            builder.AppendLine("            <li>");
+            builder.AppendLine($"              <div class=\"kind\">{HtmlEncode(command.Kind)}</div>");
+            builder.AppendLine($"              <code>{HtmlEncode(command.Command)}</code>");
+            builder.AppendLine("            </li>");
+        }
+
+        builder.AppendLine("          </ul>");
+        builder.AppendLine("        </div>");
+        builder.AppendLine("      </div>");
+        builder.AppendLine("    </section>");
+    }
+
+    private static void AppendMetaHtml(StringBuilder builder, string label, string value)
+    {
+        builder.AppendLine("            <div class=\"meta\">");
+        builder.AppendLine($"              <span>{HtmlEncode(label)}</span>");
+        builder.AppendLine($"              <strong>{HtmlEncode(value)}</strong>");
+        builder.AppendLine("            </div>");
+    }
+
+    private void AppendEvidenceHtml(StringBuilder builder, SessionReplaySummary summary, FailureCapsuleScenario? scenario)
+    {
+        var evidence = new List<FailureCapsuleArtifactLink>();
+        if (scenario is not null)
+        {
+            evidence.AddRange(scenario.Artifacts);
+        }
+
+        if (!string.IsNullOrWhiteSpace(summary.FailureCapsulePath))
+        {
+            evidence.Add(new FailureCapsuleArtifactLink("failure capsule", summary.FailureCapsulePath, null, null));
+        }
+
+        if (summary.HasTimeline)
+        {
+            evidence.Add(new FailureCapsuleArtifactLink("timeline", summary.TimelinePath, null, null));
+        }
+
+        evidence.Add(new FailureCapsuleArtifactLink("metadata", summary.MetadataPath, null, null));
+
+        builder.AppendLine("          <ul class=\"evidence-list\">");
+        foreach (var item in evidence
+            .Where(static item => !string.IsNullOrWhiteSpace(item.Path))
+            .GroupBy(static item => item.Path, StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.First())
+            .Take(8))
+        {
+            builder.AppendLine("            <li>");
+            builder.AppendLine($"              <a href=\"{HtmlAttributeEncode(EscapeHtmlLink(item.Path))}\">{HtmlEncode(item.Path)}</a>");
+            builder.AppendLine($"              <div class=\"root\">{HtmlEncode(item.Kind)}{FormatStepSuffix(item)}</div>");
+            builder.AppendLine("            </li>");
+        }
+
+        builder.AppendLine("          </ul>");
+    }
+
+    private static void AppendTimelineHtml(StringBuilder builder, SessionReplaySummary summary)
+    {
+        if (summary.TimelineHighlights.Count == 0)
+        {
+            builder.AppendLine("          <div class=\"root\">No timeline highlights were available.</div>");
+            return;
+        }
+
+        builder.AppendLine("          <ul class=\"timeline\">");
+        foreach (var entry in summary.TimelineHighlights.Take(8))
+        {
+            builder.AppendLine($"            <li>{HtmlEncode(FormatTimelineEntry(entry))}</li>");
+        }
+
+        builder.AppendLine("          </ul>");
+    }
+
+    private static (SessionReplaySummary Summary, FailureCapsuleScenario? Scenario)? SelectPrimaryFailure(
+        IReadOnlyList<SessionReplaySummary> replaySummaries)
+    {
+        foreach (var summary in replaySummaries.Where(static item => item.HasFailureSignals))
+        {
+            var scenario = summary.FailureCapsule?.Scenarios.FirstOrDefault(static item =>
+                string.Equals(item.Status, "failed", StringComparison.OrdinalIgnoreCase) ||
+                item.Error is not null ||
+                item.FailedStep is not null);
+            return (summary, scenario);
+        }
+
+        return null;
+    }
+
+    private static string FormatStepSuffix(FailureCapsuleArtifactLink item) =>
+        string.IsNullOrWhiteSpace(item.StepName) ? string.Empty : $" for {item.StepName}";
+
     private void AppendReplaySessionsHtml(StringBuilder builder, IReadOnlyList<SessionReplaySummary> replaySummaries)
     {
         if (replaySummaries.Count == 0)
@@ -752,7 +952,7 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
             }
 
             builder.AppendLine("          </div>");
-            builder.AppendLine("          <span class=\"kind\">REPLAY</span>");
+            builder.AppendLine("          <span class=\"kind badge\">REPLAY</span>");
             builder.AppendLine("        </li>");
         }
 
@@ -767,17 +967,15 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
             return;
         }
 
-        builder.AppendLine("    <section>");
+        builder.AppendLine("    <section class=\"workflow\">");
         builder.AppendLine("      <h2>Replay Front Door</h2>");
         builder.AppendLine("      <ul>");
         foreach (var command in BuildReplayWorkflowCommands(replaySummaries))
         {
             builder.AppendLine("        <li>");
-            builder.AppendLine("          <div>");
-            builder.AppendLine($"            <code>{HtmlEncode(command.Command)}</code>");
-            builder.AppendLine($"            <div class=\"root\">{HtmlEncode(command.Purpose)}</div>");
-            builder.AppendLine("          </div>");
             builder.AppendLine($"          <span class=\"kind\">{HtmlEncode(command.Kind)}</span>");
+            builder.AppendLine($"          <div><code>{HtmlEncode(command.Command)}</code></div>");
+            builder.AppendLine($"          <div class=\"root\">{HtmlEncode(command.Purpose)}</div>");
             builder.AppendLine("        </li>");
         }
 
@@ -859,6 +1057,9 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
 
     private static string EscapeHtmlLink(string path) =>
         Uri.EscapeDataString(path.Replace("\\", "/", StringComparison.Ordinal)).Replace("%2F", "/", StringComparison.Ordinal);
+
+    private static bool IsReportArtifact(string path) =>
+        string.Equals(GetArtifactCategory(path), "Reports", StringComparison.Ordinal);
 
     private static string Quote(string value) =>
         value.Contains(' ', StringComparison.Ordinal) ? "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"" : value;
