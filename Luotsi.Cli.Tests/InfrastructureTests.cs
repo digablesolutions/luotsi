@@ -212,7 +212,9 @@ public sealed partial class AppTests
         Assert.Contains("<h2>Replay Sessions</h2>", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("<title>Luotsi Failure Workbench</title>", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Replay navigation\"", htmlIndex, StringComparison.Ordinal);
-        Assert.Contains("Artifacts / Replay triage", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("Luotsi / Replay triage", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("--accent: #38bdf8", htmlIndex, StringComparison.Ordinal);
+        Assert.DoesNotContain("issue-header", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("<h2>Failure Workbench</h2>", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("class=\"workbench-layout\"", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("class=\"workbench-side\"", htmlIndex, StringComparison.Ordinal);
