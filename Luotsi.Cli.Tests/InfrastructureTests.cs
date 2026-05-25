@@ -374,12 +374,14 @@ public sealed partial class AppTests
         Assert.Contains("<video src=\"failure-recording.mp4\" muted preload=\"metadata\"></video>", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("class=\"timeline-tags\">failure", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("status=failed | total=1 | passed=0 | failed=1 | skipped=0 | duration_ms=2450", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("format=junit | tests=1 | failures=1 | skipped=0 | duration_sec=2.45 | suite=Luotsi replay workbench fixture", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("recommended_action=scrub_failure", htmlIndex, StringComparison.Ordinal);
 
         Assert.Contains("## Replay Sessions", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("### view 192.168.0.134:5555", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("scenario-results.json", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("status=failed | total=1 | passed=0 | failed=1 | skipped=0 | duration_ms=2450", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("format=junit | tests=1 | failures=1 | skipped=0 | duration_sec=2.45 | suite=Luotsi replay workbench fixture", markdownIndex, StringComparison.Ordinal);
     }
 
     [Fact]
