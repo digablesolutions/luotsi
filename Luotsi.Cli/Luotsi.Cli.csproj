@@ -17,7 +17,7 @@
 
   <ItemGroup>
     <PackageReference Include="FFmpeg.AutoGen" Version="8.1.0" />
-    <PackageReference Include="ppy.SDL3-CS" Version="2025.1115.0" />
+    <PackageReference Include="ppy.SDL3-CS" Version="2026.520.0" />
   </ItemGroup>
 
   <ItemGroup>
