@@ -6,7 +6,7 @@
 - what changed or was observed around the failure
 - what command can I run next
 
-Graph is not the only replay entry point. `replay capsule` is still the front door for one artifact root, and graph actions intentionally include a capsule command so an agent can move from semantic context back to the bundle summary, artifacts, and recommended next steps.
+Graph is not the only replay entry point. `replay open` is the front door for one artifact root, and graph actions intentionally include that command so an agent can move from semantic context back to the browser index, primary failure, recommended next action, and bundle follow-ups.
 
 ## Command
 
@@ -158,4 +158,4 @@ luotsi replay graph --artifacts artifacts/run --node failure:session-timeline.js
 
 `replay-graph.md` starts with "Agent Summary", "What Failed", "What Agents Can Act On", "Evidence", "Facts", "Causal Chains", "Hypotheses", and "Insights" before the raw node and edge tables.
 
-JSONL output includes `summary`, `failure_path`, `evidence`, `causal_chain`, `hypothesis`, `fact`, `insight`, `node`, and `edge` line types. The `summary` line includes `agent_summary`, `node_kinds`, `edge_kinds`, and `evidence_kinds` so agents can decide whether to consume later lines. `agent_summary.commands` starts with the replay capsule command, then includes graph/scrub/open follow-ups from `actions`. Use `hypothesis` lines when an agent needs ranked likely-cause hints; use `causal_chain` lines when it needs the shortest path into a failure; use `fact` lines when it needs concise semantic statements; use `evidence` lines when it needs proof before deciding whether to open the full graph.
+JSONL output includes `summary`, `failure_path`, `evidence`, `causal_chain`, `hypothesis`, `fact`, `insight`, `node`, and `edge` line types. The `summary` line includes `agent_summary`, `node_kinds`, `edge_kinds`, and `evidence_kinds` so agents can decide whether to consume later lines. `agent_summary.commands` starts with `replay open`, then includes capsule/graph/scrub follow-ups from `actions`. Use `hypothesis` lines when an agent needs ranked likely-cause hints; use `causal_chain` lines when it needs the shortest path into a failure; use `fact` lines when it needs concise semantic statements; use `evidence` lines when it needs proof before deciding whether to open the full graph.

@@ -80,13 +80,13 @@ internal sealed class ReplayCommandDispatcher(IFileSystem fileSystem)
         var commands = new List<ReplaySummaryCommandHintResult>
         {
             new(
-                "describe_replay_capsule",
+                "open_replay_front_door",
                 "Open the replay front door for the artifact root.",
-                $"luotsi replay capsule --artifacts {Quote(artifactRoot)} --write-readme --write-json"),
+                $"luotsi replay open --artifacts {Quote(artifactRoot)}"),
             new(
-                "open_artifact_index",
-                "Open the local artifact browser.",
-                $"luotsi replay open --artifacts {Quote(artifactRoot)}")
+                "write_replay_capsule",
+                "Write the replay capsule README and JSON summary.",
+                $"luotsi replay capsule --artifacts {Quote(artifactRoot)} --write-readme --write-json")
         };
 
         if (summaries.Any(static summary => summary.HasFailureSignals))

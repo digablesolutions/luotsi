@@ -392,8 +392,8 @@ public sealed partial class AppTests
         Assert.Equal(1, envelope.RootElement.GetProperty("data").GetProperty("failure_count").GetInt32());
         var commands = envelope.RootElement.GetProperty("data").GetProperty("commands").EnumerateArray().ToArray();
         Assert.Contains(commands, command =>
-            command.GetProperty("kind").GetString() == "describe_replay_capsule" &&
-            command.GetProperty("command").GetString() == $"luotsi replay capsule --artifacts {replayRoot} --write-readme --write-json");
+            command.GetProperty("kind").GetString() == "open_replay_front_door" &&
+            command.GetProperty("command").GetString() == $"luotsi replay open --artifacts {replayRoot}");
         Assert.Contains(commands, command => command.GetProperty("kind").GetString() == "graph_failures");
         Assert.Contains(commands, command => command.GetProperty("kind").GetString() == "cluster_failures");
 
@@ -595,7 +595,7 @@ public sealed partial class AppTests
         Assert.Equal(1, summaryLine.RootElement.GetProperty("session_count").GetInt32());
         Assert.Equal(1, summaryLine.RootElement.GetProperty("failure_count").GetInt32());
         Assert.Contains(summaryLine.RootElement.GetProperty("commands").EnumerateArray(), command =>
-            command.GetProperty("kind").GetString() == "describe_replay_capsule");
+            command.GetProperty("kind").GetString() == "open_replay_front_door");
         Assert.Equal(ResultSchemas.SessionReplaySummary, sessionLine.RootElement.GetProperty("schema").GetString());
         Assert.Equal("session", sessionLine.RootElement.GetProperty("type").GetString());
         Assert.Equal(replayRoot, sessionLine.RootElement.GetProperty("artifact_root").GetString());
@@ -936,8 +936,8 @@ public sealed partial class AppTests
         Assert.False(data.GetProperty("truncated").GetBoolean());
         var commands = data.GetProperty("commands").EnumerateArray().ToArray();
         Assert.Contains(commands, command =>
-            command.GetProperty("kind").GetString() == "describe_replay_capsule" &&
-            command.GetProperty("command").GetString() == $"luotsi replay capsule --artifacts {replayRoot} --write-readme --write-json");
+            command.GetProperty("kind").GetString() == "open_replay_front_door" &&
+            command.GetProperty("command").GetString() == $"luotsi replay open --artifacts {replayRoot}");
         Assert.Contains(commands, command => command.GetProperty("kind").GetString() == "scrub_failures");
         Assert.Contains(commands, command =>
             command.GetProperty("kind").GetString() == "graph_matching_context" &&
@@ -1220,8 +1220,8 @@ public sealed partial class AppTests
         Assert.Equal(1, data.GetProperty("scanned_file_count").GetInt32());
         var commands = data.GetProperty("commands").EnumerateArray().ToArray();
         Assert.Contains(commands, command =>
-            command.GetProperty("kind").GetString() == "describe_replay_capsule" &&
-            command.GetProperty("command").GetString() == $"luotsi replay capsule --artifacts {replayRoot} --write-readme --write-json");
+            command.GetProperty("kind").GetString() == "open_replay_front_door" &&
+            command.GetProperty("command").GetString() == $"luotsi replay open --artifacts {replayRoot}");
         Assert.Contains(commands, command => command.GetProperty("kind").GetString() == "scrub_failures");
         Assert.Contains(commands, command => command.GetProperty("kind").GetString() == "graph_failures");
         var evt = Assert.Single(data.GetProperty("events").EnumerateArray());
@@ -1420,10 +1420,10 @@ public sealed partial class AppTests
         Assert.Contains("luotsi replay", data.GetProperty("agent_summary").GetProperty("what_can_act_on").GetString(), StringComparison.Ordinal);
         Assert.Contains(data.GetProperty("agent_summary").GetProperty("evidence_node_ids").EnumerateArray(), id => id.GetString()!.StartsWith("failure:", StringComparison.Ordinal));
         Assert.Contains(data.GetProperty("agent_summary").GetProperty("commands").EnumerateArray(), command =>
-            command.GetString() == $"luotsi replay capsule --artifacts {replayRoot} --write-readme --write-json");
+            command.GetString() == $"luotsi replay open --artifacts {replayRoot} --dry-run");
         Assert.Contains(data.GetProperty("actions").EnumerateArray(), action =>
-            action.GetProperty("kind").GetString() == "describe_replay_capsule" &&
-            action.GetProperty("command").GetString() == $"luotsi replay capsule --artifacts {replayRoot} --write-readme --write-json");
+            action.GetProperty("kind").GetString() == "open_replay_front_door" &&
+            action.GetProperty("command").GetString() == $"luotsi replay open --artifacts {replayRoot} --dry-run");
         Assert.Contains(data.GetProperty("actions").EnumerateArray(), action => action.GetProperty("kind").GetString() == "scrub_failures");
         Assert.Contains(data.GetProperty("actions").EnumerateArray(), action => action.GetProperty("kind").GetString() == "stream_graph");
         Assert.Contains(data.GetProperty("actions").EnumerateArray(), action => action.GetProperty("kind").GetString() == "filter_artifact_evidence");
@@ -2010,11 +2010,11 @@ public sealed partial class AppTests
         Assert.Contains(hints, hint => hint.GetProperty("kind").GetString() == "inspect_best_failure_graph");
         Assert.Contains(hints, hint => hint.GetProperty("kind").GetString() == "scrub_best_failure");
         Assert.Contains(hints, hint =>
-            hint.GetProperty("kind").GetString() == "describe_best_replay_capsule" &&
-            hint.GetProperty("command").GetString() == "luotsi replay capsule --artifacts /tmp/replay-cluster-root\\run-b --write-readme --write-json");
-        Assert.Contains(hints, hint =>
             hint.GetProperty("kind").GetString() == "open_best_replay" &&
             hint.GetProperty("command").GetString() == "luotsi replay open --artifacts /tmp/replay-cluster-root\\run-b");
+        Assert.Contains(hints, hint =>
+            hint.GetProperty("kind").GetString() == "write_best_replay_capsule" &&
+            hint.GetProperty("command").GetString() == "luotsi replay capsule --artifacts /tmp/replay-cluster-root\\run-b --write-readme --write-json");
         Assert.Contains(hints, hint =>
             hint.GetProperty("kind").GetString() == "search_best_failure_text" &&
             hint.GetProperty("command").GetString()!.Contains("not visible after 30 seconds", StringComparison.Ordinal));
@@ -2025,7 +2025,7 @@ public sealed partial class AppTests
         var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-clusters.md"));
         Assert.Contains("## Start Here", markdown, StringComparison.Ordinal);
         Assert.Contains("Top cluster:", markdown, StringComparison.Ordinal);
-        Assert.Contains("Open capsule: `luotsi replay capsule --artifacts /tmp/replay-cluster-root\\run-b --write-readme --write-json`", markdown, StringComparison.Ordinal);
+        Assert.Contains("Open front door: `luotsi replay open --artifacts /tmp/replay-cluster-root\\run-b`", markdown, StringComparison.Ordinal);
         Assert.Contains("Scrub failure: `luotsi replay scrub --artifacts /tmp/replay-cluster-root\\run-b --failures --context 3 --write-markdown`", markdown, StringComparison.Ordinal);
         Assert.Contains("Inspect graph: `luotsi replay graph --artifacts /tmp/replay-cluster-root\\run-b --failed --write-json --write-markdown`", markdown, StringComparison.Ordinal);
         Assert.Contains("### Intelligence", markdown, StringComparison.Ordinal);
@@ -2087,7 +2087,7 @@ public sealed partial class AppTests
         Assert.Equal("summary", summaryLine.RootElement.GetProperty("type").GetString());
         Assert.Equal(1, summaryLine.RootElement.GetProperty("event_count").GetInt32());
         Assert.Contains(summaryLine.RootElement.GetProperty("commands").EnumerateArray(), command =>
-            command.GetProperty("kind").GetString() == "describe_replay_capsule");
+            command.GetProperty("kind").GetString() == "open_replay_front_door");
         Assert.Equal(ResultSchemas.ReplayTimeline, eventLine.RootElement.GetProperty("schema").GetString());
         Assert.Equal("event", eventLine.RootElement.GetProperty("type").GetString());
         Assert.Equal("scenario_step_failed", eventLine.RootElement.GetProperty("event").GetProperty("type").GetString());
