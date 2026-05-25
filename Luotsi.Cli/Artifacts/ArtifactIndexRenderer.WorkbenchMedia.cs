@@ -27,7 +27,7 @@ internal sealed partial class ArtifactIndexRenderer
             }
             else if (IsBrowserVideoArtifact(item.Path))
             {
-                builder.AppendLine($"              <video src=\"{HtmlAttributeEncode(EscapeHtmlLink(item.Path))}\" muted controls preload=\"metadata\"></video>");
+                builder.AppendLine($"              <video src=\"{HtmlAttributeEncode(EscapeHtmlLink(item.Path))}\" muted preload=\"metadata\"></video>");
             }
             else
             {
@@ -48,20 +48,17 @@ internal sealed partial class ArtifactIndexRenderer
         FailureCapsuleScenario? scenario)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var item in EnumeratePreviewLinks(summary, scenario))
+        foreach (var item in EnumeratePreviewLinks(summary, scenario).Where(static item => IsPreviewArtifact(item.Path)))
         {
-            if (IsPreviewArtifact(item.Path) && seen.Add(item.Path))
+            if (seen.Add(item.Path))
             {
                 yield return item;
             }
         }
 
-        foreach (var file in files.Where(IsPreviewArtifact))
+        foreach (var file in files.Where(IsPreviewArtifact).Where(file => seen.Add(file)))
         {
-            if (seen.Add(file))
-            {
-                yield return new FailureCapsuleArtifactLink(GetArtifactCategory(file).TrimEnd('s').ToLowerInvariant(), file, null, null);
-            }
+            yield return new FailureCapsuleArtifactLink(GetArtifactCategory(file).TrimEnd('s').ToLowerInvariant(), file, null, null);
         }
     }
 

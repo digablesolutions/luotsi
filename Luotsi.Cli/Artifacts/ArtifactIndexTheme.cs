@@ -67,6 +67,7 @@ internal static class ArtifactIndexTheme
     .timeline li.timeline-failure { color: var(--text); }
     .timeline li.timeline-failure::before { background: var(--danger); box-shadow: 0 0 0 3px var(--panel), 0 0 0 6px rgba(251,113,133,.12); }
     .timeline-type { display: inline-block; margin-right: 6px; color: var(--accent-strong); font-weight: 760; }
+    .timeline-tags { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
     .kind { color: var(--muted); font-size: 10px; font-weight: 760; text-transform: uppercase; letter-spacing: .08em; }
     .badge { min-width: 74px; justify-self: end; padding: 4px 8px; border: 1px solid var(--line); border-radius: 999px; background: color-mix(in srgb, var(--panel-strong) 78%, transparent); text-align: center; }
     .workflow ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; padding: 14px; }
