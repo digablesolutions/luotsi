@@ -249,6 +249,11 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
                 return BuildReplayCapsuleSummary(root);
             }
 
+            if (string.Equals(schemaName, ResultSchemas.ReplayOpen, StringComparison.Ordinal))
+            {
+                return BuildReplayOpenSummary(root);
+            }
+
             if (string.Equals(schemaName, ResultSchemas.ScenarioDraft, StringComparison.Ordinal))
             {
                 return BuildScenarioDraftSummary(root);
@@ -284,6 +289,55 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
         AddJsonProperty(parts, root, "skipped");
         AddJsonProperty(parts, root, "durationMs", "duration_ms");
         return parts.Count == 0 ? null : string.Join(" | ", parts);
+    }
+
+    private static string? BuildReplayOpenSummary(JsonElement root)
+    {
+        var parts = new List<string>();
+        AddJsonProperty(parts, root, "sessionCount", "session_count");
+        AddJsonProperty(parts, root, "failureCount", "failure_count");
+        AddJsonProperty(parts, root, "opened");
+        AddReplayOpenNextActionSummary(parts, root);
+        AddReplayOpenPrimaryFailureSummary(parts, root);
+        AddArrayCount(parts, root, "commands");
+        return parts.Count == 0 ? null : string.Join(" | ", parts);
+    }
+
+    private static void AddReplayOpenNextActionSummary(List<string> parts, JsonElement root)
+    {
+        if (!TryGetProperty(root, "recommendedNextAction", "recommended_next_action", out var nextAction) ||
+            nextAction.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        AddJsonProperty(parts, nextAction, "kind", "recommended_action");
+        AddJsonProperty(parts, nextAction, "title", "recommended_title");
+        AddJsonProperty(parts, nextAction, "command", "recommended_command");
+    }
+
+    private static void AddReplayOpenPrimaryFailureSummary(List<string> parts, JsonElement root)
+    {
+        if (!TryGetProperty(root, "primaryFailure", "primary_failure", out var primaryFailure) ||
+            primaryFailure.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        var summary = new[]
+            {
+                TryGetString(primaryFailure, "scenario"),
+                TryGetString(primaryFailure, "step"),
+                TryGetString(primaryFailure, "action"),
+                TryGetString(primaryFailure, "message")
+            }
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Take(3)
+            .ToArray();
+        if (summary.Length > 0)
+        {
+            parts.Add("primary_failure=" + string.Join(" / ", summary));
+        }
     }
 
     private static string? BuildReplayCapsuleSummary(JsonElement root)

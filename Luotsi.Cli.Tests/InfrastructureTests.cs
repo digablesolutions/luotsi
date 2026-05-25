@@ -341,6 +341,31 @@ public sealed partial class AppTests
             },
             artifactManifest = new[] { new { path = "session-timeline.jsonl", kind = "timeline", role = "session" } }
         });
+        await session.WriteJsonAsync("replay-open-summary.json", new
+        {
+            schema = ResultSchemas.ReplayOpen,
+            artifactRoot = session.Root,
+            sessionCount = 2,
+            failureCount = 1,
+            opened = false,
+            primaryFailure = new
+            {
+                scenario = "login smoke",
+                step = "wait login button",
+                action = "waitVisible",
+                message = "not visible"
+            },
+            recommendedNextAction = new
+            {
+                kind = "scrub_failure",
+                title = "Scrub the failure window",
+                command = "luotsi replay scrub --artifacts root --failures --context 5"
+            },
+            commands = new[]
+            {
+                new { kind = "open_graph", command = "luotsi replay graph --artifacts root --failed" }
+            }
+        });
         await session.WriteJsonAsync("scenario-draft-summary.json", new
         {
             schema = ResultSchemas.ScenarioDraft,
@@ -380,14 +405,17 @@ public sealed partial class AppTests
 
         Assert.Contains("## Replay", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("- [replay-capsule-summary.json](replay-capsule-summary.json)", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("- [replay-open-summary.json](replay-open-summary.json)", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("- [scenario-draft-summary.json](scenario-draft-summary.json)", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("- [replay-scrub.json](replay-scrub.json)", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("session_count=2 | failure_count=1 | scenario_draft_available=true | scenario_draft_reason=Found command_result:tap_text source in inspect/session-timeline.jsonl. | primary_failure=login smoke / wait login button / waitVisible | next_step=Scrub the failure window | next_command=luotsi replay scrub --artifacts root --failures --context 3 --write-markdown | artifact_manifest=1", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("session_count=2 | failure_count=1 | opened=false | recommended_action=scrub_failure | recommended_title=Scrub the failure window | recommended_command=luotsi replay scrub --artifacts root --failures --context 5 | primary_failure=login smoke / wait login button / waitVisible | commands=1", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("confidence=medium | source_summaries=1 | steps=2 | warnings=1 | normalizations=1", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("event_count=3 | focus_index=1 | markdown_path=", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("focus_type=scenario_step_failed | focus_detail=step=wait login button error_message=not visible | commands=1", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("<h2>Replay</h2>", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("session_count=2 | failure_count=1 | scenario_draft_available=true | scenario_draft_reason=Found command_result:tap_text source in inspect/session-timeline.jsonl. | primary_failure=login smoke / wait login button / waitVisible | next_step=Scrub the failure window | next_command=luotsi replay scrub --artifacts root --failures --context 3 --write-markdown | artifact_manifest=1", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("session_count=2 | failure_count=1 | opened=false | recommended_action=scrub_failure | recommended_title=Scrub the failure window | recommended_command=luotsi replay scrub --artifacts root --failures --context 5 | primary_failure=login smoke / wait login button / waitVisible | commands=1", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("confidence=medium | source_summaries=1 | steps=2 | warnings=1 | normalizations=1", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("focus_type=scenario_step_failed | focus_detail=step=wait login button error_message=not visible | commands=1", htmlIndex, StringComparison.Ordinal);
     }
