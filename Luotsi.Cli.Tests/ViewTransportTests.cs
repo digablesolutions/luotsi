@@ -1049,32 +1049,36 @@ public sealed class ViewTransportTests
 
     private static async Task WaitForObserverCountAsync(TcpViewShareServer server, int expectedCount)
     {
-        for (var attempt = 0; attempt < 100; attempt++)
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (!timeout.IsCancellationRequested)
         {
             if (server.ObserverCount >= expectedCount)
             {
                 return;
             }
 
-            await Task.Delay(10);
+            await Task.Delay(20);
         }
 
-        throw new InvalidOperationException($"Timed out waiting for {expectedCount} share observer connections.");
+        throw new InvalidOperationException(
+            $"Timed out waiting for {expectedCount} share observer connections. Current observer count: {server.ObserverCount}.");
     }
 
     private static async Task WaitForObserverCountExactlyAsync(TcpViewShareServer server, int expectedCount)
     {
-        for (var attempt = 0; attempt < 100; attempt++)
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (!timeout.IsCancellationRequested)
         {
             if (server.ObserverCount == expectedCount)
             {
                 return;
             }
 
-            await Task.Delay(10);
+            await Task.Delay(20);
         }
 
-        throw new InvalidOperationException($"Timed out waiting for {expectedCount} share observer connections.");
+        throw new InvalidOperationException(
+            $"Timed out waiting for {expectedCount} share observer connections. Current observer count: {server.ObserverCount}.");
     }
 }
 

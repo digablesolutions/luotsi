@@ -204,14 +204,14 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
         IReadOnlyList<ReplayTimelineEventResult> events)
     {
         yield return new ReplayTimelineCommandHint(
-            "describe_replay_capsule",
+            "open_replay_front_door",
             "Open the replay front door for this artifact root.",
-            $"luotsi replay capsule --artifacts {Quote(artifactRoot)} --write-readme --write-json");
+            $"luotsi replay open --artifacts {Quote(artifactRoot)}");
 
         yield return new ReplayTimelineCommandHint(
-            "open_artifact_index",
-            "Open the artifact browser for screenshots, logs, reports, and generated replay files.",
-            $"luotsi replay open --artifacts {Quote(artifactRoot)}");
+            "write_replay_capsule",
+            "Write the replay capsule README and JSON summary.",
+            $"luotsi replay capsule --artifacts {Quote(artifactRoot)} --write-readme --write-json");
 
         if (events.Any(static evt => evt.FailureRelevant))
         {

@@ -81,14 +81,14 @@ internal sealed class ReplaySearchService(IFileSystem fileSystem)
         IReadOnlyCollection<ReplaySearchMatchResult> matches)
     {
         yield return new ReplaySearchCommandHint(
-            "describe_replay_capsule",
+            "open_replay_front_door",
             "Open the replay front door for the artifact root.",
-            $"luotsi replay capsule --artifacts {Quote(artifactRoot)} --write-readme --write-json");
+            $"luotsi replay open --artifacts {Quote(artifactRoot)}");
 
         yield return new ReplaySearchCommandHint(
-            "open_artifact_index",
-            "Open the artifact browser for screenshots, logs, reports, and generated replay files.",
-            $"luotsi replay open --artifacts {Quote(artifactRoot)}");
+            "write_replay_capsule",
+            "Write the replay capsule README and JSON summary.",
+            $"luotsi replay capsule --artifacts {Quote(artifactRoot)} --write-readme --write-json");
 
         if (matches.Any(static match => string.Equals(match.Kind, "timeline", StringComparison.OrdinalIgnoreCase)))
         {

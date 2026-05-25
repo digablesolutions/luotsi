@@ -192,17 +192,18 @@ Notes:
 Luotsi help: replay
 
 Usage:
+  luotsi replay open --artifacts <artifact-root> [--dry-run] [--write-json] [--write-markdown]
   luotsi replay summarize --artifacts <artifact-root> [--format json|jsonl]
   luotsi replay capsule --artifacts <artifact-root> [--write-readme] [--write-json]
   luotsi replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--source-path <timeline-path>] [--sequence <n>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
   luotsi replay scrub --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--source-path <timeline-path>] [--sequence <n>] [--context <n>] [--limit 200] [--write-json] [--write-markdown]
   luotsi replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--contains <text>] [--insight <kind>] [--severity info|warning|error] [--evidence <kind>] [--fact <text>] [--node <id> --depth 1] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
   luotsi replay cluster --artifacts <artifact-root> [--min-count <n>] [--similarity same_failure_shape|likely_same_cause|same_bucket] [--contains <text>] [--write-json] [--write-markdown]
-  luotsi replay open --artifacts <artifact-root> [--dry-run]
   luotsi replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>] [--write-json] [--write-markdown]
   luotsi replay search --artifacts <artifact-root> --contains <text> [--limit 50]
 
 Examples:
+  luotsi replay open --artifacts artifacts/20260518-100000-view --write-json --write-markdown
   luotsi replay summarize --artifacts artifacts/20260518-100000-view
   luotsi replay summarize --artifacts artifacts/20260518-100000-view --format json
   luotsi replay summarize --artifacts artifacts/20260518-100000-view --format jsonl
@@ -221,31 +222,33 @@ Examples:
   luotsi replay graph --artifacts artifacts/20260518-100000-run --node failure:session-timeline.jsonl:3 --depth 2
   luotsi replay cluster --artifacts artifacts/ci-runs --write-json --write-markdown
   luotsi replay cluster --artifacts artifacts/ci-runs --min-count 2 --similarity same_failure_shape --contains waitVisible
-  luotsi replay open --artifacts artifacts/20260518-100000-view
   luotsi replay scenario-draft --artifacts artifacts/20260518-100000-inspect --output scenarios/draft.json --write-markdown
   luotsi replay search --artifacts artifacts/20260518-100000-run --contains "not visible"
 
 Notes:
+  Replay open is the canonical replay front door: it refreshes
+  index.html/index.md, opens the artifact browser, and returns session counts,
+  primary failure, recommended next action, and commands into capsule, timeline,
+  scrub, graph, search, scenario draft, and clustering. With --write-json and
+  --write-markdown, it writes replay-open-summary.json and replay-open.md.
   Replay summarize reads session-replay.json and session-timeline.jsonl from an
   existing artifact root. By default it returns the condensed failure timeline
   as a normal JSON command envelope. `--format json` writes the bare summary
   object, and `--format jsonl` writes one summary header line followed by one
   session line per replay session. The summary includes commands that point
-  into capsule, open, scrub, graph, and cluster follow-ups. Failed scenario runs also expose
+  into open, capsule, scrub, graph, and cluster follow-ups. Failed scenario runs also expose
   failure_capsule_path and an embedded failure_capsule summary with linked
-  reports and failure artifacts. Replay open refreshes index.html/index.md for
-  the artifact root and opens index.html in the local browser. Replay
-  scenario-draft turns inspect/replay action events into a conservative draft
+  reports and failure artifacts. Replay scenario-draft turns inspect/replay action events into a conservative draft
   scenario with warnings and suggestions for cleanup. The result includes
   source_summaries, step_origins, and normalizations so reviewers can see
   which steps came from inspect commands, screen deltas, view events,
   telemetry, or existing scenario events. With --write-json and
   --write-markdown, it writes review artifacts into the replay root. Suggested
-  commands route back to capsule, scrub, graph provenance, validation, and
+  commands route back to open, capsule, scrub, graph provenance, validation, and
   source timeline events. Replay search scans
   text-like replay artifacts, reports, logcat, hierarchies, screen-state JSON,
   and timelines for a case-insensitive string, then returns commands back into
-  capsule, open, scrub, and graph when the matches support those next steps. Replay capsule returns a compact
+  open, capsule, scrub, and graph when the matches support those next steps. Replay capsule returns a compact
   bundle manifest with artifact counts, an artifact_manifest, primary failure,
   existing scenario draft artifact paths, and suggested next commands. With --write-readme, replay capsule writes replay-capsule.md into
   the artifact root. With --write-json, it writes replay-capsule-summary.json.
@@ -259,12 +262,12 @@ Notes:
   output instead of the normal command envelope. With --write-json or
   --write-jsonl, it persists normalized timeline artifacts. With
   --write-markdown, it writes replay-timeline.md for artifact browsing. Timeline
-  results include commands back into capsule, open, scrub, and graph when the
+  results include commands back into open, capsule, scrub, and graph when the
   selected events support those follow-ups. These
   write options refresh the artifact index. Replay scrub uses the same timeline
   filters but returns a local previous/focused/next event view with exact
   commands to reopen the focused event, move to adjacent events, search the
-  focused detail, open capsule/graph context, or open the artifact browser. With --write-json and
+  focused detail, open the replay front door, or open graph context. With --write-json and
   --write-markdown, it writes replay-scrub.json and replay-scrub.md into the
   artifact root. Replay graph emits a stable node
   and edge model over sessions, timeline events, failures, scenarios,
@@ -275,8 +278,8 @@ Notes:
   understand what failed and what to do next. With --format json or --format
   jsonl, replay graph writes raw machine output instead of the command envelope.
   With --write-jsonl, it persists replay-graph.jsonl for CI and agent consumers.
-  Graph actions start with a replay capsule command so semantic context can
-  route back to the bundle front door.
+  Graph actions start with replay open so semantic context can
+  route back to the canonical front door.
   Use --failed, --node-kind, --edge-kind, --action, --selector, --contains,
   --insight, --evidence, --fact,
   --severity, --node,
@@ -543,7 +546,7 @@ Command groups:
     replay scrub --artifacts <artifact-root> [--failures] [--source-path <timeline-path>] [--sequence <n>] [--context <n>] [--write-json] [--write-markdown]
     replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--contains <text>] [--insight <kind>] [--severity info|warning|error] [--evidence <kind>] [--fact <text>] [--node <id> --depth 1] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
     replay cluster --artifacts <artifact-root> [--write-json] [--write-markdown]
-    replay open --artifacts <artifact-root> [--dry-run]
+    replay open --artifacts <artifact-root> [--dry-run] [--write-json] [--write-markdown]
     replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>] [--write-json] [--write-markdown]
     replay search --artifacts <artifact-root> --contains <text> [--limit 50]
 

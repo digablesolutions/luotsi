@@ -383,7 +383,7 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
 
         yield return new ReplayScenarioDraftCommandHint(
             $"luotsi replay capsule --artifacts {Quote(artifactRoot)} --write-readme --write-json",
-            "Open the replay front door that links the draft to failures, artifacts, and follow-up commands.");
+            "Write the replay capsule that links the draft to failures, artifacts, and follow-up commands.");
 
         yield return new ReplayScenarioDraftCommandHint(
             $"luotsi replay scrub --artifacts {Quote(artifactRoot)} --context 3 --write-markdown",

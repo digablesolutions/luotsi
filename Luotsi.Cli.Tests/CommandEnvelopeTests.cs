@@ -392,8 +392,8 @@ public sealed partial class AppTests
         Assert.Equal(1, envelope.RootElement.GetProperty("data").GetProperty("failure_count").GetInt32());
         var commands = envelope.RootElement.GetProperty("data").GetProperty("commands").EnumerateArray().ToArray();
         Assert.Contains(commands, command =>
-            command.GetProperty("kind").GetString() == "describe_replay_capsule" &&
-            command.GetProperty("command").GetString() == $"luotsi replay capsule --artifacts {replayRoot} --write-readme --write-json");
+            command.GetProperty("kind").GetString() == "open_replay_front_door" &&
+            command.GetProperty("command").GetString() == $"luotsi replay open --artifacts {replayRoot}");
         Assert.Contains(commands, command => command.GetProperty("kind").GetString() == "graph_failures");
         Assert.Contains(commands, command => command.GetProperty("kind").GetString() == "cluster_failures");
 
@@ -595,7 +595,7 @@ public sealed partial class AppTests
         Assert.Equal(1, summaryLine.RootElement.GetProperty("session_count").GetInt32());
         Assert.Equal(1, summaryLine.RootElement.GetProperty("failure_count").GetInt32());
         Assert.Contains(summaryLine.RootElement.GetProperty("commands").EnumerateArray(), command =>
-            command.GetProperty("kind").GetString() == "describe_replay_capsule");
+            command.GetProperty("kind").GetString() == "open_replay_front_door");
         Assert.Equal(ResultSchemas.SessionReplaySummary, sessionLine.RootElement.GetProperty("schema").GetString());
         Assert.Equal("session", sessionLine.RootElement.GetProperty("type").GetString());
         Assert.Equal(replayRoot, sessionLine.RootElement.GetProperty("artifact_root").GetString());
@@ -627,6 +627,22 @@ public sealed partial class AppTests
         Assert.Equal(ResultSchemas.ReplayOpen, data.GetProperty("schema").GetString());
         Assert.Equal(replayRoot, data.GetProperty("artifact_root").GetString());
         Assert.False(data.GetProperty("opened").GetBoolean());
+        Assert.False(data.TryGetProperty("json_path", out _));
+        Assert.False(data.TryGetProperty("markdown_path", out _));
+        Assert.Equal(1, data.GetProperty("session_count").GetInt32());
+        Assert.Equal(1, data.GetProperty("failure_count").GetInt32());
+        Assert.Equal("scrub_failure", data.GetProperty("recommended_next_action").GetProperty("kind").GetString());
+        Assert.Contains(data.GetProperty("commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "capsule" &&
+            command.GetProperty("command").GetString() == $"luotsi replay capsule --artifacts {replayRoot} --write-readme --write-json");
+        Assert.Contains(data.GetProperty("commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "scrub" &&
+            command.GetProperty("command").GetString() == $"luotsi replay scrub --artifacts {replayRoot} --failures --context 3 --write-markdown");
+        Assert.Contains(data.GetProperty("commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "graph");
+        Assert.Contains(data.GetProperty("commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "scenario_draft");
+        Assert.Equal("error=transport: Unexpected end of stream", data.GetProperty("primary_failure").GetProperty("message").GetString());
         Assert.EndsWith("index.html", data.GetProperty("index_html_path").GetString(), StringComparison.OrdinalIgnoreCase);
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.html")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.md")));
@@ -656,6 +672,112 @@ public sealed partial class AppTests
         var call = Assert.Single(processRunner.Calls);
         Assert.Contains(call.Args, arg => arg.EndsWith("index.html", StringComparison.OrdinalIgnoreCase));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.html")));
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayOpen_WriteArtifacts_PersistsFrontDoorSummary()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var processRunner = new FakeProcessRunner();
+        var replayRoot = SeedReplaySummaryArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = processRunner,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "open", "--artifacts", replayRoot, "--dry-run", "--write-json", "--write-markdown"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(Path.Join(replayRoot, "replay-open-summary.json"), data.GetProperty("json_path").GetString());
+        Assert.Equal(Path.Join(replayRoot, "replay-open.md"), data.GetProperty("markdown_path").GetString());
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-open-summary.json")));
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-open.md")));
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.html")));
+        var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-open.md"));
+        Assert.Contains("# Luotsi Replay Front Door", markdown, StringComparison.Ordinal);
+        Assert.Contains("Scrub the failure window", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay graph", markdown, StringComparison.Ordinal);
+        var indexMarkdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "index.md"));
+        Assert.Contains("[replay-open.md](replay-open.md)", indexMarkdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayOpen_WithSessionWithoutFailure_RecommendsCapsule()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var processRunner = new FakeProcessRunner();
+        var replayRoot = SeedReplaySummaryArtifactsWithoutFailure(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = processRunner,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "open", "--artifacts", replayRoot, "--dry-run"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(1, data.GetProperty("session_count").GetInt32());
+        Assert.Equal(0, data.GetProperty("failure_count").GetInt32());
+        Assert.False(data.TryGetProperty("primary_failure", out _));
+        Assert.Equal("write_capsule", data.GetProperty("recommended_next_action").GetProperty("kind").GetString());
+        Assert.Contains(data.GetProperty("commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "capsule");
+        Assert.Contains(data.GetProperty("commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "timeline");
+        Assert.DoesNotContain(data.GetProperty("commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "scrub");
+        Assert.DoesNotContain(data.GetProperty("commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "cluster");
+        Assert.Empty(processRunner.Calls);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayOpen_WithoutReplayMetadata_RecommendsArtifactInspection()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var processRunner = new FakeProcessRunner();
+        var replayRoot = "/tmp/replay-empty-root";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "logcat.txt"), "ordinary artifact");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = processRunner,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "open", "--artifacts", replayRoot, "--dry-run"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(0, data.GetProperty("session_count").GetInt32());
+        Assert.Equal(0, data.GetProperty("failure_count").GetInt32());
+        Assert.False(data.TryGetProperty("primary_failure", out _));
+        var nextAction = data.GetProperty("recommended_next_action");
+        Assert.Equal("inspect_artifacts", nextAction.GetProperty("kind").GetString());
+        Assert.Equal($"luotsi replay open --artifacts {replayRoot}", nextAction.GetProperty("command").GetString());
+        Assert.Contains(data.GetProperty("commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "capsule");
+        Assert.DoesNotContain(data.GetProperty("commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "timeline");
+        Assert.DoesNotContain(data.GetProperty("commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "scenario_draft");
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.html")));
+        Assert.Empty(processRunner.Calls);
     }
 
     [Fact]
@@ -922,8 +1044,8 @@ public sealed partial class AppTests
         Assert.False(data.GetProperty("truncated").GetBoolean());
         var commands = data.GetProperty("commands").EnumerateArray().ToArray();
         Assert.Contains(commands, command =>
-            command.GetProperty("kind").GetString() == "describe_replay_capsule" &&
-            command.GetProperty("command").GetString() == $"luotsi replay capsule --artifacts {replayRoot} --write-readme --write-json");
+            command.GetProperty("kind").GetString() == "open_replay_front_door" &&
+            command.GetProperty("command").GetString() == $"luotsi replay open --artifacts {replayRoot}");
         Assert.Contains(commands, command => command.GetProperty("kind").GetString() == "scrub_failures");
         Assert.Contains(commands, command =>
             command.GetProperty("kind").GetString() == "graph_matching_context" &&
@@ -1206,8 +1328,8 @@ public sealed partial class AppTests
         Assert.Equal(1, data.GetProperty("scanned_file_count").GetInt32());
         var commands = data.GetProperty("commands").EnumerateArray().ToArray();
         Assert.Contains(commands, command =>
-            command.GetProperty("kind").GetString() == "describe_replay_capsule" &&
-            command.GetProperty("command").GetString() == $"luotsi replay capsule --artifacts {replayRoot} --write-readme --write-json");
+            command.GetProperty("kind").GetString() == "open_replay_front_door" &&
+            command.GetProperty("command").GetString() == $"luotsi replay open --artifacts {replayRoot}");
         Assert.Contains(commands, command => command.GetProperty("kind").GetString() == "scrub_failures");
         Assert.Contains(commands, command => command.GetProperty("kind").GetString() == "graph_failures");
         var evt = Assert.Single(data.GetProperty("events").EnumerateArray());
@@ -1406,10 +1528,10 @@ public sealed partial class AppTests
         Assert.Contains("luotsi replay", data.GetProperty("agent_summary").GetProperty("what_can_act_on").GetString(), StringComparison.Ordinal);
         Assert.Contains(data.GetProperty("agent_summary").GetProperty("evidence_node_ids").EnumerateArray(), id => id.GetString()!.StartsWith("failure:", StringComparison.Ordinal));
         Assert.Contains(data.GetProperty("agent_summary").GetProperty("commands").EnumerateArray(), command =>
-            command.GetString() == $"luotsi replay capsule --artifacts {replayRoot} --write-readme --write-json");
+            command.GetString() == $"luotsi replay open --artifacts {replayRoot} --dry-run");
         Assert.Contains(data.GetProperty("actions").EnumerateArray(), action =>
-            action.GetProperty("kind").GetString() == "describe_replay_capsule" &&
-            action.GetProperty("command").GetString() == $"luotsi replay capsule --artifacts {replayRoot} --write-readme --write-json");
+            action.GetProperty("kind").GetString() == "open_replay_front_door" &&
+            action.GetProperty("command").GetString() == $"luotsi replay open --artifacts {replayRoot} --dry-run");
         Assert.Contains(data.GetProperty("actions").EnumerateArray(), action => action.GetProperty("kind").GetString() == "scrub_failures");
         Assert.Contains(data.GetProperty("actions").EnumerateArray(), action => action.GetProperty("kind").GetString() == "stream_graph");
         Assert.Contains(data.GetProperty("actions").EnumerateArray(), action => action.GetProperty("kind").GetString() == "filter_artifact_evidence");
@@ -1996,11 +2118,11 @@ public sealed partial class AppTests
         Assert.Contains(hints, hint => hint.GetProperty("kind").GetString() == "inspect_best_failure_graph");
         Assert.Contains(hints, hint => hint.GetProperty("kind").GetString() == "scrub_best_failure");
         Assert.Contains(hints, hint =>
-            hint.GetProperty("kind").GetString() == "describe_best_replay_capsule" &&
-            hint.GetProperty("command").GetString() == "luotsi replay capsule --artifacts /tmp/replay-cluster-root\\run-b --write-readme --write-json");
-        Assert.Contains(hints, hint =>
             hint.GetProperty("kind").GetString() == "open_best_replay" &&
             hint.GetProperty("command").GetString() == "luotsi replay open --artifacts /tmp/replay-cluster-root\\run-b");
+        Assert.Contains(hints, hint =>
+            hint.GetProperty("kind").GetString() == "write_best_replay_capsule" &&
+            hint.GetProperty("command").GetString() == "luotsi replay capsule --artifacts /tmp/replay-cluster-root\\run-b --write-readme --write-json");
         Assert.Contains(hints, hint =>
             hint.GetProperty("kind").GetString() == "search_best_failure_text" &&
             hint.GetProperty("command").GetString()!.Contains("not visible after 30 seconds", StringComparison.Ordinal));
@@ -2011,7 +2133,7 @@ public sealed partial class AppTests
         var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-clusters.md"));
         Assert.Contains("## Start Here", markdown, StringComparison.Ordinal);
         Assert.Contains("Top cluster:", markdown, StringComparison.Ordinal);
-        Assert.Contains("Open capsule: `luotsi replay capsule --artifacts /tmp/replay-cluster-root\\run-b --write-readme --write-json`", markdown, StringComparison.Ordinal);
+        Assert.Contains("Open front door: `luotsi replay open --artifacts /tmp/replay-cluster-root\\run-b`", markdown, StringComparison.Ordinal);
         Assert.Contains("Scrub failure: `luotsi replay scrub --artifacts /tmp/replay-cluster-root\\run-b --failures --context 3 --write-markdown`", markdown, StringComparison.Ordinal);
         Assert.Contains("Inspect graph: `luotsi replay graph --artifacts /tmp/replay-cluster-root\\run-b --failed --write-json --write-markdown`", markdown, StringComparison.Ordinal);
         Assert.Contains("### Intelligence", markdown, StringComparison.Ordinal);
@@ -2073,7 +2195,7 @@ public sealed partial class AppTests
         Assert.Equal("summary", summaryLine.RootElement.GetProperty("type").GetString());
         Assert.Equal(1, summaryLine.RootElement.GetProperty("event_count").GetInt32());
         Assert.Contains(summaryLine.RootElement.GetProperty("commands").EnumerateArray(), command =>
-            command.GetProperty("kind").GetString() == "describe_replay_capsule");
+            command.GetProperty("kind").GetString() == "open_replay_front_door");
         Assert.Equal(ResultSchemas.ReplayTimeline, eventLine.RootElement.GetProperty("schema").GetString());
         Assert.Equal("event", eventLine.RootElement.GetProperty("type").GetString());
         Assert.Equal("scenario_step_failed", eventLine.RootElement.GetProperty("event").GetProperty("type").GetString());
@@ -2961,6 +3083,33 @@ public sealed partial class AppTests
           "timelineFileName": "session-timeline.jsonl",
           "eventCount": 8,
           "eventTypes": ["view_started", "view_share_started", "view_share_client_connected", "view_reconnect_requested", "view_reconnected", "view_stats", "view_error", "view_ended"]
+        }
+        """);
+        return replayRoot;
+    }
+
+    private static string SeedReplaySummaryArtifactsWithoutFailure(FakeFileSystem fileSystem)
+    {
+        var replayRoot = "/tmp/replay-ok-root";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), """
+        {"type":"view_started","session_id":"view-session","started_at":"2026-05-18T10:00:00Z"}
+        {"type":"view_stats","session_id":"view-session","observed_at":"2026-05-18T10:00:05Z","stats":{"decoded_frames":120,"presented_frames":120,"dropped_frames":0}}
+        {"type":"view_ended","session_id":"view-session","ended_at":"2026-05-18T10:00:06Z","reason":"closed"}
+        """);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-replay.json"), """
+        {
+          "schema": "luotsi-session-replay.v1",
+          "sessionKind": "view",
+          "sessionId": "view-session",
+          "startedAt": "2026-05-18T10:00:00Z",
+          "endedAt": "2026-05-18T10:00:06Z",
+          "reason": "closed",
+          "exitCode": 0,
+          "target": "192.168.0.134:5555",
+          "timelineFileName": "session-timeline.jsonl",
+          "eventCount": 3,
+          "eventTypes": ["view_started", "view_stats", "view_ended"]
         }
         """);
         return replayRoot;
