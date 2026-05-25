@@ -117,14 +117,11 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
 
     private async Task<ReplayOpenResult> OpenAsync(CliOptions options, ArtifactSession artifacts)
     {
-        await artifacts.RefreshIndexAsync().ConfigureAwait(false);
+        var snapshot = await artifacts.RefreshIndexWithSnapshotAsync().ConfigureAwait(false);
 
         var indexHtmlPath = Path.Join(artifacts.Root, ArtifactSession.ArtifactHtmlIndexFileName);
         var indexMarkdownPath = Path.Join(artifacts.Root, ArtifactSession.ArtifactIndexFileName);
-        var files = _dependencies.FileSystem.GetFiles(artifacts.Root, "*", SearchOption.AllDirectories)
-            .Select(path => Path.GetRelativePath(artifacts.Root, path).Replace('\\', '/'))
-            .ToArray();
-        var summaries = new SessionReplaySummaryReader(artifacts.Root, _dependencies.FileSystem).ReadSummaries(files);
+        var summaries = snapshot.ReplaySummaries;
         var primaryFailure = CreatePrimaryFailure(summaries);
         var commands = BuildOpenCommandHints(artifacts.Root, summaries, primaryFailure).ToArray();
         var nextAction = BuildRecommendedNextAction(artifacts.Root, summaries, primaryFailure, commands);
@@ -236,7 +233,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         }
     }
 
-    private static ReplayOpenNextActionResult? BuildRecommendedNextAction(
+    private static ReplayOpenNextActionResult BuildRecommendedNextAction(
         string artifactRoot,
         IReadOnlyList<SessionReplaySummary> summaries,
         ReplayOpenPrimaryFailureResult? primaryFailure,
@@ -389,7 +386,6 @@ internal sealed record ReplayCommandHostDependencies(
     AppCommandEnvelopeWriter EnvelopeWriter,
     AppCommandJsonWriter JsonWriter,
     Routing.ReplayCommandDispatcher CommandDispatcher,
-    IFileSystem FileSystem,
     IProcessRunner ProcessRunner,
     ReplayScenarioDraftService ScenarioDraftService,
     ReplaySearchService SearchService,

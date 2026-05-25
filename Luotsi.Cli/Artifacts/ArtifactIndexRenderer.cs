@@ -16,6 +16,13 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
     public async Task<string> BuildMarkdownIndexAsync(IReadOnlyList<string> files)
     {
         var replaySummaries = new SessionReplaySummaryReader(_root, _fileSystem).ReadSummaries(files);
+        return await BuildMarkdownIndexAsync(files, replaySummaries).ConfigureAwait(false);
+    }
+
+    public async Task<string> BuildMarkdownIndexAsync(
+        IReadOnlyList<string> files,
+        IReadOnlyList<SessionReplaySummary> replaySummaries)
+    {
         var builder = new StringBuilder();
         builder.AppendLine("# Luotsi Artifacts");
         builder.AppendLine();
@@ -53,6 +60,13 @@ internal sealed class ArtifactIndexRenderer(string root, IFileSystem fileSystem)
     public async Task<string> BuildHtmlIndexAsync(IReadOnlyList<string> files)
     {
         var replaySummaries = new SessionReplaySummaryReader(_root, _fileSystem).ReadSummaries(files);
+        return await BuildHtmlIndexAsync(files, replaySummaries).ConfigureAwait(false);
+    }
+
+    public async Task<string> BuildHtmlIndexAsync(
+        IReadOnlyList<string> files,
+        IReadOnlyList<SessionReplaySummary> replaySummaries)
+    {
         var builder = new StringBuilder();
         builder.AppendLine("<!doctype html>");
         builder.AppendLine("<html lang=\"en\">");

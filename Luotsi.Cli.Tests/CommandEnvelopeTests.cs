@@ -673,6 +673,73 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayOpen_WithSessionWithoutFailure_RecommendsCapsule()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var processRunner = new FakeProcessRunner();
+        var replayRoot = SeedReplaySummaryArtifactsWithoutFailure(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = processRunner,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "open", "--artifacts", replayRoot, "--dry-run"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(1, data.GetProperty("session_count").GetInt32());
+        Assert.Equal(0, data.GetProperty("failure_count").GetInt32());
+        Assert.False(data.TryGetProperty("primary_failure", out _));
+        Assert.Equal("write_capsule", data.GetProperty("recommended_next_action").GetProperty("kind").GetString());
+        Assert.Contains(data.GetProperty("commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "capsule");
+        Assert.DoesNotContain(data.GetProperty("commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "scrub");
+        Assert.DoesNotContain(data.GetProperty("commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "cluster");
+        Assert.Empty(processRunner.Calls);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayOpen_WithoutReplayMetadata_RecommendsArtifactInspection()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var processRunner = new FakeProcessRunner();
+        var replayRoot = "/tmp/replay-empty-root";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "logcat.txt"), "ordinary artifact");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = processRunner,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "open", "--artifacts", replayRoot, "--dry-run"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(0, data.GetProperty("session_count").GetInt32());
+        Assert.Equal(0, data.GetProperty("failure_count").GetInt32());
+        Assert.False(data.TryGetProperty("primary_failure", out _));
+        Assert.Equal("inspect_artifacts", data.GetProperty("recommended_next_action").GetProperty("kind").GetString());
+        Assert.Contains(data.GetProperty("commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "capsule");
+        Assert.DoesNotContain(data.GetProperty("commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "scenario_draft");
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.html")));
+        Assert.Empty(processRunner.Calls);
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayScenarioDraft_Writes_Valid_Draft_From_Inspect_Timeline()
     {
         var console = new FakeConsole();
@@ -2975,6 +3042,33 @@ public sealed partial class AppTests
           "timelineFileName": "session-timeline.jsonl",
           "eventCount": 8,
           "eventTypes": ["view_started", "view_share_started", "view_share_client_connected", "view_reconnect_requested", "view_reconnected", "view_stats", "view_error", "view_ended"]
+        }
+        """);
+        return replayRoot;
+    }
+
+    private static string SeedReplaySummaryArtifactsWithoutFailure(FakeFileSystem fileSystem)
+    {
+        var replayRoot = "/tmp/replay-ok-root";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), """
+        {"type":"view_started","session_id":"view-session","started_at":"2026-05-18T10:00:00Z"}
+        {"type":"view_stats","session_id":"view-session","observed_at":"2026-05-18T10:00:05Z","stats":{"decoded_frames":120,"presented_frames":120,"dropped_frames":0}}
+        {"type":"view_ended","session_id":"view-session","ended_at":"2026-05-18T10:00:06Z","reason":"closed"}
+        """);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-replay.json"), """
+        {
+          "schema": "luotsi-session-replay.v1",
+          "sessionKind": "view",
+          "sessionId": "view-session",
+          "startedAt": "2026-05-18T10:00:00Z",
+          "endedAt": "2026-05-18T10:00:06Z",
+          "reason": "closed",
+          "exitCode": 0,
+          "target": "192.168.0.134:5555",
+          "timelineFileName": "session-timeline.jsonl",
+          "eventCount": 3,
+          "eventTypes": ["view_started", "view_stats", "view_ended"]
         }
         """);
         return replayRoot;

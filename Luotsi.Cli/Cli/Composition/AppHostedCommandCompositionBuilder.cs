@@ -54,7 +54,6 @@ internal static class AppHostedCommandCompositionBuilder
             envelopeWriter,
             jsonWriter,
             replayCommandDispatcher,
-            dependencies.FileSystem,
             dependencies.ProcessRunner,
             new ReplayScenarioDraftService(dependencies.FileSystem),
             new ReplaySearchService(dependencies.FileSystem),

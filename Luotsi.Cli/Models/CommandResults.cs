@@ -355,7 +355,7 @@ public sealed record ReplayOpenResult(
     int SessionCount,
     int FailureCount,
     ReplayOpenPrimaryFailureResult? PrimaryFailure,
-    ReplayOpenNextActionResult? RecommendedNextAction,
+    ReplayOpenNextActionResult RecommendedNextAction,
     IReadOnlyList<ReplayOpenCommandHintResult> Commands,
     bool Opened,
     string? Opener,
