@@ -3,6 +3,7 @@ using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Processes;
+using Luotsi.Cli.Infrastructure.System;
 using Luotsi.Cli.Models;
 using Xunit;
 
@@ -348,6 +349,37 @@ public sealed partial class AppTests
         Assert.Contains("view_share_client_connected | endpoint=127.0.0.1:9000 | remote_endpoint=10.0.0.25:40122 | observer_count=1 | reason=observer_joined", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("view_stats | decoded_frames=120 | presented_frames=118 | dropped_frames=2 | decode_fps=29.5 | present_fps=29.0 | end_to_end_latency_ms=142", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("view_error | error=transport: Unexpected end of stream", htmlIndex, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ArtifactIndexRenderer_Builds_Workbench_From_Checked_In_Replay_Fixture()
+    {
+        var root = Path.Join(AppContext.BaseDirectory, "Fixtures", "ReplayWorkbench", "failure");
+        var files = Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(root, file))
+            .OrderBy(ArtifactIndexRenderer.GetArtifactSortGroup)
+            .ThenBy(static file => file, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var renderer = new ArtifactIndexRenderer(root, new PhysicalFileSystem());
+
+        var htmlIndex = await renderer.BuildHtmlIndexAsync(files);
+        var markdownIndex = await renderer.BuildMarkdownIndexAsync(files);
+
+        Assert.Contains("<h2>Failure Workbench</h2>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("view stream failure", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("Unexpected end of stream", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("What failed", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("What changed", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("<img src=\"failure-screen.png\"", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("<video src=\"failure-recording.mp4\" muted preload=\"metadata\"></video>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("class=\"timeline-tags\">failure", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("status=failed | total=1 | passed=0 | failed=1 | skipped=0 | duration_ms=2450", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("recommended_action=scrub_failure", htmlIndex, StringComparison.Ordinal);
+
+        Assert.Contains("## Replay Sessions", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("### view 192.168.0.134:5555", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("scenario-results.json", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("status=failed | total=1 | passed=0 | failed=1 | skipped=0 | duration_ms=2450", markdownIndex, StringComparison.Ordinal);
     }
 
     [Fact]
