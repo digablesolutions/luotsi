@@ -4,7 +4,10 @@ namespace Luotsi.Cli.Artifacts;
 
 internal sealed partial class ArtifactIndexRenderer
 {
-    private void AppendFailureWorkbenchHtml(StringBuilder builder, IReadOnlyList<SessionReplaySummary> replaySummaries)
+    private void AppendFailureWorkbenchHtml(
+        StringBuilder builder,
+        IReadOnlyList<string> files,
+        IReadOnlyList<SessionReplaySummary> replaySummaries)
     {
         var primary = SelectPrimaryFailure(replaySummaries);
         if (primary is null)
@@ -38,6 +41,7 @@ internal sealed partial class ArtifactIndexRenderer
 
         builder.AppendLine("          </div>");
         builder.AppendLine($"          <p class=\"failure-title\">{HtmlEncode(title)}</p>");
+        AppendFailureBriefHtml(builder, summary, scenario, actionCommand);
         builder.AppendLine("          <div class=\"meta-grid\">");
         AppendMetaHtml(builder, "Session", BuildReplayTitle(summary));
         AppendMetaHtml(builder, "Reason", summary.Reason);
@@ -58,10 +62,12 @@ internal sealed partial class ArtifactIndexRenderer
         builder.AppendLine("        </div>");
         builder.AppendLine("        <div class=\"panel\" data-filter-item>");
         builder.AppendLine("          <h3>Timeline preview</h3>");
+        AppendTimelineFilterHtml(builder);
         AppendTimelineHtml(builder, summary);
         builder.AppendLine("        </div>");
         builder.AppendLine("        <div class=\"panel\" data-filter-item>");
         builder.AppendLine("          <h3>Evidence</h3>");
+        AppendMediaPreviewHtml(builder, files, summary, scenario);
         AppendEvidenceHtml(builder, summary, scenario);
         builder.AppendLine("        </div>");
         AppendSemanticSignalsHtml(builder);
@@ -179,23 +185,6 @@ internal sealed partial class ArtifactIndexRenderer
             builder.AppendLine($"              <div class=\"root\">{HtmlEncode(item.Kind)}{FormatStepSuffix(item)}</div>");
             builder.AppendLine("            </li>");
             index++;
-        }
-
-        builder.AppendLine("          </ul>");
-    }
-
-    private static void AppendTimelineHtml(StringBuilder builder, SessionReplaySummary summary)
-    {
-        if (summary.TimelineHighlights.Count == 0)
-        {
-            builder.AppendLine("          <div class=\"root\">No timeline highlights were available.</div>");
-            return;
-        }
-
-        builder.AppendLine("          <ul class=\"timeline\">");
-        foreach (var entry in summary.TimelineHighlights.Take(8))
-        {
-            builder.AppendLine($"            <li>{HtmlEncode(FormatTimelineEntry(entry))}</li>");
         }
 
         builder.AppendLine("          </ul>");
