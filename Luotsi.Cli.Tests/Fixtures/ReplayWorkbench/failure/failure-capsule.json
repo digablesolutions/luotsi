@@ -1,0 +1,102 @@
+{
+  "schema": "luotsi-failure-capsule.v1",
+  "generatedAt": "2026-05-18T10:00:05Z",
+  "path": "scenario.json",
+  "status": "failed",
+  "replayMetadataPath": "session-replay.json",
+  "replayTimelinePath": "session-timeline.jsonl",
+  "reports": {
+    "jsonPath": "scenario-results.json",
+    "junitPath": "junit.xml"
+  },
+  "scenarios": [
+    {
+      "scenario": "view stream failure",
+      "scenarioId": "scenario.json::view stream failure",
+      "status": "failed",
+      "file": "scenario.json",
+      "failedStep": {
+        "index": 2,
+        "name": "watch stream",
+        "action": "view",
+        "phase": "main"
+      },
+      "artifacts": [
+        {
+          "kind": "screenshot",
+          "path": "failure-screen.png",
+          "stepIndex": 2,
+          "stepName": "watch stream"
+        },
+        {
+          "kind": "recording",
+          "path": "failure-recording.mp4",
+          "stepIndex": 2,
+          "stepName": "watch stream"
+        },
+        {
+          "kind": "logcat",
+          "path": "failure-logcat.txt",
+          "stepIndex": 2,
+          "stepName": "watch stream"
+        }
+      ],
+      "error": {
+        "type": "System.InvalidOperationException",
+        "message": "Unexpected end of stream",
+        "category": "transport"
+      }
+    }
+  ],
+  "screenshots": [
+    {
+      "kind": "screenshot",
+      "path": "failure-screen.png",
+      "stepIndex": 2,
+      "stepName": "watch stream"
+    }
+  ],
+  "logcat": [
+    {
+      "kind": "logcat",
+      "path": "failure-logcat.txt",
+      "stepIndex": 2,
+      "stepName": "watch stream"
+    }
+  ],
+  "hierarchies": [],
+  "screenStates": [],
+  "failureBundles": [
+    {
+      "path": "failure-bundle.json",
+      "scenario": "view stream failure",
+      "scenarioId": "scenario.json::view stream failure",
+      "file": "scenario.json",
+      "failedStep": {
+        "index": 2,
+        "name": "watch stream",
+        "action": "view",
+        "phase": "main"
+      },
+      "artifacts": [
+        {
+          "kind": "screenshot",
+          "path": "failure-screen.png",
+          "stepIndex": 2,
+          "stepName": "watch stream"
+        },
+        {
+          "kind": "recording",
+          "path": "failure-recording.mp4",
+          "stepIndex": 2,
+          "stepName": "watch stream"
+        }
+      ],
+      "error": {
+        "type": "System.InvalidOperationException",
+        "message": "Unexpected end of stream",
+        "category": "transport"
+      }
+    }
+  ]
+}
