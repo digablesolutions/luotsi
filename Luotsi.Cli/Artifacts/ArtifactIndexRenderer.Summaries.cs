@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Xml.Linq;
 using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Artifacts;
@@ -16,9 +17,59 @@ internal sealed partial class ArtifactIndexRenderer
             return await TryBuildJsonlSummaryAsync(path).ConfigureAwait(false);
         }
 
-        return string.Equals(Path.GetExtension(path), ".json", StringComparison.OrdinalIgnoreCase)
-            ? await TryBuildJsonReportSummaryAsync(path).ConfigureAwait(false)
+        if (string.Equals(Path.GetExtension(path), ".json", StringComparison.OrdinalIgnoreCase))
+        {
+            return await TryBuildJsonReportSummaryAsync(path).ConfigureAwait(false);
+        }
+
+        return string.Equals(Path.GetExtension(path), ".xml", StringComparison.OrdinalIgnoreCase)
+            ? await TryBuildXmlReportSummaryAsync(path).ConfigureAwait(false)
             : null;
+    }
+
+    private async Task<string?> TryBuildXmlReportSummaryAsync(string path)
+    {
+        if (!Path.GetFileName(path).Contains("junit", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var stream = _fileSystem.OpenRead(Path.Join(_root, path));
+            var document = await XDocument.LoadAsync(stream, LoadOptions.None, CancellationToken.None).ConfigureAwait(false);
+            var root = document.Root;
+            if (root is null)
+            {
+                return null;
+            }
+
+            var parts = new List<string> { "format=junit" };
+            AddXmlAttribute(parts, root, "tests");
+            AddXmlAttribute(parts, root, "failures");
+            AddXmlAttribute(parts, root, "errors");
+            AddXmlAttribute(parts, root, "skipped");
+            AddXmlAttribute(parts, root, "time", "duration_sec");
+            if (root.Name.LocalName.Equals("testsuite", StringComparison.OrdinalIgnoreCase))
+            {
+                AddXmlAttribute(parts, root, "name", "suite");
+            }
+            else
+            {
+                var firstSuite = root.Elements()
+                    .FirstOrDefault(static element => element.Name.LocalName.Equals("testsuite", StringComparison.OrdinalIgnoreCase));
+                if (firstSuite is not null)
+                {
+                    AddXmlAttribute(parts, firstSuite, "name", "suite");
+                }
+            }
+
+            return parts.Count == 1 ? null : string.Join(" | ", parts);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Xml.XmlException)
+        {
+            return null;
+        }
     }
 
     private async Task<string?> TryBuildJsonReportSummaryAsync(string path)
@@ -387,6 +438,15 @@ internal sealed partial class ArtifactIndexRenderer
             JsonValueKind.False => "false",
             _ => null
         };
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            parts.Add($"{label ?? ToSnakeCase(name)}={value}");
+        }
+    }
+
+    private static void AddXmlAttribute(List<string> parts, XElement element, string name, string? label = null)
+    {
+        var value = element.Attribute(name)?.Value;
         if (!string.IsNullOrWhiteSpace(value))
         {
             parts.Add($"{label ?? ToSnakeCase(name)}={value}");
