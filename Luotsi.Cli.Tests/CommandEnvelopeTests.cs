@@ -733,6 +733,8 @@ public sealed partial class AppTests
         Assert.Equal("write_capsule", data.GetProperty("recommended_next_action").GetProperty("kind").GetString());
         Assert.Contains(data.GetProperty("commands").EnumerateArray(), command =>
             command.GetProperty("kind").GetString() == "capsule");
+        Assert.Contains(data.GetProperty("commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "timeline");
         Assert.DoesNotContain(data.GetProperty("commands").EnumerateArray(), command =>
             command.GetProperty("kind").GetString() == "scrub");
         Assert.DoesNotContain(data.GetProperty("commands").EnumerateArray(), command =>
@@ -765,9 +767,13 @@ public sealed partial class AppTests
         Assert.Equal(0, data.GetProperty("session_count").GetInt32());
         Assert.Equal(0, data.GetProperty("failure_count").GetInt32());
         Assert.False(data.TryGetProperty("primary_failure", out _));
-        Assert.Equal("inspect_artifacts", data.GetProperty("recommended_next_action").GetProperty("kind").GetString());
+        var nextAction = data.GetProperty("recommended_next_action");
+        Assert.Equal("inspect_artifacts", nextAction.GetProperty("kind").GetString());
+        Assert.Equal($"luotsi replay open --artifacts {replayRoot}", nextAction.GetProperty("command").GetString());
         Assert.Contains(data.GetProperty("commands").EnumerateArray(), command =>
             command.GetProperty("kind").GetString() == "capsule");
+        Assert.DoesNotContain(data.GetProperty("commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "timeline");
         Assert.DoesNotContain(data.GetProperty("commands").EnumerateArray(), command =>
             command.GetProperty("kind").GetString() == "scenario_draft");
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.html")));

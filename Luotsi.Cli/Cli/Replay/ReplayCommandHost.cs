@@ -267,10 +267,13 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             "capsule",
             "Write the replay capsule summary and README for this bundle.",
             $"luotsi replay capsule --artifacts {Quote(artifactRoot)} --write-readme --write-json");
-        yield return new ReplayOpenCommandHintResult(
-            "timeline",
-            "Read the ordered session timeline.",
-            $"luotsi replay timeline --artifacts {Quote(artifactRoot)} --context 3 --write-markdown");
+        if (summaries.Any(static summary => summary.HasTimeline))
+        {
+            yield return new ReplayOpenCommandHintResult(
+                "timeline",
+                "Read the ordered session timeline.",
+                $"luotsi replay timeline --artifacts {Quote(artifactRoot)} --context 3 --write-markdown");
+        }
 
         if (summaries.Any(static summary => summary.HasFailureSignals))
         {
@@ -336,7 +339,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             "inspect_artifacts",
             "Inspect the artifact index",
             "No replay metadata was found; use the refreshed index to inspect available artifacts.",
-            $"luotsi replay open --artifacts {Quote(artifactRoot)} --dry-run");
+            $"luotsi replay open --artifacts {Quote(artifactRoot)}");
     }
 
     private static ReplayOutputMode ParseOutputMode(CliOptions options, string commandName)
