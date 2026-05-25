@@ -1,0 +1,24 @@
+{
+  "schema": "luotsi-replay-open.v1",
+  "artifactRoot": "Fixtures/ReplayWorkbench/failure",
+  "sessionCount": 1,
+  "failureCount": 1,
+  "opened": false,
+  "primaryFailure": {
+    "scenario": "view stream failure",
+    "step": "watch stream",
+    "action": "view",
+    "message": "Unexpected end of stream"
+  },
+  "recommendedNextAction": {
+    "kind": "scrub_failure",
+    "title": "Scrub the failure window",
+    "command": "luotsi replay scrub --artifacts Fixtures/ReplayWorkbench/failure --failures --context 3 --write-markdown"
+  },
+  "commands": [
+    {
+      "kind": "graph",
+      "command": "luotsi replay graph --artifacts Fixtures/ReplayWorkbench/failure --failed"
+    }
+  ]
+}

@@ -98,7 +98,7 @@ internal sealed partial class ArtifactIndexRenderer(string root, IFileSystem fil
         }
         else
         {
-            AppendFailureWorkbenchHtml(builder, replaySummaries);
+            AppendFailureWorkbenchHtml(builder, files, replaySummaries);
             AppendReplaySessionsHtml(builder, replaySummaries);
             AppendReplayWorkflowHtml(builder, replaySummaries);
 

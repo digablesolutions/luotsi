@@ -1,0 +1,9 @@
+{
+  "schema": "luotsi-scenario-run-report.v1",
+  "status": "failed",
+  "total": 1,
+  "passed": 0,
+  "failed": 1,
+  "skipped": 0,
+  "durationMs": 2450
+}

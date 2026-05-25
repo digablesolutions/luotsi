@@ -3,6 +3,7 @@ using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Processes;
+using Luotsi.Cli.Infrastructure.System;
 using Luotsi.Cli.Models;
 using Xunit;
 
@@ -158,6 +159,98 @@ public sealed partial class AppTests
             eventCount = 7,
             eventTypes = new[] { "view_started", "view_reconnect_requested", "view_share_client_connected", "view_stats", "view_diagnostic", "view_error", "view_ended" }
         });
+        await session.WriteJsonAsync("failure-capsule.json", new
+        {
+            schema = ResultSchemas.FailureCapsule,
+            generatedAt = DateTimeOffset.Parse("2026-05-18T10:00:03Z", null, System.Globalization.DateTimeStyles.RoundtripKind),
+            path = "scenario.json",
+            status = "failed",
+            replayMetadataPath = "session-replay.json",
+            replayTimelinePath = "session-timeline.jsonl",
+            reports = new
+            {
+                jsonPath = "scenario-results.json",
+                junitPath = "junit.xml"
+            },
+            scenarios = new object[]
+            {
+                new
+                {
+                    scenario = "view stream failure",
+                    scenarioId = "scenario.json::view stream failure",
+                    status = "failed",
+                    file = "scenario.json",
+                    failedStep = new
+                    {
+                        index = 2,
+                        name = "watch stream",
+                        action = "view",
+                        phase = "main"
+                    },
+                    artifacts = new object[]
+                    {
+                        new { kind = "screenshot", path = "failure-screen.png", stepIndex = 2, stepName = "watch stream" },
+                        new { kind = "recording", path = "failure-recording.mp4", stepIndex = 2, stepName = "watch stream" },
+                        new { kind = "logcat", path = "failure-logcat.txt", stepIndex = 2, stepName = "watch stream" }
+                    },
+                    error = new
+                    {
+                        type = "System.InvalidOperationException",
+                        message = "Unexpected end of stream",
+                        category = "transport"
+                    }
+                }
+            },
+            screenshots = new object[]
+            {
+                new { kind = "screenshot", path = "failure-screen.png", stepIndex = 2, stepName = "watch stream" }
+            },
+            logcat = new object[]
+            {
+                new { kind = "logcat", path = "failure-logcat.txt", stepIndex = 2, stepName = "watch stream" }
+            },
+            hierarchies = Array.Empty<object>(),
+            screenStates = Array.Empty<object>(),
+            failureBundles = new object[]
+            {
+                new
+                {
+                    path = "failure-bundle.json",
+                    scenario = "view stream failure",
+                    scenarioId = "scenario.json::view stream failure",
+                    file = "scenario.json",
+                    failedStep = new
+                    {
+                        index = 2,
+                        name = "watch stream",
+                        action = "view",
+                        phase = "main"
+                    },
+                    artifacts = new object[]
+                    {
+                        new { kind = "screenshot", path = "failure-screen.png", stepIndex = 2, stepName = "watch stream" },
+                        new { kind = "recording", path = "failure-recording.mp4", stepIndex = 2, stepName = "watch stream" }
+                    },
+                    error = new
+                    {
+                        type = "System.InvalidOperationException",
+                        message = "Unexpected end of stream",
+                        category = "transport"
+                    }
+                }
+            }
+        });
+        await using (var screenshot = fileSystem.OpenWrite(Path.Join(session.Root, "failure-screen.png")))
+        {
+            await screenshot.WriteAsync(new byte[] { 1, 2, 3 });
+        }
+
+        await using (var video = fileSystem.OpenWrite(Path.Join(session.Root, "failure-recording.mp4")))
+        {
+            await video.WriteAsync(new byte[] { 4, 5, 6 });
+        }
+
+        await session.RefreshIndexAsync();
         await session.WriteJsonAsync("replay-graph.json", new
         {
             schema = ResultSchemas.ReplayGraph,
@@ -219,6 +312,11 @@ public sealed partial class AppTests
         Assert.Contains("class=\"workbench-layout\"", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("class=\"workbench-side\"", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("Filter artifacts, timeline, commands, and evidence", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("class=\"failure-brief\"", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("What failed", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("What changed", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("Run next", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("class=\"filter-chip\" type=\"button\" data-filter-set=\"failure\"", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("href=\"#failure-workbench\"", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("<h3>Primary failure</h3>", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("needs triage", htmlIndex, StringComparison.Ordinal);
@@ -230,7 +328,11 @@ public sealed partial class AppTests
         Assert.Contains("luotsi replay scrub --artifacts", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("data-copy=\"luotsi replay scrub --artifacts", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("<h3>Evidence</h3>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("class=\"media-grid\"", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("<img src=\"failure-screen.png\"", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("<video src=\"failure-recording.mp4\"", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("<h3>Timeline preview</h3>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("class=\"timeline-failure\"", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("<h3>Semantic signals</h3>", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("view_error -&gt; failure:transport", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("The stream failed after reconnect; inspect transport evidence first.", htmlIndex, StringComparison.Ordinal);
@@ -247,6 +349,39 @@ public sealed partial class AppTests
         Assert.Contains("view_share_client_connected | endpoint=127.0.0.1:9000 | remote_endpoint=10.0.0.25:40122 | observer_count=1 | reason=observer_joined", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("view_stats | decoded_frames=120 | presented_frames=118 | dropped_frames=2 | decode_fps=29.5 | present_fps=29.0 | end_to_end_latency_ms=142", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("view_error | error=transport: Unexpected end of stream", htmlIndex, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ArtifactIndexRenderer_Builds_Workbench_From_Checked_In_Replay_Fixture()
+    {
+        var root = Path.Join(AppContext.BaseDirectory, "Fixtures", "ReplayWorkbench", "failure");
+        var files = Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(root, file))
+            .OrderBy(ArtifactIndexRenderer.GetArtifactSortGroup)
+            .ThenBy(static file => file, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var renderer = new ArtifactIndexRenderer(root, new PhysicalFileSystem());
+
+        var htmlIndex = await renderer.BuildHtmlIndexAsync(files);
+        var markdownIndex = await renderer.BuildMarkdownIndexAsync(files);
+
+        Assert.Contains("<h2>Failure Workbench</h2>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("view stream failure", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("Unexpected end of stream", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("What failed", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("What changed", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("<img src=\"failure-screen.png\"", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("<video src=\"failure-recording.mp4\" muted preload=\"metadata\"></video>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("class=\"timeline-tags\">failure", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("status=failed | total=1 | passed=0 | failed=1 | skipped=0 | duration_ms=2450", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("format=junit | tests=1 | failures=1 | skipped=0 | duration_sec=2.45 | suite=Luotsi replay workbench fixture", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("recommended_action=scrub_failure", htmlIndex, StringComparison.Ordinal);
+
+        Assert.Contains("## Replay Sessions", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("### view 192.168.0.134:5555", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("scenario-results.json", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("status=failed | total=1 | passed=0 | failed=1 | skipped=0 | duration_ms=2450", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("format=junit | tests=1 | failures=1 | skipped=0 | duration_sec=2.45 | suite=Luotsi replay workbench fixture", markdownIndex, StringComparison.Ordinal);
     }
 
     [Fact]

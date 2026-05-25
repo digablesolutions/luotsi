@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites tests="1" failures="1" skipped="0" time="2.45">
+  <testsuite name="Luotsi replay workbench fixture" tests="1" failures="1" skipped="0" time="2.45">
+    <testcase classname="scenario.json" name="view stream failure" time="2.45">
+      <failure type="System.InvalidOperationException" message="Unexpected end of stream">The view stream closed before the scenario reached a stable frame.</failure>
+    </testcase>
+  </testsuite>
+</testsuites>

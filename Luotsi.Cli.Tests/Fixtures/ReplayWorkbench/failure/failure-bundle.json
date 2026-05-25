@@ -1,0 +1,39 @@
+{
+  "schema": "luotsi-failure-bundle.v1",
+  "generatedAt": "2026-05-18T10:00:05Z",
+  "scenario": "view stream failure",
+  "scenarioId": "scenario.json::view stream failure",
+  "file": "scenario.json",
+  "status": "failed",
+  "failedStep": {
+    "index": 2,
+    "name": "watch stream",
+    "action": "view",
+    "phase": "main"
+  },
+  "artifacts": [
+    {
+      "kind": "screenshot",
+      "path": "failure-screen.png",
+      "stepIndex": 2,
+      "stepName": "watch stream"
+    },
+    {
+      "kind": "recording",
+      "path": "failure-recording.mp4",
+      "stepIndex": 2,
+      "stepName": "watch stream"
+    },
+    {
+      "kind": "logcat",
+      "path": "failure-logcat.txt",
+      "stepIndex": 2,
+      "stepName": "watch stream"
+    }
+  ],
+  "error": {
+    "type": "System.InvalidOperationException",
+    "message": "Unexpected end of stream",
+    "category": "transport"
+  }
+}
