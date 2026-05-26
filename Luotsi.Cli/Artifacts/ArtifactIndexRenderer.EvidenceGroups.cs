@@ -7,10 +7,11 @@ internal sealed partial class ArtifactIndexRenderer
     private void AppendEvidenceGroupsHtml(
         StringBuilder builder,
         IReadOnlyList<string> files,
+        IReadOnlyList<SessionReplaySummary> replaySummaries,
         SessionReplaySummary summary,
         FailureCapsuleScenario? scenario)
     {
-        var groups = BuildWorkbenchEvidenceGroups(files, summary, scenario);
+        var groups = BuildWorkbenchEvidenceGroups(files, replaySummaries, summary, scenario);
         if (groups.Count == 0)
         {
             return;
@@ -31,7 +32,11 @@ internal sealed partial class ArtifactIndexRenderer
             {
                 builder.AppendLine("                <li data-filter-item>");
                 builder.AppendLine($"                  <span>{HtmlEncode(item.Label)}</span>");
-                if (!string.IsNullOrWhiteSpace(item.Path))
+                if (item.IsCommand)
+                {
+                    builder.AppendLine($"                  <code>{HtmlEncode(item.Detail)}</code>");
+                }
+                else if (!string.IsNullOrWhiteSpace(item.Path))
                 {
                     builder.AppendLine($"                  <a href=\"{HtmlAttributeEncode(EscapeHtmlLink(item.Path))}\">{HtmlEncode(item.Detail)}</a>");
                 }
@@ -50,15 +55,16 @@ internal sealed partial class ArtifactIndexRenderer
         builder.AppendLine("          </div>");
     }
 
-    private static IReadOnlyList<WorkbenchEvidenceGroup> BuildWorkbenchEvidenceGroups(
+    private IReadOnlyList<WorkbenchEvidenceGroup> BuildWorkbenchEvidenceGroups(
         IReadOnlyList<string> files,
+        IReadOnlyList<SessionReplaySummary> replaySummaries,
         SessionReplaySummary summary,
         FailureCapsuleScenario? scenario)
     {
         var groups = new List<WorkbenchEvidenceGroup>();
         AddFailureSignalGroup(groups, summary, scenario);
         AddDeviceAppFactsGroup(groups, summary);
-        AddActionsCommandsGroup(groups, summary);
+        AddActionsCommandsGroup(groups, replaySummaries, summary);
         AddMediaReportsGroup(groups, files, summary, scenario);
         return groups;
     }
@@ -121,12 +127,22 @@ internal sealed partial class ArtifactIndexRenderer
             DeduplicateEvidenceItems(items)));
     }
 
-    private static void AddActionsCommandsGroup(List<WorkbenchEvidenceGroup> groups, SessionReplaySummary summary)
+    private void AddActionsCommandsGroup(
+        List<WorkbenchEvidenceGroup> groups,
+        IReadOnlyList<SessionReplaySummary> replaySummaries,
+        SessionReplaySummary summary)
     {
-        var items = summary.TimelineHighlights
-            .Where(IsActionOrCommandEvent)
-            .Select(static entry => new WorkbenchEvidenceItem(entry.Type, FormatTimelineDetail(entry), null))
+        var items = BuildReplayWorkflowCommands(replaySummaries)
+            .Where(static command => string.Equals(command.Kind, "SCRUB", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.Kind, "GRAPH", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(command.Kind, "OPEN", StringComparison.OrdinalIgnoreCase))
+            .Take(3)
+            .Select(static command => new WorkbenchEvidenceItem(command.Kind, command.Command, null, IsCommand: true))
             .ToList();
+
+        items.AddRange(summary.TimelineHighlights
+            .Where(IsActionOrCommandEvent)
+            .Select(static entry => new WorkbenchEvidenceItem(entry.Type, FormatTimelineDetail(entry), null)));
 
         if (items.Count == 0)
         {
@@ -205,5 +221,5 @@ internal sealed partial class ArtifactIndexRenderer
         string Kind,
         IReadOnlyList<WorkbenchEvidenceItem> Items);
 
-    private sealed record WorkbenchEvidenceItem(string Label, string Detail, string? Path);
+    private sealed record WorkbenchEvidenceItem(string Label, string Detail, string? Path, bool IsCommand = false);
 }

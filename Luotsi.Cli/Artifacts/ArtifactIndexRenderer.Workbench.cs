@@ -68,7 +68,7 @@ internal sealed partial class ArtifactIndexRenderer
         builder.AppendLine("        <div class=\"panel\" data-filter-item>");
         builder.AppendLine("          <h3>Evidence</h3>");
         AppendMediaPreviewHtml(builder, files, summary, scenario);
-        AppendEvidenceGroupsHtml(builder, files, summary, scenario);
+        AppendEvidenceGroupsHtml(builder, files, replaySummaries, summary, scenario);
         AppendEvidenceHtml(builder, summary, scenario);
         builder.AppendLine("        </div>");
         AppendSemanticSignalsHtml(builder);
