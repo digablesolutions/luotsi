@@ -385,6 +385,9 @@ public sealed partial class AppTests
         Assert.Contains("class=\"timeline-tags\">failure", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("status=failed | total=1 | passed=0 | failed=1 | skipped=0 | duration_ms=2450", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("format=junit | tests=1 | failures=1 | skipped=0 | duration_sec=2.45 | suite=Luotsi replay workbench fixture", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("session_kind=view | reason=error | exit_code=1 | event_count=5 | target=192.168.0.134:5555", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("events=5 | first_failure=view_diagnostic | category=transport | message=Unexpected end of stream after reconnect", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("status=failed | scenarios=1 | failed_scenarios=view stream failure | failed_steps=watch stream", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("recommended_action=scrub_failure", htmlIndex, StringComparison.Ordinal);
 
         Assert.Contains("## Replay Sessions", markdownIndex, StringComparison.Ordinal);

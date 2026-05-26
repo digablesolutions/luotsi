@@ -28,7 +28,7 @@ internal sealed partial class ArtifactIndexRenderer
             builder.AppendLine("              </div>");
             builder.AppendLine($"              <div class=\"root\">{HtmlEncode(group.Summary)}</div>");
             builder.AppendLine("              <ul class=\"evidence-group-items\">");
-            foreach (var item in group.Items.Take(5))
+            foreach (var item in group.Items.Take(6))
             {
                 builder.AppendLine("                <li data-filter-item>");
                 builder.AppendLine($"                  <span>{HtmlEncode(item.Label)}</span>");
@@ -43,6 +43,11 @@ internal sealed partial class ArtifactIndexRenderer
                 else
                 {
                     builder.AppendLine($"                  <strong>{HtmlEncode(item.Detail)}</strong>");
+                }
+
+                if (!string.IsNullOrWhiteSpace(item.SupportingDetail))
+                {
+                    builder.AppendLine($"                  <em>{HtmlEncode(item.SupportingDetail)}</em>");
                 }
 
                 builder.AppendLine("                </li>");
@@ -102,13 +107,13 @@ internal sealed partial class ArtifactIndexRenderer
             DeduplicateEvidenceItems(items)));
     }
 
-    private static void AddDeviceAppFactsGroup(List<WorkbenchEvidenceGroup> groups, SessionReplaySummary summary)
+    private void AddDeviceAppFactsGroup(List<WorkbenchEvidenceGroup> groups, SessionReplaySummary summary)
     {
         var items = new List<WorkbenchEvidenceItem>
         {
-            new("Session", BuildReplayTitle(summary), summary.MetadataPath),
+            new("Session", BuildReplayTitle(summary), summary.MetadataPath, SupportingDetail: TryBuildEvidenceArtifactDetail(summary.MetadataPath)),
             new("Exit", $"reason={summary.Reason} | exit_code={summary.ExitCode}", null),
-            new("Events", $"{summary.EventCount} events", summary.HasTimeline ? summary.TimelinePath : null)
+            new("Events", $"{summary.EventCount} events", summary.HasTimeline ? summary.TimelinePath : null, SupportingDetail: summary.HasTimeline ? TryBuildEvidenceArtifactDetail(summary.TimelinePath) : null)
         };
 
         if (!string.IsNullOrWhiteSpace(summary.Target))
@@ -146,7 +151,7 @@ internal sealed partial class ArtifactIndexRenderer
 
         if (items.Count == 0)
         {
-            items.Add(new WorkbenchEvidenceItem("Timeline", "No explicit action events were highlighted; scrub the failure window first.", summary.TimelinePath));
+            items.Add(new WorkbenchEvidenceItem("Timeline", "No explicit action events were highlighted; scrub the failure window first.", summary.TimelinePath, SupportingDetail: TryBuildEvidenceArtifactDetail(summary.TimelinePath)));
         }
 
         groups.Add(new WorkbenchEvidenceGroup(
@@ -156,7 +161,7 @@ internal sealed partial class ArtifactIndexRenderer
             DeduplicateEvidenceItems(items)));
     }
 
-    private static void AddMediaReportsGroup(
+    private void AddMediaReportsGroup(
         List<WorkbenchEvidenceGroup> groups,
         IReadOnlyList<string> files,
         SessionReplaySummary summary,
@@ -167,17 +172,17 @@ internal sealed partial class ArtifactIndexRenderer
         {
             items.AddRange(scenario.Artifacts
                 .Where(static artifact => !string.IsNullOrWhiteSpace(artifact.Path))
-                .Select(static artifact => new WorkbenchEvidenceItem(artifact.Kind, artifact.Path, artifact.Path)));
+                .Select(artifact => new WorkbenchEvidenceItem(artifact.Kind, artifact.Path, artifact.Path, SupportingDetail: TryBuildEvidenceArtifactDetail(artifact.Path))));
         }
 
         if (!string.IsNullOrWhiteSpace(summary.FailureCapsulePath))
         {
-            items.Add(new WorkbenchEvidenceItem("failure capsule", summary.FailureCapsulePath, summary.FailureCapsulePath));
+            items.Add(new WorkbenchEvidenceItem("failure capsule", summary.FailureCapsulePath, summary.FailureCapsulePath, SupportingDetail: TryBuildEvidenceArtifactDetail(summary.FailureCapsulePath)));
         }
 
         items.AddRange(files
             .Where(IsReportArtifact)
-            .Select(static file => new WorkbenchEvidenceItem("report", file, file)));
+            .Select(file => new WorkbenchEvidenceItem("report", file, file, SupportingDetail: TryBuildEvidenceArtifactDetail(file))));
 
         if (items.Count == 0)
         {
@@ -208,10 +213,12 @@ internal sealed partial class ArtifactIndexRenderer
         entry.Type.Contains("reconnect", StringComparison.OrdinalIgnoreCase) ||
         entry.Type.Contains("share_client", StringComparison.OrdinalIgnoreCase);
 
+    private string? TryBuildEvidenceArtifactDetail(string path) => _evidenceDetailReader.TryBuild(path);
+
     private static IReadOnlyList<WorkbenchEvidenceItem> DeduplicateEvidenceItems(IReadOnlyList<WorkbenchEvidenceItem> items) =>
         items
             .Where(static item => !string.IsNullOrWhiteSpace(item.Detail))
-            .GroupBy(static item => $"{item.Label}\n{item.Detail}\n{item.Path}", StringComparer.OrdinalIgnoreCase)
+            .GroupBy(static item => $"{item.Label}\n{item.Detail}\n{item.Path}\n{item.SupportingDetail}", StringComparer.OrdinalIgnoreCase)
             .Select(static group => group.First())
             .ToArray();
 
@@ -221,5 +228,5 @@ internal sealed partial class ArtifactIndexRenderer
         string Kind,
         IReadOnlyList<WorkbenchEvidenceItem> Items);
 
-    private sealed record WorkbenchEvidenceItem(string Label, string Detail, string? Path, bool IsCommand = false);
+    private sealed record WorkbenchEvidenceItem(string Label, string Detail, string? Path, string? SupportingDetail = null, bool IsCommand = false);
 }
