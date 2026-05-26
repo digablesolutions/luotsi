@@ -13,6 +13,7 @@
     <SelfContained Condition="'$(SelfContained)' == ''">true</SelfContained>
     <PublishTrimmed Condition="'$(PublishTrimmed)' == ''">false</PublishTrimmed>
     <IncludeNativeLibrariesForSelfExtract Condition="'$(IncludeNativeLibrariesForSelfExtract)' == ''">true</IncludeNativeLibrariesForSelfExtract>
+    <ApplicationIcon>Assets\luotsi-icon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
