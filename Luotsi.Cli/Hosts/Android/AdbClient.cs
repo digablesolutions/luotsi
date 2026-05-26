@@ -4,13 +4,19 @@ using System.Text;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Infrastructure.Telemetry;
 using Luotsi.Cli.Models;
+using Polly;
 
 namespace Luotsi.Cli.Hosts.Android;
 
 /// <summary>
 /// Executes ADB commands with stdout and stderr captured separately.
 /// </summary>
-public sealed class AdbClient(string executable, string? serial, IProcessRunner processRunner, TimeSpan? commandTimeout = null) : IAdbClient
+public sealed class AdbClient(
+    string executable,
+    string? serial,
+    IProcessRunner processRunner,
+    TimeSpan? commandTimeout = null,
+    ResiliencePipeline? commandRetryPipeline = null) : IAdbClient
 {
     private const int MaxCapturedLogChars = 512 * 1024;
     private const int MaxCapturedStreamChars = 512 * 1024;
@@ -19,6 +25,7 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
     private readonly string? _serial = string.IsNullOrWhiteSpace(serial) ? null : serial;
     private readonly IProcessRunner _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
     private readonly TimeSpan? _commandTimeout = commandTimeout is { } timeout && timeout > TimeSpan.Zero ? timeout : null;
+    private readonly ResiliencePipeline _commandRetryPipeline = commandRetryPipeline ?? AdbResilience.CreateCommandRetryPipeline();
 
     /// <summary>
     /// Runs adb and captures the result.
@@ -30,34 +37,45 @@ public sealed class AdbClient(string executable, string? serial, IProcessRunner 
     {
         var requestedArgs = args.ToArray();
         var finalArgs = BuildFinalArgs(requestedArgs);
-        var result = await RunProcessAsync(finalArgs, cancellationToken).ConfigureAwait(false);
-        var retryReason = FindTransientTransportReason(result);
-        if (retryReason is null || !IsSafeToRetry(requestedArgs))
-        {
-            return new AdbCommandResult(_executable, _serial, finalArgs, result);
-        }
+        AdbRetryExecutionState? retryState = null;
 
-        var recoveryActions = new List<AdbRecoveryActionResult>();
-        await RunRecoveryActionAsync(["start-server"], recoveryActions, cancellationToken).ConfigureAwait(false);
+        return await _commandRetryPipeline.ExecuteAsync(
+            async token =>
+            {
+                var result = await RunProcessAsync(finalArgs, token).ConfigureAwait(false);
+                var retryReason = FindTransientTransportReason(result);
+                if (retryState is null && retryReason is not null && IsSafeToRetry(requestedArgs))
+                {
+                    var recoveryActions = new List<AdbRecoveryActionResult>();
+                    await RunRecoveryActionAsync(["start-server"], recoveryActions, token).ConfigureAwait(false);
 
-        if (ShouldReconnectOffline(result))
-        {
-            await RunRecoveryActionAsync(BuildFinalArgs(["reconnect", "offline"]), recoveryActions, cancellationToken).ConfigureAwait(false);
-        }
+                    if (ShouldReconnectOffline(result))
+                    {
+                        await RunRecoveryActionAsync(BuildFinalArgs(["reconnect", "offline"]), recoveryActions, token).ConfigureAwait(false);
+                    }
 
-        if (ShouldWaitForDevice(retryReason, requestedArgs))
-        {
-            await RunRecoveryActionAsync(BuildFinalArgs(["wait-for-device"]), recoveryActions, cancellationToken).ConfigureAwait(false);
-        }
+                    if (ShouldWaitForDevice(retryReason, requestedArgs))
+                    {
+                        await RunRecoveryActionAsync(BuildFinalArgs(["wait-for-device"]), recoveryActions, token).ConfigureAwait(false);
+                    }
 
-        var retryResult = await RunProcessAsync(finalArgs, cancellationToken).ConfigureAwait(false);
-        return new AdbCommandResult(
-            _executable,
-            _serial,
-            finalArgs,
-            retryResult,
-            new AdbRetryInfo(retryReason, 2, recoveryActions));
+                    retryState = new AdbRetryExecutionState(retryReason, recoveryActions);
+                    throw new AdbTransientTransportException(retryReason);
+                }
+
+                return retryState is null
+                    ? new AdbCommandResult(_executable, _serial, finalArgs, result)
+                    : new AdbCommandResult(
+                        _executable,
+                        _serial,
+                        finalArgs,
+                        result,
+                        new AdbRetryInfo(retryState.RetryReason, 2, retryState.RecoveryActions));
+            },
+            cancellationToken).ConfigureAwait(false);
     }
+
+    private sealed record AdbRetryExecutionState(string RetryReason, IReadOnlyList<AdbRecoveryActionResult> RecoveryActions);
 
     /// <summary>
     /// Runs an adb shell command.
