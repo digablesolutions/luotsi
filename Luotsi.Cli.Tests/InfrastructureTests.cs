@@ -688,4 +688,30 @@ public sealed partial class AppTests
         Assert.Contains("first_failure=view_error | error=transport: tail failure", detail, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ArtifactEvidenceDetailReader_Rejects_Paths_Outside_Artifact_Root()
+    {
+        var fileSystem = new FakeFileSystem();
+        fileSystem.AddFile(Path.Join("/tmp", "outside.json"), """{"schema":"luotsi-session-replay.v1"}""");
+        var reader = new ArtifactEvidenceDetailReader("/tmp/replay", fileSystem);
+
+        Assert.Null(reader.TryBuild("../outside.json"));
+        Assert.Null(reader.TryBuild(Path.GetFullPath(Path.Join("/tmp", "outside.json"))));
+    }
+
+    [Fact]
+    public void ArtifactEvidenceDetailReader_Includes_Junit_Suite_Name()
+    {
+        var fileSystem = new FakeFileSystem();
+        fileSystem.AddFile(
+            Path.Join("/tmp/replay", "junit.xml"),
+            """<testsuites tests="1" failures="1"><testsuite name="smoke suite" tests="1" failures="1" time="2.5" /></testsuites>""");
+        var reader = new ArtifactEvidenceDetailReader("/tmp/replay", fileSystem);
+
+        var detail = reader.TryBuild("junit.xml");
+
+        Assert.NotNull(detail);
+        Assert.Contains("suite=smoke suite", detail, StringComparison.Ordinal);
+    }
+
 }

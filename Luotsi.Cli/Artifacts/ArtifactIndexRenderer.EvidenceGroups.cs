@@ -172,6 +172,7 @@ internal sealed partial class ArtifactIndexRenderer
         {
             items.AddRange(scenario.Artifacts
                 .Where(static artifact => !string.IsNullOrWhiteSpace(artifact.Path))
+                .Take(4)
                 .Select(artifact => new WorkbenchEvidenceItem(artifact.Kind, artifact.Path, artifact.Path, SupportingDetail: TryBuildEvidenceArtifactDetail(artifact.Path))));
         }
 
@@ -182,6 +183,7 @@ internal sealed partial class ArtifactIndexRenderer
 
         items.AddRange(files
             .Where(IsReportArtifact)
+            .Take(Math.Max(0, 6 - items.Count))
             .Select(file => new WorkbenchEvidenceItem("report", file, file, SupportingDetail: TryBuildEvidenceArtifactDetail(file))));
 
         if (items.Count == 0)

@@ -12,6 +12,7 @@ internal sealed class ArtifactEvidenceDetailReader(string root, IFileSystem file
     private const int MaxJsonlDetailLines = 500;
 
     private readonly string _root = root ?? throw new ArgumentNullException(nameof(root));
+    private readonly string _fullRoot = Path.GetFullPath(root ?? throw new ArgumentNullException(nameof(root)));
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
 
     public string? TryBuild(string path)
@@ -33,7 +34,7 @@ internal sealed class ArtifactEvidenceDetailReader(string root, IFileSystem file
                 ? BuildXmlDetail(path)
                 : null;
         }
-        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or System.Xml.XmlException)
+        catch (Exception ex) when (ex is ArgumentException or JsonException or IOException or NotSupportedException or PathTooLongException or UnauthorizedAccessException or System.Xml.XmlException)
         {
             return null;
         }
@@ -41,7 +42,7 @@ internal sealed class ArtifactEvidenceDetailReader(string root, IFileSystem file
 
     private string? BuildJsonDetail(string path)
     {
-        using var stream = _fileSystem.OpenRead(Path.Join(_root, path));
+        using var stream = _fileSystem.OpenRead(ResolveArtifactPath(path));
         using var document = JsonDocument.Parse(stream);
         var root = document.RootElement;
         if (root.ValueKind != JsonValueKind.Object ||
@@ -72,7 +73,7 @@ internal sealed class ArtifactEvidenceDetailReader(string root, IFileSystem file
             return null;
         }
 
-        using var stream = _fileSystem.OpenRead(Path.Join(_root, path));
+        using var stream = _fileSystem.OpenRead(ResolveArtifactPath(path));
         var document = XDocument.Load(stream);
         var root = document.Root;
         if (root is null)
@@ -86,12 +87,26 @@ internal sealed class ArtifactEvidenceDetailReader(string root, IFileSystem file
         AddXmlAttribute(parts, root, "errors");
         AddXmlAttribute(parts, root, "skipped");
         AddXmlAttribute(parts, root, "time", "duration_sec");
+        if (root.Name.LocalName.Equals("testsuite", StringComparison.OrdinalIgnoreCase))
+        {
+            AddXmlAttribute(parts, root, "name", "suite");
+        }
+        else
+        {
+            var firstSuite = root.Elements()
+                .FirstOrDefault(static element => element.Name.LocalName.Equals("testsuite", StringComparison.OrdinalIgnoreCase));
+            if (firstSuite is not null)
+            {
+                AddXmlAttribute(parts, firstSuite, "name", "suite");
+            }
+        }
+
         return parts.Count == 1 ? null : string.Join(" | ", parts);
     }
 
     private string? BuildJsonlDetail(string path)
     {
-        using var stream = _fileSystem.OpenRead(Path.Join(_root, path));
+        using var stream = _fileSystem.OpenRead(ResolveArtifactPath(path));
         var truncatedByBytes = false;
         if (stream is {CanSeek: true, Length: > MaxJsonlDetailBytes})
         {
@@ -401,5 +416,25 @@ internal sealed class ArtifactEvidenceDetailReader(string root, IFileSystem file
         }
 
         return builder.ToString();
+    }
+
+    private string ResolveArtifactPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || Path.IsPathRooted(path))
+        {
+            throw new ArgumentException("Artifact path must be relative.", nameof(path));
+        }
+
+        var fullPath = Path.GetFullPath(Path.Join(_fullRoot, path));
+        var rootWithSeparator = _fullRoot.EndsWith(Path.DirectorySeparatorChar) || _fullRoot.EndsWith(Path.AltDirectorySeparatorChar)
+            ? _fullRoot
+            : _fullRoot + Path.DirectorySeparatorChar;
+        if (!fullPath.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(fullPath, _fullRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException("Artifact path must stay inside the artifact root.", nameof(path));
+        }
+
+        return Path.Join(_root, Path.GetRelativePath(_fullRoot, fullPath));
     }
 }
