@@ -19,7 +19,8 @@ public sealed record LabStatusResult(
     int Available,
     int Unavailable,
     IReadOnlyList<DeviceState> Devices,
-    IReadOnlyList<LabDeviceDecision> Decisions);
+    IReadOnlyList<LabDeviceDecision> Decisions,
+    IReadOnlyList<LabDoctorProbe>? Probes = null);
 
 public sealed record LabDoctorResult(
     string Status,
@@ -29,7 +30,13 @@ public sealed record LabDoctorResult(
     IReadOnlyList<string>? AppliedFixes = null,
     IReadOnlyList<LabDoctorProbe>? Probes = null);
 
-public sealed record LabDoctorProbe(string Name, bool Succeeded, int ExitCode, string Invocation);
+public sealed record LabDoctorProbe(
+    string Name,
+    bool Succeeded,
+    int ExitCode,
+    string Invocation,
+    int AttemptCount = 1,
+    int RetryCount = 0);
 
 public sealed record LabPlanResult(
     string Status,

@@ -5,6 +5,7 @@ using Luotsi.Cli.Cli.Composition;
 using Luotsi.Cli.Cli.Provenance;
 using Luotsi.Cli.Hosts.Android;
 using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.Infrastructure.Telemetry;
 using Luotsi.Cli.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -601,6 +602,23 @@ public sealed class AdbReadinessTests
         Assert.Equal(["version"], processRunner.Calls[0].Args);
         Assert.Equal(["start-server"], processRunner.Calls[1].Args);
         Assert.Equal(["version"], processRunner.Calls[2].Args);
+    }
+
+    [Fact]
+    public async Task AdbClient_Records_Retry_Metrics_In_Current_Async_Flow()
+    {
+        var processRunner = new FakeProcessRunner();
+        processRunner.EnqueueResult(new ProcessResult(1, string.Empty, "protocol fault (no status)"));
+        processRunner.EnqueueResult(new ProcessResult(0, string.Empty, string.Empty));
+        processRunner.EnqueueResult(new ProcessResult(0, "Android Debug Bridge version 1.0.41", string.Empty));
+        var adb = new AdbClient("adb", null, processRunner, TimeSpan.FromSeconds(5));
+
+        using var retryScope = AdbRetryMetrics.BeginScope();
+        await adb.RunAsync(["version"]);
+
+        Assert.Equal(1, retryScope.CommandRetryCount);
+        Assert.Equal(1, retryScope.CommandWithRetryCount);
+        Assert.Equal("adb protocol fault", retryScope.LastRetryReason);
     }
 
     [Fact]

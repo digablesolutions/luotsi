@@ -2,6 +2,7 @@ using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Infrastructure.Devices;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Models;
+using Polly;
 
 namespace Luotsi.Cli.Cli.Routing;
 
@@ -11,7 +12,9 @@ internal static class LabCommandResolver
         IDeviceHost runner,
         string? query,
         LabLeaseStore? leaseStore = null,
-        LabQuarantineStore? quarantineStore = null)
+        LabQuarantineStore? quarantineStore = null,
+        ResiliencePipeline? labProbePipeline = null,
+        bool includeProbes = false)
     {
         ArgumentNullException.ThrowIfNull(runner);
 
@@ -23,12 +26,14 @@ internal static class LabCommandResolver
             .Select(device => ToDecision(device, selector, leases, quarantines))
             .ToArray();
 
+        var probes = includeProbes ? await LabDoctorProbes.RunAsync(runner, labProbePipeline).ConfigureAwait(false) : null;
         return new LabStatusResult(
             inventory.Devices.Count,
             inventory.Devices.Count(static device => string.Equals(device.Availability, "available", StringComparison.OrdinalIgnoreCase)),
             inventory.Devices.Count(static device => !string.Equals(device.Availability, "available", StringComparison.OrdinalIgnoreCase)),
             inventory.Devices,
-            decisions);
+            decisions,
+            probes);
     }
 
     public static async Task<LabDoctorResult> DiagnoseAsync(
@@ -36,16 +41,18 @@ internal static class LabCommandResolver
         string? query,
         bool fix = false,
         LabLeaseStore? leaseStore = null,
-        LabQuarantineStore? quarantineStore = null)
+        LabQuarantineStore? quarantineStore = null,
+        ResiliencePipeline? labProbePipeline = null)
     {
         var status = await ReadStatusAsync(runner, query, leaseStore, quarantineStore).ConfigureAwait(false);
         var findings = new List<string>();
         var actions = new List<string>();
         var appliedFixes = new List<string>();
-        var probes = await LabDoctorProbes.RunAsync(runner).ConfigureAwait(false);
+        var probes = await LabDoctorProbes.RunAsync(runner, labProbePipeline).ConfigureAwait(false);
         foreach (var probe in probes.Where(static probe => !probe.Succeeded))
         {
-            findings.Add($"ADB probe '{probe.Name}' failed with exit code {probe.ExitCode}.");
+            var retryDetail = probe.RetryCount > 0 ? $" after {probe.RetryCount} {(probe.RetryCount == 1 ? "retry" : "retries")}." : ".";
+            findings.Add($"ADB probe '{probe.Name}' failed with exit code {probe.ExitCode}{retryDetail}");
         }
 
         if (status.Total == 0)

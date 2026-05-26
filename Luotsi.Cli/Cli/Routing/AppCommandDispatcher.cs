@@ -4,7 +4,9 @@ using Luotsi.Cli.Cli.Update;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Infrastructure.Devices;
+using Luotsi.Cli.Infrastructure.Resilience;
 using Luotsi.Cli.Models;
+using Polly.Registry;
 
 namespace Luotsi.Cli.Cli.Routing;
 
@@ -14,7 +16,8 @@ internal sealed class AppCommandDispatcher(
     ISelfUpdateService selfUpdateService,
     ViewProfileCoordinator profileCoordinator,
     LabLeaseStore labLeaseStore,
-    LabQuarantineStore labQuarantineStore)
+    LabQuarantineStore labQuarantineStore,
+    ResiliencePipelineProvider<string> resiliencePipelines)
 {
     private readonly AdbSubcommandDispatcher _adbSubcommandDispatcher = adbSubcommandDispatcher ?? throw new ArgumentNullException(nameof(adbSubcommandDispatcher));
     private readonly ScenarioCommandDispatcher _scenarioCommandDispatcher = scenarioCommandDispatcher ?? throw new ArgumentNullException(nameof(scenarioCommandDispatcher));
@@ -22,6 +25,7 @@ internal sealed class AppCommandDispatcher(
     private readonly ViewProfileCoordinator _profileCoordinator = profileCoordinator ?? throw new ArgumentNullException(nameof(profileCoordinator));
     private readonly LabLeaseStore _labLeaseStore = labLeaseStore ?? throw new ArgumentNullException(nameof(labLeaseStore));
     private readonly LabQuarantineStore _labQuarantineStore = labQuarantineStore ?? throw new ArgumentNullException(nameof(labQuarantineStore));
+    private readonly ResiliencePipelineProvider<string> _resiliencePipelines = resiliencePipelines ?? throw new ArgumentNullException(nameof(resiliencePipelines));
 
     public bool RequiresRunner(CliOptions options)
     {
@@ -119,8 +123,20 @@ internal sealed class AppCommandDispatcher(
         var action = options.Arguments.FirstOrDefault() ?? "status";
         return action.ToLowerInvariant() switch
         {
-            "status" => await LabCommandResolver.ReadStatusAsync(runner, options.Get("device-query"), _labLeaseStore, _labQuarantineStore).ConfigureAwait(false),
-            "doctor" => await LabCommandResolver.DiagnoseAsync(runner, options.Get("device-query"), options.HasFlag("fix"), _labLeaseStore, _labQuarantineStore).ConfigureAwait(false),
+            "status" => await LabCommandResolver.ReadStatusAsync(
+                runner,
+                options.Get("device-query"),
+                _labLeaseStore,
+                _labQuarantineStore,
+                _resiliencePipelines.GetPipeline(LuotsiResiliencePipelines.LabProbePipelineName),
+                includeProbes: true).ConfigureAwait(false),
+            "doctor" => await LabCommandResolver.DiagnoseAsync(
+                runner,
+                options.Get("device-query"),
+                options.HasFlag("fix"),
+                _labLeaseStore,
+                _labQuarantineStore,
+                _resiliencePipelines.GetPipeline(LuotsiResiliencePipelines.LabProbePipelineName)).ConfigureAwait(false),
             "plan" => await LabCommandResolver.PlanAsync(runner, options.Get("device-query"), _labLeaseStore, _labQuarantineStore).ConfigureAwait(false),
             "claim" => await LabCommandResolver.ClaimAsync(runner, options.Get("device-query"), options.Get("owner"), options.Int("ttl-sec", 3600), _labLeaseStore, _labQuarantineStore).ConfigureAwait(false),
             "release" => await ReleaseLabLeaseAsync(options).ConfigureAwait(false),

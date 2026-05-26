@@ -11,7 +11,7 @@ luotsi update [--version <tag>] [--channel stable|prerelease] [--dry-run]
 
 **ADB path.** If `adb` is not on `PATH` (common in WSL), pass `--adb /path/to/adb` or set `LUOTSI_ADB`. Bounded ADB commands default to a 120-second timeout; override with `--adb-timeout-sec <n>` or `LUOTSI_ADB_TIMEOUT_SEC`. Use `0` to disable.
 
-**Retry policy.** Safe reads (diagnostics, UI dumps, log snapshots, read-only shell probes) get one visible retry after known transient transport errors (protocol faults, missing/offline/connecting devices). Mutating commands (tap, type, install, push, key events) are not retried.
+**Retry policy.** Safe reads (diagnostics, UI dumps, log snapshots, read-only shell probes) get one visible retry after known transient transport errors (protocol faults, missing/offline/connecting devices). Mutating commands (tap, type, install, push, key events) are not retried. Setup/download repair work and lab probes use separate named retry policies; lab status/doctor expose probe `attempt_count` and `retry_count`.
 
 **Artifacts.** Use `--artifacts <directory>` to override the artifact root for the current command or session. Use `--poll-artifacts <final|per-attempt|none>` to control whether polling-style commands write artifacts only at the end, on each attempt, or not at all.
 
@@ -48,8 +48,8 @@ The CLI includes the same flow-oriented summary in `luotsi help quickstart`.
 | `version` | Return Luotsi runtime/install metadata as a JSON envelope |
 | `update [--version <tag>] [--channel stable|prerelease] [--dry-run] [--detach]` | Re-run the release installer for the recorded install root |
 | `devices` | List adb-visible devices |
-| `lab status [--device-query <query>]` | Summarize attached-device availability and explain which devices match or are rejected by a selection query |
-| `lab doctor [--device-query <query>]` | Detect stale/offline/ambiguous lab state and return concrete remediation commands |
+| `lab status [--device-query <query>]` | Summarize attached-device availability, explain selection decisions, and include ADB probe attempt/retry counts |
+| `lab doctor [--device-query <query>]` | Detect stale/offline/ambiguous lab state, retry transient probes, and return concrete remediation commands |
 | `lab plan [--device-query <query>]` | Dry-run lab allocation and explain the selected or rejected devices, including recommended claim/run commands |
 | `lab claim [--device-query <query>] [--owner <name>] [--ttl-sec 3600]` | Claim exactly one selected device with a host-side lease token |
 | `lab leases` | List active host-side device leases |
@@ -76,7 +76,7 @@ Long-running jobs can renew an active lease with `lab extend --serial <adb seria
 Active quarantines are also honored by `--device-query`; use them for unhealthy hardware that should stay out of local and CI allocation until repaired.
 When `lab plan` is ready, `recommended_commands` includes both an explicit `lab claim` command and a direct `run --path <scenarios> --claim-device ...` command for agents or CI jobs that want allocation and execution in one step.
 
-`doctor` is the first-run entry point. It reuses the existing adb/version checks, optional package-specific preflight, and the same live-view readiness report exposed by `view-doctor`. `doctor --fix` stages Luotsi-owned FFmpeg native libraries when the requested decoder is missing them, then routes through the same helper/install readiness path as `view setup`. Published Luotsi bundles include those repair assets; source checkouts continue to resolve them from the repository layout.
+`doctor` is the first-run entry point. It reuses the existing adb/version checks, optional package-specific preflight, and the same live-view readiness report exposed by `view-doctor`. `doctor --fix` stages Luotsi-owned FFmpeg native libraries when the requested decoder is missing them, retrying transient setup/download failures before reporting a final setup result, then routes through the same helper/install readiness path as `view setup`. Published Luotsi bundles include those repair assets; source checkouts continue to resolve them from the repository layout.
 
 ---
 

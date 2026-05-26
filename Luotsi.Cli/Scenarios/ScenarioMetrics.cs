@@ -16,7 +16,9 @@ internal sealed record ScenarioStepMetricContext(
     ScenarioStep Step,
     string Phase,
     string Status,
-    ScenarioStepTiming Timing);
+    ScenarioStepTiming Timing,
+    int AdbCommandRetryCount = 0,
+    int AdbCommandWithRetryCount = 0);
 
 internal sealed record ScenarioScenarioMetricContext(
     string Status,
@@ -39,7 +41,8 @@ internal sealed class CompositeScenarioMetricsCollector(IReadOnlyList<IScenarioM
     public static CompositeScenarioMetricsCollector CreateDefault() =>
         new([
             new ScenarioTimingMetricsCollector(),
-            new ScenarioActionMetricsCollector()
+            new ScenarioActionMetricsCollector(),
+            new ScenarioAdbRetryMetricsCollector()
         ]);
 
     public IReadOnlyDictionary<string, double> CollectStep(ScenarioStepMetricContext context) =>
@@ -165,4 +168,31 @@ internal sealed class ScenarioActionMetricsCollector : IScenarioMetricsCollector
                 : '_').ToArray();
         return new string(chars);
     }
+}
+
+internal sealed class ScenarioAdbRetryMetricsCollector : IScenarioMetricsCollector
+{
+    public IReadOnlyDictionary<string, double> CollectStep(ScenarioStepMetricContext context) =>
+        new SortedDictionary<string, double>(StringComparer.Ordinal)
+        {
+            ["adb_command_retry_count"] = context.AdbCommandRetryCount,
+            ["adb_command_with_retry_count"] = context.AdbCommandWithRetryCount
+        };
+
+    public IReadOnlyDictionary<string, double> CollectScenario(ScenarioScenarioMetricContext context) =>
+        new SortedDictionary<string, double>(StringComparer.Ordinal)
+        {
+            ["adb_command_retry_count"] = context.Steps.Sum(static step => GetMetric(step.Metrics, "adb_command_retry_count")),
+            ["adb_command_with_retry_count"] = context.Steps.Sum(static step => GetMetric(step.Metrics, "adb_command_with_retry_count"))
+        };
+
+    public IReadOnlyDictionary<string, double> CollectBatch(ScenarioBatchMetricContext context) =>
+        new SortedDictionary<string, double>(StringComparer.Ordinal)
+        {
+            ["adb_command_retry_count"] = context.Result.Scenarios.Sum(static scenario => GetMetric(scenario.Metrics ?? ScenarioMetrics.Empty, "adb_command_retry_count")),
+            ["adb_command_with_retry_count"] = context.Result.Scenarios.Sum(static scenario => GetMetric(scenario.Metrics ?? ScenarioMetrics.Empty, "adb_command_with_retry_count"))
+        };
+
+    private static double GetMetric(IReadOnlyDictionary<string, double> metrics, string key) =>
+        metrics.TryGetValue(key, out var value) ? value : 0;
 }
