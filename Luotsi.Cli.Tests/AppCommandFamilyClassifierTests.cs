@@ -35,6 +35,15 @@ public sealed class AppCommandFamilyClassifierTests
     }
 
     [Fact]
+    public void Classify_Artifacts_Returns_Artifacts_Family()
+    {
+        var classification = AppCommandFamilyClassifier.Classify(CliOptions.Parse(["artifacts", "open", "/tmp/run"]));
+
+        Assert.Equal(AppCommandFamily.Artifacts, classification.Family);
+        Assert.Null(classification.ViewDiagnostic);
+    }
+
+    [Fact]
     public void Classify_ViewSetup_Alias_Returns_ViewDiagnostics_Setup_Invocation()
     {
         var classification = AppCommandFamilyClassifier.Classify(CliOptions.Parse(["view", "setup", "--device", "abc"]));

@@ -6,6 +6,7 @@ internal enum AppCommandFamily
 {
     ProfileList,
     ProfileDelete,
+    Artifacts,
     Doctor,
     Inspect,
     Replay,
@@ -28,6 +29,11 @@ internal static class AppCommandFamilyClassifier
         if (string.Equals(options.Command, "profile-delete", StringComparison.OrdinalIgnoreCase))
         {
             return new AppCommandFamilyClassification(AppCommandFamily.ProfileDelete);
+        }
+
+        if (string.Equals(options.Command, "artifacts", StringComparison.OrdinalIgnoreCase))
+        {
+            return new AppCommandFamilyClassification(AppCommandFamily.Artifacts);
         }
 
         if (string.Equals(options.Command, "inspect", StringComparison.OrdinalIgnoreCase))

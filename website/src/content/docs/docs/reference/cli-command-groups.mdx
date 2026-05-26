@@ -106,6 +106,8 @@ luotsi scenario-list --path scenarios
 luotsi scenario-explain --file scenarios/smoke.json
 luotsi run --path scenarios --dry-run --include-tag smoke
 luotsi run --path scenarios --device <serial> --report-junit junit.xml
+luotsi artifacts open ./artifacts/my-run
+luotsi artifacts pack ./artifacts/my-run --output my-run.zip
 luotsi replay summarize --artifacts ./artifacts/my-run
 luotsi replay capsule --artifacts ./artifacts/my-run --write-readme --write-json
 luotsi replay timeline --artifacts ./artifacts/my-run --failures
