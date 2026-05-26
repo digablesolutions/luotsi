@@ -53,6 +53,7 @@ Luotsi help: artifacts
 
 Usage:
   luotsi <command> --artifacts <directory>
+  luotsi artifacts list [--artifacts <directory>] [--limit 20]
   luotsi artifacts open <artifact-root-or-run-id> [--dry-run]
   luotsi artifacts pack <artifact-root-or-run-id> [--output <file.zip>] [--force]
   luotsi run --path scenarios --report-json results.json --report-junit junit.xml
@@ -62,14 +63,16 @@ Artifacts:
   Luotsi writes index.md and index.html in each artifact session. The index
   groups screenshots, recordings, reports, logs, screen-state dumps, and UI
   hierarchy files so CI uploads are easier to browse.
-  artifacts open refreshes the index if needed and opens the local browser or
-  file manager. artifacts pack writes a zip suitable for sharing or CI upload.
+  artifacts list shows recent artifact roots and their run ids. artifacts open
+  refreshes the index if needed and opens the local browser or file manager.
+  artifacts pack writes a zip suitable for sharing or CI upload.
   When the target is a run id rather than a full path, Luotsi searches the
   default temp artifact root or --artifacts <directory>.
 
 Examples:
   luotsi screen-state --device emulator-5554 --artifacts artifacts
   luotsi run --path scenarios --device emulator-5554 --artifacts artifacts --report-junit junit.xml
+  luotsi artifacts list --artifacts artifacts
   luotsi artifacts open artifacts/20260518-100000-run
   luotsi artifacts open 20260518-100000-run --artifacts artifacts
   luotsi artifacts pack artifacts/20260518-100000-run --output replay.zip
@@ -573,6 +576,7 @@ Command groups:
     record --output <file.mp4> [--time-limit-sec 30]
 
   Artifact replay and triage
+    artifacts list [--artifacts <directory>] [--limit 20]
     artifacts open <artifact-root-or-run-id> [--dry-run]
     artifacts pack <artifact-root-or-run-id> [--output <file.zip>] [--force]
     replay summarize --artifacts <artifact-root> [--format json|jsonl]

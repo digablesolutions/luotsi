@@ -19,14 +19,18 @@ internal sealed class ArtifactCommandHost(
         var subcommand = options.Arguments.Count > 0 ? options.Arguments[0] : null;
         object data = subcommand?.ToLowerInvariant() switch
         {
+            "list" => await ListAsync(options).ConfigureAwait(false),
             "open" => await OpenAsync(options).ConfigureAwait(false),
             "pack" => await PackAsync(options).ConfigureAwait(false),
-            _ => throw new UsageException("artifacts command must be one of: open, pack.")
+            _ => throw new UsageException("artifacts command must be one of: list, open, pack.")
         };
 
         _envelopeWriter.WriteSuccess(options.Command!, started, data, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
         return 0;
     }
+
+    private Task<ArtifactListResult> ListAsync(CliOptions options) =>
+        _artifactCommandService.ListAsync(options.Get("artifacts"), options.Int("limit", 20));
 
     private Task<ArtifactOpenResult> OpenAsync(CliOptions options)
     {

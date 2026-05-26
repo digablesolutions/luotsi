@@ -89,6 +89,22 @@ public sealed partial class AppTests
         Assert.Contains("luotsi replay summarize --artifacts <artifact-root> [--format json|jsonl]", console.ErrorLines[0], StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task RunAsync_Help_Command_Writes_Artifacts_Topic()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["help", "artifacts"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(console.OutputLines);
+        Assert.Single(console.ErrorLines);
+        Assert.Contains("Luotsi help: artifacts", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("luotsi artifacts list [--artifacts <directory>] [--limit 20]", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("luotsi artifacts pack <artifact-root-or-run-id>", console.ErrorLines[0], StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("workflow")]
     [InlineData("workflows")]
@@ -3176,6 +3192,59 @@ public sealed partial class AppTests
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.html")));
         Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
             command.GetProperty("kind").GetString() == "pack_artifacts");
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsList_Returns_Run_Ids_And_Commands()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var searchRoot = Path.Join("C:", "artifacts");
+        var firstRoot = Path.Join(searchRoot, "20260526-110000-view");
+        var secondRoot = Path.Join(searchRoot, "20260526-120000-run");
+        fileSystem.CreateDirectory(searchRoot);
+        fileSystem.AddFile(Path.Join(firstRoot, "index.html"), "<!doctype html>");
+        fileSystem.AddFile(Path.Join(secondRoot, "session-timeline.jsonl"), "{\"type\":\"session_started\"}");
+        fileSystem.AddFile(Path.Join(secondRoot, "session-replay.json"), "{}");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "list", "--artifacts", searchRoot, "--limit", "1"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(1, data.GetProperty("count").GetInt32());
+        var entry = Assert.Single(data.GetProperty("entries").EnumerateArray());
+        Assert.Equal("20260526-120000-run", entry.GetProperty("run_id").GetString());
+        Assert.True(entry.GetProperty("has_timeline").GetBoolean());
+        Assert.True(entry.GetProperty("has_replay_metadata").GetBoolean());
+        Assert.Contains("artifacts open", entry.GetProperty("open_command").GetString(), StringComparison.Ordinal);
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "open_artifacts");
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsList_Rejects_NonPositive_Limit()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        fileSystem.CreateDirectory(Path.Join("/tmp", "artifacts"));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "list", "--artifacts", Path.Join("/tmp", "artifacts"), "--limit", "0"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("--limit", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]

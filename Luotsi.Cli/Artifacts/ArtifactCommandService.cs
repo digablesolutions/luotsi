@@ -34,6 +34,36 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             ]);
     }
 
+    public Task<ArtifactListResult> ListAsync(string? searchRoot, int limit)
+    {
+        if (limit <= 0)
+        {
+            throw new UsageException("Option --limit must be greater than zero.");
+        }
+
+        var baseRoot = ResolveSearchRoot(searchRoot);
+        if (!_fileSystem.DirectoryExists(baseRoot))
+        {
+            throw new UsageException($"Artifact search root '{baseRoot}' does not exist.");
+        }
+
+        var entries = ResolveArtifactRootCandidates(baseRoot)
+            .Select(root => CreateListEntry(root))
+            .OrderByDescending(static entry => entry.RunId, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static entry => entry.ArtifactRoot, StringComparer.OrdinalIgnoreCase)
+            .Take(limit)
+            .ToArray();
+
+        return Task.FromResult(new ArtifactListResult(
+            baseRoot,
+            entries.Length,
+            entries,
+            [
+                new ArtifactRecommendedCommandResult("open_artifacts", "Open an artifact root or run id from this list.", "luotsi artifacts open <artifact-root-or-run-id>"),
+                new ArtifactRecommendedCommandResult("pack_artifacts", "Pack an artifact root or run id from this list.", "luotsi artifacts pack <artifact-root-or-run-id>")
+            ]));
+    }
+
     public Task<ArtifactPackResult> PackAsync(string target, string? searchRoot, string? output, bool force)
     {
         var artifactRoot = ResolveArtifactRoot(target, searchRoot);
@@ -118,9 +148,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             return target;
         }
 
-        var baseRoot = string.IsNullOrWhiteSpace(searchRoot)
-            ? Path.Combine(_fileSystem.GetTempPath(), "luotsi")
-            : searchRoot;
+        var baseRoot = ResolveSearchRoot(searchRoot);
         if (!_fileSystem.DirectoryExists(baseRoot))
         {
             throw new UsageException($"Artifact root '{target}' does not exist, and search root '{baseRoot}' does not exist.");
@@ -140,6 +168,57 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             _ => throw new UsageException($"Artifact run id '{target}' matched multiple roots under '{baseRoot}'. Use the full artifact root path.")
         };
     }
+
+    private ArtifactListEntryResult CreateListEntry(string artifactRoot)
+    {
+        var files = GetArtifactFiles(artifactRoot);
+        return new ArtifactListEntryResult(
+            Path.GetFileName(Path.GetFullPath(artifactRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
+            artifactRoot,
+            files.Length,
+            _fileSystem.FileExists(Path.Join(artifactRoot, HtmlIndexFileName)),
+            _fileSystem.FileExists(Path.Join(artifactRoot, MarkdownIndexFileName)),
+            files.Any(static file => string.Equals(Path.GetFileName(file), "session-timeline.jsonl", StringComparison.OrdinalIgnoreCase)),
+            files.Any(static file => string.Equals(Path.GetFileName(file), "session-replay.json", StringComparison.OrdinalIgnoreCase)),
+            $"luotsi artifacts open {Quote(artifactRoot)}",
+            $"luotsi artifacts pack {Quote(artifactRoot)}");
+    }
+
+    private string[] ResolveArtifactRootCandidates(string baseRoot)
+    {
+        var fullBase = Path.GetFullPath(baseRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var files = _fileSystem.GetFiles(baseRoot, "*", SearchOption.AllDirectories);
+        if (files.Any(file => string.Equals(Path.GetDirectoryName(file)?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), fullBase, StringComparison.OrdinalIgnoreCase)))
+        {
+            return [baseRoot];
+        }
+
+        return files
+            .Select(file => ResolveDirectChildRoot(fullBase, file))
+            .Where(static root => !string.IsNullOrWhiteSpace(root))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray()!;
+    }
+
+    private static string? ResolveDirectChildRoot(string fullBase, string file)
+    {
+        var fullFile = Path.GetFullPath(file);
+        if (!fullFile.StartsWith(fullBase + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
+            !fullFile.StartsWith(fullBase + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var relative = Path.GetRelativePath(fullBase, fullFile);
+        var firstSegment = relative.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], 2, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        return string.IsNullOrWhiteSpace(firstSegment) ? null : Path.Join(fullBase, firstSegment);
+    }
+
+    private string ResolveSearchRoot(string? searchRoot) =>
+        string.IsNullOrWhiteSpace(searchRoot)
+            ? Path.Combine(_fileSystem.GetTempPath(), "luotsi")
+            : searchRoot;
 
     private static string ResolveOutputPath(string artifactRoot, string? output)
     {
@@ -190,6 +269,23 @@ internal sealed record ArtifactOpenResult(
     bool DryRun,
     int FileCount,
     IReadOnlyList<ArtifactRecommendedCommandResult> RecommendedCommands);
+
+internal sealed record ArtifactListResult(
+    string SearchRoot,
+    int Count,
+    IReadOnlyList<ArtifactListEntryResult> Entries,
+    IReadOnlyList<ArtifactRecommendedCommandResult> RecommendedCommands);
+
+internal sealed record ArtifactListEntryResult(
+    string RunId,
+    string ArtifactRoot,
+    int FileCount,
+    bool HasHtmlIndex,
+    bool HasMarkdownIndex,
+    bool HasTimeline,
+    bool HasReplayMetadata,
+    string OpenCommand,
+    string PackCommand);
 
 internal sealed record ArtifactPackResult(
     string ArtifactRoot,
