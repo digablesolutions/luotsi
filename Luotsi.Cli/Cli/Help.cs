@@ -226,6 +226,12 @@ Examples:
   luotsi replay scenario-draft --artifacts artifacts/20260518-100000-inspect --output scenarios/draft.json --write-markdown
   luotsi replay search --artifacts artifacts/20260518-100000-run --contains "not visible"
 
+Output:
+  Replay commands normally return the standard command envelope. replay
+  summarize, timeline, and graph can use --format json|jsonl for raw machine
+  exports. Raw --format modes cannot be combined with --human, --quiet, --json,
+  or --console-output because those flags control envelope presentation.
+
 Notes:
   Replay open is the canonical replay front door: it refreshes
   index.html/index.md, opens the artifact browser, and returns session counts,
@@ -324,6 +330,7 @@ Usage:
              [--claim-device] [--owner <name>] [--ttl-sec 3600]
              [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>]
              [--capture-on failure|never] [--attach-artifacts never|on-failure|always]
+             [--progress auto|line|plain|quiet|jsonl]
 
 Examples:
   luotsi run --path scenarios --device emulator-5554 --report-junit junit.xml
@@ -334,6 +341,14 @@ Examples:
 Artifacts:
   Runs can emit JSONL lifecycle events, JSON summaries, JUnit XML, failure
   bundles, screenshots, recordings, and a browsable artifact index.
+
+Progress:
+  Run prints progress to stderr by default and keeps the final command envelope
+  on stdout. Use --progress quiet for log-heavy CI, --progress line for compact
+  one-line events, --progress plain for human text, or --progress jsonl for a
+  typed JSONL progress stream on stderr. --quiet also selects quiet progress
+  unless --progress quiet is supplied explicitly. --events-jsonl remains the
+  durable artifact event stream.
 
 Failure modes:
   scenarioRunEnded is emitted even when parsing, ADB readiness, install, or a
@@ -366,6 +381,7 @@ Usage:
   luotsi view --device <adb serial> [--profile <name>] [--preset safe|balanced|high-quality|low-latency]
               [--capture-backend auto|screenrecord|mediaprojection] [--decoder ffmpeg|wmf]
               [--read-only] [--headless] [--record <file>]
+              [-o|--output human|json|jsonl] [--json] [--quiet]
   luotsi view setup --device <adb serial> [--dry-run]
   luotsi view-doctor --device <adb serial> [--fix]
   luotsi reconnect [--profile <name>] [--device <adb serial> | --join-share <host:port>]
@@ -379,6 +395,13 @@ Artifacts:
   View can record MP4 output, capture screenshots from the window, and write
   runtime diagnostic events when decoder, helper, transport, or projection
   startup fails.
+
+Output:
+  View prints a human startup checklist by default. Use -o jsonl, --output
+  jsonl, or --json to stream the raw event bus to stdout for automation. View
+  treats -o json as JSONL because the live event stream is line-oriented. Use
+  --quiet to print only diagnostics and errors. Session events are still
+  written to the artifact timeline either way.
 
 Failure modes:
   If startup fails, Luotsi tries to print one actionable next command such as
@@ -498,8 +521,8 @@ Command groups:
     wireless-connect [--endpoint <host:port> | --service <mdns-service>] [--save-profile <name>]
 
   Live view and profiles
-    view (--device <adb serial> | --join-share <host:port> | --last) [--profile <name>] [--save-profile <name>] [--share-bind <host:port>] [--preset safe|balanced|high-quality|low-latency] [--defaults] [--read-only] [--always-on-top] [--codec h264|h265] [--decoder ffmpeg|wmf] [--capture-backend auto|screenrecord|mediaprojection] [--headless] [--record <file>] [--stats-interval-ms <ms>] [--renderer-stats-interval-ms <ms>]
-    reconnect [--profile <name>] [--device <adb serial> | --join-share <host:port>] [--save-profile <name>] [--share-bind <host:port>] [--preset safe|balanced|high-quality|low-latency] [--defaults] [--read-only] [--always-on-top] [--codec h264|h265] [--decoder ffmpeg|wmf] [--capture-backend auto|screenrecord|mediaprojection] [--headless] [--record <file>] [--stats-interval-ms <ms>] [--renderer-stats-interval-ms <ms>]
+    view (--device <adb serial> | --join-share <host:port> | --last) [--profile <name>] [--save-profile <name>] [--share-bind <host:port>] [--preset safe|balanced|high-quality|low-latency] [--defaults] [--read-only] [--always-on-top] [--codec h264|h265] [--decoder ffmpeg|wmf] [--capture-backend auto|screenrecord|mediaprojection] [--headless] [--record <file>] [--stats-interval-ms <ms>] [--renderer-stats-interval-ms <ms>] [-o|--output human|json|jsonl] [--json] [--quiet]
+    reconnect [--profile <name>] [--device <adb serial> | --join-share <host:port>] [--save-profile <name>] [--share-bind <host:port>] [--preset safe|balanced|high-quality|low-latency] [--defaults] [--read-only] [--always-on-top] [--codec h264|h265] [--decoder ffmpeg|wmf] [--capture-backend auto|screenrecord|mediaprojection] [--headless] [--record <file>] [--stats-interval-ms <ms>] [--renderer-stats-interval-ms <ms>] [-o|--output human|json|jsonl] [--json] [--quiet]
     view setup --device <adb serial> [--profile <name>] [--preset safe|balanced|high-quality|low-latency] [--defaults] [--decoder ffmpeg|wmf] [--capture-backend auto|screenrecord|mediaprojection] [--dry-run]
     view-setup --device <adb serial> [--profile <name>] [--preset safe|balanced|high-quality|low-latency] [--defaults] [--decoder ffmpeg|wmf] [--capture-backend auto|screenrecord|mediaprojection] [--dry-run]
     view-doctor --device <adb serial> [--profile <name>] [--preset safe|balanced|high-quality|low-latency] [--defaults] [--read-only] [--decoder ffmpeg|wmf] [--capture-backend auto|screenrecord|mediaprojection] [--record <file>] [--fix]
@@ -560,8 +583,8 @@ Command groups:
     scenario-list --path <scenario-file-or-directory-or-glob> [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>]
     scenario-validate (--file <scenario.json> | --path <scenario-file-or-directory-or-glob>) [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>]
     scenario-explain --file <scenario.json>
-    run --file <scenario.json> [--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always]
-    run --path <scenario-file-or-directory-or-glob> [--dry-run|--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>] [--shard-count <n> --shard-index <zero-based>] [--shard-strategy index|hash]
+    run --file <scenario.json> [--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--progress auto|line|plain|quiet|jsonl]
+    run --path <scenario-file-or-directory-or-glob> [--dry-run|--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--progress auto|line|plain|quiet|jsonl] [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>] [--shard-count <n> --shard-index <zero-based>] [--shard-strategy index|hash]
 
 Common options:
   --device <adb serial>
@@ -571,6 +594,12 @@ Common options:
   --adb-timeout-sec <seconds>  default 120, 0 disables; env LUOTSI_ADB_TIMEOUT_SEC
   --artifacts <directory>
   --poll-artifacts <final|per-attempt|none>
+  -o, --output <mode>          view: human|json|jsonl
+  --human                      one-shot commands: print a concise text envelope
+  --console-output <human|json|quiet>
+                               one-shot commands: choose terminal envelope mode
+  --json                       view: stream JSONL events; one-shot commands: JSON envelope
+  --quiet                      view: print only diagnostics/errors; one-shot: suppress success output
   --version                    print the Luotsi version and exit
 
 Design:

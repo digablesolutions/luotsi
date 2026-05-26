@@ -44,7 +44,7 @@ Skip curated awesome-lists for Luotsi. Focus on directories and indexes where ma
 
 When submitting, reuse the same compact description so listings do not drift.
 
-> Luotsi is a host-driven Android automation CLI for AI agents, engineers, and CI. It runs against real devices over adb, exposes structured JSON and JSONL sessions, supports live view and scenario playbooks, and preserves replay artifacts for later triage.
+> Luotsi is a host-driven Android automation CLI for AI agents, engineers, and CI. It runs against real devices over adb, exposes structured JSON, optional JSONL session streams, live view, scenario playbooks, and replay artifacts for later triage.
 
 ## Community and channel syndication
 
@@ -60,7 +60,7 @@ Use channels that can plausibly send technical evaluators to the docs hub or rel
 
 ### Agent-builder angle
 
-Luotsi gives agent loops a real Android device surface without inventing another control plane: `inspect` and `view` emit JSONL, `run` writes artifact-rich scenario outputs, and `replay` lets you triage after the device session ends.
+Luotsi gives agent loops a real Android device surface without inventing another control plane: `inspect` emits JSONL, `view -o jsonl` or `view --json` exposes the live-view event stream when automation needs it, `run` writes artifact-rich scenario outputs, and `replay` lets you triage after the device session ends.
 
 ### Mobile engineering angle
 

@@ -21,9 +21,11 @@ Most commands return a single final JSON envelope with:
 
 This is the default contract for CLI commands, including scenario execution unless you explicitly request raw replay output modes.
 
+For local terminal readability, one-shot commands also accept `--human` or `--console-output human`. That mode prints a concise text summary and artifact path, while the default and `--json` keep the full machine-readable envelope. Use `--quiet` or `--console-output quiet` to suppress successful command output while still printing failure envelopes. Luotsi does not use a global `--output` switch for this because some commands already use `--output` for file paths.
+
 ## Long-lived session mode
 
-`inspect` and `view` are JSONL sessions instead of one final object.
+`inspect` is a JSONL session instead of one final object. `view` prints human startup/runtime progress by default, can stream raw JSONL events with `view -o jsonl`, `view --output jsonl`, or `view --json`, and always writes its JSONL timeline artifact for replay.
 
 Typical inspect events:
 
@@ -60,6 +62,8 @@ Not every session emits every event family. Startup diagnostics appear during br
 ## Replay export exception
 
 `replay summarize --format json|jsonl` and `replay timeline --format json|jsonl` are intentional exceptions. They can emit raw replay output for CI-oriented consumers instead of the normal envelope.
+
+Raw replay `--format` modes cannot be combined with `--human`, `--quiet`, `--json`, or `--console-output` because those flags control envelope presentation, while `--format` replaces the envelope entirely.
 
 Replay commands that keep the normal envelope put their command-specific contract under `data`:
 

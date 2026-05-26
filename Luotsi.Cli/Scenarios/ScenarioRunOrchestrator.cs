@@ -28,7 +28,7 @@ internal sealed class ScenarioRunOrchestrator(
         ArgumentNullException.ThrowIfNull(runner);
         ArgumentNullException.ThrowIfNull(configuration);
 
-        await using var runEvents = _scenarioRunEventCoordinatorFactory.Create(configuration.EventsJsonlPath, artifacts, file);
+        await using var runEvents = _scenarioRunEventCoordinatorFactory.Create(configuration.EventsJsonlPath, artifacts, file, configuration.ProgressMode);
         var runReports = _scenarioRunReportCoordinatorFactory.Create(configuration, artifacts);
         return await RunFileCoreAsync(
             file,
@@ -45,7 +45,7 @@ internal sealed class ScenarioRunOrchestrator(
         ArgumentNullException.ThrowIfNull(runner);
         ArgumentNullException.ThrowIfNull(configuration);
 
-        await using var runEvents = _scenarioRunEventCoordinatorFactory.Create(configuration.EventsJsonlPath, artifacts, query.Path);
+        await using var runEvents = _scenarioRunEventCoordinatorFactory.Create(configuration.EventsJsonlPath, artifacts, query.Path, configuration.ProgressMode);
         var runReports = _scenarioRunReportCoordinatorFactory.Create(configuration, artifacts);
         return await RunPathCoreAsync(
             query,
@@ -60,7 +60,7 @@ internal sealed class ScenarioRunOrchestrator(
         ArgumentException.ThrowIfNullOrWhiteSpace(file);
         ArgumentNullException.ThrowIfNull(configuration);
 
-        await using var runEvents = _scenarioRunEventCoordinatorFactory.Create(configuration.EventsJsonlPath);
+        await using var runEvents = _scenarioRunEventCoordinatorFactory.Create(configuration.EventsJsonlPath, progressMode: configuration.ProgressMode);
         var runReports = _scenarioRunReportCoordinatorFactory.Create(configuration);
         return await ExecuteFileAsync(
             file,
@@ -74,7 +74,7 @@ internal sealed class ScenarioRunOrchestrator(
         ArgumentNullException.ThrowIfNull(query);
         ArgumentNullException.ThrowIfNull(configuration);
 
-        await using var runEvents = _scenarioRunEventCoordinatorFactory.Create(configuration.EventsJsonlPath);
+        await using var runEvents = _scenarioRunEventCoordinatorFactory.Create(configuration.EventsJsonlPath, progressMode: configuration.ProgressMode);
         var runReports = _scenarioRunReportCoordinatorFactory.Create(configuration);
         var preparedPlan = await PlanPathAsync(query, runEvents, runReports, () => _runPlanner.CreateAsync(query)).ConfigureAwait(false);
         return await ExecuteBatchAsync(

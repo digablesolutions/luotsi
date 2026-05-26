@@ -11,7 +11,7 @@
 
 # Luotsi
 
-Luotsi is a host-driven CLI for Android device automation, inspection, live view, and replay. It runs on the engineer or CI machine, talks to real devices over ADB, and returns structured JSON or JSONL plus artifacts. It is aimed at AI agent builders, mobile engineers, and device-lab or CI workflows that need machine-readable state instead of browser-only mocks. Orchestration, policy, and diagnostics stay on the host; the on-device helper stays thin and purpose-built.
+Luotsi is a host-driven CLI for Android device automation, inspection, live view, and replay. It runs on the engineer or CI machine, talks to real devices over ADB, and returns structured JSON, optional JSONL session streams, and artifacts. It is aimed at AI agent builders, mobile engineers, and device-lab or CI workflows that need machine-readable state instead of browser-only mocks. Orchestration, policy, and diagnostics stay on the host; the on-device helper stays thin and purpose-built.
 
 Docs site: [https://digablesolutions.github.io/luotsi/](https://digablesolutions.github.io/luotsi/)
 
@@ -27,7 +27,7 @@ Start here:
 
 ## Why Luotsi
 
-- Agent-readable sessions. `inspect` and `view` emit structured JSONL events that agent loops and tooling can consume directly.
+- Agent-readable sessions. `inspect` emits structured JSONL directly, and `view -o jsonl` / `view --json` exposes the same raw event stream while every view session writes a JSONL timeline artifact.
 - Agent-builder guidance. The public docs now include a dedicated AI workflow guide that maps `inspect`, `view`, `run`, and `replay` to the job each surface is meant to solve.
 - Real-device focus. Luotsi operates over ADB against physical Android devices instead of browser-only surrogates.
 - Replayable failures. Scenario runs leave screenshots, hierarchy captures, logcat, telemetry, and replay bundles for later triage.
@@ -45,10 +45,10 @@ Start here:
 
 ## How it works
 
-1. **Run a command** — commands return one JSON envelope with `schema`, `ok`, `command`, `started_at`, `ended_at`, `data`, `artifacts`, `provenance`, and `error` by default. `replay open` is the replay front door: it refreshes the local artifact browser and returns the recommended next action plus commands into capsule, timeline, scrub, graph, search, scenario draft, and clustering. `replay summarize --format json|jsonl` can emit raw machine-readable replay summaries for CI without the envelope wrapper, `replay capsule` writes a replay bundle summary, `replay graph` emits an agent-focused semantic graph with filters, insights, and next actions, `replay search` finds text across replay timelines and artifacts, `replay scenario-draft` turns inspect action history into a starter scenario, and failed scenario runs now carry an embedded `failure_capsule` summary so replay consumers do not need a second artifact read just to discover linked reports and failure artifacts. No third-party device server required.
+1. **Run a command** — commands return one JSON envelope with `schema`, `ok`, `command`, `started_at`, `ended_at`, `data`, `artifacts`, `provenance`, and `error` by default. `run --progress auto|line|plain|quiet|jsonl` keeps scenario progress on stderr while stdout remains parseable. `replay open` is the replay front door: it refreshes the local artifact browser and returns the recommended next action plus commands into capsule, timeline, scrub, graph, search, scenario draft, and clustering. `replay summarize --format json|jsonl` can emit raw machine-readable replay summaries for CI without the envelope wrapper, `replay capsule` writes a replay bundle summary, `replay graph` emits an agent-focused semantic graph with filters, insights, and next actions, `replay search` finds text across replay timelines and artifacts, `replay scenario-draft` turns inspect action history into a starter scenario, and failed scenario runs now carry an embedded `failure_capsule` summary so replay consumers do not need a second artifact read just to discover linked reports and failure artifacts. No third-party device server required.
 2. **Run a scenario** — drive multi-step device flows from a small JSON playbook. Steps are validated, templated, and timed; failures produce artifact bundles automatically.
 3. **Inspect mode** — open a JSONL session for agent-driven exploration. Luotsi emits structured JSONL events (`session_started`, `screen_snapshot`, `screen_delta`, `command_result`, `session_ended`, `protocol_error`, `session_error`) so an agent can reason about the UI and act without a scenario file.
-4. **Live view** — stream a mirrored device display to a local SDL window with an operator control layer, hotkeys, and JSONL events for agents consuming stream state.
+4. **Live view** — stream a mirrored device display to a local SDL window with an operator control layer, hotkeys, human startup progress, and JSONL events for agents consuming stream state.
 5. **Telemetry** — parse structured `LUOTSI_DEVICE_TELEMETRY` events from logcat for semantic waits and assertions.
 6. **CI-friendly** — same binary for engineers, CI pipelines, and agent-driven flows, with default envelopes plus optional raw replay summary output for CI consumers.
 
@@ -227,7 +227,7 @@ Quick reference. Start with the public [CLI command groups](https://digablesolut
 
 | Command | Description |
 |---|---|
-| `view --device <serial> [options]` | Open live streaming mirror (JSONL session) |
+| `view --device <serial> [options]` | Open live streaming mirror; human output by default, `-o jsonl` / `--json` for raw events |
 | `view --profile <name>` | Open view using a saved profile |
 | `view --last` | Reopen the last successful view session |
 | `reconnect` | Reconnect using the last successful profile |
@@ -298,7 +298,7 @@ The public [CLI command groups](https://digablesolutions.github.io/luotsi/docs/r
 
 ## View session
 
-`view` is a long-lived JSONL session that mirrors a connected device to a local SDL window. See the public [Live View guide](https://digablesolutions.github.io/luotsi/docs/core-workflows/live-view/) for the main operator-facing reference.
+`view` is a long-lived interactive session that mirrors a connected device to a local SDL window. It prints human progress by default, supports `-o jsonl` / `--json` for raw events, and always records the JSONL timeline in artifacts. See the public [Live View guide](https://digablesolutions.github.io/luotsi/docs/core-workflows/live-view/) for the main operator-facing reference.
 
 Key flags: `--preset <name>` (low-latency / balanced / high-quality / safe), `--capture-backend <auto|screenrecord|mediaprojection>`, `--save-profile <name>`, `--record <file>`, `--share-bind <host:port>`, `--read-only`.
 
@@ -355,7 +355,9 @@ For a full device walkthrough with screenshots, reports, and troubleshooting not
 
 ## Output format
 
-Every command returns a single JSON envelope:
+One-shot commands return a single JSON envelope by default. Use `--human` or `--console-output human` when you want a concise terminal summary, `--quiet` or `--console-output quiet` when success output should be suppressed, and use `--json` or omit the human flag when a script needs the full envelope. Quiet mode still prints failure envelopes so diagnostics are not lost. Luotsi does not currently use a global `--output` switch for this because some commands already use `--output` for file paths.
+
+Default JSON envelope:
 
 ```json
 {

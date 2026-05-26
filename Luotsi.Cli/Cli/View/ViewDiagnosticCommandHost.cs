@@ -39,12 +39,12 @@ internal sealed class ViewDiagnosticCommandHost(
             var result = repairSteps.Count == 0
                 ? setup
                 : setup with {Steps = repairSteps.Concat(setup.Steps).ToArray()};
-            _envelopeWriter.WriteSuccess(command.EnvelopeCommand, started, result, artifacts.ToData());
+            _envelopeWriter.WriteSuccess(command.EnvelopeCommand, started, result, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
             return result.Ready ? 0 : 1;
         }
 
         var report = await _viewDoctorFactory.Create(runner).DiagnoseAsync(viewOptions).ConfigureAwait(false);
-        _envelopeWriter.WriteSuccess(command.EnvelopeCommand, started, report, artifacts.ToData());
+        _envelopeWriter.WriteSuccess(command.EnvelopeCommand, started, report, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
         return 0;
     }
 

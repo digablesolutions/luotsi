@@ -68,6 +68,27 @@ internal sealed class JsonlScenarioEventSink : IScenarioEventSink
     public async ValueTask DisposeAsync() => await _stream.DisposeAsync().ConfigureAwait(false);
 }
 
+internal sealed class CompositeScenarioEventSink(IReadOnlyList<IScenarioEventSink> sinks) : IScenarioEventSink
+{
+    private readonly IReadOnlyList<IScenarioEventSink> _sinks = sinks ?? throw new ArgumentNullException(nameof(sinks));
+
+    public async Task EmitAsync(ScenarioEvent scenarioEvent)
+    {
+        foreach (var sink in _sinks)
+        {
+            await sink.EmitAsync(scenarioEvent).ConfigureAwait(false);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        foreach (var sink in _sinks)
+        {
+            await sink.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+}
+
 internal sealed class ScenarioReplayEventSink(IScenarioEventSink innerSink, SessionReplayArtifacts replayArtifacts) : IScenarioEventSink
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -90,17 +111,36 @@ internal sealed class ScenarioReplayEventSink(IScenarioEventSink innerSink, Sess
     public async ValueTask DisposeAsync() => await _innerSink.DisposeAsync().ConfigureAwait(false);
 }
 
-internal sealed class ScenarioRunEventCoordinatorFactory(IFileSystem fileSystem, TimeProvider timeProvider, BuildProvenance provenance)
+internal sealed class ScenarioRunEventCoordinatorFactory(IFileSystem fileSystem, TimeProvider timeProvider, BuildProvenance provenance, IConsoleIo console)
 {
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     private readonly BuildProvenance _provenance = provenance ?? throw new ArgumentNullException(nameof(provenance));
+    private readonly IConsoleIo _console = console ?? throw new ArgumentNullException(nameof(console));
 
-    public ScenarioRunEventCoordinator Create(string? path, ArtifactSession? replayArtifacts = null, string? replayTarget = null)
+    public ScenarioRunEventCoordinator Create(
+        string? path,
+        ArtifactSession? replayArtifacts = null,
+        string? replayTarget = null,
+        ScenarioProgressMode progressMode = ScenarioProgressMode.Plain)
     {
-        IScenarioEventSink sink = string.IsNullOrWhiteSpace(path)
-            ? NullScenarioEventSink.Instance
-            : new JsonlScenarioEventSink(_fileSystem, path);
+        var sinks = new List<IScenarioEventSink>();
+        if (!string.IsNullOrWhiteSpace(path))
+        {
+            sinks.Add(new JsonlScenarioEventSink(_fileSystem, path));
+        }
+
+        if (progressMode != ScenarioProgressMode.Quiet)
+        {
+            sinks.Add(new ConsoleScenarioProgressEventSink(_console, progressMode));
+        }
+
+        IScenarioEventSink sink = sinks.Count switch
+        {
+            0 => NullScenarioEventSink.Instance,
+            1 => sinks[0],
+            _ => new CompositeScenarioEventSink(sinks)
+        };
 
         SessionReplayArtifacts? replay = null;
         if (replayArtifacts is not null)

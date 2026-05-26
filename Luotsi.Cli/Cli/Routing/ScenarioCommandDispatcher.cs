@@ -9,11 +9,13 @@ internal sealed class ScenarioCommandDispatcher(
     ScenarioRunPlanner runPlanner,
     ScenarioRunOrchestrator scenarioRunOrchestrator,
     ScenarioAuthoringService authoringService,
+    IEnvironmentVariables environment,
     LabLeaseStore? labLeaseStore = null)
 {
     private readonly ScenarioRunPlanner _runPlanner = runPlanner ?? throw new ArgumentNullException(nameof(runPlanner));
     private readonly ScenarioRunOrchestrator _scenarioRunOrchestrator = scenarioRunOrchestrator ?? throw new ArgumentNullException(nameof(scenarioRunOrchestrator));
     private readonly ScenarioAuthoringService _authoringService = authoringService ?? throw new ArgumentNullException(nameof(authoringService));
+    private readonly IEnvironmentVariables _environment = environment ?? throw new ArgumentNullException(nameof(environment));
     private readonly LabLeaseStore? _labLeaseStore = labLeaseStore;
 
     public async Task<ScenarioListResult> ListAsync(CliOptions options)
@@ -57,7 +59,7 @@ internal sealed class ScenarioCommandDispatcher(
         ArgumentNullException.ThrowIfNull(artifacts);
         ArgumentNullException.ThrowIfNull(options);
 
-        var configuration = ScenarioRunConfiguration.Create(options);
+        var configuration = ScenarioRunConfiguration.Create(options, _environment);
 
         if (!ScenarioQueryFactory.UsesCatalogExecution(options))
         {

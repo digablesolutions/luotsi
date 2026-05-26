@@ -18,7 +18,7 @@ flowchart LR
     CLI --> App[App / CliOptions / Help]
     App --> Commands[One-shot commands]
     App --> Inspect[InspectSession JSONL]
-    App --> View[ViewSession JSONL]
+    App --> View[ViewSession human or JSONL]
 
     Commands --> Host[IDeviceHost]
     Inspect --> Host
@@ -45,8 +45,8 @@ flowchart LR
 ### Command layer
 
 `Luotsi.Cli/Cli/` owns argument parsing, command dispatch, help text, JSON
-envelope formatting for one-shot commands, and JSONL formatting for long-lived
-sessions.
+envelope formatting for one-shot commands, and console/output formatting for
+long-lived sessions.
 
 ### Device host layer
 
@@ -99,7 +99,7 @@ sequenceDiagram
     User->>Window: click
     Window->>CLI: pointer event
     CLI->>Host: TapPointAsync(relative coords)
-    CLI-->>User: view_started / view_ended JSONL events
+    CLI-->>User: human progress or view_started / view_ended JSONL events
     Note over Share,Backend: Late-joining observers receive cached bootstrap packets\n(config plus latest keyframe) so decoding can start immediately.
 ```
 

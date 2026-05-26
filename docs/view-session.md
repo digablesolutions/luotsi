@@ -1,9 +1,11 @@
 # View Session
 
-`view` opens a long-lived JSONL session that mirrors a connected Android device to a local SDL window. It emits structured events on stdout so agents and CI can consume stream state without scraping the UI.
+`view` opens a long-lived session that mirrors a connected Android device to a local SDL window. By default it prints a compact human startup checklist and leaves the full machine-readable event stream in `session-timeline.jsonl`. Use `-o jsonl`, `--output jsonl`, or `--json` when an agent or CI job needs raw structured events on stdout.
 
 ```bash
 luotsi view --device <serial> --preset safe --decoder ffmpeg --record capture.mp4
+luotsi view --device <serial> -o jsonl
+luotsi view --device <serial> --json
 luotsi view --profile desk
 luotsi view --last
 ```
@@ -59,8 +61,21 @@ Every successful `view` launch refreshes the special `last` profile. `reconnect`
 
 | Flag | Default | Description |
 |---|---|---|
-| `--stats-interval-ms <ms>` | `1000` | Cadence for JSONL `view_stats` events (0 = disabled) |
+| `--stats-interval-ms <ms>` | `1000` | Cadence for `view_stats` events in the session timeline and JSONL stdout stream (0 = disabled) |
 | `--renderer-stats-interval-ms <ms>` | `0` | Cadence for renderer/title stats updates (0 = every update) |
+
+---
+
+## Console Output
+
+| Flag | Behavior |
+|---|---|
+| *(default)* | Human checklist for startup, fallback, diagnostics, artifact location, and shutdown |
+| `-o jsonl`, `--output jsonl` | Stream the raw view event bus to stdout |
+| `-o json`, `--output json`, `--json` | Alias for JSONL stdout because live view is a line-oriented stream |
+| `--quiet` | Print only diagnostics and errors |
+
+All modes continue to write the structured session timeline and replay metadata under the artifact root.
 
 ---
 
@@ -95,11 +110,13 @@ Plain text input and common navigation/editing keys are forwarded to the device.
 
 For CI and agent workflows, `luotsi replay open --artifacts <artifact-root>` is the front door for that replay metadata: it refreshes the local artifact browser and returns session counts, primary failure, recommended next action, and commands into capsule, timeline, scrub, graph, search, scenario draft, and clustering. `luotsi replay summarize --artifacts <artifact-root>` reads the same replay metadata directly for machine consumers. By default it returns the condensed timeline as a normal JSON command envelope. `--format json` writes the bare summary object, and `--format jsonl` writes a summary header line followed by one session line per replay session. The summary includes replay workflow commands that route into `replay open`, `replay capsule`, `replay scrub`, `replay graph`, and repeated-failure clustering when failures are present. It also includes reconnect/share churn and the latest `view_stats` snapshot when those events are present in the timeline. When the artifact root also contains a failed scenario run, the session summary exposes `failure_capsule_path` plus an embedded `failure_capsule` object that links reports, screenshots, logcat, hierarchy, screen-state captures, and failure bundles.
 
-The `view_started` JSONL event includes `artifacts.artifact_root`; `view_screenshot_captured`, `view_recording_started`, and `view_recording_stopped` include the file or record path that was written.
+With JSONL stdout enabled, the `view_started` event includes `artifacts.artifact_root`; `view_screenshot_captured`, `view_recording_started`, and `view_recording_stopped` include the file or record path that was written. The same events are always recorded in `session-timeline.jsonl`.
 
 ---
 
 ## JSONL Events
+
+These events are always written to `session-timeline.jsonl` and are also streamed to stdout with `-o jsonl`, `--output jsonl`, or `--json`.
 
 | Event | When |
 |---|---|
@@ -145,7 +162,7 @@ luotsi view --device <serial> --share-bind 0.0.0.0:9000
 luotsi view --join-share 192.168.0.10:9000
 ```
 
-The host session relays the private binary packet protocol and reports the bound endpoint in JSONL via `view_share_started`.
+The host session relays the private binary packet protocol and reports the bound endpoint via `view_share_started`.
 
 Joined share sessions are forced into read-only observer mode. They reconnect to the shared TCP source rather than talking to adb directly.
 

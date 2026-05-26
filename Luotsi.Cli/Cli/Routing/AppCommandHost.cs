@@ -23,7 +23,7 @@ internal sealed class AppCommandHost(
         ArgumentNullException.ThrowIfNull(artifacts);
 
         var profiles = await _profileCoordinator.ListAsync().ConfigureAwait(false);
-        _envelopeWriter.WriteSuccess(options.Command!, started, new ViewProfileListResult(profiles), artifacts.ToData());
+        _envelopeWriter.WriteSuccess(options.Command!, started, new ViewProfileListResult(profiles), artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
         return 0;
     }
 
@@ -34,7 +34,7 @@ internal sealed class AppCommandHost(
 
         var profileName = options.Require("name");
         var deleted = await _profileCoordinator.DeleteAsync(profileName).ConfigureAwait(false);
-        _envelopeWriter.WriteSuccess(options.Command!, started, new ViewProfileDeleteResult(profileName, deleted), artifacts.ToData());
+        _envelopeWriter.WriteSuccess(options.Command!, started, new ViewProfileDeleteResult(profileName, deleted), artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
         return 0;
     }
 
@@ -51,7 +51,7 @@ internal sealed class AppCommandHost(
         ArgumentNullException.ThrowIfNull(artifacts);
 
         var data = await _commandDispatcher.ExecuteAsync(options.Command!, options, adbExecutable, runner, artifacts).ConfigureAwait(false);
-        _envelopeWriter.WriteSuccess(options.Command!, started, data, artifacts.ToData());
+        _envelopeWriter.WriteSuccess(options.Command!, started, data, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
         return _exitCodeResolver.Resolve(data);
     }
 }

@@ -25,6 +25,7 @@ public sealed class ScenarioRunConfigurationTests
         Assert.Equal("/tmp/junit.xml", configuration.JUnitReportPath);
         Assert.Equal(ScenarioFailureArtifactCapturePolicy.Never, configuration.FailureArtifactCapturePolicy);
         Assert.Equal(ScenarioArtifactAttachmentPolicy.Always, configuration.ArtifactAttachmentPolicy);
+        Assert.Equal(ScenarioProgressMode.Plain, configuration.ProgressMode);
     }
 
     [Fact]
@@ -35,5 +36,67 @@ public sealed class ScenarioRunConfigurationTests
         var error = Assert.Throws<UsageException>(() => ScenarioRunConfiguration.Create(options));
 
         Assert.Contains("--attach-artifacts", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_Parses_Progress_Mode()
+    {
+        var options = CliOptions.Parse(["run", "--progress", "jsonl"]);
+
+        var configuration = ScenarioRunConfiguration.Create(options);
+
+        Assert.Equal(ScenarioProgressMode.Jsonl, configuration.ProgressMode);
+    }
+
+    [Fact]
+    public void Create_Quiet_Flag_Uses_Quiet_Progress_Mode()
+    {
+        var options = CliOptions.Parse(["run", "--quiet"]);
+
+        var configuration = ScenarioRunConfiguration.Create(options);
+
+        Assert.Equal(ScenarioProgressMode.Quiet, configuration.ProgressMode);
+    }
+
+    [Fact]
+    public void Create_Quiet_Flag_Allows_Explicit_Quiet_Progress_Mode()
+    {
+        var options = CliOptions.Parse(["run", "--quiet", "--progress", "quiet"]);
+
+        var configuration = ScenarioRunConfiguration.Create(options);
+
+        Assert.Equal(ScenarioProgressMode.Quiet, configuration.ProgressMode);
+    }
+
+    [Fact]
+    public void Create_Quiet_Flag_Rejects_Conflicting_Progress_Mode()
+    {
+        var options = CliOptions.Parse(["run", "--quiet", "--progress", "line"]);
+
+        var error = Assert.Throws<UsageException>(() => ScenarioRunConfiguration.Create(options));
+
+        Assert.Contains("--quiet", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_Auto_Progress_Uses_Line_Mode_In_CI()
+    {
+        var options = CliOptions.Parse(["run"]);
+
+        var configuration = ScenarioRunConfiguration.Create(
+            options,
+            new FakeEnvironmentVariables(new Dictionary<string, string> { ["CI"] = "true" }));
+
+        Assert.Equal(ScenarioProgressMode.Line, configuration.ProgressMode);
+    }
+
+    [Fact]
+    public void Create_Invalid_Progress_Throws_UsageException()
+    {
+        var options = CliOptions.Parse(["run", "--progress", "chatty"]);
+
+        var error = Assert.Throws<UsageException>(() => ScenarioRunConfiguration.Create(options));
+
+        Assert.Contains("--progress", error.Message, StringComparison.Ordinal);
     }
 }

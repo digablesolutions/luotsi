@@ -44,9 +44,10 @@ public interface IViewSessionFactory
 /// <param name="VideoBitRate">Requested video bit rate.</param>
 /// <param name="OverlayScreenState">Whether screen-state overlays are enabled.</param>
 /// <param name="OverlayTelemetry">Whether telemetry overlays are enabled.</param>
-/// <param name="StatsIntervalMs">Minimum interval between emitted JSONL stats updates. Set to zero to disable JSONL stats emission.</param>
+/// <param name="StatsIntervalMs">Minimum interval between emitted stats events. Set to zero to disable stats emission.</param>
 /// <param name="RendererStatsIntervalMs">Minimum interval between forwarded renderer stats updates. Set to zero to forward every renderer stats update.</param>
 /// <param name="CaptureBackend">Requested Android capture backend.</param>
+/// <param name="ConsoleOutput">Console output mode for runtime view events.</param>
 public sealed record ViewOptions(
     string DeviceSelector,
     string AdbExecutable,
@@ -68,7 +69,19 @@ public sealed record ViewOptions(
     bool AlwaysOnTop = false,
     string ScaleMode = "fit",
     string CaptureBackend = ViewCaptureBackends.Auto,
-    TimeSpan? CommandTimeout = null);
+    TimeSpan? CommandTimeout = null,
+    string ConsoleOutput = ViewConsoleOutputModes.Jsonl);
+
+/// <summary>
+/// Live view console output modes.
+/// </summary>
+public static class ViewConsoleOutputModes
+{
+    public const string Human = "human";
+    public const string Json = "json";
+    public const string Jsonl = "jsonl";
+    public const string Quiet = "quiet";
+}
 
 /// <summary>
 /// Android view capture backend names.

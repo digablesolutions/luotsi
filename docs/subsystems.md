@@ -7,7 +7,7 @@ that matches the code currently in the repo.
 
 - `App` dispatches one-shot commands and the two long-lived session modes.
 - One-shot commands return exactly one final JSON envelope.
-- `inspect` and `view` are JSONL sessions with startup and shutdown events.
+- `inspect` is a JSONL session. `view` is an interactive session that prints human progress by default, can stream JSONL with `-o jsonl` or `--json`, and always writes JSONL session timelines to artifacts.
 
 Relevant code:
 
@@ -123,12 +123,12 @@ Relevant code:
   capture-backend policy, adb device visibility, device preflight,
   MediaProjection readiness when requested, and optional recording output
   readiness.
-- Startup and doctor flows emit explicit JSONL startup-phase/diagnostic events
+- Startup and doctor flows emit explicit startup-phase/diagnostic events
   (`view_startup_phase`, `view_diagnostic`) so agents can track readiness
-  progress without parsing console text.
-- Stats cadence is split intentionally: `--stats-interval-ms` controls JSONL
-  `view_stats`, while `--renderer-stats-interval-ms` controls renderer/title
-  update cadence.
+  progress from the artifact timeline or JSONL stdout mode.
+- Stats cadence is split intentionally: `--stats-interval-ms` controls
+  `view_stats` timeline/JSONL events, while `--renderer-stats-interval-ms`
+  controls renderer/title update cadence.
 
 ## Suggested next docs to keep current
 

@@ -1,6 +1,6 @@
 # Command Reference
 
-All commands run on the host machine and return a single JSON envelope unless noted as a JSONL session or as an explicit raw replay output mode.
+All commands run on the host machine and return a single JSON envelope unless noted as an interactive session, an explicit raw replay output mode, or a one-shot command invoked with `--human`, `--quiet`, `--console-output human`, or `--console-output quiet`.
 
 ```
 luotsi [--device <serial> | --device-query <query>] [--platform android] [--adb <path>] [--adb-timeout-sec <n>] <command> [flags]
@@ -82,11 +82,11 @@ When `lab plan` is ready, `recommended_commands` includes both an explicit `lab 
 
 ## View & Profiles
 
-See [view-session.md](view-session.md) for the full view reference (presets, backends, hotkeys, JSONL events, sharing).
+See [view-session.md](view-session.md) for the full view reference (presets, backends, hotkeys, output modes, JSONL events, sharing).
 
 | Command | Description |
 |---|---|
-| `view --device <serial> [options]` | Open live streaming mirror (JSONL session) |
+| `view --device <serial> [options]` | Open live streaming mirror; human output by default, `-o jsonl`/`--json` for raw events |
 | `view --profile <name>` | Open view using a saved profile |
 | `view --last` | Reopen the last successful view session |
 | `reconnect` | Reconnect using the last successful profile |
@@ -231,8 +231,8 @@ Luotsi reads the `LUOTSI_DEVICE_TELEMETRY` logcat marker to parse structured sem
 | `scenario-list --path <scenario-file-or-directory-or-glob> [filters]` | Discover scenario files and report matched names, tags, and actions without executing them |
 | `scenario-validate (--file <path> | --path <path>)` | Validate one or many scenarios without creating a device host |
 | `scenario-explain --file <path>` | Summarize scenario metadata, lifecycle step counts, actions, docs, and suggested commands |
-| `run --device <serial> --file <path>` | Execute one JSON scenario playbook; also supports `--validate-only`, `--events-jsonl`, `--report-json`, `--report-junit`, `--capture-on`, and `--attach-artifacts` |
-| `run --device <serial> --path <scenario-file-or-directory-or-glob>` | Execute one or many scenario files discovered from a file, directory, or glob; supports filtering, `--dry-run`, `--validate-only`, reporting, artifact-policy flags, and sharding |
+| `run --device <serial> --file <path>` | Execute one JSON scenario playbook; also supports `--validate-only`, `--progress`, `--events-jsonl`, `--report-json`, `--report-junit`, `--capture-on`, and `--attach-artifacts` |
+| `run --device <serial> --path <scenario-file-or-directory-or-glob>` | Execute one or many scenario files discovered from a file, directory, or glob; supports filtering, `--dry-run`, `--validate-only`, progress, reporting, artifact-policy flags, and sharding |
 | `inspect --device <serial>` | Open an agent-driven JSONL inspection session |
 
 See [scenarios.md](scenarios.md) for the playbook format and full action reference.
@@ -258,7 +258,7 @@ For command examples, see README [Inspect mode](../README.md#inspect-mode).
 
 ### View mode events
 
-`view` is also a JSONL session. Core lifecycle events include `view_started`, `view_stats`, `view_reconnect_requested`, `view_reconnected`, `view_error`, and `view_ended`, with additional operational events for recording/share/input blocking.
+`view` is an interactive session. It prints human progress by default, streams raw JSONL events with `-o jsonl`, `--output jsonl`, or `--json`, and always writes those events to `session-timeline.jsonl`. `-o json` is accepted as a JSONL alias because live view is a line-oriented stream. Core lifecycle events include `view_started`, `view_stats`, `view_reconnect_requested`, `view_reconnected`, `view_error`, and `view_ended`, with additional operational events for recording/share/input blocking.
 
 See [view-session.md](view-session.md) for the complete event table and operator controls.
 
@@ -270,6 +270,7 @@ Scenario runner flags:
 - `--dry-run` is available only with `run --path`; it returns the selected scenario plan after filtering and sharding without validating or executing it.
 - `--validate-only` and `--dry-run` are mutually exclusive.
 - `--events-jsonl`, `--report-json`, and `--report-junit` write machine-readable run outputs for validation and execution flows.
+- `--progress auto|line|plain|quiet|jsonl` controls live progress on stderr. `--quiet` also selects quiet progress for `run` unless `--progress quiet` is supplied explicitly. The final command envelope stays on stdout unless one-shot quiet output is enabled; `--events-jsonl` remains the durable event artifact.
 - `--capture-on failure|never` controls runtime failure capture during scenario execution.
 - `--attach-artifacts never|on-failure|always` controls whether report outputs include artifact references.
 - `--claim-device` creates a host-side lab lease for the selected `--device` or `--device-query` serial and releases it in a `finally` path after the scenario run. Use `--owner <name>` and `--ttl-sec <seconds>` to identify the run and set the safety expiry.
@@ -278,9 +279,9 @@ Scenario runner flags:
 
 ## Output Envelopes
 
-Normal command mode returns a single JSON envelope with `schema`, `ok`, `command`, `started_at`, `ended_at`, `data`, `artifacts`, `provenance`, and `error`.
+Normal command mode returns a single JSON envelope with `schema`, `ok`, `command`, `started_at`, `ended_at`, `data`, `artifacts`, `provenance`, and `error`. Use `--human` or `--console-output human` on one-shot commands when local terminal readability matters; use `--quiet` or `--console-output quiet` to suppress successful command output while still printing failure envelopes; rerun with `--json` or omit the human flag for the full machine-readable envelope. Luotsi intentionally does not use a global `--output` mode for command envelopes because existing commands such as `record` and `replay scenario-draft` already use `--output` as a file path.
 
-Long-lived `inspect` and `view` sessions are the main exceptions: they stream JSONL events instead of a single final envelope. `replay summarize --format json|jsonl` is the other intentional exception for CI-oriented replay export.
+Long-lived `inspect` and `view` sessions are the main exceptions: `inspect` streams JSONL, while `view` prints human output by default and streams JSONL only with `-o jsonl`, `--output jsonl`, or `--json`. `replay summarize --format json|jsonl` is the other intentional exception for CI-oriented replay export.
 
 Common `error.category` values currently include:
 
