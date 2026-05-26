@@ -107,6 +107,18 @@ internal static class ArtifactIndexTheme
     .evidence-list { display: grid; gap: 8px; margin: 0; padding: 0; }
     .evidence-list li { display: block; padding: 9px 10px; border: 1px solid var(--line-soft); border-radius: 7px; background: var(--panel-subtle); }
     .evidence-list li.primary-evidence { border-color: rgba(56,189,248,.46); background: var(--accent-soft); }
+    .evidence-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 9px; margin: 0 0 12px; }
+    .evidence-group { min-width: 0; padding: 10px; border: 1px solid var(--line-soft); border-radius: 8px; background: color-mix(in srgb, var(--panel-subtle) 84%, var(--panel-strong)); }
+    .evidence-group-failure { border-color: rgba(251,113,133,.42); background: color-mix(in srgb, var(--danger-soft) 38%, var(--panel-subtle)); }
+    .evidence-group-context { border-color: rgba(125,211,252,.28); }
+    .evidence-group-action { border-color: rgba(251,191,36,.32); }
+    .evidence-group-artifact { border-color: rgba(52,211,153,.3); }
+    .evidence-group-header { display: grid; gap: 3px; margin-bottom: 7px; }
+    .evidence-group-header strong { font-size: 13px; }
+    .evidence-group-items { display: grid; gap: 6px; margin-top: 9px; }
+    .evidence-group-items li { display: grid; grid-template-columns: minmax(74px, .38fr) minmax(0, 1fr); gap: 8px; padding: 7px 0 0; border: 0; border-top: 1px solid var(--line-soft); background: transparent; font-size: 12px; }
+    .evidence-group-items span { color: var(--muted); font-weight: 680; overflow-wrap: anywhere; }
+    .evidence-group-items strong { font-weight: 560; overflow-wrap: anywhere; }
     .filter-chips { display: flex; flex-wrap: wrap; gap: 7px; margin: 0 0 9px; }
     .filter-chip { min-height: 28px; padding: 5px 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel-subtle); color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
     .filter-chip:hover, .filter-chip.active { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
