@@ -1,6 +1,7 @@
 using Luotsi.Cli.Cli.Hosting;
 using Luotsi.Cli.Cli.Provenance;
 using Luotsi.Cli.Cli.View;
+using Luotsi.Cli.Hosts.Android;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Infrastructure.Devices;
 using Luotsi.Cli.Infrastructure.Ids;
@@ -10,6 +11,7 @@ using Luotsi.Cli.Infrastructure.Time;
 using Luotsi.Cli.Models;
 using Luotsi.Cli.View.Contracts;
 using Microsoft.Extensions.DependencyInjection;
+using Polly;
 
 namespace Luotsi.Cli.Cli.Composition;
 
@@ -27,7 +29,18 @@ internal static class LuotsiInfrastructureServices
         services.AddSingleton(dependencies.Console ?? new SystemConsoleIo());
         services.AddSingleton(dependencies.Environment ?? new SystemEnvironmentVariables());
         services.AddSingleton(dependencies.IdGenerator ?? new GuidUniqueIdGenerator());
-        services.AddSingleton(dependencies.AdbClientFactory ?? new DefaultAdbClientFactory());
+        services.AddResiliencePipeline(AdbResilience.CommandRetryPipelineName, builder =>
+            builder.AddRetry(AdbResilience.CreateCommandRetryOptions()));
+        if (dependencies.AdbClientFactory is not null)
+        {
+            services.AddSingleton(dependencies.AdbClientFactory);
+        }
+        else
+        {
+            services.AddSingleton<IAdbClientFactory>(serviceProvider =>
+                ActivatorUtilities.CreateInstance<DefaultAdbClientFactory>(serviceProvider));
+        }
+
         services.AddSingleton<IDeviceHostFactory>(serviceProvider =>
             dependencies.DeviceHostFactory ?? ActivatorUtilities.CreateInstance<DefaultDeviceHostFactory>(serviceProvider));
         services.AddSingleton<IViewProfileStore>(serviceProvider =>

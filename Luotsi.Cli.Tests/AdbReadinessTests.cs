@@ -1,10 +1,12 @@
 using System.Text.Json;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
+using Luotsi.Cli.Cli.Composition;
 using Luotsi.Cli.Cli.Provenance;
 using Luotsi.Cli.Hosts.Android;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Luotsi.Cli.Tests;
@@ -591,6 +593,33 @@ public sealed class AdbReadinessTests
         processRunner.EnqueueResult(new ProcessResult(0, string.Empty, string.Empty));
         processRunner.EnqueueResult(new ProcessResult(0, "Android Debug Bridge version 1.0.41", string.Empty));
         var adb = new AdbClient("adb", null, processRunner, TimeSpan.FromSeconds(5));
+
+        var result = await adb.RunAsync(["version"]);
+
+        Assert.Equal(2, result.AttemptCount);
+        Assert.Equal("adb protocol fault", result.Retry?.Reason);
+        Assert.Equal(["version"], processRunner.Calls[0].Args);
+        Assert.Equal(["start-server"], processRunner.Calls[1].Args);
+        Assert.Equal(["version"], processRunner.Calls[2].Args);
+    }
+
+    [Fact]
+    public async Task DefaultAdbClientFactory_Uses_Composed_Resilience_Pipeline()
+    {
+        using var serviceProvider = new ServiceCollection()
+            .AddLuotsiCli(new AppDependencies())
+            .BuildServiceProvider(new ServiceProviderOptions
+            {
+                ValidateOnBuild = true,
+                ValidateScopes = true
+            });
+        var processRunner = new FakeProcessRunner();
+        processRunner.EnqueueResult(new ProcessResult(1, string.Empty, "protocol fault (no status)"));
+        processRunner.EnqueueResult(new ProcessResult(0, string.Empty, string.Empty));
+        processRunner.EnqueueResult(new ProcessResult(0, "Android Debug Bridge version 1.0.41", string.Empty));
+
+        var factory = serviceProvider.GetRequiredService<IAdbClientFactory>();
+        var adb = factory.Create("adb", null, processRunner, TimeSpan.FromSeconds(5));
 
         var result = await adb.RunAsync(["version"]);
 
