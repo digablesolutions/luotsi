@@ -19,6 +19,12 @@
         "requested": "[2026.520.0, )",
         "resolved": "2026.520.0",
         "contentHash": "p20Tmo8hyyXCMyvyZiNpSUoY66e+CWRvJDQN/fI67Nua2Tw0PagVyrKpoCDuc7PDA+xoEU09UYDlA/n/WXVA5w=="
+      },
+      "Scriban": {
+        "type": "Direct",
+        "requested": "[7.2.1, )",
+        "resolved": "7.2.1",
+        "contentHash": "5Jw6PyOiY6RBhC5XgtZbOO6ZbZOXlqUDS35IVhLdAPRZHclf3iW35Tdh4FCw1/gNCJ9ia1CGVQabypGPYVThbw=="
       }
     },
     "net10.0/linux-x64": {

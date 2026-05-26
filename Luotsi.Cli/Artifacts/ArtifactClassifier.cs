@@ -1,9 +1,9 @@
 namespace Luotsi.Cli.Artifacts;
 
-internal sealed partial class ArtifactIndexRenderer
+internal static class ArtifactClassifier
 {
-    public static int GetArtifactSortGroup(string path) =>
-        GetArtifactCategory(path) switch
+    public static int GetSortGroup(string path) =>
+        GetCategory(path) switch
         {
             "Screenshots" => 0,
             "Recordings" => 1,
@@ -15,7 +15,7 @@ internal sealed partial class ArtifactIndexRenderer
             _ => 7
         };
 
-    private static string GetArtifactCategory(string path)
+    public static string GetCategory(string path)
     {
         var extension = Path.GetExtension(path);
         var fileName = Path.GetFileName(path);
@@ -73,10 +73,31 @@ internal sealed partial class ArtifactIndexRenderer
         return "Other";
     }
 
-
-    private static string GetArtifactKind(string path)
+    public static string GetKind(string path)
     {
         var extension = Path.GetExtension(path);
         return string.IsNullOrWhiteSpace(extension) ? "file" : extension.TrimStart('.').ToUpperInvariant();
+    }
+
+    public static bool IsReport(string path) =>
+        string.Equals(GetCategory(path), "Reports", StringComparison.Ordinal);
+
+    public static bool IsPreview(string path) =>
+        IsImage(path) || IsBrowserVideo(path) || string.Equals(Path.GetExtension(path), ".h264", StringComparison.OrdinalIgnoreCase);
+
+    public static bool IsImage(string path)
+    {
+        var extension = Path.GetExtension(path);
+        return string.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(extension, ".jpg", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(extension, ".jpeg", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(extension, ".webp", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static bool IsBrowserVideo(string path)
+    {
+        var extension = Path.GetExtension(path);
+        return string.Equals(extension, ".mp4", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(extension, ".webm", StringComparison.OrdinalIgnoreCase);
     }
 }

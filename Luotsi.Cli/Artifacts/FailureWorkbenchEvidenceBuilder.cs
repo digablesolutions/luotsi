@@ -1,75 +1,73 @@
-using System.Text;
+using Luotsi.Cli.Infrastructure.Contracts;
 
 namespace Luotsi.Cli.Artifacts;
 
-internal sealed partial class ArtifactIndexRenderer
+internal sealed class FailureWorkbenchEvidenceBuilder(string root, IFileSystem fileSystem)
 {
-    private void AppendEvidenceGroupsHtml(
-        StringBuilder builder,
+    private readonly ArtifactEvidenceDetailReader _evidenceDetailReader = new(root, fileSystem);
+
+    public IReadOnlyList<EvidenceGroupModel> BuildGroups(
         IReadOnlyList<string> files,
-        IReadOnlyList<SessionReplaySummary> replaySummaries,
+        IReadOnlyList<ReplayWorkflowCommandModel> workflowCommands,
         SessionReplaySummary summary,
-        FailureCapsuleScenario? scenario)
+        FailureCapsuleScenario? scenario) =>
+        BuildWorkbenchEvidenceGroups(files, workflowCommands, summary, scenario)
+            .Select(group => new EvidenceGroupModel(
+                group.Title,
+                group.Summary,
+                group.Kind,
+                group.Items.Take(6).Select(static item => new EvidenceGroupItemModel(
+                    item.Label,
+                    item.Detail,
+                    string.IsNullOrWhiteSpace(item.Path) ? null : ArtifactIndexPaths.EscapeHtmlLink(item.Path),
+                    item.SupportingDetail,
+                    item.IsCommand)).ToArray()))
+            .ToArray();
+
+    public static IReadOnlyList<EvidenceLinkModel> BuildLinks(SessionReplaySummary summary, FailureCapsuleScenario? scenario)
     {
-        var groups = BuildWorkbenchEvidenceGroups(files, replaySummaries, summary, scenario);
-        if (groups.Count == 0)
+        var evidence = new List<FailureCapsuleArtifactLink>();
+        if (scenario is not null)
         {
-            return;
+            evidence.AddRange(scenario.Artifacts);
         }
 
-        builder.AppendLine("          <h3>Evidence groups</h3>");
-        builder.AppendLine("          <div class=\"evidence-groups\">");
-        foreach (var group in groups)
+        if (!string.IsNullOrWhiteSpace(summary.FailureCapsulePath))
         {
-            builder.AppendLine($"            <article class=\"evidence-group evidence-group-{HtmlAttributeEncode(group.Kind)}\" data-filter-item>");
-            builder.AppendLine("              <div class=\"evidence-group-header\">");
-            builder.AppendLine($"                <span class=\"kind\">{HtmlEncode(group.Kind)}</span>");
-            builder.AppendLine($"                <strong>{HtmlEncode(group.Title)}</strong>");
-            builder.AppendLine("              </div>");
-            builder.AppendLine($"              <div class=\"root\">{HtmlEncode(group.Summary)}</div>");
-            builder.AppendLine("              <ul class=\"evidence-group-items\">");
-            foreach (var item in group.Items.Take(6))
-            {
-                builder.AppendLine("                <li data-filter-item>");
-                builder.AppendLine($"                  <span>{HtmlEncode(item.Label)}</span>");
-                if (item.IsCommand)
-                {
-                    builder.AppendLine($"                  <code>{HtmlEncode(item.Detail)}</code>");
-                }
-                else if (!string.IsNullOrWhiteSpace(item.Path))
-                {
-                    builder.AppendLine($"                  <a href=\"{HtmlAttributeEncode(EscapeHtmlLink(item.Path))}\">{HtmlEncode(item.Detail)}</a>");
-                }
-                else
-                {
-                    builder.AppendLine($"                  <strong>{HtmlEncode(item.Detail)}</strong>");
-                }
-
-                if (!string.IsNullOrWhiteSpace(item.SupportingDetail))
-                {
-                    builder.AppendLine($"                  <em>{HtmlEncode(item.SupportingDetail)}</em>");
-                }
-
-                builder.AppendLine("                </li>");
-            }
-
-            builder.AppendLine("              </ul>");
-            builder.AppendLine("            </article>");
+            evidence.Add(new FailureCapsuleArtifactLink("failure capsule", summary.FailureCapsulePath, null, null));
         }
 
-        builder.AppendLine("          </div>");
+        if (summary.HasTimeline)
+        {
+            evidence.Add(new FailureCapsuleArtifactLink("timeline", summary.TimelinePath, null, null));
+        }
+
+        evidence.Add(new FailureCapsuleArtifactLink("metadata", summary.MetadataPath, null, null));
+
+        return evidence
+            .Where(static item => !string.IsNullOrWhiteSpace(item.Path))
+            .GroupBy(static item => item.Path, StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.First())
+            .Take(8)
+            .Select(static (item, index) => new EvidenceLinkModel(
+                item.Path,
+                ArtifactIndexPaths.EscapeHtmlLink(item.Path),
+                item.Kind,
+                string.IsNullOrWhiteSpace(item.StepName) ? string.Empty : $" for {item.StepName}",
+                index == 0))
+            .ToArray();
     }
 
     private IReadOnlyList<WorkbenchEvidenceGroup> BuildWorkbenchEvidenceGroups(
         IReadOnlyList<string> files,
-        IReadOnlyList<SessionReplaySummary> replaySummaries,
+        IReadOnlyList<ReplayWorkflowCommandModel> workflowCommands,
         SessionReplaySummary summary,
         FailureCapsuleScenario? scenario)
     {
         var groups = new List<WorkbenchEvidenceGroup>();
         AddFailureSignalGroup(groups, summary, scenario);
         AddDeviceAppFactsGroup(groups, summary);
-        AddActionsCommandsGroup(groups, replaySummaries, summary);
+        AddActionsCommandsGroup(groups, workflowCommands, summary);
         AddMediaReportsGroup(groups, files, summary, scenario);
         return groups;
     }
@@ -93,7 +91,7 @@ internal sealed partial class ArtifactIndexRenderer
 
         items.AddRange(summary.TimelineHighlights
             .Where(static entry => entry.IsFailureRelevant)
-            .Select(static entry => new WorkbenchEvidenceItem(entry.Type, FormatTimelineDetail(entry), null)));
+            .Select(static entry => new WorkbenchEvidenceItem(entry.Type, ArtifactTimelineFormatter.FormatDetail(entry), null)));
 
         if (items.Count == 0)
         {
@@ -111,7 +109,7 @@ internal sealed partial class ArtifactIndexRenderer
     {
         var items = new List<WorkbenchEvidenceItem>
         {
-            new("Session", BuildReplayTitle(summary), summary.MetadataPath, SupportingDetail: TryBuildEvidenceArtifactDetail(summary.MetadataPath)),
+            new("Session", ArtifactReplayFormatter.BuildTitle(summary), summary.MetadataPath, SupportingDetail: TryBuildEvidenceArtifactDetail(summary.MetadataPath)),
             new("Exit", $"reason={summary.Reason} | exit_code={summary.ExitCode}", null),
             new("Events", $"{summary.EventCount} events", summary.HasTimeline ? summary.TimelinePath : null, SupportingDetail: summary.HasTimeline ? TryBuildEvidenceArtifactDetail(summary.TimelinePath) : null)
         };
@@ -123,7 +121,7 @@ internal sealed partial class ArtifactIndexRenderer
 
         items.AddRange(summary.TimelineHighlights
             .Where(IsDeviceOrSessionFact)
-            .Select(static entry => new WorkbenchEvidenceItem(entry.Type, FormatTimelineDetail(entry), null)));
+            .Select(static entry => new WorkbenchEvidenceItem(entry.Type, ArtifactTimelineFormatter.FormatDetail(entry), null)));
 
         groups.Add(new WorkbenchEvidenceGroup(
             "Device and app facts",
@@ -132,12 +130,12 @@ internal sealed partial class ArtifactIndexRenderer
             DeduplicateEvidenceItems(items)));
     }
 
-    private void AddActionsCommandsGroup(
+    private static void AddActionsCommandsGroup(
         List<WorkbenchEvidenceGroup> groups,
-        IReadOnlyList<SessionReplaySummary> replaySummaries,
+        IReadOnlyList<ReplayWorkflowCommandModel> workflowCommands,
         SessionReplaySummary summary)
     {
-        var items = BuildReplayWorkflowCommands(replaySummaries)
+        var items = workflowCommands
             .Where(static command => string.Equals(command.Kind, "SCRUB", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(command.Kind, "GRAPH", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(command.Kind, "OPEN", StringComparison.OrdinalIgnoreCase))
@@ -147,11 +145,11 @@ internal sealed partial class ArtifactIndexRenderer
 
         items.AddRange(summary.TimelineHighlights
             .Where(IsActionOrCommandEvent)
-            .Select(static entry => new WorkbenchEvidenceItem(entry.Type, FormatTimelineDetail(entry), null)));
+            .Select(static entry => new WorkbenchEvidenceItem(entry.Type, ArtifactTimelineFormatter.FormatDetail(entry), null)));
 
         if (items.Count == 0)
         {
-            items.Add(new WorkbenchEvidenceItem("Timeline", "No explicit action events were highlighted; scrub the failure window first.", summary.TimelinePath, SupportingDetail: TryBuildEvidenceArtifactDetail(summary.TimelinePath)));
+            items.Add(new WorkbenchEvidenceItem("Timeline", "No explicit action events were highlighted; scrub the failure window first.", summary.TimelinePath));
         }
 
         groups.Add(new WorkbenchEvidenceGroup(
@@ -182,7 +180,7 @@ internal sealed partial class ArtifactIndexRenderer
         }
 
         items.AddRange(files
-            .Where(IsReportArtifact)
+            .Where(ArtifactClassifier.IsReport)
             .Take(Math.Max(0, 6 - items.Count))
             .Select(file => new WorkbenchEvidenceItem("report", file, file, SupportingDetail: TryBuildEvidenceArtifactDetail(file))));
 
@@ -223,12 +221,4 @@ internal sealed partial class ArtifactIndexRenderer
             .GroupBy(static item => $"{item.Label}\n{item.Detail}\n{item.Path}\n{item.SupportingDetail}", StringComparer.OrdinalIgnoreCase)
             .Select(static group => group.First())
             .ToArray();
-
-    private sealed record WorkbenchEvidenceGroup(
-        string Title,
-        string Summary,
-        string Kind,
-        IReadOnlyList<WorkbenchEvidenceItem> Items);
-
-    private sealed record WorkbenchEvidenceItem(string Label, string Detail, string? Path, string? SupportingDetail = null, bool IsCommand = false);
 }

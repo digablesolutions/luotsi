@@ -1,16 +1,20 @@
 using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
+using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Artifacts;
 
-internal sealed partial class ArtifactIndexRenderer
+internal sealed class ArtifactSummaryBuilder(string root, IFileSystem fileSystem)
 {
     private const int MaxJsonlSummaryBytes = 256 * 1024;
     private const int MaxJsonlSummaryLines = 500;
 
-    private async Task<string?> TryBuildArtifactSummaryAsync(string path)
+    private readonly string _root = root ?? throw new ArgumentNullException(nameof(root));
+    private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+
+    public async Task<string?> TryBuildAsync(string path)
     {
         if (string.Equals(Path.GetExtension(path), ".jsonl", StringComparison.OrdinalIgnoreCase))
         {
@@ -501,5 +505,4 @@ internal sealed partial class ArtifactIndexRenderer
 
         return builder.ToString();
     }
-
 }
