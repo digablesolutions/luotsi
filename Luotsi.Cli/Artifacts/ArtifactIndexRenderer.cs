@@ -8,6 +8,7 @@ internal sealed partial class ArtifactIndexRenderer(string root, IFileSystem fil
 {
     private readonly string _root = root ?? throw new ArgumentNullException(nameof(root));
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+    private readonly ArtifactEvidenceDetailReader _evidenceDetailReader = new(root, fileSystem);
 
     public async Task<string> BuildMarkdownIndexAsync(IReadOnlyList<string> files)
     {

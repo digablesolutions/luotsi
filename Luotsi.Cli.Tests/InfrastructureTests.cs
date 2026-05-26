@@ -385,6 +385,9 @@ public sealed partial class AppTests
         Assert.Contains("class=\"timeline-tags\">failure", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("status=failed | total=1 | passed=0 | failed=1 | skipped=0 | duration_ms=2450", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("format=junit | tests=1 | failures=1 | skipped=0 | duration_sec=2.45 | suite=Luotsi replay workbench fixture", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("session_kind=view | reason=error | exit_code=1 | event_count=5 | target=192.168.0.134:5555", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("events=5 | first_failure=view_diagnostic | category=transport | message=Unexpected end of stream after reconnect", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("status=failed | scenarios=1 | failed_scenarios=view stream failure | failed_steps=watch stream", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("recommended_action=scrub_failure", htmlIndex, StringComparison.Ordinal);
 
         Assert.Contains("## Replay Sessions", markdownIndex, StringComparison.Ordinal);
@@ -647,5 +650,68 @@ public sealed partial class AppTests
         Assert.Contains("- [demo.mp4](demo.mp4)", index, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ArtifactEvidenceDetailReader_Skips_Invalid_Jsonl_Lines()
+    {
+        var fileSystem = new FakeFileSystem();
+        fileSystem.AddFile(
+            Path.Join("/tmp/replay", "session-timeline.jsonl"),
+            """
+            {"type":"view_started"}
+            not-json
+            {"type":"view_error","error":{"category":"transport","message":"Unexpected end of stream"}}
+            """);
+        var reader = new ArtifactEvidenceDetailReader("/tmp/replay", fileSystem);
+
+        var detail = reader.TryBuild("session-timeline.jsonl");
+
+        Assert.NotNull(detail);
+        Assert.Contains("events=2", detail, StringComparison.Ordinal);
+        Assert.Contains("first_failure=view_error | error=transport: Unexpected end of stream", detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ArtifactEvidenceDetailReader_Samples_Large_Jsonl_Files()
+    {
+        var fileSystem = new FakeFileSystem();
+        var lines = Enumerable.Range(0, 520)
+            .Select(static index => index == 519
+                ? """{"type":"view_error","error":{"category":"transport","message":"tail failure"}}"""
+                : """{"type":"view_stats"}""");
+        fileSystem.AddFile(Path.Join("/tmp/replay", "session-timeline.jsonl"), string.Join('\n', lines));
+        var reader = new ArtifactEvidenceDetailReader("/tmp/replay", fileSystem);
+
+        var detail = reader.TryBuild("session-timeline.jsonl");
+
+        Assert.NotNull(detail);
+        Assert.Contains("events_sampled=500", detail, StringComparison.Ordinal);
+        Assert.Contains("first_failure=view_error | error=transport: tail failure", detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ArtifactEvidenceDetailReader_Rejects_Paths_Outside_Artifact_Root()
+    {
+        var fileSystem = new FakeFileSystem();
+        fileSystem.AddFile(Path.Join("/tmp", "outside.json"), """{"schema":"luotsi-session-replay.v1"}""");
+        var reader = new ArtifactEvidenceDetailReader("/tmp/replay", fileSystem);
+
+        Assert.Null(reader.TryBuild("../outside.json"));
+        Assert.Null(reader.TryBuild(Path.GetFullPath(Path.Join("/tmp", "outside.json"))));
+    }
+
+    [Fact]
+    public void ArtifactEvidenceDetailReader_Includes_Junit_Suite_Name()
+    {
+        var fileSystem = new FakeFileSystem();
+        fileSystem.AddFile(
+            Path.Join("/tmp/replay", "junit.xml"),
+            """<testsuites tests="1" failures="1"><testsuite name="smoke suite" tests="1" failures="1" time="2.5" /></testsuites>""");
+        var reader = new ArtifactEvidenceDetailReader("/tmp/replay", fileSystem);
+
+        var detail = reader.TryBuild("junit.xml");
+
+        Assert.NotNull(detail);
+        Assert.Contains("suite=smoke suite", detail, StringComparison.Ordinal);
+    }
 
 }
