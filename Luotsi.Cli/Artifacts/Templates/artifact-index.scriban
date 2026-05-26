@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ index.page_title | html.escape }}</title>
+  <style>
+{{ styles }}
+  </style>
+</head>
+<body{{ if index.has_failure_workbench }} class="has-workbench"{{ end }}>
+{{ if index.has_failure_workbench }}
+  <aside class="app-rail" aria-label="Replay navigation">
+    <div class="rail-brand" title="Luotsi" aria-label="Luotsi"></div>
+    <nav class="rail-nav">
+      <a class="rail-link active" href="#failure-workbench">Triage</a>
+      <a class="rail-link" href="#replay-sessions">Replay</a>
+      <a class="rail-link" href="#replay-front-door">Cmds</a>
+      <a class="rail-link" href="#artifacts">Files</a>
+    </nav>
+  </aside>
+{{ end }}
+  <main>
+    <header>
+      <div class="workbench-header">
+        <div>
+          <div class="breadcrumbs">{{ index.header.breadcrumbs | html.escape }}</div>
+          <div class="eyebrow">{{ index.header.eyebrow | html.escape }}</div>
+          <h1>{{ index.header.heading | html.escape }}</h1>
+          <div class="workbench-subtitle">
+{{ for item in index.header.subtitle_items }}
+            <span class="{{ item.css_class | html.escape }}">{{ item.text | html.escape }}</span>
+{{ end }}
+          </div>
+          <div class="root">{{ index.header.root | html.escape }}</div>
+        </div>
+        <div class="headline-metrics">
+{{ for metric in index.header.metrics }}
+          <div class="headline-metric">
+            <span>{{ metric.label | html.escape }}</span>
+            <strong>{{ metric.value }}</strong>
+          </div>
+{{ end }}
+        </div>
+      </div>
+      <div class="stats">
+{{ for stat in index.header.stats }}
+        <div class="stat">
+          <span class="stat-value">{{ stat.value }}</span>
+          <span class="stat-label">{{ stat.label | html.escape }}</span>
+        </div>
+{{ end }}
+      </div>
+{{ if index.has_replay_sessions }}
+      <div class="toolbar">
+        <input class="search" type="search" placeholder="Filter artifacts, timeline, commands, and evidence" aria-label="Filter artifact index" data-filter-input>
+        <nav class="jump-links" aria-label="Artifact sections">
+          <a href="#failure-workbench">Workbench</a>
+          <a href="#replay-sessions">Sessions</a>
+          <a href="#replay-front-door">Commands</a>
+        </nav>
+      </div>
+{{ end }}
+    </header>
+{{ if !index.has_artifacts }}
+    <section><h2>Artifacts</h2><div class="empty">No artifacts have been written yet.</div></section>
+{{ else }}
+{{ if index.has_failure_workbench }}
+{{ workbench = index.failure_workbench }}
+    <section class="workbench" id="failure-workbench">
+      <h2>Failure Workbench</h2>
+      <div class="workbench-layout">
+        <div class="workbench-main">
+        <div class="panel hero-panel" data-filter-item>
+          <h3>Primary failure</h3>
+          <div class="chip-row">
+{{ for chip in workbench.chips }}
+            <span class="{{ chip.css_class | html.escape }}">{{ chip.text | html.escape }}</span>
+{{ end }}
+          </div>
+          <p class="failure-title">{{ workbench.title | html.escape }}</p>
+          <div class="failure-brief" aria-label="Failure brief">
+{{ for card in workbench.brief_cards }}
+            <div class="brief-card">
+              <span>{{ card.label | html.escape }}</span>
+              <strong>{{ card.value | html.escape }}</strong>
+            </div>
+{{ end }}
+          </div>
+          <div class="meta-grid">
+{{ for item in workbench.meta_items }}
+            <div class="meta">
+              <span>{{ item.label | html.escape }}</span>
+              <strong>{{ item.value | html.escape }}</strong>
+            </div>
+{{ end }}
+          </div>
+{{ if workbench.has_error }}
+          <div class="failure-message"><strong>{{ workbench.error.category | html.escape }}</strong>: {{ workbench.error.message | html.escape }}</div>
+{{ end }}
+          <div class="next-action">
+            <h3>Recommended next action</h3>
+            <div class="root">Scrub the smallest timeline window before opening broader evidence.</div>
+            <div class="command-row">
+              <code>{{ workbench.action_command | html.escape }}</code>
+              <button class="copy-command" type="button" data-copy="{{ workbench.action_command | html.escape }}">Copy</button>
+            </div>
+          </div>
+        </div>
+        <div class="panel" data-filter-item>
+          <h3>Timeline preview</h3>
+          <div class="filter-chips" aria-label="Timeline quick filters">
+{{ for filter in workbench.timeline_filters }}
+            <button class="filter-chip" type="button" data-filter-set="{{ filter.query | html.escape }}">{{ filter.label | html.escape }}</button>
+{{ end }}
+          </div>
+{{ if workbench.has_timeline_entries }}
+          <ul class="timeline">
+{{ for entry in workbench.timeline_entries }}
+            <li{{ if entry.is_failure_relevant }} class="timeline-failure"{{ end }} data-filter-item><span class="timeline-tags">{{ entry.tags | html.escape }}</span><span class="timeline-type">{{ entry.type | html.escape }}</span> {{ entry.detail | html.escape }}</li>
+{{ end }}
+          </ul>
+{{ else }}
+          <div class="root">No timeline highlights were available.</div>
+{{ end }}
+        </div>
+        <div class="panel" data-filter-item>
+          <h3>Evidence</h3>
+{{ if workbench.has_media }}
+          <div class="media-grid" aria-label="Visual evidence preview">
+{{ for item in workbench.media }}
+            <a class="media-tile" data-filter-item href="{{ item.href | html.escape }}">
+{{ if item.is_image }}
+              <img src="{{ item.href | html.escape }}" alt="{{ item.kind | html.escape }} preview">
+{{ else if item.is_video }}
+              <video src="{{ item.href | html.escape }}" muted preload="metadata"></video>
+{{ else }}
+              <div class="media-placeholder">Open</div>
+{{ end }}
+              <span>{{ item.kind | html.escape }}</span>
+              <strong>{{ item.file_name | html.escape }}</strong>
+            </a>
+{{ end }}
+          </div>
+{{ else }}
+          <div class="media-empty root">No screenshot or video evidence was linked to the primary failure.</div>
+{{ end }}
+{{ if workbench.has_evidence_groups }}
+          <h3>Evidence groups</h3>
+          <div class="evidence-groups">
+{{ for group in workbench.evidence_groups }}
+            <article class="evidence-group evidence-group-{{ group.kind | html.escape }}" data-filter-item>
+              <div class="evidence-group-header">
+                <span class="kind">{{ group.kind | html.escape }}</span>
+                <strong>{{ group.title | html.escape }}</strong>
+              </div>
+              <div class="root">{{ group.summary | html.escape }}</div>
+              <ul class="evidence-group-items">
+{{ for item in group.items }}
+                <li data-filter-item>
+                  <span>{{ item.label | html.escape }}</span>
+{{ if item.is_command }}
+                  <code>{{ item.detail | html.escape }}</code>
+{{ else if item.has_href }}
+                  <a href="{{ item.href | html.escape }}">{{ item.detail | html.escape }}</a>
+{{ else }}
+                  <strong>{{ item.detail | html.escape }}</strong>
+{{ end }}
+{{ if item.has_supporting_detail }}
+                  <em>{{ item.supporting_detail | html.escape }}</em>
+{{ end }}
+                </li>
+{{ end }}
+              </ul>
+            </article>
+{{ end }}
+          </div>
+{{ end }}
+          <ul class="evidence-list">
+{{ for item in workbench.evidence_links }}
+            <li{{ if item.is_primary }} class="primary-evidence"{{ end }} data-filter-item>
+              <a href="{{ item.href | html.escape }}">{{ item.path | html.escape }}</a>
+              <div class="root">{{ item.kind | html.escape }}{{ item.step_suffix | html.escape }}</div>
+            </li>
+{{ end }}
+          </ul>
+        </div>
+{{ if workbench.has_semantic_signals }}
+        <div class="panel" data-filter-item>
+          <h3>Semantic signals</h3>
+          <ul class="evidence-list">
+{{ for item in workbench.semantic_signals.items }}
+            <li data-filter-item>
+              <div class="kind">{{ item.kind | html.escape }}</div>
+              <div>{{ item.text | html.escape }}</div>
+{{ if item.has_command }}
+              <div class="command-row">
+                <code>{{ item.command | html.escape }}</code>
+                <button class="copy-command" type="button" data-copy="{{ item.command | html.escape }}">Copy</button>
+              </div>
+{{ end }}
+            </li>
+{{ end }}
+          </ul>
+          <div class="root"><a href="{{ workbench.semantic_signals.graph_href | html.escape }}">Open graph JSON</a></div>
+        </div>
+{{ end }}
+        </div>
+        <aside class="workbench-side">
+          <div class="panel" data-filter-item>
+            <h3>Triage path</h3>
+          <div class="triage-path">
+{{ for step in workbench.triage_steps }}
+            <div class="triage-step">
+              <div class="step-number">{{ step.number }}</div>
+              <div>
+                <div class="step-title">{{ step.title | html.escape }}</div>
+                <div class="root">{{ step.description | html.escape }}</div>
+{{ if step.has_command }}
+                <div class="command-row">
+                  <code>{{ step.command | html.escape }}</code>
+                  <button class="copy-command" type="button" data-copy="{{ step.command | html.escape }}">Copy</button>
+                </div>
+{{ end }}
+              </div>
+            </div>
+{{ end }}
+          </div>
+          </div>
+        <div class="panel" data-filter-item>
+          <h3>Replay actions</h3>
+          <ul class="evidence-list">
+{{ for command in workbench.replay_actions }}
+            <li>
+              <div class="kind">{{ command.kind | html.escape }}</div>
+              <div class="command-row">
+                <code>{{ command.command | html.escape }}</code>
+                <button class="copy-command" type="button" data-copy="{{ command.command | html.escape }}">Copy</button>
+              </div>
+            </li>
+{{ end }}
+          </ul>
+        </div>
+        </aside>
+      </div>
+    </section>
+{{ end }}
+{{ if index.has_replay_sessions }}
+    <section id="replay-sessions">
+      <h2>Replay Sessions</h2>
+      <ul>
+{{ for session in index.replay_sessions }}
+        <li data-filter-item>
+          <div>
+            <div><strong>{{ session.title | html.escape }}</strong></div>
+            <div class="root">{{ session.outcome | html.escape }}</div>
+            <div class="root">{{ for link in session.links }}<a href="{{ link.href | html.escape }}">{{ link.label | html.escape }}</a>{{ if !for.last }} | {{ end }}{{ end }}</div>
+{{ if session.has_timeline_entries }}
+            <div class="timeline-label">{{ session.timeline_label | html.escape }}</div>
+            <ul class="timeline">
+{{ for entry in session.timeline_entries }}
+              <li>{{ entry.full_text | html.escape }}</li>
+{{ end }}
+            </ul>
+{{ end }}
+          </div>
+          <span class="kind badge">REPLAY</span>
+        </li>
+{{ end }}
+      </ul>
+    </section>
+{{ end }}
+{{ if index.has_replay_workflow_commands }}
+    <section class="workflow" id="replay-front-door">
+      <h2>Replay Front Door</h2>
+      <ul>
+{{ for command in index.replay_workflow_commands }}
+        <li data-filter-item>
+          <span class="kind">{{ command.kind | html.escape }}</span>
+          <div><code>{{ command.command | html.escape }}</code></div>
+          <div class="root">{{ command.purpose | html.escape }}</div>
+        </li>
+{{ end }}
+      </ul>
+    </section>
+{{ end }}
+{{ for section in index.artifact_sections }}
+    <section{{ if section.section_id != null }} id="{{ section.section_id | html.escape }}"{{ end }}>
+      <h2>{{ section.title | html.escape }}</h2>
+      <ul>
+{{ for file in section.items }}
+        <li data-filter-item>
+          <div>
+            <a href="{{ file.href | html.escape }}">{{ file.path | html.escape }}</a>
+{{ if file.has_summary }}
+            <div class="root">{{ file.summary | html.escape }}</div>
+{{ end }}
+          </div>
+          <span class="kind">{{ file.kind | html.escape }}</span>
+        </li>
+{{ end }}
+      </ul>
+    </section>
+{{ end }}
+{{ end }}
+  </main>
+  <script>
+{{ script }}
+  </script>
+</body>
+</html>

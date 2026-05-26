@@ -18,10 +18,12 @@
   <ItemGroup>
     <PackageReference Include="FFmpeg.AutoGen" Version="8.1.0" />
     <PackageReference Include="ppy.SDL3-CS" Version="2026.520.0" />
+    <PackageReference Include="Scriban" Version="7.2.1" />
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="Assets\luotsi-icon.bmp" LogicalName="Luotsi.Cli.Assets.luotsi-icon.bmp" />
+    <EmbeddedResource Include="Artifacts\Templates\artifact-index.scriban" LogicalName="Luotsi.Cli.Artifacts.Templates.artifact-index.scriban" />
   </ItemGroup>
 
   <ItemGroup>
