@@ -38,8 +38,8 @@ internal sealed class AppCommandRouteBootstrapper(AppCommandRouteBootstrapperDep
             setup.Artifacts,
             options.Command,
             _dependencies.DeviceHostLauncher,
-            new LabLeaseStore(_dependencies.FileSystem, _dependencies.TimeProvider),
-            new LabQuarantineStore(_dependencies.FileSystem, _dependencies.TimeProvider)).ConfigureAwait(false);
+            _dependencies.LabLeaseStore,
+            _dependencies.LabQuarantineStore).ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(deviceSelector) && string.IsNullOrWhiteSpace(options.Get("device")))
         {
             options.ApplyDefaults(new Dictionary<string, string?> { ["device"] = deviceSelector });
@@ -94,6 +94,10 @@ internal sealed class AppCommandRouteBootstrapperDependencies
     public required ViewProfileCoordinator ProfileCoordinator { get; init; }
 
     public required DeviceHostLauncher DeviceHostLauncher { get; init; }
+
+    public required LabLeaseStore LabLeaseStore { get; init; }
+
+    public required LabQuarantineStore LabQuarantineStore { get; init; }
 }
 
 internal sealed record AppCommandRouteSetup(string AdbExecutable, ArtifactSession Artifacts);

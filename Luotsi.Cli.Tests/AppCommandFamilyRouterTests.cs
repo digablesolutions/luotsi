@@ -1,6 +1,5 @@
 using Luotsi.Cli.Cli;
 using Luotsi.Cli.Cli.Composition;
-using Luotsi.Cli.Cli.Inspect;
 using Luotsi.Cli.Cli.Routing;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Models;
@@ -8,8 +7,10 @@ using Xunit;
 
 namespace Luotsi.Cli.Tests;
 
-public sealed class AppCommandFamilyRouterTests
+public sealed class AppCommandFamilyRouterTests : IDisposable
 {
+    private readonly List<AppComposition> _compositions = [];
+
     [Fact]
     public async Task DispatchAsync_ProfileList_Bootstraps_Artifacts_Without_Creating_Runner()
     {
@@ -271,47 +272,18 @@ public sealed class AppCommandFamilyRouterTests
         Assert.Equal(0, deviceHostFactory.CreateCallCount);
     }
 
-    private static AppCommandFamilyRouter CreateRouter(AppDependencies dependencies)
+    public void Dispose()
     {
-        var infrastructure = AppInfrastructureCompositionBuilder.Build(dependencies);
-        var hostedCommands = AppHostedCommandCompositionBuilder.Build(new(
-            infrastructure.TimeProvider,
-            infrastructure.Console,
-            infrastructure.FileSystem,
-            infrastructure.Environment,
-            infrastructure.ProcessRunner,
-            infrastructure.Delay,
-            null,
-            infrastructure.ProfileCoordinator));
-        var viewCommands = AppViewCommandCompositionBuilder.Build(new(
-            dependencies,
-            infrastructure.TimeProvider,
-            infrastructure.Console,
-            infrastructure.Environment,
-            infrastructure.FileSystem,
-            infrastructure.ProcessRunner,
-            infrastructure.AdbClientFactory,
-            infrastructure.IdGenerator,
-            hostedCommands.EnvelopeWriter,
-            infrastructure.ProfileCoordinator,
-            infrastructure.DeviceHostLauncher));
-
-        return new AppCommandFamilyRouter(new AppCommandFamilyRouterDependencies
+        foreach (var composition in _compositions)
         {
-            RouteBootstrapper = new AppCommandRouteBootstrapper(new AppCommandRouteBootstrapperDependencies
-            {
-                TimeProvider = infrastructure.TimeProvider,
-                FileSystem = infrastructure.FileSystem,
-                Environment = infrastructure.Environment,
-                ProfileCoordinator = infrastructure.ProfileCoordinator,
-                DeviceHostLauncher = infrastructure.DeviceHostLauncher
-            }),
-            CommandHost = hostedCommands.CommandHost,
-            ReplayCommandHost = hostedCommands.ReplayCommandHost,
-            ViewSessionCommandPreparer = viewCommands.ViewSessionCommandPreparer,
-            InspectSessionLauncher = new InspectSessionLauncher(infrastructure.DeviceHostLauncher, infrastructure.Console, infrastructure.TimeProvider),
-            ViewDiagnosticsLauncher = viewCommands.ViewDiagnosticsLauncher,
-            DoctorCommandLauncher = viewCommands.DoctorCommandLauncher
-        });
+            composition.Dispose();
+        }
+    }
+
+    private AppCommandFamilyRouter CreateRouter(AppDependencies dependencies)
+    {
+        var composition = AppComposition.Create(dependencies);
+        _compositions.Add(composition);
+        return composition.CommandFamilyRouter;
     }
 }
