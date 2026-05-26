@@ -6,6 +6,7 @@ using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Infrastructure.Devices;
 using Luotsi.Cli.Infrastructure.Ids;
 using Luotsi.Cli.Infrastructure.Processes;
+using Luotsi.Cli.Infrastructure.Resilience;
 using Luotsi.Cli.Infrastructure.System;
 using Luotsi.Cli.Infrastructure.Time;
 using Luotsi.Cli.Models;
@@ -31,6 +32,10 @@ internal static class LuotsiInfrastructureServices
         services.AddSingleton(dependencies.IdGenerator ?? new GuidUniqueIdGenerator());
         services.AddResiliencePipeline(AdbResilience.CommandRetryPipelineName, builder =>
             builder.AddRetry(AdbResilience.CreateCommandRetryOptions()));
+        services.AddResiliencePipeline(LuotsiResiliencePipelines.SetupDownloadPipelineName, builder =>
+            builder.AddRetry(LuotsiResiliencePipelines.CreateSetupDownloadRetryOptions()));
+        services.AddResiliencePipeline(LuotsiResiliencePipelines.LabProbePipelineName, builder =>
+            builder.AddRetry(LuotsiResiliencePipelines.CreateLabProbeRetryOptions()));
         if (dependencies.AdbClientFactory is not null)
         {
             services.AddSingleton(dependencies.AdbClientFactory);

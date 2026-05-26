@@ -60,6 +60,7 @@ public sealed class AdbClient(
                     }
 
                     retryState = new AdbRetryExecutionState(retryReason, recoveryActions);
+                    AdbRetryMetrics.RecordRetry(retryReason, 2);
                     throw new AdbTransientTransportException(retryReason);
                 }
 

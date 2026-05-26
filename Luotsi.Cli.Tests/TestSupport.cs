@@ -514,6 +514,8 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public List<string> AdbDiagnostics { get; } = [];
 
+    public Queue<AdbDiagnosticResult> AdbServerStatusResults { get; } = new();
+
     public List<string> AdbReconnectTargets { get; } = [];
 
     public List<int> WaitForDeviceRequests { get; } = [];
@@ -597,7 +599,9 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
     public Task<AdbDiagnosticResult> GetAdbServerStatusAsync()
     {
         AdbDiagnostics.Add("server-status");
-        return Task.FromResult(CreateAdbDiagnostic("server-status", ["server-status"]));
+        return Task.FromResult(AdbServerStatusResults.Count > 0
+            ? AdbServerStatusResults.Dequeue()
+            : CreateAdbDiagnostic("server-status", ["server-status"]));
     }
 
     public Task<AdbDiagnosticResult> GetAdbVersionAsync()

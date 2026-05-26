@@ -2264,6 +2264,8 @@ public sealed partial class AppTests
         Assert.Equal(1, data.GetProperty("available").GetInt32());
         Assert.True(data.GetProperty("decisions")[0].GetProperty("selected").GetBoolean());
         Assert.False(data.GetProperty("decisions")[1].GetProperty("selected").GetBoolean());
+        Assert.Equal(4, data.GetProperty("probes").GetArrayLength());
+        Assert.Equal(1, data.GetProperty("probes")[0].GetProperty("attempt_count").GetInt32());
     }
 
     [Fact]
@@ -2321,6 +2323,56 @@ public sealed partial class AppTests
         Assert.Contains("adb", capabilities);
         Assert.Contains("physical", capabilities);
         Assert.Contains("model:Pixel_9", capabilities);
+    }
+
+    [Fact]
+    public async Task LabDoctor_Retries_Transient_Probe_Failure_And_Reports_Attempts()
+    {
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("usb-1", "device", "product:p model:Pixel_9 device:komodo usb:1-1"));
+        host.AdbServerStatusResults.Enqueue(CreateAdbDiagnostic("server-status", ["server-status"], exitCode: 1, stderr: "transport is not ready"));
+        host.AdbServerStatusResults.Enqueue(CreateAdbDiagnostic("server-status", ["server-status"]));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var exitCode = await app.RunAsync(["lab", "doctor", "--device-query", "serial=usb-1"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var firstProbe = envelope.RootElement.GetProperty("data").GetProperty("probes")[0];
+        Assert.Equal("server-status", firstProbe.GetProperty("name").GetString());
+        Assert.True(firstProbe.GetProperty("succeeded").GetBoolean());
+        Assert.Equal(2, firstProbe.GetProperty("attempt_count").GetInt32());
+        Assert.Equal(1, firstProbe.GetProperty("retry_count").GetInt32());
+        Assert.Equal(["server-status", "server-status", "version", "features", "mdns check"], host.AdbDiagnostics);
+    }
+
+    [Fact]
+    public async Task LabDoctor_Does_Not_Retry_NonTransient_Probe_Failure()
+    {
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("usb-1", "device", "product:p model:Pixel_9 device:komodo usb:1-1"));
+        host.AdbServerStatusResults.Enqueue(CreateAdbDiagnostic("server-status", ["server-status"], exitCode: 1, stderr: "unknown option --bad"));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var exitCode = await app.RunAsync(["lab", "doctor", "--device-query", "serial=usb-1"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var firstProbe = envelope.RootElement.GetProperty("data").GetProperty("probes")[0];
+        Assert.False(firstProbe.GetProperty("succeeded").GetBoolean());
+        Assert.Equal(1, firstProbe.GetProperty("attempt_count").GetInt32());
+        Assert.Equal(0, firstProbe.GetProperty("retry_count").GetInt32());
+        Assert.Equal(["server-status", "version", "features", "mdns check"], host.AdbDiagnostics);
     }
 
     [Fact]
@@ -3371,5 +3423,27 @@ public sealed partial class AppTests
                 MetadataFile = "failure.json"
             }
         };
+
+    private static AdbDiagnosticResult CreateAdbDiagnostic(
+        string name,
+        IReadOnlyList<string> args,
+        int exitCode = 0,
+        string stdout = "",
+        string stderr = "")
+    {
+        return new AdbDiagnosticResult(
+            ResultSchemas.AdbDiagnostic,
+            name,
+            new AdbCommandOutput(
+                $"adb {string.Join(" ", args)}",
+                args,
+                exitCode,
+                exitCode == 0,
+                stdout,
+                stderr,
+                1,
+                null,
+                []));
+    }
 
 }

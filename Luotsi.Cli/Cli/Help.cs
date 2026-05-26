@@ -159,11 +159,12 @@ Examples:
   luotsi lab doctor --fix
 
 Output:
-  Lab status explains which attached devices match a query. Lab doctor reports
-  ambiguous selection, offline devices, stale devices, and recommended repair
-  commands. With --fix, Luotsi may run safe host-side recovery actions. Lab
-  claim creates a host-side lease token so CI and agents can avoid selecting a
-  device already claimed by another workflow. Active leases are honored by
+  Lab status explains which attached devices match a query and includes ADB
+  probe attempt/retry counts for transient host readiness failures. Lab doctor
+  reports ambiguous selection, offline devices, stale devices, and recommended
+  repair commands. With --fix, Luotsi may run safe host-side recovery actions.
+  Lab claim creates a host-side lease token so CI and agents can avoid selecting
+  a device already claimed by another workflow. Active leases are honored by
   --device-query selection. Lab quarantine marks unhealthy devices unavailable
   until they are explicitly unquarantined. Lab plan is a dry-run allocator that
   explains which device would be selected or why selection is blocked, and
