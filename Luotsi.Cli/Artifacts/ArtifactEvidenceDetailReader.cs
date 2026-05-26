@@ -12,7 +12,7 @@ internal sealed class ArtifactEvidenceDetailReader(string root, IFileSystem file
     private const int MaxJsonlDetailLines = 500;
 
     private readonly string _root = root ?? throw new ArgumentNullException(nameof(root));
-    private readonly string _fullRoot = Path.GetFullPath(root ?? throw new ArgumentNullException(nameof(root)));
+    private readonly string _fullRoot = Path.GetFullPath(root);
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
 
     public string? TryBuild(string path)
