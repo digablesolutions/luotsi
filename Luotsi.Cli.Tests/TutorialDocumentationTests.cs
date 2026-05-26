@@ -13,22 +13,47 @@ public sealed partial class AppTests
     {
         var docsRoot = Path.GetFullPath(Path.Join(FindRepositoryRoot(), "docs"));
         var markdownFiles = Directory.GetFiles(docsRoot, "*.md", SearchOption.AllDirectories);
-        var missingLinks = new List<string>();
+        var missingLinks = FindMissingLinks(markdownFiles, docsRoot);
 
-        foreach (var markdownFile in markdownFiles)
+        Assert.Empty(missingLinks);
+    }
+
+    [Fact]
+    public void Website_Documentation_Links_Resolve()
+    {
+        var websiteDocsRoot = Path.GetFullPath(Path.Join(FindRepositoryRoot(), "website", "src", "content", "docs", "docs"));
+        var contentFiles = Directory.GetFiles(websiteDocsRoot, "*.*", SearchOption.AllDirectories)
+            .Where(static path => string.Equals(Path.GetExtension(path), ".md", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(Path.GetExtension(path), ".mdx", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        var missingLinks = FindMissingLinks(contentFiles, websiteDocsRoot);
+
+        Assert.Empty(missingLinks);
+    }
+
+    [Fact]
+    public void Website_Documentation_Sidebar_Slugs_Resolve()
+    {
+        var root = FindRepositoryRoot();
+        var websiteDocsRoot = Path.GetFullPath(Path.Join(root, "website", "src", "content", "docs", "docs"));
+        var astroConfigPath = Path.Join(root, "website", "astro.config.mjs");
+        var astroConfig = File.ReadAllText(astroConfigPath);
+        var missingSlugs = new List<string>();
+
+        foreach (var slug in SidebarSlugRegex()
+                     .Matches(astroConfig)
+                     .Cast<Match>()
+                     .Select(static match => match.Groups["target"].Value.Trim())
+                     .Where(static slug => !string.IsNullOrWhiteSpace(slug)))
         {
-            var markdown = File.ReadAllText(markdownFile);
-            foreach (var link in ExtractLocalLinks(markdown))
+            if (!ResolveWebsiteSidebarSlugTargets(websiteDocsRoot, slug).Any(TargetExists))
             {
-                var target = ResolveLocalDocumentationLink(markdownFile, link);
-                if (target is not null && !File.Exists(target) && !Directory.Exists(target))
-                {
-                    missingLinks.Add($"{Path.GetRelativePath(docsRoot, markdownFile)} -> {link}");
-                }
+                missingSlugs.Add(slug);
             }
         }
 
-        Assert.Empty(missingLinks);
+        Assert.Empty(missingSlugs);
     }
 
     [Fact]
@@ -99,6 +124,25 @@ public sealed partial class AppTests
         Assert.Equal("validated", validation.RootElement.GetProperty("data").GetProperty("status").GetString());
     }
 
+    private static IReadOnlyList<string> FindMissingLinks(IEnumerable<string> contentFiles, string contentRoot)
+    {
+        var missingLinks = new List<string>();
+
+        foreach (var contentFile in contentFiles)
+        {
+            var content = File.ReadAllText(contentFile);
+            foreach (var link in ExtractLocalLinks(content))
+            {
+                if (!ResolveLocalDocumentationLinkTargets(contentFile, link).Any(TargetExists))
+                {
+                    missingLinks.Add($"{Path.GetRelativePath(contentRoot, contentFile)} -> {link}");
+                }
+            }
+        }
+
+        return missingLinks;
+    }
+
     private static IEnumerable<string> ExtractLocalLinks(string markdown)
     {
         foreach (var link in MarkdownLinkRegex()
@@ -118,17 +162,97 @@ public sealed partial class AppTests
         {
             yield return link;
         }
+
+        var frontmatter = ExtractFrontmatter(markdown);
+        if (frontmatter is not null)
+        {
+            foreach (var link in FrontmatterLinkRegex()
+                         .Matches(frontmatter)
+                         .Cast<Match>()
+                         .Select(static match => match.Groups["target"].Value.Trim())
+                         .Where(static link => !IsExternalOrAnchorLink(link)))
+            {
+                yield return link;
+            }
+        }
     }
 
-    private static string? ResolveLocalDocumentationLink(string markdownFile, string link)
+    private static IEnumerable<string> ResolveLocalDocumentationLinkTargets(string markdownFile, string link)
     {
-        var withoutFragment = link.Split('#', 2)[0];
+        var withoutFragment = link.Split('#', 2)[0].Split('?', 2)[0];
         if (string.IsNullOrWhiteSpace(withoutFragment))
         {
-            return null;
+            yield break;
         }
 
-        return Path.GetFullPath(withoutFragment.Replace('/', Path.DirectorySeparatorChar), Path.GetDirectoryName(markdownFile)!);
+        var normalized = withoutFragment
+            .Replace('/', Path.DirectorySeparatorChar)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        foreach (var baseDirectory in ResolveDocumentationLinkBaseDirectories(markdownFile))
+        {
+            var resolved = Path.GetFullPath(normalized, baseDirectory);
+            yield return resolved;
+
+            if (Path.HasExtension(resolved))
+            {
+                continue;
+            }
+
+            yield return $"{resolved}.md";
+            yield return $"{resolved}.mdx";
+            yield return Path.Join(resolved, "index.md");
+            yield return Path.Join(resolved, "index.mdx");
+        }
+    }
+
+    private static IEnumerable<string> ResolveDocumentationLinkBaseDirectories(string markdownFile)
+    {
+        var directory = Path.GetDirectoryName(markdownFile)!;
+        yield return directory;
+
+        if (string.Equals(Path.GetExtension(markdownFile), ".mdx", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(Path.GetFileNameWithoutExtension(markdownFile), "index", StringComparison.OrdinalIgnoreCase))
+        {
+            yield return Path.Join(directory, Path.GetFileNameWithoutExtension(markdownFile));
+        }
+    }
+
+    private static IEnumerable<string> ResolveWebsiteSidebarSlugTargets(string websiteDocsRoot, string slug)
+    {
+        var normalizedSlug = slug.Replace('/', Path.DirectorySeparatorChar).Trim(Path.DirectorySeparatorChar);
+        if (string.Equals(normalizedSlug, "docs", StringComparison.OrdinalIgnoreCase))
+        {
+            yield return Path.Join(websiteDocsRoot, "index.md");
+            yield return Path.Join(websiteDocsRoot, "index.mdx");
+            yield break;
+        }
+
+        if (normalizedSlug.StartsWith($"docs{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+        {
+            normalizedSlug = normalizedSlug.Substring(5);
+        }
+
+        var resolved = Path.GetFullPath(Path.Join(websiteDocsRoot, normalizedSlug));
+        yield return resolved;
+
+        if (Path.HasExtension(resolved))
+        {
+            yield break;
+        }
+
+        yield return $"{resolved}.md";
+        yield return $"{resolved}.mdx";
+        yield return Path.Join(resolved, "index.md");
+        yield return Path.Join(resolved, "index.mdx");
+    }
+
+    private static bool TargetExists(string path) =>
+        File.Exists(path) || Directory.Exists(path);
+
+    private static string? ExtractFrontmatter(string content)
+    {
+        var match = FrontmatterRegex().Match(content);
+        return match.Success ? match.Groups["content"].Value : null;
     }
 
     private static bool IsExternalOrAnchorLink(string link) =>
@@ -160,4 +284,13 @@ public sealed partial class AppTests
 
     [GeneratedRegex("\\b(?:src|href)=\"(?<target>[^\"]+)\"", RegexOptions.Compiled)]
     private static partial Regex HtmlSourceRegex();
+
+    [GeneratedRegex(@"\A---\r?\n(?<content>.*?)\r?\n---\r?\n", RegexOptions.Compiled | RegexOptions.Singleline)]
+    private static partial Regex FrontmatterRegex();
+
+    [GeneratedRegex(@"^\s*link:\s*(?<target>\S+)\s*$", RegexOptions.Compiled | RegexOptions.Multiline)]
+    private static partial Regex FrontmatterLinkRegex();
+
+    [GeneratedRegex(@"slug:\s*'(?<target>[^']+)'", RegexOptions.Compiled)]
+    private static partial Regex SidebarSlugRegex();
 }

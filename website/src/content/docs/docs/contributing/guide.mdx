@@ -10,6 +10,8 @@ Luotsi is intended to stay boring to operate and boring to automate. Good contri
 - Branch from `main` for each focused change.
 - Keep commits and pull requests scoped to one behavior or one tightly related slice.
 - Update docs when command behavior, flags, artifacts, or operator UX changes.
+- Update `docs/` first when you change maintained prose or reference content.
+- If the public website mirrors that topic, update the matching page under `website/src/content/docs/docs/` in the same change.
 
 ## Validation
 
@@ -50,9 +52,13 @@ If you changed the Android helper, validate the helper build from `Luotsi.ViewSe
 
 When documentation needs a source of truth, prefer the owning implementation surface instead of copying behavior from stale notes.
 
+- `docs/` for maintained repository prose and reference pages
+- `website/src/content/docs/docs/` for the published public mirror of overlapping docs content
 - `Luotsi.Cli/Cli/Help.cs` for the public CLI command list and flags
 - `Luotsi.Cli/Scenarios/ScenarioExecutor.cs` and `Luotsi.Cli/Scenarios/ScenarioValidator.cs` for supported scenario actions and validation rules
 - `Luotsi.ViewServer.Android/app/src/main/AndroidManifest.xml` plus the helper Kotlin sources for Android helper behavior, permissions, and entry points
+
+Keep `Luotsi.Cli.Tests/TutorialDocumentationTests.cs` green when you touch docs. It validates repository docs links, website docs links, and the Starlight sidebar slugs.
 
 ## Useful public docs while you work
 

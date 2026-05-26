@@ -9,6 +9,8 @@ changes small, explicit, and easy to validate.
 - Open a pull request instead of pushing straight to `main`.
 - Keep commits and PRs scoped to one change or one tightly related slice.
 - Update docs when command behavior, flags, artifacts, or operator UX change.
+- Update `docs/` first for maintained prose and reference content.
+- If the public website mirrors that topic under `website/src/content/docs/docs/`, update the matching page in the same change.
 
 ## Validation
 
@@ -46,9 +48,13 @@ If you changed the Android helper, also validate the helper build from
 
 When documentation needs a source of truth, prefer the owning implementation surface instead of copying behavior from older docs:
 
+- `docs/` for maintained repository prose and reference pages
+- `website/src/content/docs/docs/` for the published public mirror of overlapping docs content
 - `Luotsi.Cli/Cli/Help.cs` for the public CLI command list and flags
 - `Luotsi.Cli/Scenarios/ScenarioExecutor.cs` and `Luotsi.Cli/Scenarios/ScenarioValidator.cs` for supported scenario actions and validation rules
 - `Luotsi.ViewServer.Android/app/src/main/AndroidManifest.xml` plus the helper Kotlin sources for Android helper behavior, permissions, and entry points
+
+Keep `Luotsi.Cli.Tests/TutorialDocumentationTests.cs` green when you touch docs. It validates local links in `docs/`, local links in the website docs content, and the Starlight sidebar slugs in `website/astro.config.mjs`.
 
 ## Pull requests
 
