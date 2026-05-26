@@ -8,6 +8,9 @@ namespace Luotsi.Cli.Artifacts;
 
 internal sealed class ArtifactEvidenceDetailReader(string root, IFileSystem fileSystem)
 {
+    private const int MaxJsonlDetailBytes = 256 * 1024;
+    private const int MaxJsonlDetailLines = 500;
+
     private readonly string _root = root ?? throw new ArgumentNullException(nameof(root));
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
 
@@ -89,9 +92,17 @@ internal sealed class ArtifactEvidenceDetailReader(string root, IFileSystem file
     private string? BuildJsonlDetail(string path)
     {
         using var stream = _fileSystem.OpenRead(Path.Join(_root, path));
+        var truncatedByBytes = false;
+        if (stream is {CanSeek: true, Length: > MaxJsonlDetailBytes})
+        {
+            stream.Seek(-MaxJsonlDetailBytes, SeekOrigin.End);
+            truncatedByBytes = true;
+        }
+
         using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 4096);
         var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         string? firstFailure = null;
+        var sampledLines = new Queue<string>();
         var lineCount = 0;
         while (reader.ReadLine() is { } line)
         {
@@ -100,7 +111,35 @@ internal sealed class ArtifactEvidenceDetailReader(string root, IFileSystem file
                 continue;
             }
 
-            using var document = JsonDocument.Parse(line);
+            if (truncatedByBytes && lineCount == 0)
+            {
+                lineCount++;
+                continue;
+            }
+
+            if (sampledLines.Count == MaxJsonlDetailLines)
+            {
+                sampledLines.Dequeue();
+            }
+
+            sampledLines.Enqueue(line);
+            lineCount++;
+        }
+
+        foreach (var line in sampledLines)
+        {
+            JsonDocument document;
+            try
+            {
+                document = JsonDocument.Parse(line);
+            }
+            catch (JsonException)
+            {
+                continue;
+            }
+
+            using (document)
+            {
             var item = document.RootElement;
             if (item.ValueKind != JsonValueKind.Object ||
                 !item.TryGetProperty("type", out var typeProperty) ||
@@ -109,7 +148,6 @@ internal sealed class ArtifactEvidenceDetailReader(string root, IFileSystem file
                 continue;
             }
 
-            lineCount++;
             var type = typeProperty.GetString();
             if (string.IsNullOrWhiteSpace(type))
             {
@@ -118,9 +156,10 @@ internal sealed class ArtifactEvidenceDetailReader(string root, IFileSystem file
 
             counts[type] = counts.GetValueOrDefault(type) + 1;
             firstFailure ??= IsTimelineFailureRelevant(item, type) ? BuildTimelineFailureSummary(item, type) : null;
+            }
         }
 
-        if (lineCount == 0)
+        if (counts.Count == 0)
         {
             return null;
         }
@@ -132,9 +171,12 @@ internal sealed class ArtifactEvidenceDetailReader(string root, IFileSystem file
                 .ThenBy(static item => item.Key)
                 .Take(3)
                 .Select(static item => $"{item.Key}={item.Value}"));
+        var prefix = lineCount > sampledLines.Count || truncatedByBytes
+            ? $"events_sampled={counts.Values.Sum()}"
+            : $"events={counts.Values.Sum()}";
         return string.IsNullOrWhiteSpace(firstFailure)
-            ? $"events={lineCount} | top={topTypes}"
-            : $"events={lineCount} | first_failure={firstFailure} | top={topTypes}";
+            ? $"{prefix} | top={topTypes}"
+            : $"{prefix} | first_failure={firstFailure} | top={topTypes}";
     }
 
     private static string? BuildSessionReplayDetail(JsonElement root)

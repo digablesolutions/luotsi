@@ -650,5 +650,42 @@ public sealed partial class AppTests
         Assert.Contains("- [demo.mp4](demo.mp4)", index, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ArtifactEvidenceDetailReader_Skips_Invalid_Jsonl_Lines()
+    {
+        var fileSystem = new FakeFileSystem();
+        fileSystem.AddFile(
+            Path.Join("/tmp/replay", "session-timeline.jsonl"),
+            """
+            {"type":"view_started"}
+            not-json
+            {"type":"view_error","error":{"category":"transport","message":"Unexpected end of stream"}}
+            """);
+        var reader = new ArtifactEvidenceDetailReader("/tmp/replay", fileSystem);
+
+        var detail = reader.TryBuild("session-timeline.jsonl");
+
+        Assert.NotNull(detail);
+        Assert.Contains("events=2", detail, StringComparison.Ordinal);
+        Assert.Contains("first_failure=view_error | error=transport: Unexpected end of stream", detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ArtifactEvidenceDetailReader_Samples_Large_Jsonl_Files()
+    {
+        var fileSystem = new FakeFileSystem();
+        var lines = Enumerable.Range(0, 520)
+            .Select(static index => index == 519
+                ? """{"type":"view_error","error":{"category":"transport","message":"tail failure"}}"""
+                : """{"type":"view_stats"}""");
+        fileSystem.AddFile(Path.Join("/tmp/replay", "session-timeline.jsonl"), string.Join('\n', lines));
+        var reader = new ArtifactEvidenceDetailReader("/tmp/replay", fileSystem);
+
+        var detail = reader.TryBuild("session-timeline.jsonl");
+
+        Assert.NotNull(detail);
+        Assert.Contains("events_sampled=500", detail, StringComparison.Ordinal);
+        Assert.Contains("first_failure=view_error | error=transport: tail failure", detail, StringComparison.Ordinal);
+    }
 
 }
