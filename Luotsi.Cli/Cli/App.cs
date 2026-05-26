@@ -1,6 +1,4 @@
 using Luotsi.Cli.Cli.Composition;
-using Luotsi.Cli.Cli.Envelope;
-using Luotsi.Cli.Cli.Inspect;
 using Luotsi.Cli.Cli.Routing;
 
 namespace Luotsi.Cli.Cli;
@@ -8,8 +6,9 @@ namespace Luotsi.Cli.Cli;
 /// <summary>
 /// Entry point for the Luotsi command-line application.
 /// </summary>
-public sealed class App
+public sealed class App : IDisposable
 {
+    private readonly AppComposition _composition;
     private readonly AppExecutionShell _executionShell;
     private readonly AppCommandFamilyRouter _commandFamilyRouter;
 
@@ -27,53 +26,9 @@ public sealed class App
     /// <param name="dependencies">Optional dependency overrides for tests or specialized hosting.</param>
     public App(AppDependencies? dependencies)
     {
-        dependencies ??= new AppDependencies();
-
-        var infrastructure = AppInfrastructureCompositionBuilder.Build(dependencies);
-        var hostedCommands = AppHostedCommandCompositionBuilder.Build(new(
-            infrastructure.TimeProvider,
-            infrastructure.Console,
-            infrastructure.FileSystem,
-            infrastructure.Environment,
-            infrastructure.ProcessRunner,
-            infrastructure.Delay,
-            dependencies.SelfUpdateService,
-            infrastructure.ProfileCoordinator));
-        var viewCommands = AppViewCommandCompositionBuilder.Build(new(
-            dependencies,
-            infrastructure.TimeProvider,
-            infrastructure.Console,
-            infrastructure.Environment,
-            infrastructure.FileSystem,
-            infrastructure.ProcessRunner,
-            infrastructure.AdbClientFactory,
-            infrastructure.IdGenerator,
-            hostedCommands.EnvelopeWriter,
-            infrastructure.ProfileCoordinator,
-            infrastructure.DeviceHostLauncher));
-        _executionShell = new AppExecutionShell(new AppExecutionShellDependencies
-        {
-            Console = infrastructure.Console,
-            TimeProvider = infrastructure.TimeProvider,
-            FailureResponder = new AppCommandFailureResponder(hostedCommands.EnvelopeWriter)
-        });
-        _commandFamilyRouter = new AppCommandFamilyRouter(new AppCommandFamilyRouterDependencies
-        {
-            RouteBootstrapper = new AppCommandRouteBootstrapper(new AppCommandRouteBootstrapperDependencies
-            {
-                TimeProvider = infrastructure.TimeProvider,
-                FileSystem = infrastructure.FileSystem,
-                Environment = infrastructure.Environment,
-                ProfileCoordinator = infrastructure.ProfileCoordinator,
-                DeviceHostLauncher = infrastructure.DeviceHostLauncher
-            }),
-            CommandHost = hostedCommands.CommandHost,
-            ReplayCommandHost = hostedCommands.ReplayCommandHost,
-            ViewSessionCommandPreparer = viewCommands.ViewSessionCommandPreparer,
-            InspectSessionLauncher = new InspectSessionLauncher(infrastructure.DeviceHostLauncher, infrastructure.Console, infrastructure.TimeProvider),
-            ViewDiagnosticsLauncher = viewCommands.ViewDiagnosticsLauncher,
-            DoctorCommandLauncher = viewCommands.DoctorCommandLauncher
-        });
+        _composition = AppComposition.Create(dependencies);
+        _executionShell = _composition.ExecutionShell;
+        _commandFamilyRouter = _composition.CommandFamilyRouter;
     }
 
     /// <summary>
@@ -82,4 +37,7 @@ public sealed class App
     /// <param name="args">Command-line arguments.</param>
     /// <returns>The process exit code.</returns>
     public Task<int> RunAsync(string[] args) => _executionShell.RunAsync(args, _commandFamilyRouter.DispatchAsync);
+
+    /// <inheritdoc />
+    public void Dispose() => _composition.Dispose();
 }

@@ -12,7 +12,7 @@ public static class Program
     /// <returns>The process exit code.</returns>
     public static async Task<int> Main(string[] args)
     {
-        var app = new App();
+        using var app = new App();
         return await app.RunAsync(args).ConfigureAwait(false);
     }
 }
