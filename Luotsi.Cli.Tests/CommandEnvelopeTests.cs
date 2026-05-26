@@ -103,6 +103,7 @@ public sealed partial class AppTests
         Assert.Contains("Luotsi help: artifacts", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi artifacts list [--artifacts <directory>] [--limit 20]", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi artifacts pack <artifact-root-or-run-id>", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("luotsi artifacts unpack <artifact.zip>", console.ErrorLines[0], StringComparison.Ordinal);
     }
 
     [Theory]
@@ -3320,6 +3321,79 @@ public sealed partial class AppTests
         Assert.Equal(2, exitCode);
         Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
         Assert.Contains("already exists", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsUnpack_Extracts_Zip_To_Output_Directory()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var packagePath = "/tmp/share/replay.zip";
+        fileSystem.CreateDirectory("/tmp/share");
+        await using (var packageStream = fileSystem.OpenWrite(packagePath))
+        {
+            using var archive = new ZipArchive(packageStream, ZipArchiveMode.Create, leaveOpen: true);
+            var index = archive.CreateEntry("index.html");
+            await using (var entry = index.Open())
+            await using (var writer = new StreamWriter(entry))
+            {
+                await writer.WriteAsync("<!doctype html>");
+            }
+
+            var timeline = archive.CreateEntry("failures/session-timeline.jsonl");
+            await using (var entry = timeline.Open())
+            await using (var writer = new StreamWriter(entry))
+            {
+                await writer.WriteAsync("{\"type\":\"session_started\"}");
+            }
+        }
+
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "unpack", packagePath, "--output", "/tmp/unpacked"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(packagePath, data.GetProperty("package").GetString());
+        var outputDirectory = data.GetProperty("output_directory").GetString();
+        Assert.Equal("/tmp/unpacked", outputDirectory);
+        Assert.Equal(2, data.GetProperty("entry_count").GetInt32());
+        Assert.True(fileSystem.FileExists(Path.GetFullPath(Path.Join(outputDirectory!, "index.html"))));
+        Assert.True(fileSystem.FileExists(Path.GetFullPath(Path.Join(outputDirectory!, "failures", "session-timeline.jsonl"))));
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "open_artifacts");
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsUnpack_Rejects_ZipSlip_Entry()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var packagePath = "/tmp/share/bad.zip";
+        fileSystem.CreateDirectory("/tmp/share");
+        await using (var packageStream = fileSystem.OpenWrite(packagePath))
+        {
+            using var archive = new ZipArchive(packageStream, ZipArchiveMode.Create, leaveOpen: true);
+            _ = archive.CreateEntry("../escape.txt");
+        }
+
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "unpack", packagePath, "--output", "/tmp/unpacked"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("outside the output directory", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
     private static FakeEnvironmentVariables CreateInstalledLuotsiEnvironment(FakeFileSystem fileSystem, string tag)

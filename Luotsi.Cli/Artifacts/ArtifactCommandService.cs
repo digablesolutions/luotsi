@@ -90,6 +90,36 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             ]));
     }
 
+    public Task<ArtifactUnpackResult> UnpackAsync(string packagePath, string? output, bool force)
+    {
+        if (string.IsNullOrWhiteSpace(packagePath))
+        {
+            throw new UsageException("artifacts unpack requires <artifact-zip>.");
+        }
+
+        if (!_fileSystem.FileExists(packagePath))
+        {
+            throw new UsageException($"Artifact package '{packagePath}' does not exist.");
+        }
+
+        var outputDirectory = ResolveUnpackOutputPath(packagePath, output);
+        if (_fileSystem.DirectoryExists(outputDirectory) && !force)
+        {
+            throw new UsageException($"Artifact unpack output '{outputDirectory}' already exists. Use --force to write into it.");
+        }
+
+        _fileSystem.CreateDirectory(outputDirectory);
+        var entries = UnpackArtifactPackage(packagePath, outputDirectory, force);
+        return Task.FromResult(new ArtifactUnpackResult(
+            packagePath,
+            outputDirectory,
+            entries,
+            [
+                new ArtifactRecommendedCommandResult("open_artifacts", "Open the unpacked artifact root.", $"luotsi artifacts open {Quote(outputDirectory)}"),
+                new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench for the unpacked artifact root.", $"luotsi replay open --artifacts {Quote(outputDirectory)}")
+            ]));
+    }
+
     private async Task<string> EnsureIndexAsync(string artifactRoot)
     {
         var htmlIndexPath = Path.Join(artifactRoot, HtmlIndexFileName);
@@ -127,6 +157,35 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         }
 
         return files.Length;
+    }
+
+    private int UnpackArtifactPackage(string packagePath, string outputDirectory, bool force)
+    {
+        var fullOutputDirectory = Path.GetFullPath(outputDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var count = 0;
+        using var input = _fileSystem.OpenRead(packagePath);
+        using var archive = new ZipArchive(input, ZipArchiveMode.Read, leaveOpen: false);
+        foreach (var entry in archive.Entries.Where(static entry => !string.IsNullOrWhiteSpace(entry.Name)))
+        {
+            var destinationPath = Path.GetFullPath(Path.Join(outputDirectory, entry.FullName));
+            if (!destinationPath.StartsWith(fullOutputDirectory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
+                !destinationPath.StartsWith(fullOutputDirectory + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new UsageException($"Artifact package entry '{entry.FullName}' would write outside the output directory.");
+            }
+
+            if (_fileSystem.FileExists(destinationPath) && !force)
+            {
+                throw new UsageException($"Artifact unpack destination '{destinationPath}' already exists. Use --force to overwrite it.");
+            }
+
+            using var entryStream = entry.Open();
+            using var output = _fileSystem.OpenWrite(destinationPath, overwrite: force);
+            entryStream.CopyTo(output);
+            count++;
+        }
+
+        return count;
     }
 
     private int CountPackableFiles(string artifactRoot) => GetArtifactFiles(artifactRoot).Length;
@@ -231,6 +290,19 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         return Path.Join(Path.GetDirectoryName(Path.GetFullPath(artifactRoot)), $"{rootName}.zip");
     }
 
+    private static string ResolveUnpackOutputPath(string packagePath, string? output)
+    {
+        if (!string.IsNullOrWhiteSpace(output))
+        {
+            return output;
+        }
+
+        var fullPath = Path.GetFullPath(packagePath);
+        var directory = Path.GetDirectoryName(fullPath);
+        var name = Path.GetFileNameWithoutExtension(fullPath);
+        return Path.Join(directory, name);
+    }
+
     private static string? FindAncestorByName(string baseRoot, string filePath, string name)
     {
         var current = Path.GetDirectoryName(filePath);
@@ -290,6 +362,12 @@ internal sealed record ArtifactListEntryResult(
 internal sealed record ArtifactPackResult(
     string ArtifactRoot,
     string Output,
+    int EntryCount,
+    IReadOnlyList<ArtifactRecommendedCommandResult> RecommendedCommands);
+
+internal sealed record ArtifactUnpackResult(
+    string Package,
+    string OutputDirectory,
     int EntryCount,
     IReadOnlyList<ArtifactRecommendedCommandResult> RecommendedCommands);
 

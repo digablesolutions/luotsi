@@ -56,6 +56,7 @@ Usage:
   luotsi artifacts list [--artifacts <directory>] [--limit 20]
   luotsi artifacts open <artifact-root-or-run-id> [--dry-run]
   luotsi artifacts pack <artifact-root-or-run-id> [--output <file.zip>] [--force]
+  luotsi artifacts unpack <artifact.zip> [--output <directory>] [--force]
   luotsi run --path scenarios --report-json results.json --report-junit junit.xml
   luotsi run --path scenarios --events-jsonl events.jsonl
 
@@ -66,6 +67,8 @@ Artifacts:
   artifacts list shows recent artifact roots and their run ids. artifacts open
   refreshes the index if needed and opens the local browser or file manager.
   artifacts pack writes a zip suitable for sharing or CI upload.
+  artifacts unpack extracts a zip into a local artifact root with zip-slip
+  protection before you open or replay it.
   When the target is a run id rather than a full path, Luotsi searches the
   default temp artifact root or --artifacts <directory>.
 
@@ -76,6 +79,7 @@ Examples:
   luotsi artifacts open artifacts/20260518-100000-run
   luotsi artifacts open 20260518-100000-run --artifacts artifacts
   luotsi artifacts pack artifacts/20260518-100000-run --output replay.zip
+  luotsi artifacts unpack replay.zip --output artifacts/replay
 """,
         ["inspect"] = """
 Luotsi help: inspect
@@ -579,6 +583,7 @@ Command groups:
     artifacts list [--artifacts <directory>] [--limit 20]
     artifacts open <artifact-root-or-run-id> [--dry-run]
     artifacts pack <artifact-root-or-run-id> [--output <file.zip>] [--force]
+    artifacts unpack <artifact.zip> [--output <directory>] [--force]
     replay summarize --artifacts <artifact-root> [--format json|jsonl]
     replay capsule --artifacts <artifact-root> [--write-readme] [--write-json]
     replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
