@@ -20,6 +20,9 @@ public sealed partial class AppTests
 
         Assert.Contains("[switch]$SkipFfmpeg", script, StringComparison.Ordinal);
         Assert.Contains("ffmpeg_staged = $ViewExtras.ffmpeg_staged", script, StringComparison.Ordinal);
+        Assert.Contains("function Get-NativeLastExitCode", script, StringComparison.Ordinal);
+        Assert.Contains("Get-Variable -Name LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue", script, StringComparison.Ordinal);
+        Assert.Contains("$exitCode = Get-NativeLastExitCode", script, StringComparison.Ordinal);
 
         var catchBlock = Slice(script, "catch {", "finally {");
         Assert.Contains("if (-not $installCommitted)", catchBlock, StringComparison.Ordinal);

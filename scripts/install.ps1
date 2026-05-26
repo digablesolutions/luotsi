@@ -95,6 +95,15 @@ function Invoke-Download([string]$Uri, [string]$DestinationPath) {
     Invoke-WebRequest -Headers @{ "User-Agent" = "luotsi-installer" } -Uri $Uri -OutFile $DestinationPath
 }
 
+function Get-NativeLastExitCode {
+    $lastExitCode = Get-Variable -Name LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue
+    if ($null -eq $lastExitCode) {
+        return 0
+    }
+
+    return [int]$lastExitCode.Value
+}
+
 function Install-ViewExtras([string]$CurrentDirectory, [string]$Rid, [bool]$Skip) {
     $ffmpegRoot = Join-Path $CurrentDirectory "ffmpeg"
     $ffmpegBin = Join-Path $ffmpegRoot "bin"
@@ -130,10 +139,7 @@ function Install-ViewExtras([string]$CurrentDirectory, [string]$Rid, [bool]$Skip
     Write-Host "Installing view extras..."
     try {
         $output = & $scriptPath -Platform $Rid 2>&1
-        $exitCode = $LASTEXITCODE
-        if ($null -eq $exitCode) {
-            $exitCode = 0
-        }
+        $exitCode = Get-NativeLastExitCode
     }
     catch {
         return [ordered]@{
