@@ -8,9 +8,18 @@ using Luotsi.Cli.View.Diagnostics;
 
 namespace Luotsi.Cli.Cli.Doctor;
 
-internal sealed class DoctorCommandHost(DoctorCommandHostDependencies dependencies)
+internal sealed class DoctorCommandHost(
+    IEnvironmentVariables environment,
+    AppCommandEnvelopeWriter envelopeWriter,
+    IViewDoctorFactory viewDoctorFactory,
+    IViewSetupFactory viewSetupFactory,
+    FfmpegSetupProvisioner ffmpegSetupProvisioner)
 {
-    private readonly DoctorCommandHostDependencies _dependencies = dependencies ?? throw new ArgumentNullException(nameof(dependencies));
+    private readonly IEnvironmentVariables _environment = environment ?? throw new ArgumentNullException(nameof(environment));
+    private readonly AppCommandEnvelopeWriter _envelopeWriter = envelopeWriter ?? throw new ArgumentNullException(nameof(envelopeWriter));
+    private readonly IViewDoctorFactory _viewDoctorFactory = viewDoctorFactory ?? throw new ArgumentNullException(nameof(viewDoctorFactory));
+    private readonly IViewSetupFactory _viewSetupFactory = viewSetupFactory ?? throw new ArgumentNullException(nameof(viewSetupFactory));
+    private readonly FfmpegSetupProvisioner _ffmpegSetupProvisioner = ffmpegSetupProvisioner ?? throw new ArgumentNullException(nameof(ffmpegSetupProvisioner));
 
     public async Task<int> RunAsync(CliOptions options, DateTimeOffset started, string adbExecutable, IDeviceHost runner, ArtifactSession artifacts)
     {
@@ -47,16 +56,16 @@ internal sealed class DoctorCommandHost(DoctorCommandHostDependencies dependenci
         {
             if (IsFfmpegDecoder(viewOptions))
             {
-                await _dependencies.FfmpegSetupProvisioner.StageAsync(repairSteps.Add).ConfigureAwait(false);
+                await _ffmpegSetupProvisioner.StageAsync(repairSteps.Add).ConfigureAwait(false);
             }
 
-            var setup = await _dependencies.ViewSetupFactory.Create(runner).SetupAsync(viewOptions, fix: true).ConfigureAwait(false);
+            var setup = await _viewSetupFactory.Create(runner).SetupAsync(viewOptions, fix: true).ConfigureAwait(false);
             repairSteps.AddRange(setup.Steps);
             viewReport = setup.Doctor;
         }
         else
         {
-            viewReport = await _dependencies.ViewDoctorFactory.Create(runner).DiagnoseAsync(viewOptions).ConfigureAwait(false);
+            viewReport = await _viewDoctorFactory.Create(runner).DiagnoseAsync(viewOptions).ConfigureAwait(false);
         }
 
         PreflightResult? packagePreflight = null;
@@ -74,7 +83,7 @@ internal sealed class DoctorCommandHost(DoctorCommandHostDependencies dependenci
             packagePreflight,
             viewReport,
             repairSteps);
-        _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "doctor", started, result, artifacts.ToData());
+        _envelopeWriter.WriteSuccess(options.Command ?? "doctor", started, result, artifacts.ToData());
         return result.Ready ? 0 : 1;
     }
 
@@ -131,17 +140,10 @@ internal sealed class DoctorCommandHost(DoctorCommandHostDependencies dependenci
 
     private Luotsi.Cli.View.Contracts.ViewOptions BuildViewOptions(CliOptions options, string adbExecutable)
     {
-        var commandTimeout = AdbCommandTimeoutResolver.Resolve(options, _dependencies.Environment);
+        var commandTimeout = AdbCommandTimeoutResolver.Resolve(options, _environment);
         return ViewCommandOptionsFactory.Build(options, adbExecutable, allowJoinShare: false, commandTimeout, options.Command ?? "doctor");
     }
 
     private static bool IsFfmpegDecoder(Luotsi.Cli.View.Contracts.ViewOptions options) =>
         string.Equals(options.Decoder, "ffmpeg", StringComparison.OrdinalIgnoreCase);
 }
-
-internal sealed record DoctorCommandHostDependencies(
-    IEnvironmentVariables Environment,
-    AppCommandEnvelopeWriter EnvelopeWriter,
-    IViewDoctorFactory ViewDoctorFactory,
-    IViewSetupFactory ViewSetupFactory,
-    FfmpegSetupProvisioner FfmpegSetupProvisioner);

@@ -7,19 +7,32 @@ using Luotsi.Cli.Infrastructure.Contracts;
 
 namespace Luotsi.Cli.Cli.Routing;
 
-internal sealed class AppCommandRouteBootstrapper(AppCommandRouteBootstrapperDependencies dependencies)
+internal sealed class AppCommandRouteBootstrapper(
+    TimeProvider timeProvider,
+    IFileSystem fileSystem,
+    IEnvironmentVariables environment,
+    ViewProfileCoordinator profileCoordinator,
+    DeviceHostLauncher deviceHostLauncher,
+    LabLeaseStore labLeaseStore,
+    LabQuarantineStore labQuarantineStore)
 {
-    private readonly AppCommandRouteBootstrapperDependencies _dependencies = dependencies ?? throw new ArgumentNullException(nameof(dependencies));
+    private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+    private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+    private readonly IEnvironmentVariables _environment = environment ?? throw new ArgumentNullException(nameof(environment));
+    private readonly ViewProfileCoordinator _profileCoordinator = profileCoordinator ?? throw new ArgumentNullException(nameof(profileCoordinator));
+    private readonly DeviceHostLauncher _deviceHostLauncher = deviceHostLauncher ?? throw new ArgumentNullException(nameof(deviceHostLauncher));
+    private readonly LabLeaseStore _labLeaseStore = labLeaseStore ?? throw new ArgumentNullException(nameof(labLeaseStore));
+    private readonly LabQuarantineStore _labQuarantineStore = labQuarantineStore ?? throw new ArgumentNullException(nameof(labQuarantineStore));
 
     public async Task<AppCommandRouteSetup> PrepareAsync(AppExecutionContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
         var options = context.Options;
-        await _dependencies.ProfileCoordinator.ApplyDefaultsAsync(options).ConfigureAwait(false);
+        await _profileCoordinator.ApplyDefaultsAsync(options).ConfigureAwait(false);
 
         var adbExecutable = options.Get("adb")
-            ?? _dependencies.Environment.GetEnvironmentVariable(CliDefaults.AdbExecutableEnvironmentVariable)
+            ?? _environment.GetEnvironmentVariable(CliDefaults.AdbExecutableEnvironmentVariable)
             ?? CliDefaults.DefaultAdbExecutable;
         var artifacts = CreateArtifacts(options);
         context.Artifacts = artifacts;
@@ -37,15 +50,15 @@ internal sealed class AppCommandRouteBootstrapper(AppCommandRouteBootstrapperDep
             setup.AdbExecutable,
             setup.Artifacts,
             options.Command,
-            _dependencies.DeviceHostLauncher,
-            _dependencies.LabLeaseStore,
-            _dependencies.LabQuarantineStore).ConfigureAwait(false);
+            _deviceHostLauncher,
+            _labLeaseStore,
+            _labQuarantineStore).ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(deviceSelector) && string.IsNullOrWhiteSpace(options.Get("device")))
         {
             options.ApplyDefaults(new Dictionary<string, string?> { ["device"] = deviceSelector });
         }
 
-        return _dependencies.DeviceHostLauncher.Create(options, setup.AdbExecutable, setup.Artifacts, deviceSelector);
+        return _deviceHostLauncher.Create(options, setup.AdbExecutable, setup.Artifacts, deviceSelector);
     }
 
     public void ValidateHostedCommandPrerequisites(CliOptions options)
@@ -65,7 +78,7 @@ internal sealed class AppCommandRouteBootstrapper(AppCommandRouteBootstrapperDep
             return;
         }
 
-        if (!_dependencies.FileSystem.FileExists(file))
+        if (!_fileSystem.FileExists(file))
         {
             throw new UsageException($"Scenario file '{file}' does not exist.");
         }
@@ -76,28 +89,11 @@ internal sealed class AppCommandRouteBootstrapper(AppCommandRouteBootstrapperDep
         if (string.Equals(options.Command, "replay", StringComparison.OrdinalIgnoreCase))
         {
             var artifactRoot = options.Get("artifacts") ?? throw new UsageException("replay requires --artifacts <directory> pointing to an existing artifact root.");
-            return ArtifactSession.AttachExisting(artifactRoot, _dependencies.FileSystem, options.Get("poll-artifacts"));
+            return ArtifactSession.AttachExisting(artifactRoot, _fileSystem, options.Get("poll-artifacts"));
         }
 
-        return ArtifactSession.Create(options, _dependencies.FileSystem, _dependencies.TimeProvider);
+        return ArtifactSession.Create(options, _fileSystem, _timeProvider);
     }
-}
-
-internal sealed class AppCommandRouteBootstrapperDependencies
-{
-    public required TimeProvider TimeProvider { get; init; }
-
-    public required IFileSystem FileSystem { get; init; }
-
-    public required IEnvironmentVariables Environment { get; init; }
-
-    public required ViewProfileCoordinator ProfileCoordinator { get; init; }
-
-    public required DeviceHostLauncher DeviceHostLauncher { get; init; }
-
-    public required LabLeaseStore LabLeaseStore { get; init; }
-
-    public required LabQuarantineStore LabQuarantineStore { get; init; }
 }
 
 internal sealed record AppCommandRouteSetup(string AdbExecutable, ArtifactSession Artifacts);
