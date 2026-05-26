@@ -23,12 +23,11 @@ internal static class FailureWorkbenchMediaBuilder
         FailureCapsuleScenario? scenario)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var item in EnumeratePreviewLinks(summary, scenario).Where(static item => ArtifactClassifier.IsPreview(item.Path)))
+        foreach (var item in EnumeratePreviewLinks(summary, scenario)
+            .Where(static item => ArtifactClassifier.IsPreview(item.Path))
+            .Where(item => seen.Add(item.Path)))
         {
-            if (seen.Add(item.Path))
-            {
-                yield return item;
-            }
+            yield return item;
         }
 
         foreach (var file in files.Where(ArtifactClassifier.IsPreview).Where(file => seen.Add(file)))
