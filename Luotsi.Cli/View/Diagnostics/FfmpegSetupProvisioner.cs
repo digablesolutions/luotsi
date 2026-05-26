@@ -119,12 +119,14 @@ internal sealed class FfmpegSetupProvisioner(
     private static bool IsTransientSetupFailure(ProcessResult result)
     {
         var output = $"{result.Stderr}\n{result.Stdout}";
-        return output.Contains("download", StringComparison.OrdinalIgnoreCase) ||
-               output.Contains("timed out", StringComparison.OrdinalIgnoreCase) ||
+        return output.Contains("timed out", StringComparison.OrdinalIgnoreCase) ||
                output.Contains("timeout", StringComparison.OrdinalIgnoreCase) ||
                output.Contains("connection", StringComparison.OrdinalIgnoreCase) ||
                output.Contains("temporarily unavailable", StringComparison.OrdinalIgnoreCase) ||
                output.Contains("could not resolve", StringComparison.OrdinalIgnoreCase) ||
+               output.Contains("name resolution", StringComparison.OrdinalIgnoreCase) ||
+               output.Contains("remote name could not be resolved", StringComparison.OrdinalIgnoreCase) ||
+               output.Contains("operation has timed out", StringComparison.OrdinalIgnoreCase) ||
                output.Contains("503", StringComparison.OrdinalIgnoreCase) ||
                output.Contains("502", StringComparison.OrdinalIgnoreCase) ||
                output.Contains("429", StringComparison.OrdinalIgnoreCase);

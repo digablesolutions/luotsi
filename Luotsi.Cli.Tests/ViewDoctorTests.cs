@@ -651,6 +651,29 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task FfmpegSetupProvisioner_StageAsync_Does_Not_Retry_ScriptPath_Download_Text()
+    {
+        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>());
+        var fileSystem = new FakeFileSystem();
+        var processRunner = new FakeProcessRunner();
+        processRunner.EnqueueResult(new ProcessResult(1, string.Empty, "C:/repo/ffmpeg/download-ffmpeg.ps1: access denied"));
+        processRunner.EnqueueResult(new ProcessResult(0, "Done. Staged native libraries.", string.Empty));
+        var scriptPath = Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "ffmpeg", "download-ffmpeg.ps1"));
+        fileSystem.AddFile(scriptPath, "Write-Host 'ok'");
+        var provisioner = new FfmpegSetupProvisioner(environment, fileSystem, processRunner);
+        var steps = new List<ViewSetupStep>();
+
+        var staged = await provisioner.StageAsync(steps.Add);
+
+        Assert.False(staged);
+        Assert.Single(processRunner.Calls);
+        Assert.Contains(steps, step =>
+            step is {Name: "ffmpeg_stage", Status: ViewStartupPhaseStatus.Failed} &&
+            step.Detail is not null &&
+            step.Detail.Contains("download-ffmpeg.ps1", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task AndroidViewHelperSetupProvisioner_ResolveOrBuildAsync_Builds_From_Published_App_Project_When_Source_Checkout_Is_Missing()
     {
         var environment = new FakeEnvironmentVariables(new Dictionary<string, string>());
