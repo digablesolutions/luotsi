@@ -141,13 +141,12 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
 
         var items = property.EnumerateArray().ToArray();
         lines.Add($"{propertyName}: {items.Length}");
-        foreach (var item in items.Take(MaxArrayItems))
+        foreach (var itemSummary in items
+            .Take(MaxArrayItems)
+            .Select(static item => SummarizeArrayItem(item))
+            .Where(static itemSummary => !string.IsNullOrWhiteSpace(itemSummary)))
         {
-            var itemSummary = SummarizeArrayItem(item);
-            if (!string.IsNullOrWhiteSpace(itemSummary))
-            {
-                lines.Add($"  - {itemSummary}");
-            }
+            lines.Add($"  - {itemSummary}");
         }
     }
 

@@ -91,7 +91,7 @@ internal sealed record ScenarioRunConfiguration(
     {
         if (quiet && !string.IsNullOrWhiteSpace(value) && !string.Equals(value.Trim(), "quiet", StringComparison.OrdinalIgnoreCase))
         {
-            throw new UsageException("Use either --quiet or --progress plain/line/jsonl, not both.");
+            throw new UsageException("Use either --quiet or --progress auto/plain/line/jsonl; use --progress quiet for explicit quiet progress.");
         }
 
         if (quiet)
