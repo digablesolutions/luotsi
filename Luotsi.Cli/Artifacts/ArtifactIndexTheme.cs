@@ -111,6 +111,7 @@ internal static class ArtifactIndexTheme
     .evidence-group { min-width: 0; padding: 10px; border: 1px solid var(--line-soft); border-radius: 8px; background: color-mix(in srgb, var(--panel-subtle) 84%, var(--panel-strong)); }
     .evidence-group-failure { border-color: rgba(251,113,133,.42); background: color-mix(in srgb, var(--danger-soft) 38%, var(--panel-subtle)); }
     .evidence-group-context { border-color: rgba(125,211,252,.28); }
+    .evidence-group-action { border-color: rgba(251,191,36,.32); }
     .evidence-group-artifact { border-color: rgba(52,211,153,.3); }
     .evidence-group-header { display: grid; gap: 3px; margin-bottom: 7px; }
     .evidence-group-header strong { font-size: 13px; }
