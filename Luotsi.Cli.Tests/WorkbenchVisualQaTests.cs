@@ -38,8 +38,11 @@ public sealed class WorkbenchVisualQaTests
                 await AssertHasVisibleBoxAsync(page.Locator(".hero-panel"));
                 await AssertHasVisibleBoxAsync(page.Locator(".workbench-side"));
                 await AssertHasVisibleBoxAsync(page.Locator(".media-grid"));
+                await AssertHasVisibleBoxAsync(page.Locator(".evidence-groups"));
+                await AssertHasVisibleBoxAsync(page.Locator(".evidence-group"));
                 await AssertHasVisibleBoxAsync(page.Locator(".timeline"));
                 await AssertHasVisibleBoxAsync(page.Locator("#replay-front-door"));
+                Assert.True(await page.Locator(".evidence-group").CountAsync() >= 4, "Expected grouped workbench evidence to cover failure, context, actions, and artifacts.");
                 await AssertFitsViewportAsync(page);
 
                 await page.SetViewportSizeAsync(390, 844);

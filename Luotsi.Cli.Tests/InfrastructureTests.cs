@@ -328,6 +328,14 @@ public sealed partial class AppTests
         Assert.Contains("luotsi replay scrub --artifacts", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("data-copy=\"luotsi replay scrub --artifacts", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("<h3>Evidence</h3>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("<h3>Evidence groups</h3>", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("Failure signals", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("Device and app facts", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("Actions and commands", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("Media and reports", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("transport: Unexpected end of stream", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("Target", htmlIndex, StringComparison.Ordinal);
+        Assert.Contains("192.168.0.134:5555", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("class=\"media-grid\"", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("<img src=\"failure-screen.png\"", htmlIndex, StringComparison.Ordinal);
         Assert.Contains("<video src=\"failure-recording.mp4\"", htmlIndex, StringComparison.Ordinal);
