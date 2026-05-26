@@ -43,11 +43,16 @@ internal sealed class AppExecutionShell(
 
         try
         {
+            if (ShouldValidateCommandEnvelopeOutput(options.Command))
+            {
+                _ = AppCommandConsoleOutputModeResolver.Resolve(options);
+            }
+
             return await dispatchAsync(context).ConfigureAwait(false);
         }
         catch (UsageException ex)
         {
-            return _failureResponder.WriteUsageError(options.Command, started, context.CreateArtifactData(), ex);
+            return _failureResponder.WriteUsageError(options, started, context.CreateArtifactData(), ex);
         }
         catch (Exception ex)
         {
@@ -73,6 +78,11 @@ internal sealed class AppExecutionShell(
         _console.WriteErrorLine(text);
         return 0;
     }
+
+    private static bool ShouldValidateCommandEnvelopeOutput(string? command) =>
+        !string.Equals(command, "view", StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(command, "reconnect", StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(command, "inspect", StringComparison.OrdinalIgnoreCase);
 }
 
 internal sealed class AppExecutionContext(DateTimeOffset started, CliOptions options)

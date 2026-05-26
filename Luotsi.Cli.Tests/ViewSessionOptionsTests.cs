@@ -75,6 +75,134 @@ public sealed partial class AppTests
         Assert.True(options.OverlayTelemetry);
         Assert.Equal("balanced", options.PresetName);
         Assert.Equal(TimeSpan.FromSeconds(CliDefaults.DefaultAdbCommandTimeoutSeconds), options.CommandTimeout);
+        Assert.Equal(ViewConsoleOutputModes.Human, options.ConsoleOutput);
+    }
+
+    [Fact]
+    public async Task RunAsync_View_Can_Request_Jsonl_Output()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var session = new FakeViewSession(0);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            TimeProvider = timeProvider,
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            ViewSessionFactory = new FakeViewSessionFactory(session)
+        });
+
+        var exitCode = await app.RunAsync([
+            "view",
+            "--device", "192.168.0.134:5555",
+            "--output", "jsonl"]);
+
+        Assert.Equal(0, exitCode);
+        var options = Assert.Single(session.Options);
+        Assert.Equal(ViewConsoleOutputModes.Jsonl, options.ConsoleOutput);
+    }
+
+    [Fact]
+    public async Task RunAsync_View_Can_Request_Json_Output_Alias()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var session = new FakeViewSession(0);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            TimeProvider = timeProvider,
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            ViewSessionFactory = new FakeViewSessionFactory(session)
+        });
+
+        var exitCode = await app.RunAsync([
+            "view",
+            "--device", "192.168.0.134:5555",
+            "--output", "json"]);
+
+        Assert.Equal(0, exitCode);
+        var options = Assert.Single(session.Options);
+        Assert.Equal(ViewConsoleOutputModes.Jsonl, options.ConsoleOutput);
+    }
+
+    [Fact]
+    public async Task RunAsync_View_Can_Request_Short_Output_Mode()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var session = new FakeViewSession(0);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            TimeProvider = timeProvider,
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            ViewSessionFactory = new FakeViewSessionFactory(session)
+        });
+
+        var exitCode = await app.RunAsync([
+            "view",
+            "--device", "192.168.0.134:5555",
+            "-o", "jsonl"]);
+
+        Assert.Equal(0, exitCode);
+        var options = Assert.Single(session.Options);
+        Assert.Equal(ViewConsoleOutputModes.Jsonl, options.ConsoleOutput);
+    }
+
+    [Fact]
+    public async Task RunAsync_View_Can_Request_Json_Flag_Before_Command()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var session = new FakeViewSession(0);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            TimeProvider = timeProvider,
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            ViewSessionFactory = new FakeViewSessionFactory(session)
+        });
+
+        var exitCode = await app.RunAsync([
+            "--json",
+            "view",
+            "--device", "192.168.0.134:5555"]);
+
+        Assert.Equal(0, exitCode);
+        var options = Assert.Single(session.Options);
+        Assert.Equal(ViewConsoleOutputModes.Jsonl, options.ConsoleOutput);
+    }
+
+    [Fact]
+    public async Task RunAsync_View_Quiet_Overrides_Output_Mode()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var session = new FakeViewSession(0);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            TimeProvider = timeProvider,
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            ViewSessionFactory = new FakeViewSessionFactory(session)
+        });
+
+        var exitCode = await app.RunAsync([
+            "view",
+            "--device", "192.168.0.134:5555",
+            "--output", "jsonl",
+            "--json",
+            "--quiet"]);
+
+        Assert.Equal(0, exitCode);
+        var options = Assert.Single(session.Options);
+        Assert.Equal(ViewConsoleOutputModes.Quiet, options.ConsoleOutput);
     }
 
     [Fact]

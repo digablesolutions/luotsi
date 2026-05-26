@@ -22,35 +22,35 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         if (IsOpenCommand(options))
         {
             var openResult = await OpenAsync(options, artifacts).ConfigureAwait(false);
-            _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, openResult, artifacts.ToData());
+            _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, openResult, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
             return 0;
         }
 
         if (IsScenarioDraftCommand(options))
         {
             var draftResult = await _dependencies.ScenarioDraftService.CreateAsync(options, artifacts).ConfigureAwait(false);
-            _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, draftResult, artifacts.ToData());
+            _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, draftResult, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
             return 0;
         }
 
         if (IsSearchCommand(options))
         {
             var searchResult = await _dependencies.SearchService.SearchAsync(options, artifacts).ConfigureAwait(false);
-            _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, searchResult, artifacts.ToData());
+            _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, searchResult, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
             return 0;
         }
 
         if (IsCapsuleCommand(options))
         {
             var capsuleResult = await _dependencies.CapsuleService.DescribeAsync(options, artifacts).ConfigureAwait(false);
-            _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, capsuleResult, artifacts.ToData());
+            _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, capsuleResult, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
             return 0;
         }
 
         if (IsScrubCommand(options))
         {
             var scrubResult = await _dependencies.ScrubService.CreateAsync(options, artifacts).ConfigureAwait(false);
-            _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, scrubResult, artifacts.ToData());
+            _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, scrubResult, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
             return 0;
         }
 
@@ -66,7 +66,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
                     _dependencies.JsonWriter.WriteLines(ReplayTimelineService.ToJsonLineObjects(timelineResult));
                     break;
                 default:
-                    _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, timelineResult, artifacts.ToData());
+                    _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, timelineResult, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
                     break;
             }
 
@@ -85,7 +85,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
                     _dependencies.JsonWriter.WriteLines(ReplayGraphService.ToJsonLineObjects(graphResult));
                     break;
                 default:
-                    _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, graphResult, artifacts.ToData());
+                    _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, graphResult, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
                     break;
             }
 
@@ -95,7 +95,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         if (IsClusterCommand(options))
         {
             var clusterResult = await _dependencies.ClusterService.ClusterAsync(options, artifacts).ConfigureAwait(false);
-            _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, clusterResult, artifacts.ToData());
+            _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, clusterResult, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
             return 0;
         }
 
@@ -111,7 +111,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
                 _dependencies.JsonWriter.WriteLines(CreateJsonLines(result));
                 break;
             default:
-                _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, result, artifacts.ToData());
+                _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, result, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
                 break;
         }
 
@@ -348,6 +348,11 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         if (string.IsNullOrWhiteSpace(format))
         {
             return ReplayOutputMode.Envelope;
+        }
+
+        if (options.HasFlag("human") || options.HasFlag("quiet") || options.HasFlag("json") || !string.IsNullOrWhiteSpace(options.Get("console-output")))
+        {
+            throw new UsageException($"{commandName} --format is a raw output mode; do not combine it with --human, --quiet, --json, or --console-output.");
         }
 
         return format.Trim().ToLowerInvariant() switch

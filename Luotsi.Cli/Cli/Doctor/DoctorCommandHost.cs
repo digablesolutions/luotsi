@@ -83,7 +83,7 @@ internal sealed class DoctorCommandHost(
             packagePreflight,
             viewReport,
             repairSteps);
-        _envelopeWriter.WriteSuccess(options.Command ?? "doctor", started, result, artifacts.ToData());
+        _envelopeWriter.WriteSuccess(options.Command ?? "doctor", started, result, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
         return result.Ready ? 0 : 1;
     }
 

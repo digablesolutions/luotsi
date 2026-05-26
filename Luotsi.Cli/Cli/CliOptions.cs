@@ -88,11 +88,14 @@ public sealed class CliOptions
         "force",
         "h",
         "headless",
+        "human",
         "help",
+        "json",
         "last",
         "overlay-screen-state",
         "overlay-telemetry",
         "no-require-device-ready",
+        "quiet",
         "read-only",
         "validate-only"
     }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);

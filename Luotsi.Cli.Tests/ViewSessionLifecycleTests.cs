@@ -85,6 +85,100 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_View_Human_Output_Still_Writes_Jsonl_Timeline()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var backend = new FakeViewBackend("ffmpeg-native");
+        var artifacts = ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider);
+        var session = CreateViewSession(
+            host,
+            artifacts,
+            console,
+            timeProvider,
+            new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward")),
+            new FakeViewBackendFactory(backend),
+            new FakeViewStreamConnector(
+                new ViewPacketStreamHarness()
+                    .WriteHeader("h264", 1080, 1920)
+                    .WritePacket(ViewPacketType.Config, 1, 0, false, [0x01, 0x02])
+                    .WritePacket(ViewPacketType.StreamEnd, 2, 33_000, false, [])
+                    .Build()),
+            new ViewPacketStreamReader());
+
+        var exitCode = await session.RunAsync(new ViewOptions(
+            "192.168.0.134:5555",
+            "adb",
+            "h264",
+            "ffmpeg",
+            true,
+            null,
+            1600,
+            60,
+            "8M",
+            false,
+            false,
+            ConsoleOutput: ViewConsoleOutputModes.Human));
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains(console.OutputLines, static line => line.Equals("View started", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, static line => line.Contains("device: 192.168.0.134:5555", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, static line => line.Contains("stream: 1080x1920 h264", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, static line => line.Equals("View ended: stream_ended", StringComparison.Ordinal));
+        Assert.DoesNotContain(console.OutputLines, static line => line.StartsWith('{'));
+
+        var timeline = await fileSystem.ReadAllTextAsync(Path.Join(artifacts.Root, "session-timeline.jsonl"));
+        Assert.Contains(SessionEventTypes.View.Started, timeline, StringComparison.Ordinal);
+        Assert.Contains(SessionEventTypes.View.Ended, timeline, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_View_Quiet_Output_Suppresses_Normal_Lifecycle_Events()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var artifacts = ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider);
+        var session = CreateViewSession(
+            host,
+            artifacts,
+            console,
+            timeProvider,
+            new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward")),
+            new FakeViewBackendFactory(new FakeViewBackend("ffmpeg-native")),
+            new FakeViewStreamConnector(
+                new ViewPacketStreamHarness()
+                    .WriteHeader("h264", 1080, 1920)
+                    .WritePacket(ViewPacketType.StreamEnd, 1, 0, false, [])
+                    .Build()),
+            new ViewPacketStreamReader());
+
+        var exitCode = await session.RunAsync(new ViewOptions(
+            "192.168.0.134:5555",
+            "adb",
+            "h264",
+            "ffmpeg",
+            true,
+            null,
+            1600,
+            60,
+            "8M",
+            false,
+            false,
+            ConsoleOutput: ViewConsoleOutputModes.Quiet));
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(console.OutputLines);
+
+        var timeline = await fileSystem.ReadAllTextAsync(Path.Join(artifacts.Root, "session-timeline.jsonl"));
+        Assert.Contains(SessionEventTypes.View.Started, timeline, StringComparison.Ordinal);
+        Assert.Contains(SessionEventTypes.View.Ended, timeline, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_View_Fails_Before_Startup_When_Selected_Device_Is_Not_Visible()
     {
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));

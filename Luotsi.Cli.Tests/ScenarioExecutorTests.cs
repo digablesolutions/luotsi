@@ -750,6 +750,77 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_File_Progress_Jsonl_Writes_Typed_Progress_To_Stderr()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "name": "pause", "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json", "--validate-only", "--progress", "jsonl"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.NotEmpty(console.ErrorLines);
+        using var first = JsonDocument.Parse(console.ErrorLines[0]);
+        Assert.Equal("luotsi-scenario-progress.v1", first.RootElement.GetProperty("schema").GetString());
+        Assert.Equal("scenario_progress", first.RootElement.GetProperty("type").GetString());
+        Assert.Equal("scenario_run_started", first.RootElement.GetProperty("event").GetProperty("event").GetString());
+        using var last = JsonDocument.Parse(console.ErrorLines[^1]);
+        Assert.Equal("scenario_run_ended", last.RootElement.GetProperty("event").GetProperty("event").GetString());
+        Assert.Equal("validated", last.RootElement.GetProperty("event").GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public async Task RunAsync_File_Progress_Quiet_Suppresses_Progress_Stderr()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "name": "pause", "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json", "--validate-only", "--progress", "quiet"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Empty(console.ErrorLines);
+    }
+
+    [Fact]
     public async Task RunAsync_File_Prepares_Device_And_Writes_Allocation_Metadata()
     {
         var fileSystem = new FakeFileSystem();

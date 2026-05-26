@@ -133,6 +133,7 @@ public sealed class ViewSession : IViewSession
     private readonly TimeSpan _autoReconnectAfter;
     private readonly Lock _writeGate = new();
     private SessionReplayArtifacts? _replayArtifacts;
+    private ViewConsoleEventWriter? _consoleEventWriter;
 
     public ViewSession(IDeviceHost deviceHost, ArtifactSession artifacts, ViewSessionRuntime runtime)
     {
@@ -167,6 +168,7 @@ public sealed class ViewSession : IViewSession
         TcpViewShareServer? shareServer = null;
         _replayArtifacts = new SessionReplayArtifacts(_artifacts, "view", sessionId, replayStartedAt);
         _replayArtifacts.SetTarget(usesSharedTransport ? options.JoinShareEndpoint : activeDeviceSelector);
+        _consoleEventWriter = new ViewConsoleEventWriter(_console, options);
 
         try
         {
@@ -490,6 +492,7 @@ public sealed class ViewSession : IViewSession
             }
 
             _replayArtifacts = null;
+            _consoleEventWriter = null;
 
             return 1;
         }
@@ -506,6 +509,7 @@ public sealed class ViewSession : IViewSession
             }
 
             _ = _deviceHost;
+            _consoleEventWriter = null;
         }
     }
 
@@ -514,7 +518,15 @@ public sealed class ViewSession : IViewSession
         lock (_writeGate)
         {
             var json = JsonSerializer.Serialize(value, OutputJsonOptions);
-            _console.WriteLine(json);
+            if (_consoleEventWriter is null)
+            {
+                _console.WriteLine(json);
+            }
+            else
+            {
+                _consoleEventWriter.Write(json);
+            }
+
             _replayArtifacts?.RecordSerializedEvent(json);
         }
     }

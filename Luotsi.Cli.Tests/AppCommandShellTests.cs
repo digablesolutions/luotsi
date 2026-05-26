@@ -94,11 +94,130 @@ public sealed class AppCommandShellTests
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-18T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var responder = new AppCommandFailureResponder(new AppCommandEnvelopeWriter(console, timeProvider, CreateProvenance()));
 
-        var exitCode = responder.WriteUsageError("tap", timeProvider.GetUtcNow(), new ArtifactData("/tmp/artifacts", "final"), new UsageException("bad args"));
+        var exitCode = responder.WriteUsageError(CliOptions.Parse(["tap"]), timeProvider.GetUtcNow(), new ArtifactData("/tmp/artifacts", "final"), new UsageException("bad args"));
 
         using var envelope = console.ParseSingleOutputAsJson();
         Assert.Equal(2, exitCode);
         Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+    }
+
+    [Fact]
+    public void WriteSuccess_HumanOutput_Writes_Concise_Text()
+    {
+        var console = new FakeConsole();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-18T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var writer = new AppCommandEnvelopeWriter(console, timeProvider, CreateProvenance());
+
+        writer.WriteSuccess(
+            "devices",
+            DateTimeOffset.Parse("2026-05-18T09:59:59Z", null, System.Globalization.DateTimeStyles.RoundtripKind),
+            new DeviceListResult([new DeviceInfo("emulator-5554", "device", "model:Pixel_9")]),
+            new ArtifactData("/tmp/artifacts", "final"),
+            AppCommandConsoleOutputMode.Human);
+
+        Assert.Equal(
+            [
+                "OK  devices completed in 1000 ms.",
+                "  devices: 1",
+                "    - serial=emulator-5554; status=device",
+                "  artifacts: /tmp/artifacts"
+            ],
+            console.OutputLines);
+        Assert.Empty(console.ErrorLines);
+    }
+
+    [Fact]
+    public async Task RunAsync_Human_Output_Flag_Writes_Text_Envelope()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["version", "--human"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains(console.OutputLines, static line => line.StartsWith("OK  version completed", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, static line => line.Contains("runtime_version:", StringComparison.Ordinal));
+        Assert.DoesNotContain(console.OutputLines, static line => line.StartsWith("{", StringComparison.Ordinal));
+        Assert.Empty(console.ErrorLines);
+    }
+
+    [Fact]
+    public async Task RunAsync_ConsoleOutput_Human_Writes_Text_Envelope()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["version", "--console-output", "human"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains(console.OutputLines, static line => line.StartsWith("OK  version completed", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_ConsoleOutput_Quiet_Suppresses_Success_Envelope()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["version", "--console-output", "quiet"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(console.OutputLines);
+        Assert.Empty(console.ErrorLines);
+    }
+
+    [Fact]
+    public async Task RunAsync_Quiet_Flag_Suppresses_Success_Envelope()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["version", "--quiet"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(console.OutputLines);
+        Assert.Empty(console.ErrorLines);
+    }
+
+    [Fact]
+    public async Task RunAsync_ConsoleOutput_Quiet_Keeps_Failure_Envelope()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["tap", "--x", "nope", "--y", "1", "--console-output", "quiet"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+    }
+
+    [Fact]
+    public async Task RunAsync_Quiet_Flag_Conflicts_With_Human_Output()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["version", "--quiet", "--human"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Contains("--quiet", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_Invalid_ConsoleOutput_Returns_Usage_Envelope()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["version", "--console-output", "yaml"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("--console-output", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
     private static BuildProvenance CreateProvenance() =>
