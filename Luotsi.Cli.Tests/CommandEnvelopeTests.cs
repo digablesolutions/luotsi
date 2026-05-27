@@ -102,6 +102,7 @@ public sealed partial class AppTests
         Assert.Single(console.ErrorLines);
         Assert.Contains("Luotsi help: artifacts", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi artifacts list [--artifacts <directory>] [--limit 20]", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("luotsi artifacts info <artifact-root-or-run-id>", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi artifacts pack <artifact-root-or-run-id>", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi artifacts unpack <artifact.zip>", console.ErrorLines[0], StringComparison.Ordinal);
     }
@@ -3223,9 +3224,54 @@ public sealed partial class AppTests
         Assert.Equal("20260526-120000-run", entry.GetProperty("run_id").GetString());
         Assert.True(entry.GetProperty("has_timeline").GetBoolean());
         Assert.True(entry.GetProperty("has_replay_metadata").GetBoolean());
+        Assert.Contains("artifacts info", entry.GetProperty("info_command").GetString(), StringComparison.Ordinal);
         Assert.Contains("artifacts open", entry.GetProperty("open_command").GetString(), StringComparison.Ordinal);
         Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "info_artifacts");
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
             command.GetProperty("kind").GetString() == "open_artifacts");
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsInfo_Returns_Metadata_Without_Refreshing_Index()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var searchRoot = Path.Join("C:", "artifacts");
+        var replayRoot = Path.Join(searchRoot, "20260526-120000-run");
+        fileSystem.CreateDirectory(searchRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), "{\"type\":\"session_started\"}");
+        fileSystem.AddFile(Path.Join(replayRoot, "session-replay.json"), "{}");
+        fileSystem.AddFile(Path.Join(replayRoot, "screens", "failure.png"), "png");
+        fileSystem.AddFile(Path.Join(replayRoot, "video.mp4"), "mp4");
+        fileSystem.AddFile(Path.Join(replayRoot, "junit.xml"), "<testsuite />");
+        fileSystem.AddFile(Path.Join(replayRoot, "logcat.log"), "log");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "info", "20260526-120000-run", "--artifacts", searchRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("20260526-120000-run", data.GetProperty("run_id").GetString());
+        Assert.Equal(replayRoot, data.GetProperty("artifact_root").GetString());
+        Assert.Equal(6, data.GetProperty("file_count").GetInt32());
+        Assert.False(data.GetProperty("has_html_index").GetBoolean());
+        Assert.False(fileSystem.FileExists(Path.Join(replayRoot, "index.html")));
+        Assert.True(data.GetProperty("has_timeline").GetBoolean());
+        Assert.True(data.GetProperty("has_replay_metadata").GetBoolean());
+        var counts = data.GetProperty("category_counts");
+        Assert.Equal(1, counts.GetProperty("screenshots").GetInt32());
+        Assert.Equal(1, counts.GetProperty("videos").GetInt32());
+        Assert.Equal(1, counts.GetProperty("reports").GetInt32());
+        Assert.Equal(1, counts.GetProperty("logs").GetInt32());
+        Assert.Equal(1, counts.GetProperty("timelines").GetInt32());
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "replay_open");
     }
 
     [Fact]
@@ -3294,9 +3340,41 @@ public sealed partial class AppTests
         Assert.Equal(replayRoot, data.GetProperty("artifact_root").GetString());
         Assert.Equal(output, data.GetProperty("output").GetString());
         Assert.Equal(2, data.GetProperty("entry_count").GetInt32());
+        Assert.False(data.GetProperty("dry_run").GetBoolean());
+        Assert.Matches("^[0-9a-f]{64}$", data.GetProperty("sha256").GetString());
         using var archive = new ZipArchive(new MemoryStream(fileSystem.ReadBytes(output)), ZipArchiveMode.Read);
         Assert.Contains(archive.Entries, entry => entry.FullName == "index.html");
         Assert.Contains(archive.Entries, entry => entry.FullName == "failures/failure.png");
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsPack_DryRun_Does_Not_Write_Zip()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var replayRoot = "/tmp/luotsi/20260526-120000-run";
+        var output = "/tmp/share/replay.zip";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "index.html"), "<!doctype html>");
+        fileSystem.AddFile(Path.Join(replayRoot, "failures", "failure.png"), "png");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "pack", replayRoot, "--output", output, "--dry-run"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.True(data.GetProperty("dry_run").GetBoolean());
+        Assert.Equal(2, data.GetProperty("entry_count").GetInt32());
+        Assert.Equal(output, data.GetProperty("output").GetString());
+        Assert.False(data.TryGetProperty("sha256", out _));
+        Assert.False(fileSystem.FileExists(output));
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "pack_artifacts");
     }
 
     [Fact]
@@ -3363,10 +3441,48 @@ public sealed partial class AppTests
         var outputDirectory = data.GetProperty("output_directory").GetString();
         Assert.Equal("/tmp/unpacked", outputDirectory);
         Assert.Equal(2, data.GetProperty("entry_count").GetInt32());
+        Assert.False(data.GetProperty("dry_run").GetBoolean());
+        Assert.Matches("^[0-9a-f]{64}$", data.GetProperty("sha256").GetString());
         Assert.True(fileSystem.FileExists(Path.GetFullPath(Path.Join(outputDirectory!, "index.html"))));
         Assert.True(fileSystem.FileExists(Path.GetFullPath(Path.Join(outputDirectory!, "failures", "session-timeline.jsonl"))));
         Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
             command.GetProperty("kind").GetString() == "open_artifacts");
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsUnpack_DryRun_Validates_Zip_Without_Writing()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var packagePath = "/tmp/share/replay.zip";
+        fileSystem.CreateDirectory("/tmp/share");
+        await using (var packageStream = fileSystem.OpenWrite(packagePath))
+        {
+            using var archive = new ZipArchive(packageStream, ZipArchiveMode.Create, leaveOpen: true);
+            var index = archive.CreateEntry("index.html");
+            await using (var entry = index.Open())
+            await using (var writer = new StreamWriter(entry))
+            {
+                await writer.WriteAsync("<!doctype html>");
+            }
+        }
+
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "unpack", packagePath, "--output", "/tmp/unpacked", "--dry-run"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.True(data.GetProperty("dry_run").GetBoolean());
+        Assert.Equal(1, data.GetProperty("entry_count").GetInt32());
+        Assert.Matches("^[0-9a-f]{64}$", data.GetProperty("sha256").GetString());
+        Assert.False(fileSystem.DirectoryExists("/tmp/unpacked"));
+        Assert.False(fileSystem.FileExists(Path.GetFullPath(Path.Join("/tmp/unpacked", "index.html"))));
     }
 
     [Fact]

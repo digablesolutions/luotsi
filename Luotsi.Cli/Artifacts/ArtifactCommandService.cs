@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Security.Cryptography;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.View.Session;
@@ -59,12 +60,33 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             entries.Length,
             entries,
             [
+                new ArtifactRecommendedCommandResult("info_artifacts", "Inspect one artifact root or run id from this list without mutating it.", "luotsi artifacts info <artifact-root-or-run-id>"),
                 new ArtifactRecommendedCommandResult("open_artifacts", "Open an artifact root or run id from this list.", "luotsi artifacts open <artifact-root-or-run-id>"),
                 new ArtifactRecommendedCommandResult("pack_artifacts", "Pack an artifact root or run id from this list.", "luotsi artifacts pack <artifact-root-or-run-id>")
             ]));
     }
 
-    public Task<ArtifactPackResult> PackAsync(string target, string? searchRoot, string? output, bool force)
+    public Task<ArtifactInfoResult> InfoAsync(string target, string? searchRoot)
+    {
+        var artifactRoot = ResolveArtifactRoot(target, searchRoot);
+        var files = GetArtifactFiles(artifactRoot);
+        return Task.FromResult(new ArtifactInfoResult(
+            Path.GetFileName(Path.GetFullPath(artifactRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
+            artifactRoot,
+            files.Length,
+            _fileSystem.FileExists(Path.Join(artifactRoot, HtmlIndexFileName)),
+            _fileSystem.FileExists(Path.Join(artifactRoot, MarkdownIndexFileName)),
+            files.Any(static file => string.Equals(Path.GetFileName(file), "session-timeline.jsonl", StringComparison.OrdinalIgnoreCase)),
+            files.Any(static file => string.Equals(Path.GetFileName(file), "session-replay.json", StringComparison.OrdinalIgnoreCase)),
+            CreateCategoryCounts(files),
+            [
+                new ArtifactRecommendedCommandResult("open_artifacts", "Open this artifact root in the local artifact browser.", $"luotsi artifacts open {Quote(artifactRoot)}"),
+                new ArtifactRecommendedCommandResult("pack_artifacts", "Pack this artifact root for sharing or CI upload.", $"luotsi artifacts pack {Quote(artifactRoot)}"),
+                new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench for this artifact root.", $"luotsi replay open --artifacts {Quote(artifactRoot)}")
+            ]));
+    }
+
+    public Task<ArtifactPackResult> PackAsync(string target, string? searchRoot, string? output, bool force, bool dryRun)
     {
         var artifactRoot = ResolveArtifactRoot(target, searchRoot);
         var outputPath = ResolveOutputPath(artifactRoot, output);
@@ -73,24 +95,41 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             throw new UsageException($"Artifact pack output '{outputPath}' already exists. Use --force to overwrite it.");
         }
 
+        var entries = CountPackableFiles(artifactRoot);
+        if (dryRun)
+        {
+            return Task.FromResult(new ArtifactPackResult(
+                artifactRoot,
+                outputPath,
+                entries,
+                dryRun,
+                null,
+                [
+                    new ArtifactRecommendedCommandResult("pack_artifacts", "Write this artifact package.", $"luotsi artifacts pack {Quote(artifactRoot)} --output {Quote(outputPath)}"),
+                    new ArtifactRecommendedCommandResult("open_artifacts", "Open this artifact root in the local workbench.", $"luotsi artifacts open {Quote(artifactRoot)}")
+                ]));
+        }
+
         var outputDirectory = Path.GetDirectoryName(outputPath);
         if (!string.IsNullOrWhiteSpace(outputDirectory))
         {
             _fileSystem.CreateDirectory(outputDirectory);
         }
 
-        var entries = PackArtifactRoot(artifactRoot, outputPath, force);
+        entries = PackArtifactRoot(artifactRoot, outputPath, force);
         return Task.FromResult(new ArtifactPackResult(
             artifactRoot,
             outputPath,
             entries,
+            dryRun,
+            ComputeSha256(outputPath),
             [
                 new ArtifactRecommendedCommandResult("open_artifacts", "Open this artifact root in the local workbench.", $"luotsi artifacts open {Quote(artifactRoot)}"),
                 new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench for this artifact root.", $"luotsi replay open --artifacts {Quote(artifactRoot)}")
             ]));
     }
 
-    public Task<ArtifactUnpackResult> UnpackAsync(string packagePath, string? output, bool force)
+    public Task<ArtifactUnpackResult> UnpackAsync(string packagePath, string? output, bool force, bool dryRun)
     {
         if (string.IsNullOrWhiteSpace(packagePath))
         {
@@ -108,12 +147,19 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             throw new UsageException($"Artifact unpack output '{outputDirectory}' already exists. Use --force to write into it.");
         }
 
-        _fileSystem.CreateDirectory(outputDirectory);
-        var entries = UnpackArtifactPackage(packagePath, outputDirectory, force);
+        var entries = ValidateArtifactPackage(packagePath, outputDirectory, force);
+        if (!dryRun)
+        {
+            _fileSystem.CreateDirectory(outputDirectory);
+            entries = UnpackArtifactPackage(packagePath, outputDirectory, force);
+        }
+
         return Task.FromResult(new ArtifactUnpackResult(
             packagePath,
             outputDirectory,
             entries,
+            dryRun,
+            ComputeSha256(packagePath),
             [
                 new ArtifactRecommendedCommandResult("open_artifacts", "Open the unpacked artifact root.", $"luotsi artifacts open {Quote(outputDirectory)}"),
                 new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench for the unpacked artifact root.", $"luotsi replay open --artifacts {Quote(outputDirectory)}")
@@ -167,16 +213,11 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         using var archive = new ZipArchive(input, ZipArchiveMode.Read, leaveOpen: false);
         foreach (var entry in archive.Entries.Where(static entry => !string.IsNullOrWhiteSpace(entry.Name)))
         {
-            var destinationPath = Path.GetFullPath(Path.Join(outputDirectory, entry.FullName));
-            if (!destinationPath.StartsWith(fullOutputDirectory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
-                !destinationPath.StartsWith(fullOutputDirectory + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            var destinationPath = ResolvePackageDestination(outputDirectory, fullOutputDirectory, entry.FullName, force);
+            var destinationDirectory = Path.GetDirectoryName(destinationPath);
+            if (!string.IsNullOrWhiteSpace(destinationDirectory))
             {
-                throw new UsageException($"Artifact package entry '{entry.FullName}' would write outside the output directory.");
-            }
-
-            if (_fileSystem.FileExists(destinationPath) && !force)
-            {
-                throw new UsageException($"Artifact unpack destination '{destinationPath}' already exists. Use --force to overwrite it.");
+                _fileSystem.CreateDirectory(destinationDirectory);
             }
 
             using var entryStream = entry.Open();
@@ -186,6 +227,38 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         }
 
         return count;
+    }
+
+    private int ValidateArtifactPackage(string packagePath, string outputDirectory, bool force)
+    {
+        var fullOutputDirectory = Path.GetFullPath(outputDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var count = 0;
+        using var input = _fileSystem.OpenRead(packagePath);
+        using var archive = new ZipArchive(input, ZipArchiveMode.Read, leaveOpen: false);
+        foreach (var entry in archive.Entries.Where(static entry => !string.IsNullOrWhiteSpace(entry.Name)))
+        {
+            _ = ResolvePackageDestination(outputDirectory, fullOutputDirectory, entry.FullName, force);
+            count++;
+        }
+
+        return count;
+    }
+
+    private string ResolvePackageDestination(string outputDirectory, string fullOutputDirectory, string entryName, bool force)
+    {
+        var destinationPath = Path.GetFullPath(Path.Join(outputDirectory, entryName));
+        if (!destinationPath.StartsWith(fullOutputDirectory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
+            !destinationPath.StartsWith(fullOutputDirectory + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new UsageException($"Artifact package entry '{entryName}' would write outside the output directory.");
+        }
+
+        if (_fileSystem.FileExists(destinationPath) && !force)
+        {
+            throw new UsageException($"Artifact unpack destination '{destinationPath}' already exists. Use --force to overwrite it.");
+        }
+
+        return destinationPath;
     }
 
     private int CountPackableFiles(string artifactRoot) => GetArtifactFiles(artifactRoot).Length;
@@ -239,8 +312,52 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             _fileSystem.FileExists(Path.Join(artifactRoot, MarkdownIndexFileName)),
             files.Any(static file => string.Equals(Path.GetFileName(file), "session-timeline.jsonl", StringComparison.OrdinalIgnoreCase)),
             files.Any(static file => string.Equals(Path.GetFileName(file), "session-replay.json", StringComparison.OrdinalIgnoreCase)),
+            $"luotsi artifacts info {Quote(artifactRoot)}",
             $"luotsi artifacts open {Quote(artifactRoot)}",
             $"luotsi artifacts pack {Quote(artifactRoot)}");
+    }
+
+    private static ArtifactCategoryCountsResult CreateCategoryCounts(IReadOnlyList<string> files)
+    {
+        var screenshots = 0;
+        var videos = 0;
+        var reports = 0;
+        var logs = 0;
+        var timelines = 0;
+
+        foreach (var file in files)
+        {
+            var extension = Path.GetExtension(file).ToLowerInvariant();
+            var name = Path.GetFileName(file);
+            if (extension is ".png" or ".jpg" or ".jpeg" or ".webp" or ".bmp")
+            {
+                screenshots++;
+            }
+            else if (extension is ".mp4" or ".webm" or ".mov" or ".mkv")
+            {
+                videos++;
+            }
+            else if (extension is ".trx" || name.Equals("junit.xml", StringComparison.OrdinalIgnoreCase) || name.Contains("report", StringComparison.OrdinalIgnoreCase))
+            {
+                reports++;
+            }
+            else if (extension is ".log" or ".txt")
+            {
+                logs++;
+            }
+            else if (name.EndsWith(".jsonl", StringComparison.OrdinalIgnoreCase) || name.Contains("timeline", StringComparison.OrdinalIgnoreCase))
+            {
+                timelines++;
+            }
+        }
+
+        return new ArtifactCategoryCountsResult(
+            screenshots,
+            videos,
+            reports,
+            logs,
+            timelines,
+            Math.Max(0, files.Count - screenshots - videos - reports - logs - timelines));
     }
 
     private string[] ResolveArtifactRootCandidates(string baseRoot)
@@ -333,6 +450,12 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         value.Any(static ch => char.IsWhiteSpace(ch) || ch == '"')
             ? $"\"{value.Replace("\"", "\\\"", StringComparison.Ordinal)}\""
             : value;
+
+    private string ComputeSha256(string path)
+    {
+        using var stream = _fileSystem.OpenRead(path);
+        return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+    }
 }
 
 internal sealed record ArtifactOpenResult(
@@ -356,19 +479,43 @@ internal sealed record ArtifactListEntryResult(
     bool HasMarkdownIndex,
     bool HasTimeline,
     bool HasReplayMetadata,
+    string InfoCommand,
     string OpenCommand,
     string PackCommand);
+
+internal sealed record ArtifactInfoResult(
+    string RunId,
+    string ArtifactRoot,
+    int FileCount,
+    bool HasHtmlIndex,
+    bool HasMarkdownIndex,
+    bool HasTimeline,
+    bool HasReplayMetadata,
+    ArtifactCategoryCountsResult CategoryCounts,
+    IReadOnlyList<ArtifactRecommendedCommandResult> RecommendedCommands);
+
+internal sealed record ArtifactCategoryCountsResult(
+    int Screenshots,
+    int Videos,
+    int Reports,
+    int Logs,
+    int Timelines,
+    int Other);
 
 internal sealed record ArtifactPackResult(
     string ArtifactRoot,
     string Output,
     int EntryCount,
+    bool DryRun,
+    string? Sha256,
     IReadOnlyList<ArtifactRecommendedCommandResult> RecommendedCommands);
 
 internal sealed record ArtifactUnpackResult(
     string Package,
     string OutputDirectory,
     int EntryCount,
+    bool DryRun,
+    string Sha256,
     IReadOnlyList<ArtifactRecommendedCommandResult> RecommendedCommands);
 
 internal sealed record ArtifactRecommendedCommandResult(string Kind, string Summary, string Command);

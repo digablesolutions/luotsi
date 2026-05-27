@@ -20,10 +20,11 @@ internal sealed class ArtifactCommandHost(
         object data = subcommand?.ToLowerInvariant() switch
         {
             "list" => await ListAsync(options).ConfigureAwait(false),
+            "info" => await InfoAsync(options).ConfigureAwait(false),
             "open" => await OpenAsync(options).ConfigureAwait(false),
             "pack" => await PackAsync(options).ConfigureAwait(false),
             "unpack" => await UnpackAsync(options).ConfigureAwait(false),
-            _ => throw new UsageException("artifacts command must be one of: list, open, pack, unpack.")
+            _ => throw new UsageException("artifacts command must be one of: list, info, open, pack, unpack.")
         };
 
         _envelopeWriter.WriteSuccess(options.Command!, started, data, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
@@ -32,6 +33,12 @@ internal sealed class ArtifactCommandHost(
 
     private Task<ArtifactListResult> ListAsync(CliOptions options) =>
         _artifactCommandService.ListAsync(options.Get("artifacts"), options.Int("limit", 20));
+
+    private Task<ArtifactInfoResult> InfoAsync(CliOptions options)
+    {
+        var target = RequireTarget(options, "info");
+        return _artifactCommandService.InfoAsync(target, options.Get("artifacts"));
+    }
 
     private Task<ArtifactOpenResult> OpenAsync(CliOptions options)
     {
@@ -42,13 +49,13 @@ internal sealed class ArtifactCommandHost(
     private Task<ArtifactPackResult> PackAsync(CliOptions options)
     {
         var target = RequireTarget(options, "pack");
-        return _artifactCommandService.PackAsync(target, options.Get("artifacts"), options.Get("output"), options.HasFlag("force"));
+        return _artifactCommandService.PackAsync(target, options.Get("artifacts"), options.Get("output"), options.HasFlag("force"), options.HasFlag("dry-run"));
     }
 
     private Task<ArtifactUnpackResult> UnpackAsync(CliOptions options)
     {
         var target = RequireTarget(options, "unpack");
-        return _artifactCommandService.UnpackAsync(target, options.Get("output"), options.HasFlag("force"));
+        return _artifactCommandService.UnpackAsync(target, options.Get("output"), options.HasFlag("force"), options.HasFlag("dry-run"));
     }
 
     private static string RequireTarget(CliOptions options, string subcommand)

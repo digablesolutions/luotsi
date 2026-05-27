@@ -109,7 +109,9 @@ luotsi scenario-explain --file scenarios/smoke.json
 luotsi run --path scenarios --dry-run --include-tag smoke
 luotsi run --path scenarios --device <serial> --report-junit junit.xml
 luotsi artifacts list --artifacts ./artifacts
+luotsi artifacts info ./artifacts/my-run
 luotsi artifacts open ./artifacts/my-run
+luotsi artifacts pack ./artifacts/my-run --output my-run.zip --dry-run
 luotsi artifacts pack ./artifacts/my-run --output my-run.zip
 luotsi artifacts unpack my-run.zip --output ./artifacts/my-run
 luotsi replay summarize --artifacts ./artifacts/my-run
@@ -122,7 +124,7 @@ luotsi replay scenario-draft --artifacts ./artifacts/my-run --output scenarios/r
 luotsi replay open --artifacts ./artifacts/my-run
 ```
 
-Use `scenario-validate`, `scenario-explain`, or `run --dry-run` before you execute device work. Use `artifacts list` when you need to rediscover a recent run id, `artifacts open` when you want the generic artifact browser, and `replay open` when you want the replay-specific front door with next actions. Reach for `replay capsule` when one artifact root failed, `replay graph` when you need selector/action/telemetry context, and `replay cluster` when the same failure pattern is repeating across runs.
+Use `scenario-validate`, `scenario-explain`, or `run --dry-run` before you execute device work. Use `artifacts list` when you need to rediscover a recent run id, `artifacts info` when you want a non-mutating summary of one bundle, `artifacts open` when you want the generic artifact browser, and `replay open` when you want the replay-specific front door with next actions. Reach for `replay capsule` when one artifact root failed, `replay graph` when you need selector/action/telemetry context, and `replay cluster` when the same failure pattern is repeating across runs.
 
 ## Related pages
 
