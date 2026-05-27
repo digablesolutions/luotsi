@@ -392,7 +392,7 @@ public sealed record CommandEnvelope(bool Ok, string? Command, DateTimeOffset St
     /// <summary>
     /// Gets the schema name.
     /// </summary>
-    public static string Schema => ResultSchemas.CommandEnvelope;
+    public string Schema => ResultSchemas.CommandEnvelope;
 
     /// <summary>
     /// Gets duration in milliseconds.
@@ -486,4 +486,3 @@ public sealed record ErrorInfo(string Type, string Message, string Category)
         return "scenario_error";
     }
 }
-
