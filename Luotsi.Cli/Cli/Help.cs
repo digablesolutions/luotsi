@@ -54,8 +54,8 @@ Luotsi help: artifacts
 Usage:
   luotsi <command> --artifacts <directory>
   luotsi artifacts list [--artifacts <directory>] [--limit 20]
-  luotsi artifacts info <artifact-root-or-run-id>
-  luotsi artifacts open <artifact-root-or-run-id> [--dry-run]
+  luotsi artifacts info (<artifact-root-or-run-id> | --last [--artifacts <directory>])
+  luotsi artifacts open (<artifact-root-or-run-id> | --last [--artifacts <directory>]) [--dry-run]
   luotsi artifacts pack <artifact-root-or-run-id> [--output <file.zip>] [--force] [--dry-run]
   luotsi artifacts unpack <artifact.zip> [--output <directory>] [--force] [--dry-run]
   luotsi run --path scenarios --report-json results.json --report-junit junit.xml
@@ -76,6 +76,9 @@ Artifacts:
   protection, requires luotsi-artifact-package.json, refreshes index.html for
   non-dry-run restores, and reports the manifest plus SHA-256 before you open
   or replay it.
+  artifacts info/open also accept --last so you can jump straight back to the
+  latest artifact root under the default temp artifact root or
+  --artifacts <directory>.
   When the target is a run id rather than a full path, Luotsi searches the
   default temp artifact root or --artifacts <directory>.
 
@@ -86,6 +89,7 @@ Examples:
   luotsi artifacts info 20260518-100000-run --artifacts artifacts
   luotsi artifacts open artifacts/20260518-100000-run
   luotsi artifacts open 20260518-100000-run --artifacts artifacts
+  luotsi artifacts open --last --artifacts artifacts
   luotsi artifacts pack artifacts/20260518-100000-run --output replay.zip --dry-run
   luotsi artifacts pack artifacts/20260518-100000-run --output replay.zip
   luotsi artifacts unpack replay.zip --output artifacts/replay --dry-run
@@ -131,6 +135,10 @@ Common workflows:
   Inspect a screen and gather artifacts
     luotsi screen-state --device <adb serial>
     luotsi inspect --device <adb serial>
+
+  Resume the latest local triage bundle
+    luotsi artifacts open --last --artifacts artifacts
+    luotsi replay open --last --artifacts artifacts --dry-run
 
   Prepare live view prerequisites without opening a stream
     luotsi view setup --device <adb serial>
@@ -220,6 +228,7 @@ Luotsi help: replay
 
 Usage:
   luotsi replay open --artifacts <artifact-root> [--dry-run] [--write-json] [--write-markdown]
+  luotsi replay open --last [--artifacts <directory>] [--dry-run] [--write-json] [--write-markdown]
   luotsi replay summarize --artifacts <artifact-root> [--format json|jsonl]
   luotsi replay capsule --artifacts <artifact-root> [--write-readme] [--write-json]
   luotsi replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--source-path <timeline-path>] [--sequence <n>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
@@ -231,6 +240,7 @@ Usage:
 
 Examples:
   luotsi replay open --artifacts artifacts/20260518-100000-view --write-json --write-markdown
+  luotsi replay open --last --artifacts artifacts --dry-run
   luotsi replay summarize --artifacts artifacts/20260518-100000-view
   luotsi replay summarize --artifacts artifacts/20260518-100000-view --format json
   luotsi replay summarize --artifacts artifacts/20260518-100000-view --format jsonl
@@ -263,7 +273,9 @@ Notes:
   index.html/index.md, opens the artifact browser, and returns session counts,
   primary failure, recommended next action, and commands into capsule, timeline,
   scrub, graph, search, scenario draft, and clustering. With --write-json and
-  --write-markdown, it writes replay-open-summary.json and replay-open.md.
+  --write-markdown, it writes replay-open-summary.json and replay-open.md. Use
+  --last to resume the latest artifact root under the default temp root or
+  --artifacts <directory> without re-copying a path.
   Replay summarize reads session-replay.json and session-timeline.jsonl from an
   existing artifact root. By default it returns the condensed failure timeline
   as a normal JSON command envelope. `--format json` writes the bare summary
@@ -593,8 +605,8 @@ Command groups:
 
   Artifact replay and triage
     artifacts list [--artifacts <directory>] [--limit 20]
-    artifacts info <artifact-root-or-run-id>
-    artifacts open <artifact-root-or-run-id> [--dry-run]
+    artifacts info (<artifact-root-or-run-id> | --last [--artifacts <directory>])
+    artifacts open (<artifact-root-or-run-id> | --last [--artifacts <directory>]) [--dry-run]
     artifacts pack <artifact-root-or-run-id> [--output <file.zip>] [--force] [--dry-run]
     artifacts unpack <artifact.zip> [--output <directory>] [--force] [--dry-run]
     replay summarize --artifacts <artifact-root> [--format json|jsonl]
@@ -603,7 +615,7 @@ Command groups:
     replay scrub --artifacts <artifact-root> [--failures] [--source-path <timeline-path>] [--sequence <n>] [--context <n>] [--write-json] [--write-markdown]
     replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--contains <text>] [--insight <kind>] [--severity info|warning|error] [--evidence <kind>] [--fact <text>] [--node <id> --depth 1] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
     replay cluster --artifacts <artifact-root> [--write-json] [--write-markdown]
-    replay open --artifacts <artifact-root> [--dry-run] [--write-json] [--write-markdown]
+    replay open (--artifacts <artifact-root> | --last [--artifacts <directory>]) [--dry-run] [--write-json] [--write-markdown]
     replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>] [--write-json] [--write-markdown]
     replay search --artifacts <artifact-root> --contains <text> [--limit 50]
 

@@ -19,9 +19,11 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
     private readonly IArtifactFolderOpener _artifactOpener = artifactOpener ?? throw new ArgumentNullException(nameof(artifactOpener));
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
 
-    public async Task<ArtifactOpenResult> OpenAsync(string target, string? searchRoot, bool dryRun)
+    public async Task<ArtifactOpenResult> OpenAsync(string? target, string? searchRoot, bool dryRun, bool useLast)
     {
-        var artifactRoot = ResolveArtifactRoot(target, searchRoot);
+        var artifactRoot = useLast
+            ? ArtifactRootResolver.ResolveLatestArtifactRoot(_fileSystem, searchRoot)
+            : ArtifactRootResolver.ResolveArtifactRoot(_fileSystem, target!, searchRoot);
         var indexPath = await EnsureIndexAsync(artifactRoot).ConfigureAwait(false);
         if (!dryRun)
         {
@@ -47,13 +49,13 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             throw new UsageException("Option --limit must be greater than zero.");
         }
 
-        var baseRoot = ResolveSearchRoot(searchRoot);
+        var baseRoot = ArtifactRootResolver.ResolveSearchRoot(_fileSystem, searchRoot);
         if (!_fileSystem.DirectoryExists(baseRoot))
         {
             throw new UsageException($"Artifact search root '{baseRoot}' does not exist.");
         }
 
-        var entries = ResolveArtifactRootCandidates(baseRoot)
+        var entries = ArtifactRootResolver.ResolveArtifactRootCandidates(_fileSystem, baseRoot)
             .Select(root => CreateListEntry(root))
             .OrderByDescending(static entry => entry.RunId, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static entry => entry.ArtifactRoot, StringComparer.OrdinalIgnoreCase)
@@ -65,15 +67,19 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             entries.Length,
             entries,
             [
+                new ArtifactRecommendedCommandResult("open_latest_artifacts", "Open the latest artifact root from this search root.", $"luotsi artifacts open --last --artifacts {Quote(baseRoot)}"),
+                new ArtifactRecommendedCommandResult("replay_open_latest", "Open the replay workbench for the latest artifact root from this search root.", $"luotsi replay open --last --artifacts {Quote(baseRoot)}"),
                 new ArtifactRecommendedCommandResult("info_artifacts", "Inspect one artifact root or run id from this list without mutating it.", "luotsi artifacts info <artifact-root-or-run-id>"),
                 new ArtifactRecommendedCommandResult("open_artifacts", "Open an artifact root or run id from this list.", "luotsi artifacts open <artifact-root-or-run-id>"),
                 new ArtifactRecommendedCommandResult("pack_artifacts", "Pack an artifact root or run id from this list.", "luotsi artifacts pack <artifact-root-or-run-id>")
             ]));
     }
 
-    public Task<ArtifactInfoResult> InfoAsync(string target, string? searchRoot)
+    public Task<ArtifactInfoResult> InfoAsync(string? target, string? searchRoot, bool useLast)
     {
-        var artifactRoot = ResolveArtifactRoot(target, searchRoot);
+        var artifactRoot = useLast
+            ? ArtifactRootResolver.ResolveLatestArtifactRoot(_fileSystem, searchRoot)
+            : ArtifactRootResolver.ResolveArtifactRoot(_fileSystem, target!, searchRoot);
         var files = GetArtifactFiles(artifactRoot);
         return Task.FromResult(new ArtifactInfoResult(
             Path.GetFileName(Path.GetFullPath(artifactRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
@@ -94,7 +100,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
 
     public Task<ArtifactPackResult> PackAsync(string target, string? searchRoot, string? output, bool force, bool dryRun)
     {
-        var artifactRoot = ResolveArtifactRoot(target, searchRoot);
+        var artifactRoot = ArtifactRootResolver.ResolveArtifactRoot(_fileSystem, target, searchRoot);
         var outputPath = ResolveOutputPath(artifactRoot, output);
         if (_fileSystem.FileExists(outputPath) && !force)
         {
@@ -480,39 +486,6 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             .Where(path => string.IsNullOrWhiteSpace(outputPath) || !string.Equals(Path.GetFullPath(path), Path.GetFullPath(outputPath), StringComparison.OrdinalIgnoreCase))
             .ToArray();
 
-    private string ResolveArtifactRoot(string target, string? searchRoot)
-    {
-        if (string.IsNullOrWhiteSpace(target))
-        {
-            throw new UsageException("Artifact command requires <artifact-root-or-run-id>.");
-        }
-
-        if (_fileSystem.DirectoryExists(target))
-        {
-            return target;
-        }
-
-        var baseRoot = ResolveSearchRoot(searchRoot);
-        if (!_fileSystem.DirectoryExists(baseRoot))
-        {
-            throw new UsageException($"Artifact root '{target}' does not exist, and search root '{baseRoot}' does not exist.");
-        }
-
-        var matches = _fileSystem.GetFiles(baseRoot, "*", SearchOption.AllDirectories)
-            .Select(path => FindAncestorByName(baseRoot, path, target))
-            .Where(static path => !string.IsNullOrWhiteSpace(path))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Order(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        return matches.Length switch
-        {
-            1 => matches[0]!,
-            0 => throw new UsageException($"Artifact root or run id '{target}' was not found under '{baseRoot}'."),
-            _ => throw new UsageException($"Artifact run id '{target}' matched multiple roots under '{baseRoot}'. Use the full artifact root path.")
-        };
-    }
-
     private ArtifactListEntryResult CreateListEntry(string artifactRoot)
     {
         var files = GetArtifactFiles(artifactRoot);
@@ -573,56 +546,6 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             Math.Max(0, files.Count - screenshots - videos - reports - logs - timelines));
     }
 
-    private string[] ResolveArtifactRootCandidates(string baseRoot)
-    {
-        var fullBase = Path.GetFullPath(baseRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var files = _fileSystem.GetFiles(baseRoot, "*", SearchOption.AllDirectories);
-        if (files.Any(file => IsDirectArtifactRootMarker(fullBase, file)))
-        {
-            return [baseRoot];
-        }
-
-        return files
-            .Select(file => ResolveDirectChildRoot(fullBase, file))
-            .Where(static root => !string.IsNullOrWhiteSpace(root))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Order(StringComparer.OrdinalIgnoreCase)
-            .ToArray()!;
-    }
-
-    private static bool IsDirectArtifactRootMarker(string fullBase, string file)
-    {
-        var directory = Path.GetDirectoryName(file)?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return string.Equals(directory, fullBase, StringComparison.OrdinalIgnoreCase) &&
-            IsArtifactRootMarker(Path.GetFileName(file));
-    }
-
-    private static bool IsArtifactRootMarker(string fileName) =>
-        string.Equals(fileName, HtmlIndexFileName, StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(fileName, MarkdownIndexFileName, StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(fileName, PackageManifestFileName, StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(fileName, "session-timeline.jsonl", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(fileName, "session-replay.json", StringComparison.OrdinalIgnoreCase);
-
-    private static string? ResolveDirectChildRoot(string fullBase, string file)
-    {
-        var fullFile = Path.GetFullPath(file);
-        if (!fullFile.StartsWith(fullBase + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
-            !fullFile.StartsWith(fullBase + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-
-        var relative = Path.GetRelativePath(fullBase, fullFile);
-        var firstSegment = relative.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], 2, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-        return string.IsNullOrWhiteSpace(firstSegment) ? null : Path.Join(fullBase, firstSegment);
-    }
-
-    private string ResolveSearchRoot(string? searchRoot) =>
-        string.IsNullOrWhiteSpace(searchRoot)
-            ? Path.Join(_fileSystem.GetTempPath(), "luotsi")
-            : searchRoot;
-
     private static string ResolveOutputPath(string artifactRoot, string? output)
     {
         if (!string.IsNullOrWhiteSpace(output))
@@ -645,29 +568,6 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         var directory = Path.GetDirectoryName(fullPath);
         var name = Path.GetFileNameWithoutExtension(fullPath);
         return Path.Join(directory, name);
-    }
-
-    private static string? FindAncestorByName(string baseRoot, string filePath, string name)
-    {
-        var current = Path.GetDirectoryName(filePath);
-        var fullBase = Path.GetFullPath(baseRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        while (!string.IsNullOrWhiteSpace(current))
-        {
-            if (string.Equals(Path.GetFileName(current), name, StringComparison.OrdinalIgnoreCase))
-            {
-                return current;
-            }
-
-            var fullCurrent = Path.GetFullPath(current).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            if (string.Equals(fullCurrent, fullBase, StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
-            current = Path.GetDirectoryName(current);
-        }
-
-        return null;
     }
 
     private static string NormalizeZipEntryName(string path) =>

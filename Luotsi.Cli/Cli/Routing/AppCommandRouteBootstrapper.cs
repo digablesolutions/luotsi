@@ -88,12 +88,37 @@ internal sealed class AppCommandRouteBootstrapper(
     {
         if (string.Equals(options.Command, "replay", StringComparison.OrdinalIgnoreCase))
         {
-            var artifactRoot = options.Get("artifacts") ?? throw new UsageException("replay requires --artifacts <directory> pointing to an existing artifact root.");
+            var artifactRoot = ResolveReplayArtifactRoot(options);
             return ArtifactSession.AttachExisting(artifactRoot, _fileSystem, options.Get("poll-artifacts"));
         }
 
         return ArtifactSession.Create(options, _fileSystem, _timeProvider);
     }
+
+    private string ResolveReplayArtifactRoot(CliOptions options)
+    {
+        var artifactRoot = options.Get("artifacts");
+        if (IsReplayOpenCommand(options) && options.HasFlag("last"))
+        {
+            return ArtifactRootResolver.ResolveLatestArtifactRoot(_fileSystem, artifactRoot);
+        }
+
+        if (!string.IsNullOrWhiteSpace(artifactRoot))
+        {
+            return artifactRoot;
+        }
+
+        if (IsReplayOpenCommand(options))
+        {
+            throw new UsageException("replay open requires --artifacts <directory> pointing to an existing artifact root, or use --last.");
+        }
+
+        throw new UsageException("replay requires --artifacts <directory> pointing to an existing artifact root.");
+    }
+
+    private static bool IsReplayOpenCommand(CliOptions options) =>
+        options.Arguments.Count > 0 &&
+        string.Equals(options.Arguments[0], "open", StringComparison.OrdinalIgnoreCase);
 }
 
 internal sealed record AppCommandRouteSetup(string AdbExecutable, ArtifactSession Artifacts);

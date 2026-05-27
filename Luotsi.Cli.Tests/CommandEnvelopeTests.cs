@@ -72,6 +72,7 @@ public sealed partial class AppTests
         Assert.Contains("Luotsi help: quickstart", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi doctor --device <adb serial>", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi scenario-init --file scenarios/smoke.json", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("luotsi replay open --last --artifacts artifacts --dry-run", console.ErrorLines[0], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -87,6 +88,7 @@ public sealed partial class AppTests
         Assert.Single(console.ErrorLines);
         Assert.Contains("Luotsi help: replay", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi replay summarize --artifacts <artifact-root> [--format json|jsonl]", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("luotsi replay open --last [--artifacts <directory>] [--dry-run] [--write-json] [--write-markdown]", console.ErrorLines[0], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -102,7 +104,8 @@ public sealed partial class AppTests
         Assert.Single(console.ErrorLines);
         Assert.Contains("Luotsi help: artifacts", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi artifacts list [--artifacts <directory>] [--limit 20]", console.ErrorLines[0], StringComparison.Ordinal);
-        Assert.Contains("luotsi artifacts info <artifact-root-or-run-id>", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("luotsi artifacts info (<artifact-root-or-run-id> | --last [--artifacts <directory>])", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("luotsi artifacts open (<artifact-root-or-run-id> | --last [--artifacts <directory>]) [--dry-run]", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi artifacts pack <artifact-root-or-run-id>", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi artifacts unpack <artifact.zip>", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi-artifact-package.json", console.ErrorLines[0], StringComparison.Ordinal);
@@ -800,6 +803,35 @@ public sealed partial class AppTests
         Assert.DoesNotContain(data.GetProperty("commands").EnumerateArray(), command =>
             command.GetProperty("kind").GetString() == "scenario_draft");
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.html")));
+        Assert.Empty(processRunner.Calls);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayOpen_Last_Resolves_Latest_Root_From_Search_Root()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var processRunner = new FakeProcessRunner();
+        var searchRoot = Path.Join("/tmp", "artifacts");
+        var firstRoot = Path.Join(searchRoot, "20260526-110000-view");
+        var secondRoot = Path.Join(searchRoot, "20260526-120000-run");
+        fileSystem.CreateDirectory(searchRoot);
+        fileSystem.AddFile(Path.Join(firstRoot, "session-timeline.jsonl"), "{\"type\":\"session_started\"}");
+        fileSystem.AddFile(Path.Join(secondRoot, "session-timeline.jsonl"), "{\"type\":\"session_started\"}");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = processRunner,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "open", "--last", "--artifacts", searchRoot, "--dry-run"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(secondRoot, envelope.RootElement.GetProperty("data").GetProperty("artifact_root").GetString());
+        Assert.Equal(secondRoot, envelope.RootElement.GetProperty("artifacts").GetProperty("artifact_root").GetString());
         Assert.Empty(processRunner.Calls);
     }
 
@@ -3284,6 +3316,30 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ArtifactsInfo_Last_Resolves_Latest_Root_From_Search_Root()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var searchRoot = Path.Join("/tmp", "artifacts");
+        var firstRoot = Path.Join(searchRoot, "20260526-110000-view");
+        var secondRoot = Path.Join(searchRoot, "20260526-120000-run");
+        fileSystem.CreateDirectory(searchRoot);
+        fileSystem.AddFile(Path.Join(firstRoot, "index.html"), "<!doctype html>");
+        fileSystem.AddFile(Path.Join(secondRoot, "session-timeline.jsonl"), "{\"type\":\"session_started\"}");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "info", "--last", "--artifacts", searchRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(secondRoot, envelope.RootElement.GetProperty("data").GetProperty("artifact_root").GetString());
+    }
+
+    [Fact]
     public async Task RunAsync_ArtifactsList_Rejects_NonPositive_Limit()
     {
         var fileSystem = new FakeFileSystem();
@@ -3323,6 +3379,44 @@ public sealed partial class AppTests
 
         Assert.Equal(0, exitCode);
         Assert.EndsWith(Path.Join("artifacts", "20260526-120000-view"), envelope.RootElement.GetProperty("data").GetProperty("artifact_root").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsOpen_Last_Resolves_Latest_Root_From_Search_Root()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var searchRoot = Path.Join("/tmp", "artifacts");
+        var firstRoot = Path.Join(searchRoot, "20260526-110000-view");
+        var secondRoot = Path.Join(searchRoot, "20260526-120000-run");
+        fileSystem.CreateDirectory(searchRoot);
+        fileSystem.AddFile(Path.Join(firstRoot, "index.html"), "<!doctype html>");
+        fileSystem.AddFile(Path.Join(secondRoot, "session-timeline.jsonl"), "{\"type\":\"session_started\"}");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "open", "--last", "--artifacts", searchRoot, "--dry-run"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(secondRoot, envelope.RootElement.GetProperty("data").GetProperty("artifact_root").GetString());
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsOpen_Rejects_Target_And_Last_Together()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["artifacts", "open", "/tmp/artifacts/20260526-120000-run", "--last"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("Use either <artifact-root-or-run-id> or --last", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]

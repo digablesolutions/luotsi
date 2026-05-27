@@ -36,33 +36,46 @@ internal sealed class ArtifactCommandHost(
 
     private Task<ArtifactInfoResult> InfoAsync(CliOptions options)
     {
-        var target = RequireTarget(options, "info");
-        return _artifactCommandService.InfoAsync(target, options.Get("artifacts"));
+        var target = ResolveTarget(options, "info", allowLast: true);
+        return _artifactCommandService.InfoAsync(target, options.Get("artifacts"), options.HasFlag("last"));
     }
 
     private Task<ArtifactOpenResult> OpenAsync(CliOptions options)
     {
-        var target = RequireTarget(options, "open");
-        return _artifactCommandService.OpenAsync(target, options.Get("artifacts"), options.HasFlag("dry-run"));
+        var target = ResolveTarget(options, "open", allowLast: true);
+        return _artifactCommandService.OpenAsync(target, options.Get("artifacts"), options.HasFlag("dry-run"), options.HasFlag("last"));
     }
 
     private Task<ArtifactPackResult> PackAsync(CliOptions options)
     {
-        var target = RequireTarget(options, "pack");
-        return _artifactCommandService.PackAsync(target, options.Get("artifacts"), options.Get("output"), options.HasFlag("force"), options.HasFlag("dry-run"));
+        var target = ResolveTarget(options, "pack");
+        return _artifactCommandService.PackAsync(target!, options.Get("artifacts"), options.Get("output"), options.HasFlag("force"), options.HasFlag("dry-run"));
     }
 
     private Task<ArtifactUnpackResult> UnpackAsync(CliOptions options)
     {
-        var target = RequireTarget(options, "unpack");
-        return _artifactCommandService.UnpackAsync(target, options.Get("output"), options.HasFlag("force"), options.HasFlag("dry-run"));
+        var target = ResolveTarget(options, "unpack");
+        return _artifactCommandService.UnpackAsync(target!, options.Get("output"), options.HasFlag("force"), options.HasFlag("dry-run"));
     }
 
-    private static string RequireTarget(CliOptions options, string subcommand)
+    private static string? ResolveTarget(CliOptions options, string subcommand, bool allowLast = false)
     {
-        if (options.Arguments.Count < 2 || string.IsNullOrWhiteSpace(options.Arguments[1]))
+        var hasTarget = options.Arguments.Count >= 2 && !string.IsNullOrWhiteSpace(options.Arguments[1]);
+        var useLast = allowLast && options.HasFlag("last");
+        if (hasTarget && useLast)
         {
-            throw new UsageException($"artifacts {subcommand} requires <artifact-root-or-run-id>.");
+            throw new UsageException($"Use either <artifact-root-or-run-id> or --last with artifacts {subcommand}, not both.");
+        }
+
+        if (useLast)
+        {
+            return null;
+        }
+
+        if (!hasTarget)
+        {
+            var suffix = allowLast ? " or --last" : string.Empty;
+            throw new UsageException($"artifacts {subcommand} requires <artifact-root-or-run-id>{suffix}.");
         }
 
         return options.Arguments[1];
