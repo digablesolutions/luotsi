@@ -9,7 +9,7 @@ using Luotsi.Cli.View.Session;
 
 namespace Luotsi.Cli.Artifacts;
 
-internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFolderOpener artifactOpener, TimeProvider timeProvider)
+internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFolderOpener artifactOpener, TimeProvider timeProvider, IEnvironmentVariables environment)
 {
     private const string MarkdownIndexFileName = ArtifactSession.ArtifactIndexFileName;
     private const string HtmlIndexFileName = ArtifactSession.ArtifactHtmlIndexFileName;
@@ -18,12 +18,13 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
     private readonly IArtifactFolderOpener _artifactOpener = artifactOpener ?? throw new ArgumentNullException(nameof(artifactOpener));
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+    private readonly IEnvironmentVariables _environment = environment ?? throw new ArgumentNullException(nameof(environment));
 
     public async Task<ArtifactOpenResult> OpenAsync(string? target, string? searchRoot, bool dryRun, bool useLast)
     {
         var artifactRoot = useLast
-            ? ArtifactRootResolver.ResolveLatestArtifactRoot(_fileSystem, searchRoot)
-            : ArtifactRootResolver.ResolveArtifactRoot(_fileSystem, target!, searchRoot);
+            ? ArtifactRootResolver.ResolveLatestArtifactRoot(_fileSystem, searchRoot, _environment, preferWorkspaceHome: true)
+            : ArtifactRootResolver.ResolveArtifactRoot(_fileSystem, target!, searchRoot, _environment, preferWorkspaceHome: true);
         var indexPath = await EnsureIndexAsync(artifactRoot).ConfigureAwait(false);
         if (!dryRun)
         {
@@ -49,7 +50,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             throw new UsageException("Option --limit must be greater than zero.");
         }
 
-        var baseRoot = ArtifactRootResolver.ResolveSearchRoot(_fileSystem, searchRoot);
+        var baseRoot = ArtifactRootResolver.ResolveSearchRoot(_fileSystem, searchRoot, _environment, preferWorkspaceHome: true);
         if (!_fileSystem.DirectoryExists(baseRoot))
         {
             throw new UsageException($"Artifact search root '{baseRoot}' does not exist.");
@@ -78,8 +79,8 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
     public Task<ArtifactInfoResult> InfoAsync(string? target, string? searchRoot, bool useLast)
     {
         var artifactRoot = useLast
-            ? ArtifactRootResolver.ResolveLatestArtifactRoot(_fileSystem, searchRoot)
-            : ArtifactRootResolver.ResolveArtifactRoot(_fileSystem, target!, searchRoot);
+            ? ArtifactRootResolver.ResolveLatestArtifactRoot(_fileSystem, searchRoot, _environment, preferWorkspaceHome: true)
+            : ArtifactRootResolver.ResolveArtifactRoot(_fileSystem, target!, searchRoot, _environment, preferWorkspaceHome: true);
         var files = GetArtifactFiles(artifactRoot);
         return Task.FromResult(new ArtifactInfoResult(
             Path.GetFileName(Path.GetFullPath(artifactRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
@@ -100,7 +101,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
 
     public Task<ArtifactPackResult> PackAsync(string target, string? searchRoot, string? output, bool force, bool dryRun)
     {
-        var artifactRoot = ArtifactRootResolver.ResolveArtifactRoot(_fileSystem, target, searchRoot);
+        var artifactRoot = ArtifactRootResolver.ResolveArtifactRoot(_fileSystem, target, searchRoot, _environment, preferWorkspaceHome: true);
         var outputPath = ResolveOutputPath(artifactRoot, output);
         if (_fileSystem.FileExists(outputPath) && !force)
         {

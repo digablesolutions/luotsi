@@ -52,11 +52,16 @@ public sealed class ArtifactSession
     /// <param name="fileSystem"></param>
     /// <param name="timeProvider"></param>
     /// <returns>Artifact session.</returns>
-    public static ArtifactSession Create(CliOptions options, IFileSystem? fileSystem = null, TimeProvider? timeProvider = null)
+    public static ArtifactSession Create(
+        CliOptions options,
+        IFileSystem? fileSystem = null,
+        TimeProvider? timeProvider = null,
+        IEnvironmentVariables? environment = null,
+        bool preferWorkspaceHome = false)
     {
         var activeFileSystem = fileSystem ?? new PhysicalFileSystem();
         var activeTimeProvider = timeProvider ?? TimeProvider.System;
-        var baseDir = ResolveBaseDirectory(options, activeFileSystem);
+        var baseDir = ResolveBaseDirectory(options, activeFileSystem, environment, preferWorkspaceHome);
         var name = $"{activeTimeProvider.GetUtcNow():yyyyMMdd-HHmmss}-{SanitizePathSegment(options.Command)}";
         return new ArtifactSession(Path.Combine(baseDir, name), activeFileSystem, ParseUiPollArtifactPolicy(options.Get("poll-artifacts")), ensureDirectoryExists: true);
     }
@@ -168,7 +173,7 @@ public sealed class ArtifactSession
         };
     }
 
-    private static string ResolveBaseDirectory(CliOptions options, IFileSystem fileSystem)
+    private static string ResolveBaseDirectory(CliOptions options, IFileSystem fileSystem, IEnvironmentVariables? environment, bool preferWorkspaceHome)
     {
         var artifacts = options.Get("artifacts");
         var outputDir = options.Get("output-dir");
@@ -179,7 +184,14 @@ public sealed class ArtifactSession
             throw new UsageException("Use either --artifacts or --output-dir for the artifact root, not both.");
         }
 
-        return artifacts ?? outputDir ?? Path.Join(fileSystem.GetTempPath(), "luotsi");
+        if (!string.IsNullOrWhiteSpace(artifacts) || !string.IsNullOrWhiteSpace(outputDir))
+        {
+            return artifacts ?? outputDir!;
+        }
+
+        return preferWorkspaceHome
+            ? ArtifactWorkspacePaths.ResolveDefaultRunArtifactBaseDirectory(fileSystem, environment)
+            : Path.Join(fileSystem.GetTempPath(), "luotsi");
     }
 
     private static string SanitizePathSegment(string? value)

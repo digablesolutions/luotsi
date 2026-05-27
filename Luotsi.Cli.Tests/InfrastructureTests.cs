@@ -64,6 +64,28 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public void ArtifactSession_Create_Uses_User_Local_Run_Home_When_Workspace_Home_Is_Preferred()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-18T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var environment = OperatingSystem.IsWindows()
+            ? new FakeEnvironmentVariables(new Dictionary<string, string> { ["LOCALAPPDATA"] = @"C:\Users\Test\AppData\Local" })
+            : new FakeEnvironmentVariables(new Dictionary<string, string> { ["HOME"] = "/home/test" });
+
+        var session = ArtifactSession.Create(
+            CliOptions.Parse(["run", "--path", "scenarios"]),
+            fileSystem,
+            timeProvider,
+            environment,
+            preferWorkspaceHome: true);
+
+        var expectedBase = OperatingSystem.IsWindows()
+            ? Path.Join(@"C:\Users\Test\AppData\Local", "Luotsi", "artifacts")
+            : Path.Join("/home/test", ".local", "share", "luotsi", "artifacts");
+        Assert.Equal(Path.Join(expectedBase, "20260518-100000-run"), session.Root);
+    }
+
+    [Fact]
     public void ArtifactSession_Create_Rejects_Conflicting_Artifact_Root_Aliases()
     {
         var fileSystem = new FakeFileSystem();
@@ -76,6 +98,22 @@ public sealed partial class AppTests
 
         Assert.Contains("--artifacts", ex.Message, StringComparison.Ordinal);
         Assert.Contains("--output-dir", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ArtifactRootResolver_ResolveSearchRoot_Uses_User_Local_Run_Home_When_Workspace_Home_Is_Preferred()
+    {
+        var fileSystem = new FakeFileSystem();
+        var environment = OperatingSystem.IsWindows()
+            ? new FakeEnvironmentVariables(new Dictionary<string, string> { ["LOCALAPPDATA"] = @"C:\Users\Test\AppData\Local" })
+            : new FakeEnvironmentVariables(new Dictionary<string, string> { ["HOME"] = "/home/test" });
+
+        var searchRoot = ArtifactRootResolver.ResolveSearchRoot(fileSystem, null, environment, preferWorkspaceHome: true);
+
+        var expectedBase = OperatingSystem.IsWindows()
+            ? Path.Join(@"C:\Users\Test\AppData\Local", "Luotsi", "artifacts")
+            : Path.Join("/home/test", ".local", "share", "luotsi", "artifacts");
+        Assert.Equal(expectedBase, searchRoot);
     }
 
     [Fact]

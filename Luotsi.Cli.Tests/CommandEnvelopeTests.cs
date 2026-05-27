@@ -3275,6 +3275,36 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ArtifactsList_Uses_Default_Run_Artifact_Home_When_Artifacts_Root_Is_Omitted()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var environment = OperatingSystem.IsWindows()
+            ? new FakeEnvironmentVariables(new Dictionary<string, string> { ["LOCALAPPDATA"] = @"C:\Users\Test\AppData\Local" })
+            : new FakeEnvironmentVariables(new Dictionary<string, string> { ["HOME"] = "/home/test" });
+        var searchRoot = OperatingSystem.IsWindows()
+            ? Path.Join(@"C:\Users\Test\AppData\Local", "Luotsi", "artifacts")
+            : Path.Join("/home/test", ".local", "share", "luotsi", "artifacts");
+        var replayRoot = Path.Join(searchRoot, "20260526-120000-run");
+        fileSystem.CreateDirectory(searchRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), "{\"type\":\"session_started\"}");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            Environment = environment
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "list"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(searchRoot, data.GetProperty("search_root").GetString());
+        Assert.Equal("20260526-120000-run", Assert.Single(data.GetProperty("entries").EnumerateArray()).GetProperty("run_id").GetString());
+    }
+
+    [Fact]
     public async Task RunAsync_ArtifactsInfo_Returns_Metadata_Without_Refreshing_Index()
     {
         var fileSystem = new FakeFileSystem();

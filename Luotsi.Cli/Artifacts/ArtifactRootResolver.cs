@@ -5,15 +5,26 @@ namespace Luotsi.Cli.Artifacts;
 
 internal static class ArtifactRootResolver
 {
-    public static string ResolveSearchRoot(IFileSystem fileSystem, string? searchRoot)
+    public static string ResolveSearchRoot(
+        IFileSystem fileSystem,
+        string? searchRoot,
+        IEnvironmentVariables? environment = null,
+        bool preferWorkspaceHome = false)
     {
         ArgumentNullException.ThrowIfNull(fileSystem);
         return string.IsNullOrWhiteSpace(searchRoot)
-            ? Path.Join(fileSystem.GetTempPath(), "luotsi")
+            ? preferWorkspaceHome
+                ? ArtifactWorkspacePaths.ResolveDefaultRunArtifactBaseDirectory(fileSystem, environment)
+                : Path.Join(fileSystem.GetTempPath(), "luotsi")
             : searchRoot;
     }
 
-    public static string ResolveArtifactRoot(IFileSystem fileSystem, string target, string? searchRoot)
+    public static string ResolveArtifactRoot(
+        IFileSystem fileSystem,
+        string target,
+        string? searchRoot,
+        IEnvironmentVariables? environment = null,
+        bool preferWorkspaceHome = false)
     {
         ArgumentNullException.ThrowIfNull(fileSystem);
 
@@ -27,7 +38,7 @@ internal static class ArtifactRootResolver
             return target;
         }
 
-        var baseRoot = ResolveSearchRoot(fileSystem, searchRoot);
+        var baseRoot = ResolveSearchRoot(fileSystem, searchRoot, environment, preferWorkspaceHome);
         if (!fileSystem.DirectoryExists(baseRoot))
         {
             throw new UsageException($"Artifact root '{target}' does not exist, and search root '{baseRoot}' does not exist.");
@@ -46,11 +57,15 @@ internal static class ArtifactRootResolver
         };
     }
 
-    public static string ResolveLatestArtifactRoot(IFileSystem fileSystem, string? searchRoot)
+    public static string ResolveLatestArtifactRoot(
+        IFileSystem fileSystem,
+        string? searchRoot,
+        IEnvironmentVariables? environment = null,
+        bool preferWorkspaceHome = false)
     {
         ArgumentNullException.ThrowIfNull(fileSystem);
 
-        var baseRoot = ResolveSearchRoot(fileSystem, searchRoot);
+        var baseRoot = ResolveSearchRoot(fileSystem, searchRoot, environment, preferWorkspaceHome);
         if (!fileSystem.DirectoryExists(baseRoot))
         {
             throw new UsageException($"Artifact search root '{baseRoot}' does not exist.");
