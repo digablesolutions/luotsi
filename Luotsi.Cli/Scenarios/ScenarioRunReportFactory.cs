@@ -32,7 +32,8 @@ internal static class ScenarioRunReportFactory
             result.Metrics,
             result.DeviceAllocation,
             provenance,
-            [CreateScenarioFromSuccess(result, file, attachmentPolicy)]);
+            [CreateScenarioFromSuccess(result, file, attachmentPolicy)],
+            result.ProgressMode);
 
     public static ScenarioRunReport FromSingleFailure(
         string file,
@@ -68,7 +69,7 @@ internal static class ScenarioRunReportFactory
             deviceAllocation,
             provenance,
             [scenario],
-            error);
+            Error: error);
     }
 
     public static ScenarioRunReport FromBatch(
@@ -96,7 +97,8 @@ internal static class ScenarioRunReportFactory
             result.Metrics ?? ScenarioMetrics.Empty,
             result.DeviceAllocation,
             provenance,
-            result.Scenarios.Select(scenario => CreateScenarioFromBatchItem(scenario, attachmentPolicy)).ToArray());
+            result.Scenarios.Select(scenario => CreateScenarioFromBatchItem(scenario, attachmentPolicy)).ToArray(),
+            result.ProgressMode);
 
     public static ScenarioRunReport FromBatchFailure(
         ScenarioRunPlan plan,
@@ -132,7 +134,7 @@ internal static class ScenarioRunReportFactory
             deviceAllocation,
             provenance,
             scenarios,
-            error);
+            Error: error);
     }
 
     public static ScenarioRunReport FromQueryFailure(
@@ -163,7 +165,7 @@ internal static class ScenarioRunReportFactory
             null,
             provenance,
             [CreateScenarioFromException(query.Path, exception, "scenario discovery", $"{query.Path}::discovery")],
-            error);
+            Error: error);
     }
 
     private static ScenarioReportScenario CreateScenarioFromSuccess(

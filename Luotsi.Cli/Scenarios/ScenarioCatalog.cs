@@ -74,7 +74,8 @@ public sealed record ScenarioRunResult(
     string? ScenarioId = null,
     string? File = null,
     ScenarioMetadata? Metadata = null,
-    IReadOnlyList<ScenarioMetadataWarning>? MetadataWarnings = null);
+    IReadOnlyList<ScenarioMetadataWarning>? MetadataWarnings = null,
+    string? ProgressMode = null);
 
 public sealed record ScenarioRunFailureData(
     string Scenario,
@@ -153,7 +154,8 @@ public sealed record ScenarioRunBatchResult(
     IReadOnlyList<ScenarioBatchItemResult> Scenarios,
     string ShardStrategy = ScenarioShardStrategies.Index,
     IReadOnlyDictionary<string, double>? Metrics = null,
-    ScenarioDeviceAllocation? DeviceAllocation = null);
+    ScenarioDeviceAllocation? DeviceAllocation = null,
+    string? ProgressMode = null);
 
 public sealed record ScenarioQuery(
     string Path,
