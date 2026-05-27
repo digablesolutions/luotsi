@@ -60,7 +60,7 @@ internal sealed class ViewSessionFileTransferHandler
         }
     }
 
-    public async Task HandleFileDropAsync(string filePath)
+    private async Task HandleFileDropAsync(string filePath)
     {
         if (string.Equals(Path.GetExtension(filePath), ".apk", StringComparison.OrdinalIgnoreCase))
         {

@@ -28,7 +28,7 @@ internal sealed class ArtifactIndexRenderer
         IReadOnlyList<SessionReplaySummary> replaySummaries)
     {
         var model = await _modelBuilder.BuildAsync(files, replaySummaries).ConfigureAwait(false);
-        return _markdownRenderer.Render(model);
+        return ArtifactMarkdownIndexRenderer.Render(model);
     }
 
     public async Task<string> BuildHtmlIndexAsync(IReadOnlyList<string> files) =>
@@ -39,6 +39,6 @@ internal sealed class ArtifactIndexRenderer
         IReadOnlyList<SessionReplaySummary> replaySummaries)
     {
         var model = await _modelBuilder.BuildAsync(files, replaySummaries).ConfigureAwait(false);
-        return _htmlRenderer.Render(model);
+        return ArtifactHtmlIndexRenderer.Render(model);
     }
 }

@@ -87,7 +87,7 @@ internal sealed class DoctorCommandHost(
         return result.Ready ? 0 : 1;
     }
 
-    private async Task AddAdbCheckAsync(
+    private static async Task AddAdbCheckAsync(
         List<DoctorCheck> checks,
         string name,
         string successSummary,
@@ -114,7 +114,7 @@ internal sealed class DoctorCommandHost(
         }
     }
 
-    private async Task<PreflightResult?> AddPackagePreflightCheckAsync(List<DoctorCheck> checks, IAdbCommandHost adbHost, string package)
+    private static async Task<PreflightResult?> AddPackagePreflightCheckAsync(List<DoctorCheck> checks, IAdbCommandHost adbHost, string package)
     {
         try
         {

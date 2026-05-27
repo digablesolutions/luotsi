@@ -409,12 +409,7 @@ internal sealed class ArtifactSummaryBuilder(string root, IFileSystem fileSystem
     {
         using var document = JsonDocument.Parse(line);
         var root = document.RootElement;
-        if (root.ValueKind != JsonValueKind.Object)
-        {
-            return (null, null);
-        }
-
-        if (!root.TryGetProperty("type", out var typeProperty))
+        if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("type", out var typeProperty))
         {
             return (null, null);
         }

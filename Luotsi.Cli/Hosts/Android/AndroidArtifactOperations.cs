@@ -55,8 +55,8 @@ internal sealed class AndroidArtifactOperations(
         var fileName = DeviceArtifactNames.ScreenshotForLabel(Slugify(label));
         var artifact = await CaptureScreenshotAsync(fileName).ConfigureAwait(false);
         expectedSha256 = await ResolveExpectedSha256Async(expectedSha256, expectedSha256File, updateBaseline ? null : baselineFile, updateBaseline).ConfigureAwait(false);
-        var diffArtifact = (string?)null;
-        var regionSha256 = (string?)null;
+        string? diffArtifact = null;
+        string? regionSha256 = null;
         expectedRegionSha256 = await ResolveExpectedSha256Async(expectedRegionSha256, expectedRegionSha256File, null, false).ConfigureAwait(false);
         if (region is not null)
         {
@@ -190,7 +190,7 @@ internal sealed class AndroidArtifactOperations(
         return null;
     }
 
-    private void ValidateScreenshotRegion(string fileName, ScreenshotArtifactInfo artifact, ScreenshotAssertionRegion region)
+    private static void ValidateScreenshotRegion(string fileName, ScreenshotArtifactInfo artifact, ScreenshotAssertionRegion region)
     {
         if (artifact.Width is null || artifact.Height is null)
         {

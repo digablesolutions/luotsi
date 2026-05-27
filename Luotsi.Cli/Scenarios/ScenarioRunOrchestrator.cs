@@ -151,7 +151,7 @@ internal sealed class ScenarioRunOrchestrator(
         return ExecuteFileCoreAsync(file, runEvents, runReports, runAsync);
     }
 
-    private async Task<ScenarioRunResult> ExecuteFileCoreAsync(
+    private static async Task<ScenarioRunResult> ExecuteFileCoreAsync(
         string file,
         ScenarioRunEventCoordinator runEvents,
         ScenarioRunReportCoordinator runReports,
@@ -171,7 +171,7 @@ internal sealed class ScenarioRunOrchestrator(
         }
     }
 
-    private async Task<ScenarioRunBatchResult> ExecuteBatchAsync(
+    private static async Task<ScenarioRunBatchResult> ExecuteBatchAsync(
         ScenarioRunPlan plan,
         ScenarioRunEventCoordinator runEvents,
         ScenarioRunReportCoordinator runReports,
@@ -196,7 +196,7 @@ internal sealed class ScenarioRunOrchestrator(
         }
     }
 
-    private async Task<ScenarioRunPlan> PlanPathAsync(
+    private static async Task<ScenarioRunPlan> PlanPathAsync(
         ScenarioQuery query,
         ScenarioRunEventCoordinator runEvents,
         ScenarioRunReportCoordinator runReports,

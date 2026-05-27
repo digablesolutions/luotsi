@@ -39,7 +39,7 @@ internal sealed class AppCommandDispatcher(
             "scenario-explain" => false,
             "version" => false,
             "update" => false,
-            "run" => _scenarioCommandDispatcher.RequiresRunner(options),
+            "run" => ScenarioCommandDispatcher.RequiresRunner(options),
             _ => true
         };
     }
@@ -52,9 +52,9 @@ internal sealed class AppCommandDispatcher(
 
         return command switch
         {
-            "adb" => await _adbSubcommandDispatcher.ExecuteAsync(options, RequireAdbCommandHost(runner, command)).ConfigureAwait(false),
+            "adb" => await AdbSubcommandDispatcher.ExecuteAsync(options, RequireAdbCommandHost(runner, command)).ConfigureAwait(false),
             "version" => await _selfUpdateService.GetVersionInfoAsync().ConfigureAwait(false),
-            "update" => await _selfUpdateService.UpdateAsync(options).ConfigureAwait(false),
+            "update" => await _selfUpdateService.UpdateAsync(options, artifacts.Root).ConfigureAwait(false),
             "devices" => DeviceInventory.FromDeviceList(await RequireRunner(runner, command).GetDevicesAsync().ConfigureAwait(false)),
             "device-status" => await DeviceStatusResolver.ReadAsync(RequireRunner(runner, command), RequireAdbCommandHost(runner, command), options.Get("device")).ConfigureAwait(false),
             "device-wait" or "wait-for-device" => await RequireAdbCommandHost(runner, command).WaitForDeviceAsync(options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),

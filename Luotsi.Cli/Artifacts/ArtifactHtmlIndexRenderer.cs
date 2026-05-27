@@ -8,7 +8,7 @@ internal sealed class ArtifactHtmlIndexRenderer
 
     private static readonly Lazy<Template> TemplateInstance = new(LoadTemplate);
 
-    public string Render(ArtifactIndexModel model)
+    public static string Render(ArtifactIndexModel model)
     {
         ArgumentNullException.ThrowIfNull(model);
         return TemplateInstance.Value.Render(new ArtifactHtmlIndexTemplateModel(model, ArtifactIndexTheme.Css, IndexScript));

@@ -11,14 +11,16 @@ public sealed partial class AppTests
 
         AssertOrdered(
             script,
-            "Move-Item -LiteralPath $payloadRoot -Destination $currentDirectory",
+            "Invoke-InstallFileOperation { Move-Item -LiteralPath $payloadRoot -Destination $currentDirectory } \"Move new release payload into place\"",
             "$viewExtras = Install-ViewExtras $currentDirectory $rid $SkipFfmpeg.IsPresent",
             "Write-CommandShim $commandPath",
             "Write-Manifest $manifestPath $resolvedInstallRoot $binDirectory $commandPath $resolvedTag $rid $archiveName $archiveUrl $checksumUrl $viewExtras",
             "$installCommitted = $true",
-            "Remove-Item -LiteralPath $previousDirectory -Recurse -Force -ErrorAction SilentlyContinue");
+            "Invoke-InstallFileOperation { Remove-Item -LiteralPath $previousDirectory -Recurse -Force -ErrorAction SilentlyContinue } \"Remove previous install directory\"");
 
         Assert.Contains("[switch]$SkipFfmpeg", script, StringComparison.Ordinal);
+        Assert.Contains("function Invoke-InstallFileOperation", script, StringComparison.Ordinal);
+        Assert.Contains("$maxAttempts = 12", script, StringComparison.Ordinal);
         Assert.Contains("ffmpeg_staged = $ViewExtras.ffmpeg_staged", script, StringComparison.Ordinal);
         Assert.Contains("function Get-NativeLastExitCode", script, StringComparison.Ordinal);
         Assert.Contains("Get-Variable -Name LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue", script, StringComparison.Ordinal);

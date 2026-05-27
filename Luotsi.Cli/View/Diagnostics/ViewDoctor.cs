@@ -111,13 +111,11 @@ public sealed class ViewDoctor(
             CheckHelperPackage()
         };
 
-        IReadOnlyList<DeviceInfo> connectedDevices;
         PreflightResult? preflight = null;
-        var deviceCheck = await CheckDeviceVisibilityAsync(options, cancellationToken).ConfigureAwait(false);
-        connectedDevices = deviceCheck.Devices;
-        checks.Add(deviceCheck.Check);
+        var (check, connectedDevices) = await CheckDeviceVisibilityAsync(options, cancellationToken).ConfigureAwait(false);
+        checks.Add(check);
 
-        if (deviceCheck.Check.Ok)
+        if (check.Ok)
         {
             var preflightCheck = await CheckPreflightAsync(cancellationToken).ConfigureAwait(false);
             preflight = preflightCheck.Preflight;

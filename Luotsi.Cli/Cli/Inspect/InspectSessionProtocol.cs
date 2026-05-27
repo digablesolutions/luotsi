@@ -25,7 +25,7 @@ internal sealed class InspectSessionProtocol(IConsoleIo console, Action<string>?
 
     public string? ReadLine() => _console.ReadLine();
 
-    public ParseInspectCommandResult ParseCommand(string line)
+    public static ParseInspectCommandResult ParseCommand(string line)
     {
         try
         {

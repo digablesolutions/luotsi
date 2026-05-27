@@ -82,7 +82,7 @@ public sealed class AppCommandShellTests
         var result = new ScenarioRunBatchResult("/tmp/scenarios", "failed", 1, 1, 1, 0, 1, 0, null, null, []);
         var resolver = new AppCommandExitCodeResolver();
 
-        var exitCode = resolver.Resolve(result);
+        var exitCode = AppCommandExitCodeResolver.Resolve(result);
 
         Assert.Equal(1, exitCode);
     }

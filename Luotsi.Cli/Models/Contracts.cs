@@ -392,7 +392,7 @@ public sealed record CommandEnvelope(bool Ok, string? Command, DateTimeOffset St
     /// <summary>
     /// Gets the schema name.
     /// </summary>
-    public string Schema => ResultSchemas.CommandEnvelope;
+    public static string Schema => ResultSchemas.CommandEnvelope;
 
     /// <summary>
     /// Gets duration in milliseconds.
