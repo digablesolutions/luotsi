@@ -105,6 +105,7 @@ public sealed partial class AppTests
         Assert.Contains("luotsi artifacts info <artifact-root-or-run-id>", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi artifacts pack <artifact-root-or-run-id>", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi artifacts unpack <artifact.zip>", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("luotsi-artifact-package.json", console.ErrorLines[0], StringComparison.Ordinal);
     }
 
     [Theory]
@@ -342,6 +343,7 @@ public sealed partial class AppTests
         Assert.Single(console.ErrorLines);
         Assert.Contains("Luotsi help: run", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("--events-jsonl <file>", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("--output-dir <directory>", console.ErrorLines[0], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -788,9 +790,11 @@ public sealed partial class AppTests
         Assert.False(data.TryGetProperty("primary_failure", out _));
         var nextAction = data.GetProperty("recommended_next_action");
         Assert.Equal("inspect_artifacts", nextAction.GetProperty("kind").GetString());
-        Assert.Equal($"luotsi replay open --artifacts {replayRoot}", nextAction.GetProperty("command").GetString());
+        Assert.Equal($"luotsi artifacts open {replayRoot}", nextAction.GetProperty("command").GetString());
         Assert.Contains(data.GetProperty("commands").EnumerateArray(), command =>
             command.GetProperty("kind").GetString() == "capsule");
+        Assert.Contains(data.GetProperty("commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "pack_artifacts");
         Assert.DoesNotContain(data.GetProperty("commands").EnumerateArray(), command =>
             command.GetProperty("kind").GetString() == "timeline");
         Assert.DoesNotContain(data.GetProperty("commands").EnumerateArray(), command =>
@@ -3205,9 +3209,11 @@ public sealed partial class AppTests
         var firstRoot = Path.Join(searchRoot, "20260526-110000-view");
         var secondRoot = Path.Join(searchRoot, "20260526-120000-run");
         fileSystem.CreateDirectory(searchRoot);
+        fileSystem.AddFile(Path.Join(searchRoot, ".DS_Store"), "ignored");
         fileSystem.AddFile(Path.Join(firstRoot, "index.html"), "<!doctype html>");
         fileSystem.AddFile(Path.Join(secondRoot, "session-timeline.jsonl"), "{\"type\":\"session_started\"}");
         fileSystem.AddFile(Path.Join(secondRoot, "session-replay.json"), "{}");
+        fileSystem.AddFile(Path.Join(secondRoot, "luotsi-artifact-package.json"), "{}");
         var app = new App(new AppDependencies
         {
             Console = console,
@@ -3222,6 +3228,7 @@ public sealed partial class AppTests
         Assert.Equal(1, data.GetProperty("count").GetInt32());
         var entry = Assert.Single(data.GetProperty("entries").EnumerateArray());
         Assert.Equal("20260526-120000-run", entry.GetProperty("run_id").GetString());
+        Assert.True(entry.GetProperty("has_package_manifest").GetBoolean());
         Assert.True(entry.GetProperty("has_timeline").GetBoolean());
         Assert.True(entry.GetProperty("has_replay_metadata").GetBoolean());
         Assert.Contains("artifacts info", entry.GetProperty("info_command").GetString(), StringComparison.Ordinal);
@@ -3242,6 +3249,7 @@ public sealed partial class AppTests
         fileSystem.CreateDirectory(searchRoot);
         fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), "{\"type\":\"session_started\"}");
         fileSystem.AddFile(Path.Join(replayRoot, "session-replay.json"), "{}");
+        fileSystem.AddFile(Path.Join(replayRoot, "luotsi-artifact-package.json"), "{}");
         fileSystem.AddFile(Path.Join(replayRoot, "screens", "failure.png"), "png");
         fileSystem.AddFile(Path.Join(replayRoot, "video.mp4"), "mp4");
         fileSystem.AddFile(Path.Join(replayRoot, "junit.xml"), "<testsuite />");
@@ -3259,8 +3267,9 @@ public sealed partial class AppTests
         var data = envelope.RootElement.GetProperty("data");
         Assert.Equal("20260526-120000-run", data.GetProperty("run_id").GetString());
         Assert.Equal(replayRoot, data.GetProperty("artifact_root").GetString());
-        Assert.Equal(6, data.GetProperty("file_count").GetInt32());
+        Assert.Equal(7, data.GetProperty("file_count").GetInt32());
         Assert.False(data.GetProperty("has_html_index").GetBoolean());
+        Assert.True(data.GetProperty("has_package_manifest").GetBoolean());
         Assert.False(fileSystem.FileExists(Path.Join(replayRoot, "index.html")));
         Assert.True(data.GetProperty("has_timeline").GetBoolean());
         Assert.True(data.GetProperty("has_replay_metadata").GetBoolean());
@@ -3339,10 +3348,26 @@ public sealed partial class AppTests
         var data = envelope.RootElement.GetProperty("data");
         Assert.Equal(replayRoot, data.GetProperty("artifact_root").GetString());
         Assert.Equal(output, data.GetProperty("output").GetString());
-        Assert.Equal(2, data.GetProperty("entry_count").GetInt32());
+        Assert.Equal(3, data.GetProperty("entry_count").GetInt32());
         Assert.False(data.GetProperty("dry_run").GetBoolean());
+        Assert.Equal("luotsi-artifact-package.json", data.GetProperty("manifest_path").GetString());
+        var packManifest = data.GetProperty("manifest");
+        Assert.Equal("luotsi-artifact-package.v1", packManifest.GetProperty("schema").GetString());
+        Assert.Equal("20260526-120000-run", packManifest.GetProperty("run_id").GetString());
+        Assert.Equal(2, packManifest.GetProperty("source_file_count").GetInt32());
+        Assert.Equal(2, packManifest.GetProperty("files").GetArrayLength());
         Assert.Matches("^[0-9a-f]{64}$", data.GetProperty("sha256").GetString());
         using var archive = new ZipArchive(new MemoryStream(fileSystem.ReadBytes(output)), ZipArchiveMode.Read);
+        var manifestEntry = Assert.Single(archive.Entries, entry => entry.FullName == "luotsi-artifact-package.json");
+        using (var manifestStream = manifestEntry.Open())
+        using (var manifest = JsonDocument.Parse(manifestStream))
+        {
+            Assert.Equal("luotsi-artifact-package.v1", manifest.RootElement.GetProperty("schema").GetString());
+            Assert.Equal("20260526-120000-run", manifest.RootElement.GetProperty("run_id").GetString());
+            Assert.Equal(2, manifest.RootElement.GetProperty("source_file_count").GetInt32());
+            Assert.Contains(manifest.RootElement.GetProperty("recommended_commands").EnumerateArray(), command =>
+                command.GetProperty("kind").GetString() == "replay_open");
+        }
         Assert.Contains(archive.Entries, entry => entry.FullName == "index.html");
         Assert.Contains(archive.Entries, entry => entry.FullName == "failures/failure.png");
     }
@@ -3369,8 +3394,10 @@ public sealed partial class AppTests
         Assert.Equal(0, exitCode);
         var data = envelope.RootElement.GetProperty("data");
         Assert.True(data.GetProperty("dry_run").GetBoolean());
-        Assert.Equal(2, data.GetProperty("entry_count").GetInt32());
+        Assert.Equal(3, data.GetProperty("entry_count").GetInt32());
         Assert.Equal(output, data.GetProperty("output").GetString());
+        Assert.Equal("luotsi-artifact-package.json", data.GetProperty("manifest_path").GetString());
+        Assert.Equal("20260526-120000-run", data.GetProperty("manifest").GetProperty("run_id").GetString());
         Assert.False(data.TryGetProperty("sha256", out _));
         Assert.False(fileSystem.FileExists(output));
         Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
@@ -3424,6 +3451,15 @@ public sealed partial class AppTests
             {
                 await writer.WriteAsync("{\"type\":\"session_started\"}");
             }
+
+            var manifest = archive.CreateEntry("luotsi-artifact-package.json");
+            await using (var entry = manifest.Open())
+            await using (var writer = new StreamWriter(entry))
+            {
+                await writer.WriteAsync("""
+                {"schema":"luotsi-artifact-package.v1","run_id":"20260526-120000-run","created_at":"2026-05-26T12:00:00Z","source_file_count":2,"category_counts":{"screenshots":0,"videos":0,"reports":0,"logs":0,"timelines":1,"other":1},"recommended_commands":[{"kind":"open_artifacts","summary":"Open the unpacked artifact root locally.","command":"luotsi artifacts open <unpacked-artifact-root>"}],"files":["failures/session-timeline.jsonl","index.html"]}
+                """);
+            }
         }
 
         var app = new App(new AppDependencies
@@ -3440,11 +3476,17 @@ public sealed partial class AppTests
         Assert.Equal(packagePath, data.GetProperty("package").GetString());
         var outputDirectory = data.GetProperty("output_directory").GetString();
         Assert.Equal("/tmp/unpacked", outputDirectory);
-        Assert.Equal(2, data.GetProperty("entry_count").GetInt32());
+        Assert.Equal(3, data.GetProperty("entry_count").GetInt32());
         Assert.False(data.GetProperty("dry_run").GetBoolean());
+        Assert.Equal(Path.Join("/tmp/unpacked", "index.html"), data.GetProperty("index_path").GetString());
+        Assert.Equal(Path.Join("/tmp/unpacked", "luotsi-artifact-package.json"), data.GetProperty("manifest_path").GetString());
+        Assert.Equal("20260526-120000-run", data.GetProperty("manifest").GetProperty("run_id").GetString());
         Assert.Matches("^[0-9a-f]{64}$", data.GetProperty("sha256").GetString());
         Assert.True(fileSystem.FileExists(Path.GetFullPath(Path.Join(outputDirectory!, "index.html"))));
         Assert.True(fileSystem.FileExists(Path.GetFullPath(Path.Join(outputDirectory!, "failures", "session-timeline.jsonl"))));
+        Assert.True(fileSystem.FileExists(Path.GetFullPath(Path.Join(outputDirectory!, "luotsi-artifact-package.json"))));
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "info_artifacts");
         Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
             command.GetProperty("kind").GetString() == "open_artifacts");
     }
@@ -3465,6 +3507,15 @@ public sealed partial class AppTests
             {
                 await writer.WriteAsync("<!doctype html>");
             }
+
+            var manifest = archive.CreateEntry("luotsi-artifact-package.json");
+            await using (var entry = manifest.Open())
+            await using (var writer = new StreamWriter(entry))
+            {
+                await writer.WriteAsync("""
+                {"schema":"luotsi-artifact-package.v1","run_id":"20260526-120000-run","created_at":"2026-05-26T12:00:00Z","source_file_count":1,"category_counts":{"screenshots":0,"videos":0,"reports":0,"logs":0,"timelines":0,"other":1},"recommended_commands":[{"kind":"open_artifacts","summary":"Open the unpacked artifact root locally.","command":"luotsi artifacts open <unpacked-artifact-root>"}],"files":["index.html"]}
+                """);
+            }
         }
 
         var app = new App(new AppDependencies
@@ -3479,10 +3530,147 @@ public sealed partial class AppTests
         Assert.Equal(0, exitCode);
         var data = envelope.RootElement.GetProperty("data");
         Assert.True(data.GetProperty("dry_run").GetBoolean());
-        Assert.Equal(1, data.GetProperty("entry_count").GetInt32());
+        Assert.Equal(2, data.GetProperty("entry_count").GetInt32());
+        Assert.False(data.TryGetProperty("index_path", out _));
+        Assert.Equal(Path.Join("/tmp/unpacked", "luotsi-artifact-package.json"), data.GetProperty("manifest_path").GetString());
+        Assert.Equal("20260526-120000-run", data.GetProperty("manifest").GetProperty("run_id").GetString());
         Assert.Matches("^[0-9a-f]{64}$", data.GetProperty("sha256").GetString());
         Assert.False(fileSystem.DirectoryExists("/tmp/unpacked"));
         Assert.False(fileSystem.FileExists(Path.GetFullPath(Path.Join("/tmp/unpacked", "index.html"))));
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsUnpack_Rejects_Missing_Manifest()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var packagePath = "/tmp/share/replay.zip";
+        fileSystem.CreateDirectory("/tmp/share");
+        await using (var packageStream = fileSystem.OpenWrite(packagePath))
+        {
+            using var archive = new ZipArchive(packageStream, ZipArchiveMode.Create, leaveOpen: true);
+            _ = archive.CreateEntry("index.html");
+        }
+
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "unpack", packagePath, "--output", "/tmp/unpacked"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("missing required manifest", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsUnpack_Rejects_Invalid_Manifest_Json()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var packagePath = "/tmp/share/replay.zip";
+        fileSystem.CreateDirectory("/tmp/share");
+        await using (var packageStream = fileSystem.OpenWrite(packagePath))
+        {
+            using var archive = new ZipArchive(packageStream, ZipArchiveMode.Create, leaveOpen: true);
+            _ = archive.CreateEntry("index.html");
+            var manifest = archive.CreateEntry("luotsi-artifact-package.json");
+            await using var entry = manifest.Open();
+            await using var writer = new StreamWriter(entry);
+            await writer.WriteAsync("{not-json");
+        }
+
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "unpack", packagePath, "--output", "/tmp/unpacked"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("not valid JSON", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("""{"run_id":"20260526-120000-run","created_at":"2026-05-26T12:00:00Z","source_file_count":1,"category_counts":{"other":1},"recommended_commands":[],"files":["index.html"]}""", "missing string property 'schema'")]
+    [InlineData("""{"schema":"luotsi-artifact-package.v1","created_at":"2026-05-26T12:00:00Z","source_file_count":1,"category_counts":{"other":1},"recommended_commands":[],"files":["index.html"]}""", "missing string property 'run_id'")]
+    [InlineData("""{"schema":"luotsi-artifact-package.v1","run_id":"20260526-120000-run","created_at":"2026-05-26T12:00:00Z","category_counts":{"other":1},"recommended_commands":[],"files":["index.html"]}""", "missing integer property 'source_file_count'")]
+    public async Task RunAsync_ArtifactsUnpack_Rejects_Manifest_Missing_Required_Field(string manifestJson, string expectedMessage)
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var packagePath = "/tmp/share/replay.zip";
+        fileSystem.CreateDirectory("/tmp/share");
+        await using (var packageStream = fileSystem.OpenWrite(packagePath))
+        {
+            using var archive = new ZipArchive(packageStream, ZipArchiveMode.Create, leaveOpen: true);
+            _ = archive.CreateEntry("index.html");
+            var manifest = archive.CreateEntry("luotsi-artifact-package.json");
+            await using var entry = manifest.Open();
+            await using var writer = new StreamWriter(entry);
+            await writer.WriteAsync(manifestJson);
+        }
+
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "unpack", packagePath, "--output", "/tmp/unpacked"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains(expectedMessage, envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsPack_Then_Unpack_RoundTrips_Manifest_And_Commands()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var replayRoot = "/tmp/luotsi/20260526-120000-run";
+        var packagePath = "/tmp/share/replay.zip";
+        var unpackedRoot = "/tmp/unpacked";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "index.html"), "<!doctype html>");
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), "{\"type\":\"session_started\"}");
+        fileSystem.AddFile(Path.Join(replayRoot, "screens", "failure.png"), "png");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        Assert.Equal(0, await app.RunAsync(["artifacts", "pack", replayRoot, "--output", packagePath]));
+        console.OutputLines.Clear();
+        console.ErrorLines.Clear();
+
+        Assert.Equal(0, await app.RunAsync(["artifacts", "unpack", packagePath, "--output", unpackedRoot]));
+        using var unpackEnvelope = console.ParseSingleOutputAsJson();
+        var unpackData = unpackEnvelope.RootElement.GetProperty("data");
+
+        Assert.True(fileSystem.FileExists(Path.GetFullPath(Path.Join(unpackedRoot, "index.html"))));
+        Assert.Equal(Path.Join(unpackedRoot, "index.html"), unpackData.GetProperty("index_path").GetString());
+        Assert.Equal("20260526-120000-run", unpackData.GetProperty("manifest").GetProperty("run_id").GetString());
+        Assert.Contains(unpackData.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("command").GetString() == $"luotsi artifacts open {unpackedRoot}");
+        Assert.Contains(unpackData.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("command").GetString() == $"luotsi replay open --artifacts {unpackedRoot}");
+
+        console.OutputLines.Clear();
+        console.ErrorLines.Clear();
+
+        Assert.Equal(0, await app.RunAsync(["artifacts", "info", Path.GetFullPath(unpackedRoot)]));
+        using var infoEnvelope = console.ParseSingleOutputAsJson();
+        Assert.True(infoEnvelope.RootElement.GetProperty("data").GetProperty("has_package_manifest").GetBoolean());
     }
 
     [Fact]
@@ -3495,6 +3683,14 @@ public sealed partial class AppTests
         await using (var packageStream = fileSystem.OpenWrite(packagePath))
         {
             using var archive = new ZipArchive(packageStream, ZipArchiveMode.Create, leaveOpen: true);
+            var manifest = archive.CreateEntry("luotsi-artifact-package.json");
+            await using (var entry = manifest.Open())
+            await using (var writer = new StreamWriter(entry))
+            {
+                await writer.WriteAsync("""
+                {"schema":"luotsi-artifact-package.v1","run_id":"20260526-120000-run","created_at":"2026-05-26T12:00:00Z","source_file_count":1,"category_counts":{"screenshots":0,"videos":0,"reports":0,"logs":0,"timelines":0,"other":1},"recommended_commands":[{"kind":"open_artifacts","summary":"Open the unpacked artifact root locally.","command":"luotsi artifacts open <unpacked-artifact-root>"}],"files":["index.html"]}
+                """);
+            }
             _ = archive.CreateEntry("../escape.txt");
         }
 

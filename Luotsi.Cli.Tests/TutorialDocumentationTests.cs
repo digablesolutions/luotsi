@@ -1,7 +1,9 @@
+using System.IO.Compression;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Luotsi.Cli.Cli;
+using Luotsi.Cli.Scenarios;
 using Xunit;
 
 namespace Luotsi.Cli.Tests;
@@ -54,6 +56,108 @@ public sealed partial class AppTests
         }
 
         Assert.Empty(missingSlugs);
+    }
+
+    [Fact]
+    public void Command_Reference_Documents_Known_Command_And_Help_Surfaces()
+    {
+        var markdown = File.ReadAllText(Path.Join(FindRepositoryRoot(), "docs", "commands.md"));
+        var documentedCommandPaths = ExtractDocumentedCommandPaths(markdown);
+        var missingTopLevelCommands = CliOptions.KnownCommandNames
+            .Where(command => !IsTopLevelCommandDocumented(documentedCommandPaths, command))
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var missingHelpCommands = ExtractHelpCommandPaths()
+            .Where(commandPath => !IsCommandPathDocumented(documentedCommandPaths, commandPath))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        Assert.Empty(missingTopLevelCommands);
+        Assert.Empty(missingHelpCommands);
+    }
+
+    [Fact]
+    public void Command_Reference_Documents_Artifact_Package_Handoff_Strings()
+    {
+        var markdown = File.ReadAllText(Path.Join(FindRepositoryRoot(), "docs", "commands.md"));
+
+        Assert.Contains("--output-dir <directory>", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi-artifact-package.json", markdown, StringComparison.Ordinal);
+        Assert.Contains("artifacts pack", markdown, StringComparison.Ordinal);
+        Assert.Contains("artifacts unpack", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Artifact_Package_Manifest_Fixture_Parses_And_Passes_Unpack_Validation()
+    {
+        var manifestPath = Path.Join(FindRepositoryRoot(), "Luotsi.Cli.Tests", "Fixtures", "artifacts", "package-manifest-v1.json");
+        var manifestJson = File.ReadAllText(manifestPath);
+        using var fixture = JsonDocument.Parse(manifestJson);
+        Assert.Equal("luotsi-artifact-package.v1", fixture.RootElement.GetProperty("schema").GetString());
+        Assert.Equal("20260526-120000-run", fixture.RootElement.GetProperty("run_id").GetString());
+        Assert.Equal(2, fixture.RootElement.GetProperty("source_file_count").GetInt32());
+        Assert.Equal(2, fixture.RootElement.GetProperty("files").GetArrayLength());
+
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var packagePath = "/tmp/share/fixture.zip";
+        fileSystem.CreateDirectory("/tmp/share");
+        await using (var packageStream = fileSystem.OpenWrite(packagePath))
+        {
+            using var archive = new ZipArchive(packageStream, ZipArchiveMode.Create, leaveOpen: true);
+            var index = archive.CreateEntry("index.html");
+            await using (var entry = index.Open())
+            await using (var writer = new StreamWriter(entry))
+            {
+                await writer.WriteAsync("<!doctype html>");
+            }
+
+            var timeline = archive.CreateEntry("session-timeline.jsonl");
+            await using (var entry = timeline.Open())
+            await using (var writer = new StreamWriter(entry))
+            {
+                await writer.WriteAsync("{\"type\":\"session_started\"}");
+            }
+
+            var manifest = archive.CreateEntry("luotsi-artifact-package.json");
+            await using (var entry = manifest.Open())
+            await using (var writer = new StreamWriter(entry))
+            {
+                await writer.WriteAsync(manifestJson);
+            }
+        }
+
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "unpack", packagePath, "--output", "/tmp/unpacked", "--dry-run"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("20260526-120000-run", envelope.RootElement.GetProperty("data").GetProperty("manifest").GetProperty("run_id").GetString());
+    }
+
+    [Fact]
+    public void Scenario_Playbooks_Document_All_Supported_Actions()
+    {
+        var markdown = File.ReadAllText(Path.Join(FindRepositoryRoot(), "docs", "scenarios.md"));
+        var documentedActions = ExtractDocumentedScenarioActions(markdown);
+        var supportedActions = ScenarioExecutor.SupportedScenarioActions;
+        var missingActions = supportedActions
+            .Except(documentedActions, StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var unexpectedActions = documentedActions
+            .Except(supportedActions, StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        Assert.Empty(missingActions);
+        Assert.Empty(unexpectedActions);
     }
 
     [Fact]
@@ -141,6 +245,154 @@ public sealed partial class AppTests
         }
 
         return missingLinks;
+    }
+
+    private static HashSet<string> ExtractDocumentedCommandPaths(string markdown)
+    {
+        var documentedCommandPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var commandPath in ExtractCommandPathsFromText(markdown, requireKnownLeadToken: true))
+        {
+            documentedCommandPaths.Add(commandPath);
+        }
+
+        return documentedCommandPaths;
+    }
+
+    private static HashSet<string> ExtractHelpCommandPaths()
+    {
+        var helpPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var topicText in GetHelpTopicTexts().Values)
+        {
+            foreach (var line in topicText.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                         .Where(static line => line.StartsWith("luotsi ", StringComparison.Ordinal)))
+            {
+                if (TryNormalizeCommandPath(line, requireKnownLeadToken: false, out var commandPath))
+                {
+                    helpPaths.Add(commandPath);
+                }
+            }
+        }
+
+        return helpPaths;
+    }
+
+    private static IReadOnlyDictionary<string, string> GetHelpTopicTexts()
+    {
+        var field = typeof(Help).GetField("TopicTexts", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        var value = field.GetValue(null);
+        var topicTexts = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(value);
+        return topicTexts;
+    }
+
+    private static IEnumerable<string> ExtractCommandPathsFromText(string text, bool requireKnownLeadToken)
+    {
+        foreach (var line in text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (TryNormalizeCommandPath(line, requireKnownLeadToken, out var lineCommandPath))
+            {
+                yield return lineCommandPath;
+            }
+
+            foreach (var code in InlineCodeRegex()
+                         .Matches(line)
+                         .Cast<Match>()
+                         .Select(static match => match.Groups["code"].Value.Trim()))
+            {
+                if (TryNormalizeCommandPath(code, requireKnownLeadToken, out var codeCommandPath))
+                {
+                    yield return codeCommandPath;
+                }
+            }
+        }
+    }
+
+    private static bool TryNormalizeCommandPath(string candidate, bool requireKnownLeadToken, out string commandPath)
+    {
+        commandPath = string.Empty;
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            return false;
+        }
+
+        var normalized = candidate.Trim();
+        if (normalized.StartsWith("luotsi ", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = normalized[7..].TrimStart();
+        }
+
+        var tokens = normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (tokens.Length == 0)
+        {
+            return false;
+        }
+
+        var commandTokens = new List<string>();
+        foreach (var rawToken in tokens)
+        {
+            var token = rawToken.Trim(',', '.', ';', ':');
+            if (!CommandTokenRegex().IsMatch(token))
+            {
+                break;
+            }
+
+            commandTokens.Add(token);
+        }
+
+        if (commandTokens.Count == 0)
+        {
+            return false;
+        }
+
+        if (requireKnownLeadToken && !CliOptions.KnownCommandNames.Contains(commandTokens[0]))
+        {
+            return false;
+        }
+
+        commandPath = string.Join(' ', commandTokens);
+        return true;
+    }
+
+    private static bool IsTopLevelCommandDocumented(IReadOnlySet<string> documentedCommandPaths, string commandName) =>
+        documentedCommandPaths.Contains(commandName)
+        || documentedCommandPaths.Any(path => path.StartsWith($"{commandName} ", StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsCommandPathDocumented(IReadOnlySet<string> documentedCommandPaths, string commandPath) =>
+        documentedCommandPaths.Contains(commandPath)
+        || documentedCommandPaths.Any(path => path.StartsWith($"{commandPath} ", StringComparison.OrdinalIgnoreCase));
+
+    private static HashSet<string> ExtractDocumentedScenarioActions(string markdown)
+    {
+        const string actionsHeading = "## Actions";
+        const string nextHeading = "## Examples";
+        var start = markdown.IndexOf(actionsHeading, StringComparison.Ordinal);
+        var end = markdown.IndexOf(nextHeading, StringComparison.Ordinal);
+        Assert.True(start >= 0 && end > start, "Could not locate the Actions section in docs/scenarios.md.");
+
+        var actionsSection = markdown[start..end];
+        var documentedActions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var line in actionsSection.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                     .Where(static line => line.StartsWith("|", StringComparison.Ordinal)))
+        {
+            var cells = line.Split('|');
+            if (cells.Length < 3)
+            {
+                continue;
+            }
+
+            foreach (var action in InlineCodeRegex()
+                         .Matches(cells[1])
+                         .Cast<Match>()
+                         .Select(static match => match.Groups["code"].Value.Trim())
+                         .Where(static value => ScenarioActionTokenRegex().IsMatch(value)))
+            {
+                documentedActions.Add(action);
+            }
+        }
+
+        return documentedActions;
     }
 
     private static IEnumerable<string> ExtractLocalLinks(string markdown)
@@ -282,8 +534,17 @@ public sealed partial class AppTests
     [GeneratedRegex(@"\[[^\]]+\]\((?<target>[^)]+)\)", RegexOptions.Compiled)]
     private static partial Regex MarkdownLinkRegex();
 
+    [GeneratedRegex("`(?<code>[^`]+)`", RegexOptions.Compiled)]
+    private static partial Regex InlineCodeRegex();
+
     [GeneratedRegex("\\b(?:src|href)=\"(?<target>[^\"]+)\"", RegexOptions.Compiled)]
     private static partial Regex HtmlSourceRegex();
+
+    [GeneratedRegex("^[a-z][a-z0-9-]*$", RegexOptions.Compiled)]
+    private static partial Regex CommandTokenRegex();
+
+    [GeneratedRegex("^[A-Za-z][A-Za-z0-9]*$", RegexOptions.Compiled)]
+    private static partial Regex ScenarioActionTokenRegex();
 
     [GeneratedRegex(@"\A---\r?\n(?<content>.*?)\r?\n---\r?\n", RegexOptions.Compiled | RegexOptions.Singleline)]
     private static partial Regex FrontmatterRegex();

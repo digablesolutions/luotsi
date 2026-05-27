@@ -68,11 +68,14 @@ Artifacts:
   artifacts list shows recent artifact roots and their run ids. artifacts open
   refreshes the index if needed and opens the local browser or file manager.
   artifacts info summarizes one artifact root without opening or changing it.
-  artifacts pack writes a zip suitable for sharing or CI upload and reports
-  SHA-256 for handoff verification. Use --dry-run to preview the output path
-  and entry count without writing.
+  artifacts pack writes a zip suitable for sharing or CI upload, embeds
+  luotsi-artifact-package.json, and reports SHA-256 for handoff verification.
+  Use --dry-run to preview the output path, manifest, and entry count without
+  writing.
   artifacts unpack extracts a zip into a local artifact root with zip-slip
-  protection and SHA-256 reporting before you open or replay it.
+  protection, requires luotsi-artifact-package.json, refreshes index.html for
+  non-dry-run restores, and reports the manifest plus SHA-256 before you open
+  or replay it.
   When the target is a run id rather than a full path, Luotsi searches the
   default temp artifact root or --artifacts <directory>.
 
@@ -142,7 +145,8 @@ Common workflows:
 
 Tips:
   Use --artifacts <directory> when you want a stable output location instead of
-  the default temp folder.
+  the default temp folder. For scenario runs, --output-dir <directory> is a
+  clearer alias for the same root.
   Use luotsi help view, luotsi help scenario, and luotsi help lab when you want
   a deeper command family reference.
 """,
@@ -352,7 +356,7 @@ Usage:
              [--claim-device] [--owner <name>] [--ttl-sec 3600]
              [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>]
              [--capture-on failure|never] [--attach-artifacts never|on-failure|always]
-             [--progress auto|line|plain|quiet|jsonl]
+             [--progress auto|line|plain|quiet|jsonl] [--output-dir <directory>]
 
 Examples:
   luotsi run --path scenarios --device emulator-5554 --report-junit junit.xml
@@ -362,7 +366,9 @@ Examples:
 
 Artifacts:
   Runs can emit JSONL lifecycle events, JSON summaries, JUnit XML, failure
-  bundles, screenshots, recordings, and a browsable artifact index.
+  bundles, screenshots, recordings, and a browsable artifact index. Successful
+  run results also include artifact_commands with exact artifacts open,
+  artifacts pack, and replay open commands for the run artifact root.
 
 Progress:
   Run prints progress to stderr by default and keeps the final command envelope
@@ -610,8 +616,8 @@ Command groups:
     scenario-list --path <scenario-file-or-directory-or-glob> [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>]
     scenario-validate (--file <scenario.json> | --path <scenario-file-or-directory-or-glob>) [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>]
     scenario-explain --file <scenario.json>
-    run --file <scenario.json> [--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--progress auto|line|plain|quiet|jsonl]
-    run --path <scenario-file-or-directory-or-glob> [--dry-run|--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--progress auto|line|plain|quiet|jsonl] [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>] [--shard-count <n> --shard-index <zero-based>] [--shard-strategy index|hash]
+    run --file <scenario.json> [--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--progress auto|line|plain|quiet|jsonl] [--output-dir <directory>]
+    run --path <scenario-file-or-directory-or-glob> [--dry-run|--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--progress auto|line|plain|quiet|jsonl] [--output-dir <directory>] [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>] [--shard-count <n> --shard-index <zero-based>] [--shard-strategy index|hash]
 
 Common options:
   --device <adb serial>
@@ -620,6 +626,7 @@ Common options:
   --platform <android>
   --adb-timeout-sec <seconds>  default 120, 0 disables; env LUOTSI_ADB_TIMEOUT_SEC
   --artifacts <directory>
+  --output-dir <directory>     run alias for --artifacts
   --poll-artifacts <final|per-attempt|none>
   -o, --output <mode>          view: human|json|jsonl
   --human                      one-shot commands: print a concise text envelope

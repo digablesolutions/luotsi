@@ -264,6 +264,10 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         ReplayOpenPrimaryFailureResult? primaryFailure)
     {
         yield return new ReplayOpenCommandHintResult(
+            "pack_artifacts",
+            "Pack this artifact root for CI upload or replay handoff.",
+            $"luotsi artifacts pack {Quote(artifactRoot)}");
+        yield return new ReplayOpenCommandHintResult(
             "capsule",
             "Write the replay capsule summary and README for this bundle.",
             $"luotsi replay capsule --artifacts {Quote(artifactRoot)} --write-readme --write-json");
@@ -339,7 +343,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             "inspect_artifacts",
             "Inspect the artifact index",
             "No replay metadata was found; use the refreshed index to inspect available artifacts.",
-            $"luotsi replay open --artifacts {Quote(artifactRoot)}");
+            $"luotsi artifacts open {Quote(artifactRoot)}");
     }
 
     private static ReplayOutputMode ParseOutputMode(CliOptions options, string commandName)

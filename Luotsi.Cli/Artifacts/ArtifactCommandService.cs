@@ -1,18 +1,23 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.Models;
 using Luotsi.Cli.View.Session;
 
 namespace Luotsi.Cli.Artifacts;
 
-internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFolderOpener artifactOpener)
+internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFolderOpener artifactOpener, TimeProvider timeProvider)
 {
     private const string MarkdownIndexFileName = ArtifactSession.ArtifactIndexFileName;
     private const string HtmlIndexFileName = ArtifactSession.ArtifactHtmlIndexFileName;
+    private const string PackageManifestFileName = "luotsi-artifact-package.json";
 
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
     private readonly IArtifactFolderOpener _artifactOpener = artifactOpener ?? throw new ArgumentNullException(nameof(artifactOpener));
+    private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
 
     public async Task<ArtifactOpenResult> OpenAsync(string target, string? searchRoot, bool dryRun)
     {
@@ -23,7 +28,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             await _artifactOpener.OpenAsync(indexPath).ConfigureAwait(false);
         }
 
-        var fileCount = CountPackableFiles(artifactRoot);
+        var fileCount = GetPackableSourceFiles(artifactRoot).Length;
         return new ArtifactOpenResult(
             artifactRoot,
             indexPath,
@@ -76,6 +81,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             files.Length,
             _fileSystem.FileExists(Path.Join(artifactRoot, HtmlIndexFileName)),
             _fileSystem.FileExists(Path.Join(artifactRoot, MarkdownIndexFileName)),
+            _fileSystem.FileExists(Path.Join(artifactRoot, PackageManifestFileName)),
             files.Any(static file => string.Equals(Path.GetFileName(file), "session-timeline.jsonl", StringComparison.OrdinalIgnoreCase)),
             files.Any(static file => string.Equals(Path.GetFileName(file), "session-replay.json", StringComparison.OrdinalIgnoreCase)),
             CreateCategoryCounts(files),
@@ -95,17 +101,22 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             throw new UsageException($"Artifact pack output '{outputPath}' already exists. Use --force to overwrite it.");
         }
 
-        var entries = CountPackableFiles(artifactRoot);
+        var sourceFiles = GetPackableSourceFiles(artifactRoot, outputPath);
+        var manifest = CreatePackageManifest(artifactRoot, sourceFiles);
+        var entryCount = sourceFiles.Length + 1;
         if (dryRun)
         {
             return Task.FromResult(new ArtifactPackResult(
                 artifactRoot,
                 outputPath,
-                entries,
+                entryCount,
                 dryRun,
+                PackageManifestFileName,
+                manifest,
                 null,
                 [
                     new ArtifactRecommendedCommandResult("pack_artifacts", "Write this artifact package.", $"luotsi artifacts pack {Quote(artifactRoot)} --output {Quote(outputPath)}"),
+                    new ArtifactRecommendedCommandResult("unpack_artifacts", "Restore this package locally after writing it.", $"luotsi artifacts unpack {Quote(outputPath)} --output {Quote(ResolveUnpackOutputPath(outputPath, null))}"),
                     new ArtifactRecommendedCommandResult("open_artifacts", "Open this artifact root in the local workbench.", $"luotsi artifacts open {Quote(artifactRoot)}")
                 ]));
         }
@@ -116,20 +127,23 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             _fileSystem.CreateDirectory(outputDirectory);
         }
 
-        entries = PackArtifactRoot(artifactRoot, outputPath, force);
+        PackArtifactRoot(artifactRoot, outputPath, sourceFiles, manifest, force);
         return Task.FromResult(new ArtifactPackResult(
             artifactRoot,
             outputPath,
-            entries,
+            entryCount,
             dryRun,
+            PackageManifestFileName,
+            manifest,
             ComputeSha256(outputPath),
             [
+                new ArtifactRecommendedCommandResult("unpack_artifacts", "Restore this package locally for review or replay.", $"luotsi artifacts unpack {Quote(outputPath)} --output {Quote(ResolveUnpackOutputPath(outputPath, null))}"),
                 new ArtifactRecommendedCommandResult("open_artifacts", "Open this artifact root in the local workbench.", $"luotsi artifacts open {Quote(artifactRoot)}"),
                 new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench for this artifact root.", $"luotsi replay open --artifacts {Quote(artifactRoot)}")
             ]));
     }
 
-    public Task<ArtifactUnpackResult> UnpackAsync(string packagePath, string? output, bool force, bool dryRun)
+    public async Task<ArtifactUnpackResult> UnpackAsync(string packagePath, string? output, bool force, bool dryRun)
     {
         if (string.IsNullOrWhiteSpace(packagePath))
         {
@@ -147,23 +161,31 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             throw new UsageException($"Artifact unpack output '{outputDirectory}' already exists. Use --force to write into it.");
         }
 
+        var packageManifest = ReadPackageManifest(packagePath);
         var entries = ValidateArtifactPackage(packagePath, outputDirectory, force);
+        var manifestPath = Path.Join(outputDirectory, PackageManifestFileName);
+        string? indexPath = null;
         if (!dryRun)
         {
             _fileSystem.CreateDirectory(outputDirectory);
             entries = UnpackArtifactPackage(packagePath, outputDirectory, force);
+            indexPath = await RefreshUnpackedIndexAsync(outputDirectory).ConfigureAwait(false);
         }
 
-        return Task.FromResult(new ArtifactUnpackResult(
+        return new ArtifactUnpackResult(
             packagePath,
             outputDirectory,
             entries,
             dryRun,
+            indexPath,
+            manifestPath,
+            packageManifest,
             ComputeSha256(packagePath),
             [
+                new ArtifactRecommendedCommandResult("info_artifacts", "Inspect the unpacked artifact root without mutating it.", $"luotsi artifacts info {Quote(outputDirectory)}"),
                 new ArtifactRecommendedCommandResult("open_artifacts", "Open the unpacked artifact root.", $"luotsi artifacts open {Quote(outputDirectory)}"),
                 new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench for the unpacked artifact root.", $"luotsi replay open --artifacts {Quote(outputDirectory)}")
-            ]));
+            ]);
     }
 
     private async Task<string> EnsureIndexAsync(string artifactRoot)
@@ -185,15 +207,19 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         return htmlIndexPath;
     }
 
-    private int PackArtifactRoot(string artifactRoot, string outputPath, bool force)
+    private async Task<string> RefreshUnpackedIndexAsync(string artifactRoot)
     {
-        var files = GetArtifactFiles(artifactRoot)
-            .Where(path => !string.Equals(Path.GetFullPath(path), Path.GetFullPath(outputPath), StringComparison.OrdinalIgnoreCase))
-            .ToArray();
+        var session = ArtifactSession.AttachExisting(artifactRoot, _fileSystem);
+        await session.RefreshIndexAsync().ConfigureAwait(false);
+        return Path.Join(artifactRoot, HtmlIndexFileName);
+    }
 
+    private void PackArtifactRoot(string artifactRoot, string outputPath, IReadOnlyList<string> sourceFiles, ArtifactPackageManifestResult manifest, bool force)
+    {
         using var output = _fileSystem.OpenWrite(outputPath, overwrite: force);
         using var archive = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: false);
-        foreach (var file in files)
+        WritePackageManifest(archive, manifest);
+        foreach (var file in sourceFiles)
         {
             var entryName = NormalizeZipEntryName(Path.GetRelativePath(artifactRoot, file));
             var entry = archive.CreateEntry(entryName, CompressionLevel.SmallestSize);
@@ -201,9 +227,170 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             using var input = _fileSystem.OpenRead(file);
             input.CopyTo(entryStream);
         }
-
-        return files.Length;
     }
+
+    private void WritePackageManifest(ZipArchive archive, ArtifactPackageManifestResult manifest)
+    {
+        var entry = archive.CreateEntry(PackageManifestFileName, CompressionLevel.SmallestSize);
+        using var entryStream = entry.Open();
+        JsonSerializer.Serialize(entryStream, manifest, ArtifactPackageJson.Options);
+    }
+
+    private ArtifactPackageManifestResult CreatePackageManifest(string artifactRoot, IReadOnlyList<string> sourceFiles)
+    {
+        var relativeFiles = sourceFiles
+            .Select(path => NormalizeZipEntryName(Path.GetRelativePath(artifactRoot, path)))
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return new ArtifactPackageManifestResult(
+            ResultSchemas.ArtifactPackage,
+            Path.GetFileName(Path.GetFullPath(artifactRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
+            _timeProvider.GetUtcNow(),
+            relativeFiles.Length,
+            CreateCategoryCounts(relativeFiles),
+            [
+                new ArtifactRecommendedCommandResult("info_artifacts", "Inspect the unpacked artifact root without opening it.", "luotsi artifacts info <unpacked-artifact-root>"),
+                new ArtifactRecommendedCommandResult("open_artifacts", "Open the unpacked artifact root locally.", "luotsi artifacts open <unpacked-artifact-root>"),
+                new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench for the unpacked artifact root.", "luotsi replay open --artifacts <unpacked-artifact-root>")
+            ],
+            relativeFiles);
+    }
+
+    private ArtifactPackageManifestResult ReadPackageManifest(string packagePath)
+    {
+        using var input = _fileSystem.OpenRead(packagePath);
+        using var archive = new ZipArchive(input, ZipArchiveMode.Read, leaveOpen: false);
+        var entry = archive.Entries.FirstOrDefault(static entry =>
+            string.Equals(entry.FullName.Replace('\\', '/'), PackageManifestFileName, StringComparison.OrdinalIgnoreCase));
+        if (entry is null)
+        {
+            throw new UsageException($"Artifact package '{packagePath}' is missing required manifest '{PackageManifestFileName}'.");
+        }
+
+        return ReadPackageManifest(entry.Open(), PackageManifestFileName);
+    }
+
+    private static ArtifactPackageManifestResult ReadPackageManifest(Stream stream, string manifestPath)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(stream);
+            var root = document.RootElement;
+            var schema = GetRequiredString(root, "schema", manifestPath);
+            if (!string.Equals(schema, ResultSchemas.ArtifactPackage, StringComparison.Ordinal))
+            {
+                throw new UsageException($"Artifact package manifest '{manifestPath}' has unsupported schema '{schema}'. Expected '{ResultSchemas.ArtifactPackage}'.");
+            }
+
+            var runId = GetRequiredString(root, "run_id", manifestPath);
+            var createdAt = GetRequiredDateTimeOffset(root, "created_at", manifestPath);
+            var sourceFileCount = GetRequiredInt(root, "source_file_count", manifestPath);
+            if (!root.TryGetProperty("category_counts", out var categoryCountsElement) || categoryCountsElement.ValueKind != JsonValueKind.Object)
+            {
+                throw new UsageException($"Artifact package manifest '{manifestPath}' is missing object property 'category_counts'.");
+            }
+
+            if (!root.TryGetProperty("recommended_commands", out var recommendedCommandsElement) || recommendedCommandsElement.ValueKind != JsonValueKind.Array)
+            {
+                throw new UsageException($"Artifact package manifest '{manifestPath}' is missing array property 'recommended_commands'.");
+            }
+
+            if (!root.TryGetProperty("files", out var filesElement) || filesElement.ValueKind != JsonValueKind.Array)
+            {
+                throw new UsageException($"Artifact package manifest '{manifestPath}' is missing array property 'files'.");
+            }
+
+            var files = filesElement.EnumerateArray()
+                .Select((element, index) =>
+                {
+                    if (element.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(element.GetString()))
+                    {
+                        throw new UsageException($"Artifact package manifest '{manifestPath}' has invalid files[{index}] entry.");
+                    }
+
+                    return element.GetString()!;
+                })
+                .ToArray();
+
+            if (sourceFileCount != files.Length)
+            {
+                throw new UsageException($"Artifact package manifest '{manifestPath}' has source_file_count={sourceFileCount}, but files contains {files.Length} entries.");
+            }
+
+            var commands = recommendedCommandsElement.EnumerateArray()
+                .Select((element, index) =>
+                {
+                    if (element.ValueKind != JsonValueKind.Object)
+                    {
+                        throw new UsageException($"Artifact package manifest '{manifestPath}' has invalid recommended_commands[{index}] entry.");
+                    }
+
+                    return new ArtifactRecommendedCommandResult(
+                        GetRequiredString(element, "kind", $"{manifestPath} recommended_commands[{index}]"),
+                        GetRequiredString(element, "summary", $"{manifestPath} recommended_commands[{index}]"),
+                        GetRequiredString(element, "command", $"{manifestPath} recommended_commands[{index}]"));
+                })
+                .ToArray();
+
+            return new ArtifactPackageManifestResult(
+                schema,
+                runId,
+                createdAt,
+                sourceFileCount,
+                ReadCategoryCounts(categoryCountsElement),
+                commands,
+                files);
+        }
+        catch (JsonException ex)
+        {
+            throw new UsageException($"Artifact package manifest '{manifestPath}' is not valid JSON: {ex.Message}");
+        }
+    }
+
+    private static string GetRequiredString(JsonElement root, string propertyName, string context)
+    {
+        if (!root.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(value.GetString()))
+        {
+            throw new UsageException($"Artifact package manifest '{context}' is missing string property '{propertyName}'.");
+        }
+
+        return value.GetString()!;
+    }
+
+    private static DateTimeOffset GetRequiredDateTimeOffset(JsonElement root, string propertyName, string manifestPath)
+    {
+        if (!root.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.String || !value.TryGetDateTimeOffset(out var parsed))
+        {
+            throw new UsageException($"Artifact package manifest '{manifestPath}' is missing RFC 3339 string property '{propertyName}'.");
+        }
+
+        return parsed;
+    }
+
+    private static int GetRequiredInt(JsonElement root, string propertyName, string manifestPath)
+    {
+        if (!root.TryGetProperty(propertyName, out var value) || !value.TryGetInt32(out var parsed))
+        {
+            throw new UsageException($"Artifact package manifest '{manifestPath}' is missing integer property '{propertyName}'.");
+        }
+
+        return parsed;
+    }
+
+    private static ArtifactCategoryCountsResult ReadCategoryCounts(JsonElement root) =>
+        new(
+            GetOptionalInt(root, "screenshots"),
+            GetOptionalInt(root, "videos"),
+            GetOptionalInt(root, "reports"),
+            GetOptionalInt(root, "logs"),
+            GetOptionalInt(root, "timelines"),
+            GetOptionalInt(root, "other"));
+
+    private static int GetOptionalInt(JsonElement root, string propertyName) =>
+        root.TryGetProperty(propertyName, out var value) && value.TryGetInt32(out var parsed)
+            ? parsed
+            : 0;
 
     private int UnpackArtifactPackage(string packagePath, string outputDirectory, bool force)
     {
@@ -213,7 +400,8 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         using var archive = new ZipArchive(input, ZipArchiveMode.Read, leaveOpen: false);
         foreach (var entry in archive.Entries.Where(static entry => !string.IsNullOrWhiteSpace(entry.Name)))
         {
-            var destinationPath = ResolvePackageDestination(outputDirectory, fullOutputDirectory, entry.FullName, force);
+            var safeEntryName = NormalizePackageEntryName(entry.FullName);
+            var destinationPath = ResolvePackageDestination(outputDirectory, fullOutputDirectory, safeEntryName, entry.FullName, force);
             var destinationDirectory = Path.GetDirectoryName(destinationPath);
             if (!string.IsNullOrWhiteSpace(destinationDirectory))
             {
@@ -237,20 +425,40 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         using var archive = new ZipArchive(input, ZipArchiveMode.Read, leaveOpen: false);
         foreach (var entry in archive.Entries.Where(static entry => !string.IsNullOrWhiteSpace(entry.Name)))
         {
-            _ = ResolvePackageDestination(outputDirectory, fullOutputDirectory, entry.FullName, force);
+            var safeEntryName = NormalizePackageEntryName(entry.FullName);
+            _ = ResolvePackageDestination(outputDirectory, fullOutputDirectory, safeEntryName, entry.FullName, force);
             count++;
         }
 
         return count;
     }
 
-    private string ResolvePackageDestination(string outputDirectory, string fullOutputDirectory, string entryName, bool force)
+    private static string NormalizePackageEntryName(string entryName)
     {
-        var destinationPath = Path.GetFullPath(Path.Join(outputDirectory, entryName));
+        var normalized = entryName
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar);
+        if (string.IsNullOrWhiteSpace(normalized) || Path.IsPathRooted(normalized))
+        {
+            throw new UsageException($"Artifact package entry '{entryName}' would write outside the output directory.");
+        }
+
+        var segments = normalized.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Any(static segment => segment is "." or ".."))
+        {
+            throw new UsageException($"Artifact package entry '{entryName}' would write outside the output directory.");
+        }
+
+        return Path.Join(segments);
+    }
+
+    private string ResolvePackageDestination(string outputDirectory, string fullOutputDirectory, string safeEntryName, string originalEntryName, bool force)
+    {
+        var destinationPath = Path.GetFullPath(Path.Join(outputDirectory, safeEntryName));
         if (!destinationPath.StartsWith(fullOutputDirectory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
             !destinationPath.StartsWith(fullOutputDirectory + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
         {
-            throw new UsageException($"Artifact package entry '{entryName}' would write outside the output directory.");
+            throw new UsageException($"Artifact package entry '{originalEntryName}' would write outside the output directory.");
         }
 
         if (_fileSystem.FileExists(destinationPath) && !force)
@@ -261,11 +469,15 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         return destinationPath;
     }
 
-    private int CountPackableFiles(string artifactRoot) => GetArtifactFiles(artifactRoot).Length;
-
     private string[] GetArtifactFiles(string artifactRoot) =>
         _fileSystem.GetFiles(artifactRoot, "*", SearchOption.AllDirectories)
             .OrderBy(path => Path.GetRelativePath(artifactRoot, path), StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    private string[] GetPackableSourceFiles(string artifactRoot, string? outputPath = null) =>
+        GetArtifactFiles(artifactRoot)
+            .Where(path => !string.Equals(Path.GetFileName(path), PackageManifestFileName, StringComparison.OrdinalIgnoreCase))
+            .Where(path => string.IsNullOrWhiteSpace(outputPath) || !string.Equals(Path.GetFullPath(path), Path.GetFullPath(outputPath), StringComparison.OrdinalIgnoreCase))
             .ToArray();
 
     private string ResolveArtifactRoot(string target, string? searchRoot)
@@ -310,6 +522,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             files.Length,
             _fileSystem.FileExists(Path.Join(artifactRoot, HtmlIndexFileName)),
             _fileSystem.FileExists(Path.Join(artifactRoot, MarkdownIndexFileName)),
+            _fileSystem.FileExists(Path.Join(artifactRoot, PackageManifestFileName)),
             files.Any(static file => string.Equals(Path.GetFileName(file), "session-timeline.jsonl", StringComparison.OrdinalIgnoreCase)),
             files.Any(static file => string.Equals(Path.GetFileName(file), "session-replay.json", StringComparison.OrdinalIgnoreCase)),
             $"luotsi artifacts info {Quote(artifactRoot)}",
@@ -364,7 +577,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
     {
         var fullBase = Path.GetFullPath(baseRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var files = _fileSystem.GetFiles(baseRoot, "*", SearchOption.AllDirectories);
-        if (files.Any(file => string.Equals(Path.GetDirectoryName(file)?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), fullBase, StringComparison.OrdinalIgnoreCase)))
+        if (files.Any(file => IsDirectArtifactRootMarker(fullBase, file)))
         {
             return [baseRoot];
         }
@@ -376,6 +589,20 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             .Order(StringComparer.OrdinalIgnoreCase)
             .ToArray()!;
     }
+
+    private static bool IsDirectArtifactRootMarker(string fullBase, string file)
+    {
+        var directory = Path.GetDirectoryName(file)?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return string.Equals(directory, fullBase, StringComparison.OrdinalIgnoreCase) &&
+            IsArtifactRootMarker(Path.GetFileName(file));
+    }
+
+    private static bool IsArtifactRootMarker(string fileName) =>
+        string.Equals(fileName, HtmlIndexFileName, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(fileName, MarkdownIndexFileName, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(fileName, PackageManifestFileName, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(fileName, "session-timeline.jsonl", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(fileName, "session-replay.json", StringComparison.OrdinalIgnoreCase);
 
     private static string? ResolveDirectChildRoot(string fullBase, string file)
     {
@@ -393,7 +620,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
 
     private string ResolveSearchRoot(string? searchRoot) =>
         string.IsNullOrWhiteSpace(searchRoot)
-            ? Path.Combine(_fileSystem.GetTempPath(), "luotsi")
+            ? Path.Join(_fileSystem.GetTempPath(), "luotsi")
             : searchRoot;
 
     private static string ResolveOutputPath(string artifactRoot, string? output)
@@ -477,6 +704,7 @@ internal sealed record ArtifactListEntryResult(
     int FileCount,
     bool HasHtmlIndex,
     bool HasMarkdownIndex,
+    bool HasPackageManifest,
     bool HasTimeline,
     bool HasReplayMetadata,
     string InfoCommand,
@@ -489,6 +717,7 @@ internal sealed record ArtifactInfoResult(
     int FileCount,
     bool HasHtmlIndex,
     bool HasMarkdownIndex,
+    bool HasPackageManifest,
     bool HasTimeline,
     bool HasReplayMetadata,
     ArtifactCategoryCountsResult CategoryCounts,
@@ -507,6 +736,8 @@ internal sealed record ArtifactPackResult(
     string Output,
     int EntryCount,
     bool DryRun,
+    string? ManifestPath,
+    ArtifactPackageManifestResult Manifest,
     string? Sha256,
     IReadOnlyList<ArtifactRecommendedCommandResult> RecommendedCommands);
 
@@ -515,7 +746,30 @@ internal sealed record ArtifactUnpackResult(
     string OutputDirectory,
     int EntryCount,
     bool DryRun,
+    string? IndexPath,
+    string ManifestPath,
+    ArtifactPackageManifestResult Manifest,
     string Sha256,
     IReadOnlyList<ArtifactRecommendedCommandResult> RecommendedCommands);
 
 internal sealed record ArtifactRecommendedCommandResult(string Kind, string Summary, string Command);
+
+internal sealed record ArtifactPackageManifestResult(
+    string Schema,
+    string RunId,
+    DateTimeOffset CreatedAt,
+    int SourceFileCount,
+    ArtifactCategoryCountsResult CategoryCounts,
+    IReadOnlyList<ArtifactRecommendedCommandResult> RecommendedCommands,
+    IReadOnlyList<string> Files);
+
+internal static class ArtifactPackageJson
+{
+    public static readonly JsonSerializerOptions Options = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        PropertyNameCaseInsensitive = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        WriteIndented = true
+    };
+}
