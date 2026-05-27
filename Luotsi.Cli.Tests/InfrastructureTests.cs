@@ -53,6 +53,32 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public void ArtifactSession_Create_Uses_Output_Dir_As_Artifact_Root_Alias()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-18T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+
+        var session = ArtifactSession.Create(CliOptions.Parse(["run", "--path", "scenarios", "--output-dir", "/tmp/luotsi-runs"]), fileSystem, timeProvider);
+
+        Assert.Equal(Path.Join("/tmp/luotsi-runs", "20260518-100000-run"), session.Root);
+    }
+
+    [Fact]
+    public void ArtifactSession_Create_Rejects_Conflicting_Artifact_Root_Aliases()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-18T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+
+        var ex = Assert.Throws<UsageException>(() => ArtifactSession.Create(
+            CliOptions.Parse(["run", "--path", "scenarios", "--artifacts", "/tmp/a", "--output-dir", "/tmp/b"]),
+            fileSystem,
+            timeProvider));
+
+        Assert.Contains("--artifacts", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("--output-dir", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ArtifactSession_Writes_Markdown_Index_For_Text_And_Json_Artifacts()
     {
         var fileSystem = new FakeFileSystem();

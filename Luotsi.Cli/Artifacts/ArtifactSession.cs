@@ -56,7 +56,7 @@ public sealed class ArtifactSession
     {
         var activeFileSystem = fileSystem ?? new PhysicalFileSystem();
         var activeTimeProvider = timeProvider ?? TimeProvider.System;
-        var baseDir = options.Get("artifacts") ?? Path.Combine(activeFileSystem.GetTempPath(), "luotsi");
+        var baseDir = ResolveBaseDirectory(options, activeFileSystem);
         var name = $"{activeTimeProvider.GetUtcNow():yyyyMMdd-HHmmss}-{SanitizePathSegment(options.Command)}";
         return new ArtifactSession(Path.Combine(baseDir, name), activeFileSystem, ParseUiPollArtifactPolicy(options.Get("poll-artifacts")), ensureDirectoryExists: true);
     }
@@ -166,6 +166,19 @@ public sealed class ArtifactSession
             "none" => UiPollArtifactPolicy.None,
             _ => throw new UsageException("Option --poll-artifacts must be one of: final, per-attempt, none.")
         };
+    }
+
+    private static string ResolveBaseDirectory(CliOptions options, IFileSystem fileSystem)
+    {
+        var artifacts = options.Get("artifacts");
+        var outputDir = options.Get("output-dir");
+        if (!string.IsNullOrWhiteSpace(artifacts) && !string.IsNullOrWhiteSpace(outputDir) &&
+            !string.Equals(Path.GetFullPath(artifacts), Path.GetFullPath(outputDir), StringComparison.OrdinalIgnoreCase))
+        {
+            throw new UsageException("Use either --artifacts or --output-dir for the artifact root, not both.");
+        }
+
+        return artifacts ?? outputDir ?? Path.Combine(fileSystem.GetTempPath(), "luotsi");
     }
 
     private static string SanitizePathSegment(string? value)
