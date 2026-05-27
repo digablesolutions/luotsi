@@ -76,6 +76,34 @@ jobs:
           --blame-hang
           --blame-hang-timeout 2m
 
+      - name: Generate coverage report
+        if: always()
+        shell: pwsh
+        run: |
+          $coverageFiles = Get-ChildItem -LiteralPath artifacts/test-results -Recurse -Filter coverage.cobertura.xml -File -ErrorAction SilentlyContinue
+          if ($coverageFiles.Count -eq 0) {
+            Add-Content $env:GITHUB_STEP_SUMMARY "## Coverage"
+            Add-Content $env:GITHUB_STEP_SUMMARY ""
+            Add-Content $env:GITHUB_STEP_SUMMARY "No Cobertura coverage files were produced."
+            exit 0
+          }
+
+          dotnet tool install dotnet-reportgenerator-globaltool --tool-path ./.tools --version 5.5.10
+          $reports = ($coverageFiles | ForEach-Object { $_.FullName }) -join ";"
+          & ./.tools/reportgenerator.exe "-reports:$reports" "-targetdir:artifacts/coverage-report" "-reporttypes:Html;MarkdownSummaryGithub" "-verbosity:Warning"
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+          $summary = Get-ChildItem -LiteralPath artifacts/coverage-report -Filter *.md -File -ErrorAction SilentlyContinue | Select-Object -First 1
+          Add-Content $env:GITHUB_STEP_SUMMARY "## Coverage"
+          Add-Content $env:GITHUB_STEP_SUMMARY ""
+          if ($null -eq $summary) {
+            Add-Content $env:GITHUB_STEP_SUMMARY "Coverage report was generated under ``artifacts/coverage-report``."
+          } else {
+            Get-Content -LiteralPath $summary.FullName | Add-Content $env:GITHUB_STEP_SUMMARY
+          }
+
       - name: Summarize validation
         if: always()
         shell: pwsh
@@ -93,6 +121,14 @@ jobs:
         with:
           name: test-results
           path: artifacts/test-results
+          if-no-files-found: ignore
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: artifacts/coverage-report
           if-no-files-found: ignore
 
       - name: Upload MSBuild binlogs
