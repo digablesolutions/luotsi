@@ -36,14 +36,14 @@ internal sealed class ArtifactCommandHost(
 
     private Task<ArtifactInfoResult> InfoAsync(CliOptions options)
     {
-        var target = RequireTarget(options, "info", "<artifact-root-or-run-id>");
-        return _artifactCommandService.InfoAsync(target, options.Get("artifacts"));
+        var target = ResolveTarget(options, "info", allowLast: true);
+        return _artifactCommandService.InfoAsync(target, options.Get("artifacts"), options.HasFlag("last"));
     }
 
     private Task<ArtifactOpenResult> OpenAsync(CliOptions options)
     {
-        var target = RequireTarget(options, "open", "<artifact-root-or-run-id>");
-        return _artifactCommandService.OpenAsync(target, options.Get("artifacts"), options.HasFlag("dry-run"));
+        var target = ResolveTarget(options, "open", allowLast: true);
+        return _artifactCommandService.OpenAsync(target, options.Get("artifacts"), options.HasFlag("dry-run"), options.HasFlag("last"));
     }
 
     private Task<ArtifactPackResult> PackAsync(CliOptions options)
@@ -60,11 +60,29 @@ internal sealed class ArtifactCommandHost(
 
     private static string RequireTarget(CliOptions options, string subcommand, string argumentName)
     {
-        if (options.Arguments.Count < 2 || string.IsNullOrWhiteSpace(options.Arguments[1]))
+        var target = ResolveTarget(options, subcommand);
+        if (string.IsNullOrWhiteSpace(target))
         {
             throw new UsageException($"artifacts {subcommand} requires {argumentName}.");
         }
 
-        return options.Arguments[1];
+        return target;
+    }
+
+    private static string? ResolveTarget(CliOptions options, string subcommand, bool allowLast = false)
+    {
+        var hasTarget = options.Arguments.Count >= 2 && !string.IsNullOrWhiteSpace(options.Arguments[1]);
+        var useLast = allowLast && options.HasFlag("last");
+        if (hasTarget && useLast)
+        {
+            throw new UsageException($"Use either <artifact-root-or-run-id> or --last with artifacts {subcommand}, not both.");
+        }
+
+        if (useLast)
+        {
+            return null;
+        }
+
+        return hasTarget ? options.Arguments[1] : null;
     }
 }

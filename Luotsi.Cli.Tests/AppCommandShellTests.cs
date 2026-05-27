@@ -154,6 +154,61 @@ public sealed class AppCommandShellTests
     }
 
     [Fact]
+    public void WriteSuccess_HumanOutput_Shows_FollowUp_Command_Hints()
+    {
+        var console = new FakeConsole();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-18T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var writer = new AppCommandEnvelopeWriter(console, timeProvider, CreateProvenance());
+
+        writer.WriteSuccess(
+            "run",
+            DateTimeOffset.Parse("2026-05-18T09:59:59Z", null, System.Globalization.DateTimeStyles.RoundtripKind),
+            new
+            {
+                status = "failed",
+                artifact_commands = new[]
+                {
+                    new { kind = "open_artifacts", summary = "Open the artifact browser for this run.", command = "luotsi artifacts open /tmp/latest-run" },
+                    new { kind = "replay_open", summary = "Open the replay workbench for this run.", command = "luotsi replay open --artifacts /tmp/latest-run" }
+                },
+                recommended_commands = new[]
+                {
+                    new { kind = "pack_artifacts", summary = "Pack this run for handoff.", command = "luotsi artifacts pack /tmp/latest-run" }
+                }
+            },
+            new ArtifactData("/tmp/latest-run", "final"),
+            AppCommandConsoleOutputMode.Human);
+
+        Assert.Contains("  next: luotsi artifacts open /tmp/latest-run", console.OutputLines);
+        Assert.Contains("  artifact_commands: 2", console.OutputLines);
+        Assert.Contains("    - kind=open_artifacts; summary=Open the artifact browser for this run.; command=luotsi artifacts open /tmp/latest-run", console.OutputLines);
+        Assert.Contains("  recommended_commands: 1", console.OutputLines);
+    }
+
+    [Fact]
+    public void WriteSuccess_HumanOutput_Uses_Description_When_Command_Hint_Has_No_Summary()
+    {
+        var console = new FakeConsole();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-18T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var writer = new AppCommandEnvelopeWriter(console, timeProvider, CreateProvenance());
+
+        writer.WriteSuccess(
+            "run",
+            DateTimeOffset.Parse("2026-05-18T09:59:59Z", null, System.Globalization.DateTimeStyles.RoundtripKind),
+            new
+            {
+                artifact_commands = new object[]
+                {
+                    new { kind = "open_artifacts", description = "Open the artifact browser for this run.", command = "luotsi artifacts open /tmp/latest-run" }
+                }
+            },
+            new ArtifactData("/tmp/latest-run", "final"),
+            AppCommandConsoleOutputMode.Human);
+
+        Assert.Contains("    - kind=open_artifacts; summary=Open the artifact browser for this run.; command=luotsi artifacts open /tmp/latest-run", console.OutputLines);
+    }
+
+    [Fact]
     public async Task RunAsync_ConsoleOutput_Quiet_Suppresses_Success_Envelope()
     {
         var console = new FakeConsole();

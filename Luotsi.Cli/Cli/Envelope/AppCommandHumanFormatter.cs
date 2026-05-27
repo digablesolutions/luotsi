@@ -101,6 +101,10 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
         AddScalar(lines, value, "installed_tag");
         AddScalar(lines, value, "view_extras");
 
+        AddRecommendedCommand(lines, value);
+        AddArraySummary(lines, value, "artifact_commands");
+        AddArraySummary(lines, value, "recommended_commands");
+
         AddArraySummary(lines, value, "devices");
         AddArraySummary(lines, value, "scenarios");
         AddArraySummary(lines, value, "checks");
@@ -111,8 +115,6 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
         AddArraySummary(lines, value, "packages");
         AddArraySummary(lines, value, "services");
         AddArraySummary(lines, value, "profiles");
-
-        AddRecommendedCommand(lines, value);
 
         if (lines.Count == 0)
         {
@@ -161,17 +163,21 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
             return;
         }
 
-        if (!value.TryGetProperty("commands", out var commands) || commands.ValueKind != JsonValueKind.Array)
+        foreach (var propertyName in new[] { "artifact_commands", "recommended_commands", "commands" })
         {
-            return;
-        }
+            if (!value.TryGetProperty(propertyName, out var commands) || commands.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
 
-        var command = commands.EnumerateArray()
-            .Select(static item => item.ValueKind == JsonValueKind.Object && item.TryGetProperty("command", out var value) ? value.GetString() : null)
-            .FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
-        if (!string.IsNullOrWhiteSpace(command))
-        {
-            lines.Add($"next: {command}");
+            var command = commands.EnumerateArray()
+                .Select(static item => item.ValueKind == JsonValueKind.Object && item.TryGetProperty("command", out var value) ? value.GetString() : null)
+                .FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
+            if (!string.IsNullOrWhiteSpace(command))
+            {
+                lines.Add($"next: {command}");
+                return;
+            }
         }
     }
 
@@ -184,10 +190,11 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
 
         var parts = new List<string>();
         AddPart(parts, item, "serial");
+        AddPart(parts, item, "kind");
         AddPart(parts, item, "status");
         AddPart(parts, item, "model");
         AddPart(parts, item, "name");
-        AddPart(parts, item, "summary");
+        AddSummaryPart(parts, item);
         AddPart(parts, item, "command");
         AddPart(parts, item, "path");
         AddPart(parts, item, "file");
@@ -196,12 +203,38 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
         return parts.Count == 0 ? null : string.Join("; ", parts);
     }
 
+    private static void AddSummaryPart(List<string> parts, JsonElement item)
+    {
+        if (TryGetScalarProperty(item, "summary", out var summary))
+        {
+            parts.Add($"summary={FormatScalar(summary)}");
+            return;
+        }
+
+        if (TryGetScalarProperty(item, "description", out var description))
+        {
+            parts.Add($"summary={FormatScalar(description)}");
+        }
+    }
+
     private static void AddPart(List<string> parts, JsonElement item, string propertyName)
     {
-        if (item.TryGetProperty(propertyName, out var property) && property.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array or JsonValueKind.Null or JsonValueKind.Undefined))
+        if (TryGetScalarProperty(item, propertyName, out var property))
         {
             parts.Add($"{propertyName}={FormatScalar(property)}");
         }
+    }
+
+    private static bool TryGetScalarProperty(JsonElement item, string propertyName, out JsonElement property)
+    {
+        if (item.TryGetProperty(propertyName, out property) &&
+            property.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array or JsonValueKind.Null or JsonValueKind.Undefined))
+        {
+            return true;
+        }
+
+        property = default;
+        return false;
     }
 
     private static string FormatScalar(JsonElement value) =>
