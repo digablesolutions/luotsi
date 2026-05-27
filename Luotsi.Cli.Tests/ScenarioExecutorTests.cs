@@ -363,7 +363,8 @@ public sealed partial class AppTests
             "--validate-only",
             "--events-jsonl", "/tmp/events.jsonl",
             "--report-json", "/tmp/report.json",
-            "--report-junit", "/tmp/junit.xml"]);
+            "--report-junit", "/tmp/junit.xml",
+            "--progress", "plain"]);
         using var envelope = console.ParseSingleOutputAsJson();
         var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
         using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
