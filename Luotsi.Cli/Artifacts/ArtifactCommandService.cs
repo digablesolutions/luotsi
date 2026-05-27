@@ -427,7 +427,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
 
     private string ResolveSearchRoot(string? searchRoot) =>
         string.IsNullOrWhiteSpace(searchRoot)
-            ? Path.Combine(_fileSystem.GetTempPath(), "luotsi")
+            ? Path.Join(_fileSystem.GetTempPath(), "luotsi")
             : searchRoot;
 
     private static string ResolveOutputPath(string artifactRoot, string? output)

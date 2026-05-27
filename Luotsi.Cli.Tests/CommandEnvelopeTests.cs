@@ -3451,6 +3451,24 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ArtifactsUnpack_Requires_Zip_Target()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = new FakeFileSystem()
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "unpack"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("<artifact.zip>", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_ArtifactsUnpack_DryRun_Validates_Zip_Without_Writing()
     {
         var fileSystem = new FakeFileSystem();

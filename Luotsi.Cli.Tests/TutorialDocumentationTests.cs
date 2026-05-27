@@ -186,9 +186,9 @@ public sealed partial class AppTests
         var normalized = withoutFragment
             .Replace('/', Path.DirectorySeparatorChar)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        foreach (var baseDirectory in ResolveDocumentationLinkBaseDirectories(markdownFile))
+        foreach (var resolved in ResolveDocumentationLinkBaseDirectories(markdownFile)
+                     .Select(baseDirectory => Path.GetFullPath(normalized, baseDirectory)))
         {
-            var resolved = Path.GetFullPath(normalized, baseDirectory);
             yield return resolved;
 
             if (Path.HasExtension(resolved))
