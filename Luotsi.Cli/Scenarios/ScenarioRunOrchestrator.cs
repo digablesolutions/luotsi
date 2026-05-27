@@ -35,7 +35,8 @@ internal sealed class ScenarioRunOrchestrator(
             runner,
             configuration,
             runEvents,
-            runReports).ConfigureAwait(false);
+            runReports,
+            artifacts).ConfigureAwait(false);
     }
 
     public async Task<ScenarioRunBatchResult> RunPathAsync(ScenarioQuery query, IDeviceHost runner, ScenarioRunConfiguration configuration, ArtifactSession artifacts)
@@ -52,7 +53,8 @@ internal sealed class ScenarioRunOrchestrator(
             runner,
             configuration,
             runEvents,
-            runReports).ConfigureAwait(false);
+            runReports,
+            artifacts).ConfigureAwait(false);
     }
 
     public async Task<ScenarioRunResult> ValidateFileAsync(string file, ScenarioRunConfiguration configuration)
@@ -97,7 +99,8 @@ internal sealed class ScenarioRunOrchestrator(
         IDeviceHost runner,
         ScenarioRunConfiguration configuration,
         ScenarioRunEventCoordinator runEvents,
-        ScenarioRunReportCoordinator runReports)
+        ScenarioRunReportCoordinator runReports,
+        ArtifactSession artifacts)
     {
         return await ExecuteFileAsync(
             file,
@@ -109,7 +112,7 @@ internal sealed class ScenarioRunOrchestrator(
                 try
                 {
                     var result = await _scenarioExecutorFactory.Create(runner, sink, configuration.FailureArtifactCapturePolicy).RunAsync(file).ConfigureAwait(false);
-                    return AttachProgressMode(ScenarioMetadataCompatibility.Attach(result, allocation), configuration);
+                    return AttachArtifactCommands(AttachProgressMode(ScenarioMetadataCompatibility.Attach(result, allocation), configuration), artifacts);
                 }
                 catch (Exception ex) when (!IsFatalException(ex) && ex is not UsageException)
                 {
@@ -123,7 +126,8 @@ internal sealed class ScenarioRunOrchestrator(
         IDeviceHost runner,
         ScenarioRunConfiguration configuration,
         ScenarioRunEventCoordinator runEvents,
-        ScenarioRunReportCoordinator runReports)
+        ScenarioRunReportCoordinator runReports,
+        ArtifactSession artifacts)
     {
         var preparedPlan = await PlanPathAsync(query, runEvents, runReports, () => _runPlanner.CreateAsync(query)).ConfigureAwait(false);
         return await ExecuteBatchAsync(
@@ -136,7 +140,7 @@ internal sealed class ScenarioRunOrchestrator(
                 try
                 {
                     var result = await _scenarioBatchExecutorFactory.Create(runner, sink, configuration.FailureArtifactCapturePolicy).RunAsync(preparedPlan).ConfigureAwait(false);
-                    return AttachProgressMode(ScenarioMetadataCompatibility.Attach(result, allocation), configuration);
+                    return AttachArtifactCommands(AttachProgressMode(ScenarioMetadataCompatibility.Attach(result, allocation), configuration), artifacts);
                 }
                 catch (Exception ex) when (!IsFatalException(ex) && ex is not UsageException)
                 {
@@ -236,8 +240,26 @@ internal sealed class ScenarioRunOrchestrator(
     private static ScenarioRunBatchResult AttachProgressMode(ScenarioRunBatchResult result, ScenarioRunConfiguration configuration) =>
         result with { ProgressMode = FormatProgressMode(configuration.ProgressMode) };
 
+    private static ScenarioRunResult AttachArtifactCommands(ScenarioRunResult result, ArtifactSession artifacts) =>
+        result with { ArtifactCommands = CreateArtifactCommands(artifacts.Root) };
+
+    private static ScenarioRunBatchResult AttachArtifactCommands(ScenarioRunBatchResult result, ArtifactSession artifacts) =>
+        result with { ArtifactCommands = CreateArtifactCommands(artifacts.Root) };
+
+    private static IReadOnlyList<ScenarioArtifactCommandHint> CreateArtifactCommands(string artifactRoot) =>
+    [
+        new("open_artifacts", "Open the artifact browser for this run.", $"luotsi artifacts open {Quote(artifactRoot)}"),
+        new("pack_artifacts", "Pack this run into a portable zip for CI upload or handoff.", $"luotsi artifacts pack {Quote(artifactRoot)}"),
+        new("replay_open", "Open the replay workbench for this run.", $"luotsi replay open --artifacts {Quote(artifactRoot)}")
+    ];
+
     private static string FormatProgressMode(ScenarioProgressMode progressMode) =>
         progressMode.ToString().ToLowerInvariant();
+
+    private static string Quote(string value) =>
+        value.Any(static ch => char.IsWhiteSpace(ch) || ch == '"')
+            ? $"\"{value.Replace("\"", "\\\"", StringComparison.Ordinal)}\""
+            : value;
 
     private static bool IsFatalException(Exception exception) =>
         exception is OutOfMemoryException

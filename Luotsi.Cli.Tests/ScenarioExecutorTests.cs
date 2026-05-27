@@ -723,6 +723,7 @@ public sealed partial class AppTests
         using var envelope = console.ParseSingleOutputAsJson();
         var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
         var artifactRoot = envelope.RootElement.GetProperty("artifacts").GetProperty("artifact_root").GetString();
+        var artifactCommands = envelope.RootElement.GetProperty("data").GetProperty("artifact_commands").EnumerateArray().ToArray();
 
         Assert.Equal(0, exitCode);
         Assert.Equal([
@@ -743,6 +744,8 @@ public sealed partial class AppTests
         Assert.Equal(1, events[^1].GetProperty("metrics").GetProperty("action.sleep.count").GetInt32());
         Assert.Equal(1, Assert.Single(events, static evt => evt.GetProperty("event").GetString() == "scenario_step_passed").GetProperty("metrics").GetProperty("configured_delay_ms").GetInt32());
         Assert.NotNull(artifactRoot);
+        Assert.Contains(artifactCommands, command => command.GetProperty("kind").GetString() == "open_artifacts");
+        Assert.Contains(artifactCommands, command => command.GetProperty("command").GetString() == $"luotsi replay open --artifacts {artifactRoot}");
         await AssertRunReplayArtifactsAsync(fileSystem, artifactRoot, "/tmp/scenario.json", [
           "scenario_run_started",
           "scenario_started",

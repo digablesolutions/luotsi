@@ -142,7 +142,8 @@ Common workflows:
 
 Tips:
   Use --artifacts <directory> when you want a stable output location instead of
-  the default temp folder.
+  the default temp folder. For scenario runs, --output-dir <directory> is a
+  clearer alias for the same artifact root.
   Use luotsi help view, luotsi help scenario, and luotsi help lab when you want
   a deeper command family reference.
 """,
@@ -614,8 +615,8 @@ Command groups:
     scenario-list --path <scenario-file-or-directory-or-glob> [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>]
     scenario-validate (--file <scenario.json> | --path <scenario-file-or-directory-or-glob>) [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--progress auto|line|plain|quiet|jsonl]
     scenario-explain --file <scenario.json>
-    run --file <scenario.json> [--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--progress auto|line|plain|quiet|jsonl]
-    run --path <scenario-file-or-directory-or-glob> [--dry-run|--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--progress auto|line|plain|quiet|jsonl] [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>] [--shard-count <n> --shard-index <zero-based>] [--shard-strategy index|hash]
+    run --file <scenario.json> [--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--progress auto|line|plain|quiet|jsonl] [--output-dir <directory>]
+    run --path <scenario-file-or-directory-or-glob> [--dry-run|--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--progress auto|line|plain|quiet|jsonl] [--output-dir <directory>] [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>] [--shard-count <n> --shard-index <zero-based>] [--shard-strategy index|hash]
 
 Common options:
   --device <adb serial>
@@ -624,6 +625,7 @@ Common options:
   --platform <android>
   --adb-timeout-sec <seconds>  default 120, 0 disables; env LUOTSI_ADB_TIMEOUT_SEC
   --artifacts <directory>
+  --output-dir <directory>     run alias for --artifacts
   --poll-artifacts <final|per-attempt|none>
   -o, --output <mode>          view: human|json|jsonl
   --human                      one-shot commands: print a concise text envelope
