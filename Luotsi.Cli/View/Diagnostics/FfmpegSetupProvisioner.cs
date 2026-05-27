@@ -29,7 +29,7 @@ internal sealed class FfmpegSetupProvisioner(
     {
         ArgumentNullException.ThrowIfNull(reportStep);
 
-        var scriptPath = _pathResolver.GetRepositoryRelativeFileCandidates(ScriptRelativePath).FirstOrDefault(_fileSystem.FileExists);
+        var scriptPath = ViewHostPathResolver.GetRepositoryRelativeFileCandidates(ScriptRelativePath).FirstOrDefault(_fileSystem.FileExists);
         if (string.IsNullOrWhiteSpace(scriptPath))
         {
             reportStep(new ViewSetupStep(

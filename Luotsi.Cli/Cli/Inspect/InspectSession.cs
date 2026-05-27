@@ -68,7 +68,7 @@ internal sealed class InspectSession
                     continue;
                 }
 
-                var parseResult = _protocol.ParseCommand(line);
+                var parseResult = InspectSessionProtocol.ParseCommand(line);
                 if (!parseResult.IsSuccess)
                 {
                     _protocol.WriteProtocolError(sessionId, _timeProvider.GetUtcNow(), parseResult.ErrorMessage!, parseResult.RawLine!);
@@ -76,8 +76,8 @@ internal sealed class InspectSession
                 }
 
                 var request = parseResult.Request!;
-                var normalizedCommand = _commandDispatcher.Normalize(request.Command!);
-                if (_commandDispatcher.IsExit(normalizedCommand))
+                var normalizedCommand = InspectSessionCommandDispatcher.Normalize(request.Command!);
+                if (InspectSessionCommandDispatcher.IsExit(normalizedCommand))
                 {
                     endedAt = _timeProvider.GetUtcNow();
                     exitCode = 0;
@@ -93,7 +93,7 @@ internal sealed class InspectSession
                     var data = await _commandDispatcher.ExecuteAsync(request, normalizedCommand).ConfigureAwait(false);
                     _protocol.WriteCommandResult(sessionId, request.Id, normalizedCommand, true, startedAt, _timeProvider.GetUtcNow(), data);
 
-                    if (_commandDispatcher.ShouldCaptureScreenState(normalizedCommand))
+                    if (InspectSessionCommandDispatcher.ShouldCaptureScreenState(normalizedCommand))
                     {
                         try
                         {

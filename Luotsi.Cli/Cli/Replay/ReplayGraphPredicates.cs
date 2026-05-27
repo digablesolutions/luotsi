@@ -11,7 +11,7 @@ internal static class ReplayGraphPredicates
         string.Equals(GetProperty(node, "failure_relevant"), "true", StringComparison.OrdinalIgnoreCase);
 
     public static string? GetProperty(ReplayGraphNodeResult node, string name) =>
-        node.Properties.TryGetValue(name, out var value) ? value : null;
+        node.Properties.GetValueOrDefault(name);
 
     public static bool Contains(string? source, string value) =>
         source?.Contains(value, StringComparison.OrdinalIgnoreCase) == true;

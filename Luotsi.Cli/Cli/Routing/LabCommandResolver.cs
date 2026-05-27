@@ -165,7 +165,7 @@ internal static class LabCommandResolver
 
     private static string BuildRunCommand(string? query, string? serial)
     {
-        var command = "luotsi run --path <scenarios> --claim-device";
+        const string command = "luotsi run --path <scenarios> --claim-device";
         if (!string.IsNullOrWhiteSpace(query))
         {
             return command + " --device-query " + Quote(query);
