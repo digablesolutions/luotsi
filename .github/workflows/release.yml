@@ -138,6 +138,7 @@ jobs:
 
       - name: Generate coverage report
         if: always()
+        continue-on-error: true
         shell: pwsh
         run: |
           $coverageFiles = Get-ChildItem -LiteralPath artifacts/test-results -Recurse -Filter coverage.cobertura.xml -File -ErrorAction SilentlyContinue
