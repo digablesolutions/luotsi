@@ -16,7 +16,7 @@ public sealed class ViewHostPathResolver(IEnvironmentVariables environment)
     /// </summary>
     /// <param name="relativePath">Repository-relative path to probe.</param>
     /// <returns>Candidate host-local file paths.</returns>
-    public IEnumerable<string> GetRepositoryRelativeFileCandidates(string relativePath)
+    public static IEnumerable<string> GetRepositoryRelativeFileCandidates(string relativePath)
     {
         return GetRepositoryRelativePathCandidates(relativePath);
     }
@@ -26,7 +26,7 @@ public sealed class ViewHostPathResolver(IEnvironmentVariables environment)
     /// </summary>
     /// <param name="relativePath">Repository-relative path to probe.</param>
     /// <returns>Candidate host-local directory paths.</returns>
-    public IEnumerable<string> GetRepositoryRelativeDirectoryCandidates(string relativePath)
+    public static IEnumerable<string> GetRepositoryRelativeDirectoryCandidates(string relativePath)
     {
         return GetRepositoryRelativePathCandidates(relativePath);
     }

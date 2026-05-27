@@ -194,6 +194,9 @@ public sealed partial class AppTests
         Assert.Equal("v0.1.0-rc.3", data.GetProperty("current_tag").GetString());
         Assert.Equal("v0.1.0-rc.4", data.GetProperty("target").GetString());
         Assert.Equal("stable", data.GetProperty("channel").GetString());
+        var installerArgs = string.Join(" ", data.GetProperty("installer_args").EnumerateArray().Select(value => value.GetString()));
+        Assert.Contains("/releases/download/v0.1.0-rc.4/luotsi-install", installerArgs, StringComparison.Ordinal);
+        Assert.DoesNotContain("/releases/latest/download/luotsi-install", installerArgs, StringComparison.Ordinal);
         Assert.Empty(processRunner.Calls);
     }
 
@@ -271,9 +274,12 @@ public sealed partial class AppTests
 
         Assert.Equal(0, exitCode);
         Assert.Equal("update_started", envelope.RootElement.GetProperty("data").GetProperty("status").GetString());
+        Assert.True(envelope.RootElement.GetProperty("data").TryGetProperty("detached_installer_stdout_log", out _));
+        Assert.True(envelope.RootElement.GetProperty("data").TryGetProperty("detached_installer_stderr_log", out _));
         var call = Assert.Single(processRunner.Calls);
         Assert.Contains("Start-Process", string.Join(" ", call.Args), StringComparison.Ordinal);
-        Assert.Contains("Wait-Process", string.Join(" ", call.Args), StringComparison.Ordinal);
+        Assert.Contains("-EncodedCommand", string.Join(" ", call.Args), StringComparison.Ordinal);
+        Assert.DoesNotContain("Wait-Process", string.Join(" ", call.Args), StringComparison.Ordinal);
     }
 
     [Fact]

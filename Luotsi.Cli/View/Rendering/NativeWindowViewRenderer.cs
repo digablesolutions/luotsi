@@ -26,6 +26,7 @@ public interface IViewWindowSurface : IAsyncDisposable
     /// <param name="displayInfo">Initial display info.</param>
     /// <param name="pointerHandler">Pointer callback for click routing.</param>
     /// <param name="interactionHandler">Window interaction callback for hotkeys and typed input.</param>
+    /// <param name="options">View window options.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Completion task.</returns>
     Task InitializeAsync(
@@ -207,14 +208,8 @@ internal static class ViewPointerMapper
         out double yRatio)
     {
         var layout = ComputeLayout(pointerEvent.ClientWidth, pointerEvent.ClientHeight, sourceWidth, sourceHeight, pointerEvent.ScaleMode);
-        if (layout.Width <= 0 || layout.Height <= 0)
-        {
-            xRatio = 0;
-            yRatio = 0;
-            return false;
-        }
-
-        if (pointerEvent.ClientX < layout.Left ||
+        if (layout.Width <= 0 || layout.Height <= 0 ||
+            pointerEvent.ClientX < layout.Left ||
             pointerEvent.ClientY < layout.Top ||
             pointerEvent.ClientX >= layout.Left + layout.Width ||
             pointerEvent.ClientY >= layout.Top + layout.Height)

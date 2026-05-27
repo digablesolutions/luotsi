@@ -7,11 +7,11 @@ internal sealed class InspectSessionCommandDispatcher(IDeviceHost deviceHost)
 {
     private readonly IDeviceHost _deviceHost = deviceHost ?? throw new ArgumentNullException(nameof(deviceHost));
 
-    public string Normalize(string command) => command.Trim().Replace('-', '_').ToLowerInvariant();
+    public static string Normalize(string command) => command.Trim().Replace('-', '_').ToLowerInvariant();
 
-    public bool IsExit(string normalizedCommand) => normalizedCommand is "exit" or "quit";
+    public static bool IsExit(string normalizedCommand) => normalizedCommand is "exit" or "quit";
 
-    public bool ShouldCaptureScreenState(string normalizedCommand) => normalizedCommand is
+    public static bool ShouldCaptureScreenState(string normalizedCommand) => normalizedCommand is
         "refresh" or
         "screen_state" or
         "snapshot" or

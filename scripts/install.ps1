@@ -191,6 +191,25 @@ function Ensure-Directory([string]$Path) {
     }
 }
 
+function Invoke-InstallFileOperation([scriptblock]$Operation, [string]$Description) {
+    $maxAttempts = 12
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        try {
+            & $Operation
+            return
+        }
+        catch {
+            if ($attempt -eq $maxAttempts) {
+                throw "$Description failed after $maxAttempts attempts. $($_.Exception.Message)"
+            }
+
+            $delayMs = [Math]::Min(2000, 200 * $attempt)
+            Write-Host "$Description failed; retrying in $delayMs ms. $($_.Exception.Message)"
+            Start-Sleep -Milliseconds $delayMs
+        }
+    }
+}
+
 function Update-UserPath([string]$TargetDirectory) {
     $currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
     $entries = @()
@@ -339,14 +358,14 @@ try {
     }
 
     if (Test-Path -LiteralPath $previousDirectory) {
-        Remove-Item -LiteralPath $previousDirectory -Recurse -Force
+        Invoke-InstallFileOperation { Remove-Item -LiteralPath $previousDirectory -Recurse -Force } "Remove previous install directory"
     }
 
     if (Test-Path -LiteralPath $currentDirectory) {
-        Move-Item -LiteralPath $currentDirectory -Destination $previousDirectory
+        Invoke-InstallFileOperation { Move-Item -LiteralPath $currentDirectory -Destination $previousDirectory } "Move current install directory aside"
     }
 
-    Move-Item -LiteralPath $payloadRoot -Destination $currentDirectory
+    Invoke-InstallFileOperation { Move-Item -LiteralPath $payloadRoot -Destination $currentDirectory } "Move new release payload into place"
 
     $viewExtras = Install-ViewExtras $currentDirectory $rid $SkipFfmpeg.IsPresent
 
@@ -355,7 +374,7 @@ try {
     $installCommitted = $true
 
     if (Test-Path -LiteralPath $previousDirectory) {
-        Remove-Item -LiteralPath $previousDirectory -Recurse -Force -ErrorAction SilentlyContinue
+        Invoke-InstallFileOperation { Remove-Item -LiteralPath $previousDirectory -Recurse -Force -ErrorAction SilentlyContinue } "Remove previous install directory"
     }
 
     $pathUpdated = $false

@@ -560,7 +560,7 @@ internal sealed class ReplayGraphService(IFileSystem fileSystem, ReplayTimelineS
     private static string? FirstProperty(ReplayTimelineEventResult evt, params string[] names)
     {
         return names
-            .Select(name => evt.Properties.TryGetValue(name, out var value) ? value : null)
+            .Select(name => evt.Properties.GetValueOrDefault(name))
             .Where(static value => !string.IsNullOrWhiteSpace(value))
             .FirstOrDefault();
     }

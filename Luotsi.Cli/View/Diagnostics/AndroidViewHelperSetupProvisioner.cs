@@ -101,7 +101,7 @@ internal sealed class AndroidViewHelperSetupProvisioner(
 
     private string? ResolveHelperProjectDirectory()
     {
-        var candidates = _pathResolver.GetRepositoryRelativeDirectoryCandidates(HelperProjectDirectory);
+        var candidates = ViewHostPathResolver.GetRepositoryRelativeDirectoryCandidates(HelperProjectDirectory);
         return candidates.Where(_fileSystem.DirectoryExists).FirstOrDefault();
     }
 

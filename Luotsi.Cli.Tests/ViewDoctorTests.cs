@@ -140,7 +140,7 @@ public sealed partial class AppTests
         var fileSystem = new FakeFileSystem();
         var environment = new FakeEnvironmentVariables(new Dictionary<string, string>());
         var pathResolver = new ViewHostPathResolver(environment);
-        fileSystem.AddFile(pathResolver.GetRepositoryRelativeFileCandidates("ffmpeg/download-ffmpeg.ps1").First(), "Write-Host 'ok'");
+        fileSystem.AddFile(ViewHostPathResolver.GetRepositoryRelativeFileCandidates("ffmpeg/download-ffmpeg.ps1").First(), "Write-Host 'ok'");
 
         var processRunner = new FakeProcessRunner();
         processRunner.EnqueueResult(new ProcessResult(0, "Done. Staged native libraries.", string.Empty));
@@ -266,7 +266,7 @@ public sealed partial class AppTests
         var fileSystem = new FakeFileSystem();
         var environment = new FakeEnvironmentVariables(new Dictionary<string, string>());
         var pathResolver = new ViewHostPathResolver(environment);
-        fileSystem.AddFile(pathResolver.GetRepositoryRelativeFileCandidates("ffmpeg/download-ffmpeg.ps1").First(), "Write-Host 'ok'");
+        fileSystem.AddFile(ViewHostPathResolver.GetRepositoryRelativeFileCandidates("ffmpeg/download-ffmpeg.ps1").First(), "Write-Host 'ok'");
 
         var processRunner = new FakeProcessRunner();
         processRunner.EnqueueResult(new ProcessResult(0, "Done. Staged native libraries.", string.Empty));
@@ -557,7 +557,7 @@ public sealed partial class AppTests
         var environment = new FakeEnvironmentVariables(new Dictionary<string, string>());
         var fileSystem = new FakeFileSystem();
         var pathResolver = new ViewHostPathResolver(environment);
-        var projectDirectory = pathResolver.GetRepositoryRelativeDirectoryCandidates("Luotsi.ViewServer.Android").First();
+        var projectDirectory = ViewHostPathResolver.GetRepositoryRelativeDirectoryCandidates("Luotsi.ViewServer.Android").First();
         var wrapperPath = OperatingSystem.IsWindows()
             ? Path.Join(projectDirectory, "gradlew.bat")
             : Path.Join(projectDirectory, "gradlew");
