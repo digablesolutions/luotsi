@@ -11,6 +11,7 @@ using Luotsi.Cli.Infrastructure.System;
 using Luotsi.Cli.Infrastructure.Time;
 using Luotsi.Cli.Models;
 using Luotsi.Cli.View.Contracts;
+using Luotsi.Cli.View.Session;
 using Microsoft.Extensions.DependencyInjection;
 using Polly;
 
@@ -30,6 +31,7 @@ internal static class LuotsiInfrastructureServices
         services.AddSingleton(dependencies.Console ?? new SystemConsoleIo());
         services.AddSingleton(dependencies.Environment ?? new SystemEnvironmentVariables());
         services.AddSingleton(dependencies.IdGenerator ?? new GuidUniqueIdGenerator());
+        services.AddSingleton<IArtifactFolderOpener, SystemArtifactFolderOpener>();
         services.AddResiliencePipeline(AdbResilience.CommandRetryPipelineName, builder =>
             builder.AddRetry(AdbResilience.CreateCommandRetryOptions()));
         services.AddResiliencePipeline(LuotsiResiliencePipelines.SetupDownloadPipelineName, builder =>

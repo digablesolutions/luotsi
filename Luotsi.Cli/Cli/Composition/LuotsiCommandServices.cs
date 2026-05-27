@@ -1,6 +1,7 @@
 using Luotsi.Cli.Cli.Envelope;
 using Luotsi.Cli.Cli.Routing;
 using Luotsi.Cli.Cli.Update;
+using Luotsi.Cli.Artifacts;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Luotsi.Cli.Cli.Composition;
@@ -23,6 +24,8 @@ internal static class LuotsiCommandServices
         services.AddSingleton<AppCommandExitCodeResolver>();
         services.AddSingleton<AdbSubcommandDispatcher>();
         services.AddSingleton<AppCommandDispatcher>();
+        services.AddSingleton<ArtifactCommandService>();
+        services.AddSingleton<ArtifactCommandHost>();
         services.AddSingleton<AppCommandHost>();
         services.AddSingleton<AppCommandRouteBootstrapper>();
         services.AddSingleton<AppExecutionShell>();

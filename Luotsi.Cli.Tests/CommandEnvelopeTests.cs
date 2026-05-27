@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Runtime.InteropServices;
+using System.IO.Compression;
 using Luotsi.Cli.Cli;
 using Luotsi.Cli.Cli.Routing;
 using Luotsi.Cli.Errors;
@@ -86,6 +87,24 @@ public sealed partial class AppTests
         Assert.Single(console.ErrorLines);
         Assert.Contains("Luotsi help: replay", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi replay summarize --artifacts <artifact-root> [--format json|jsonl]", console.ErrorLines[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_Help_Command_Writes_Artifacts_Topic()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["help", "artifacts"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(console.OutputLines);
+        Assert.Single(console.ErrorLines);
+        Assert.Contains("Luotsi help: artifacts", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("luotsi artifacts list [--artifacts <directory>] [--limit 20]", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("luotsi artifacts info <artifact-root-or-run-id>", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("luotsi artifacts pack <artifact-root-or-run-id>", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("luotsi artifacts unpack <artifact.zip>", console.ErrorLines[0], StringComparison.Ordinal);
     }
 
     [Theory]
@@ -3154,6 +3173,395 @@ public sealed partial class AppTests
         Assert.Equal(1, exitCode);
         Assert.Equal("configuration_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
         Assert.Contains("device offline", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsOpen_DryRun_Refreshes_Index_For_Artifact_Root()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var replayRoot = "/tmp/luotsi/20260526-120000-run";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), "{\"type\":\"session_started\"}");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "open", replayRoot, "--dry-run"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(replayRoot, data.GetProperty("artifact_root").GetString());
+        Assert.Equal(Path.Join(replayRoot, "index.html"), data.GetProperty("index_path").GetString());
+        Assert.True(data.GetProperty("dry_run").GetBoolean());
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.html")));
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "pack_artifacts");
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsList_Returns_Run_Ids_And_Commands()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var searchRoot = Path.Join("C:", "artifacts");
+        var firstRoot = Path.Join(searchRoot, "20260526-110000-view");
+        var secondRoot = Path.Join(searchRoot, "20260526-120000-run");
+        fileSystem.CreateDirectory(searchRoot);
+        fileSystem.AddFile(Path.Join(searchRoot, ".DS_Store"), "ignored");
+        fileSystem.AddFile(Path.Join(firstRoot, "index.html"), "<!doctype html>");
+        fileSystem.AddFile(Path.Join(secondRoot, "session-timeline.jsonl"), "{\"type\":\"session_started\"}");
+        fileSystem.AddFile(Path.Join(secondRoot, "session-replay.json"), "{}");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "list", "--artifacts", searchRoot, "--limit", "1"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(1, data.GetProperty("count").GetInt32());
+        var entry = Assert.Single(data.GetProperty("entries").EnumerateArray());
+        Assert.Equal("20260526-120000-run", entry.GetProperty("run_id").GetString());
+        Assert.True(entry.GetProperty("has_timeline").GetBoolean());
+        Assert.True(entry.GetProperty("has_replay_metadata").GetBoolean());
+        Assert.Contains("artifacts info", entry.GetProperty("info_command").GetString(), StringComparison.Ordinal);
+        Assert.Contains("artifacts open", entry.GetProperty("open_command").GetString(), StringComparison.Ordinal);
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "info_artifacts");
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "open_artifacts");
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsInfo_Returns_Metadata_Without_Refreshing_Index()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var searchRoot = Path.Join("C:", "artifacts");
+        var replayRoot = Path.Join(searchRoot, "20260526-120000-run");
+        fileSystem.CreateDirectory(searchRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), "{\"type\":\"session_started\"}");
+        fileSystem.AddFile(Path.Join(replayRoot, "session-replay.json"), "{}");
+        fileSystem.AddFile(Path.Join(replayRoot, "screens", "failure.png"), "png");
+        fileSystem.AddFile(Path.Join(replayRoot, "video.mp4"), "mp4");
+        fileSystem.AddFile(Path.Join(replayRoot, "junit.xml"), "<testsuite />");
+        fileSystem.AddFile(Path.Join(replayRoot, "logcat.log"), "log");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "info", "20260526-120000-run", "--artifacts", searchRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("20260526-120000-run", data.GetProperty("run_id").GetString());
+        Assert.Equal(replayRoot, data.GetProperty("artifact_root").GetString());
+        Assert.Equal(6, data.GetProperty("file_count").GetInt32());
+        Assert.False(data.GetProperty("has_html_index").GetBoolean());
+        Assert.False(fileSystem.FileExists(Path.Join(replayRoot, "index.html")));
+        Assert.True(data.GetProperty("has_timeline").GetBoolean());
+        Assert.True(data.GetProperty("has_replay_metadata").GetBoolean());
+        var counts = data.GetProperty("category_counts");
+        Assert.Equal(1, counts.GetProperty("screenshots").GetInt32());
+        Assert.Equal(1, counts.GetProperty("videos").GetInt32());
+        Assert.Equal(1, counts.GetProperty("reports").GetInt32());
+        Assert.Equal(1, counts.GetProperty("logs").GetInt32());
+        Assert.Equal(1, counts.GetProperty("timelines").GetInt32());
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "replay_open");
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsList_Rejects_NonPositive_Limit()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        fileSystem.CreateDirectory(Path.Join("/tmp", "artifacts"));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "list", "--artifacts", Path.Join("/tmp", "artifacts"), "--limit", "0"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("--limit", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsOpen_Resolves_Run_Id_From_Search_Root()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var replayRoot = Path.Join("/tmp/artifacts", "20260526-120000-view");
+        fileSystem.CreateDirectory(Path.Join("/tmp", "artifacts"));
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "index.html"), "<!doctype html>");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "open", "20260526-120000-view", "--artifacts", "/tmp/artifacts", "--dry-run"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.EndsWith(Path.Join("artifacts", "20260526-120000-view"), envelope.RootElement.GetProperty("data").GetProperty("artifact_root").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsPack_Writes_Zip_With_Relative_Entries()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var replayRoot = "/tmp/luotsi/20260526-120000-run";
+        var output = "/tmp/share/replay.zip";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "index.html"), "<!doctype html>");
+        fileSystem.AddFile(Path.Join(replayRoot, "failures", "failure.png"), "png");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "pack", replayRoot, "--output", output]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(replayRoot, data.GetProperty("artifact_root").GetString());
+        Assert.Equal(output, data.GetProperty("output").GetString());
+        Assert.Equal(2, data.GetProperty("entry_count").GetInt32());
+        Assert.False(data.GetProperty("dry_run").GetBoolean());
+        Assert.Matches("^[0-9a-f]{64}$", data.GetProperty("sha256").GetString());
+        using var archive = new ZipArchive(new MemoryStream(fileSystem.ReadBytes(output)), ZipArchiveMode.Read);
+        Assert.Contains(archive.Entries, entry => entry.FullName == "index.html");
+        Assert.Contains(archive.Entries, entry => entry.FullName == "failures/failure.png");
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsPack_DryRun_Does_Not_Write_Zip()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var replayRoot = "/tmp/luotsi/20260526-120000-run";
+        var output = "/tmp/share/replay.zip";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "index.html"), "<!doctype html>");
+        fileSystem.AddFile(Path.Join(replayRoot, "failures", "failure.png"), "png");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "pack", replayRoot, "--output", output, "--dry-run"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.True(data.GetProperty("dry_run").GetBoolean());
+        Assert.Equal(2, data.GetProperty("entry_count").GetInt32());
+        Assert.Equal(output, data.GetProperty("output").GetString());
+        Assert.False(data.TryGetProperty("sha256", out _));
+        Assert.False(fileSystem.FileExists(output));
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "pack_artifacts");
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsPack_Rejects_Existing_Output_Without_Force()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var replayRoot = "/tmp/luotsi/20260526-120000-run";
+        var output = "/tmp/share/replay.zip";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "index.html"), "<!doctype html>");
+        fileSystem.AddFile(output, "existing");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "pack", replayRoot, "--output", output]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("already exists", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsUnpack_Extracts_Zip_To_Output_Directory()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var packagePath = "/tmp/share/replay.zip";
+        fileSystem.CreateDirectory("/tmp/share");
+        await using (var packageStream = fileSystem.OpenWrite(packagePath))
+        {
+            using var archive = new ZipArchive(packageStream, ZipArchiveMode.Create, leaveOpen: true);
+            var index = archive.CreateEntry("index.html");
+            await using (var entry = index.Open())
+            await using (var writer = new StreamWriter(entry))
+            {
+                await writer.WriteAsync("<!doctype html>");
+            }
+
+            var timeline = archive.CreateEntry("failures/session-timeline.jsonl");
+            await using (var entry = timeline.Open())
+            await using (var writer = new StreamWriter(entry))
+            {
+                await writer.WriteAsync("{\"type\":\"session_started\"}");
+            }
+        }
+
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "unpack", packagePath, "--output", "/tmp/unpacked"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(packagePath, data.GetProperty("package").GetString());
+        var outputDirectory = data.GetProperty("output_directory").GetString();
+        Assert.Equal("/tmp/unpacked", outputDirectory);
+        Assert.Equal(2, data.GetProperty("entry_count").GetInt32());
+        Assert.False(data.GetProperty("dry_run").GetBoolean());
+        Assert.Matches("^[0-9a-f]{64}$", data.GetProperty("sha256").GetString());
+        Assert.True(fileSystem.FileExists(Path.GetFullPath(Path.Join(outputDirectory!, "index.html"))));
+        Assert.True(fileSystem.FileExists(Path.GetFullPath(Path.Join(outputDirectory!, "failures", "session-timeline.jsonl"))));
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "open_artifacts");
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsUnpack_Requires_Zip_Target()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = new FakeFileSystem()
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "unpack"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("<artifact.zip>", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsUnpack_DryRun_Validates_Zip_Without_Writing()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var packagePath = "/tmp/share/replay.zip";
+        fileSystem.CreateDirectory("/tmp/share");
+        await using (var packageStream = fileSystem.OpenWrite(packagePath))
+        {
+            using var archive = new ZipArchive(packageStream, ZipArchiveMode.Create, leaveOpen: true);
+            var index = archive.CreateEntry("index.html");
+            await using (var entry = index.Open())
+            await using (var writer = new StreamWriter(entry))
+            {
+                await writer.WriteAsync("<!doctype html>");
+            }
+        }
+
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "unpack", packagePath, "--output", "/tmp/unpacked", "--dry-run"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.True(data.GetProperty("dry_run").GetBoolean());
+        Assert.Equal(1, data.GetProperty("entry_count").GetInt32());
+        Assert.Matches("^[0-9a-f]{64}$", data.GetProperty("sha256").GetString());
+        Assert.False(fileSystem.DirectoryExists("/tmp/unpacked"));
+        Assert.False(fileSystem.FileExists(Path.GetFullPath(Path.Join("/tmp/unpacked", "index.html"))));
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsUnpack_Rejects_ZipSlip_Entry()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var packagePath = "/tmp/share/bad.zip";
+        fileSystem.CreateDirectory("/tmp/share");
+        await using (var packageStream = fileSystem.OpenWrite(packagePath))
+        {
+            using var archive = new ZipArchive(packageStream, ZipArchiveMode.Create, leaveOpen: true);
+            _ = archive.CreateEntry("../escape.txt");
+        }
+
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "unpack", packagePath, "--output", "/tmp/unpacked"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("outside the output directory", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsUnpack_Rejects_Rooted_Zip_Entry()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var packagePath = "/tmp/share/bad-rooted.zip";
+        fileSystem.CreateDirectory("/tmp/share");
+        await using (var packageStream = fileSystem.OpenWrite(packagePath))
+        {
+            using var archive = new ZipArchive(packageStream, ZipArchiveMode.Create, leaveOpen: true);
+            _ = archive.CreateEntry("/escape.txt");
+        }
+
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "unpack", packagePath, "--output", "/tmp/unpacked", "--dry-run"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("outside the output directory", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
     private static FakeEnvironmentVariables CreateInstalledLuotsiEnvironment(FakeFileSystem fileSystem, string tag)

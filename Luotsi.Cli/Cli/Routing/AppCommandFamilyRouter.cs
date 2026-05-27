@@ -13,7 +13,8 @@ internal sealed class AppCommandFamilyRouter(
     ViewSessionCommandPreparer viewSessionCommandPreparer,
     InspectSessionLauncher inspectSessionLauncher,
     ViewDiagnosticsLauncher viewDiagnosticsLauncher,
-    DoctorCommandLauncher doctorCommandLauncher)
+    DoctorCommandLauncher doctorCommandLauncher,
+    ArtifactCommandHost artifactCommandHost)
 {
     private readonly AppCommandRouteBootstrapper _routeBootstrapper = routeBootstrapper ?? throw new ArgumentNullException(nameof(routeBootstrapper));
     private readonly AppCommandHost _commandHost = commandHost ?? throw new ArgumentNullException(nameof(commandHost));
@@ -22,6 +23,7 @@ internal sealed class AppCommandFamilyRouter(
     private readonly InspectSessionLauncher _inspectSessionLauncher = inspectSessionLauncher ?? throw new ArgumentNullException(nameof(inspectSessionLauncher));
     private readonly ViewDiagnosticsLauncher _viewDiagnosticsLauncher = viewDiagnosticsLauncher ?? throw new ArgumentNullException(nameof(viewDiagnosticsLauncher));
     private readonly DoctorCommandLauncher _doctorCommandLauncher = doctorCommandLauncher ?? throw new ArgumentNullException(nameof(doctorCommandLauncher));
+    private readonly ArtifactCommandHost _artifactCommandHost = artifactCommandHost ?? throw new ArgumentNullException(nameof(artifactCommandHost));
 
     public async Task<int> DispatchAsync(AppExecutionContext context)
     {
@@ -39,6 +41,9 @@ internal sealed class AppCommandFamilyRouter(
 
             case AppCommandFamily.ProfileDelete:
                 return await _commandHost.RunProfileDeleteAsync(options, started, routeSetup.Artifacts).ConfigureAwait(false);
+
+            case AppCommandFamily.Artifacts:
+                return await _artifactCommandHost.RunAsync(options, started, routeSetup.Artifacts).ConfigureAwait(false);
 
             case AppCommandFamily.Inspect:
                 return await _inspectSessionLauncher.RunAsync(options, routeSetup.AdbExecutable, routeSetup.Artifacts).ConfigureAwait(false);

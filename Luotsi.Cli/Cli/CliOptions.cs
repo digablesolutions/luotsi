@@ -16,6 +16,7 @@ public sealed class CliOptions
     new[]
     {
         "adb",
+        "artifacts",
         "help",
         "version",
         "update",
