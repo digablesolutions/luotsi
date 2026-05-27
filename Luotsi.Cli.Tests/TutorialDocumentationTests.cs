@@ -237,12 +237,10 @@ public sealed partial class AppTests
         foreach (var contentFile in contentFiles)
         {
             var content = File.ReadAllText(contentFile);
-            foreach (var link in ExtractLocalLinks(content))
+            foreach (var link in ExtractLocalLinks(content)
+                         .Where(link => !ResolveLocalDocumentationLinkTargets(contentFile, link).Any(TargetExists)))
             {
-                if (!ResolveLocalDocumentationLinkTargets(contentFile, link).Any(TargetExists))
-                {
-                    missingLinks.Add($"{Path.GetRelativePath(contentRoot, contentFile)} -> {link}");
-                }
+                missingLinks.Add($"{Path.GetRelativePath(contentRoot, contentFile)} -> {link}");
             }
         }
 
@@ -297,15 +295,15 @@ public sealed partial class AppTests
                 yield return lineCommandPath;
             }
 
-            foreach (var code in InlineCodeRegex()
+            foreach (var commandPath in InlineCodeRegex()
                          .Matches(line)
                          .Cast<Match>()
-                         .Select(static match => match.Groups["code"].Value.Trim()))
+                         .Select(static match => match.Groups["code"].Value.Trim())
+                         .Select(code => (IsCommandPath: TryNormalizeCommandPath(code, requireKnownLeadToken, out var commandPath), CommandPath: commandPath))
+                         .Where(result => result.IsCommandPath)
+                         .Select(result => result.CommandPath))
             {
-                if (TryNormalizeCommandPath(code, requireKnownLeadToken, out var codeCommandPath))
-                {
-                    yield return codeCommandPath;
-                }
+                yield return commandPath;
             }
         }
     }
@@ -331,9 +329,9 @@ public sealed partial class AppTests
         }
 
         var commandTokens = new List<string>();
-        foreach (var rawToken in tokens)
+        var trimmedTokens = tokens.Select(rawToken => rawToken.Trim(',', '.', ';', ':'));
+        foreach (var token in trimmedTokens)
         {
-            var token = rawToken.Trim(',', '.', ';', ':');
             if (!CommandTokenRegex().IsMatch(token))
             {
                 break;
@@ -375,10 +373,10 @@ public sealed partial class AppTests
         var actionsSection = markdown[start..end];
         var documentedActions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var line in actionsSection.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                     .Where(static line => line.StartsWith("|", StringComparison.Ordinal)))
+        foreach (var cells in actionsSection.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                     .Where(static line => line.StartsWith("|", StringComparison.Ordinal))
+                     .Select(static line => line.Split('|')))
         {
-            var cells = line.Split('|');
             if (cells.Length < 3)
             {
                 continue;
@@ -442,9 +440,9 @@ public sealed partial class AppTests
         var normalized = withoutFragment
             .Replace('/', Path.DirectorySeparatorChar)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        foreach (var baseDirectory in ResolveDocumentationLinkBaseDirectories(markdownFile))
+        foreach (var resolved in ResolveDocumentationLinkBaseDirectories(markdownFile)
+                     .Select(baseDirectory => Path.GetFullPath(normalized, baseDirectory)))
         {
-            var resolved = Path.GetFullPath(normalized, baseDirectory);
             yield return resolved;
 
             if (Path.HasExtension(resolved))

@@ -131,7 +131,7 @@ internal static class ReplayGraphFactBuilder
     }
 
     private static string? GetProperty(ReplayGraphEdgeResult edge, string name) =>
-        edge.Properties.TryGetValue(name, out var value) ? value : null;
+        edge.Properties.GetValueOrDefault(name);
 
     private static string EdgeId(ReplayGraphEdgeResult edge) =>
         edge.From + " -> " + edge.Kind + " -> " + edge.To;

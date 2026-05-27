@@ -48,14 +48,25 @@ internal sealed class ArtifactCommandHost(
 
     private Task<ArtifactPackResult> PackAsync(CliOptions options)
     {
-        var target = ResolveTarget(options, "pack");
-        return _artifactCommandService.PackAsync(target!, options.Get("artifacts"), options.Get("output"), options.HasFlag("force"), options.HasFlag("dry-run"));
+        var target = RequireTarget(options, "pack", "<artifact-root-or-run-id>");
+        return _artifactCommandService.PackAsync(target, options.Get("artifacts"), options.Get("output"), options.HasFlag("force"), options.HasFlag("dry-run"));
     }
 
     private Task<ArtifactUnpackResult> UnpackAsync(CliOptions options)
     {
-        var target = ResolveTarget(options, "unpack");
-        return _artifactCommandService.UnpackAsync(target!, options.Get("output"), options.HasFlag("force"), options.HasFlag("dry-run"));
+        var target = RequireTarget(options, "unpack", "<artifact.zip>");
+        return _artifactCommandService.UnpackAsync(target, options.Get("output"), options.HasFlag("force"), options.HasFlag("dry-run"));
+    }
+
+    private static string RequireTarget(CliOptions options, string subcommand, string argumentName)
+    {
+        var target = ResolveTarget(options, subcommand);
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            throw new UsageException($"artifacts {subcommand} requires {argumentName}.");
+        }
+
+        return target;
     }
 
     private static string? ResolveTarget(CliOptions options, string subcommand, bool allowLast = false)
@@ -72,12 +83,6 @@ internal sealed class ArtifactCommandHost(
             return null;
         }
 
-        if (!hasTarget)
-        {
-            var suffix = allowLast ? " or --last" : string.Empty;
-            throw new UsageException($"artifacts {subcommand} requires <artifact-root-or-run-id>{suffix}.");
-        }
-
-        return options.Arguments[1];
+        return hasTarget ? options.Arguments[1] : null;
     }
 }

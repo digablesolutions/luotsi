@@ -131,7 +131,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         }
     }
 
-    private IEnumerable<ReplayCapsuleCommandHint> BuildCommandHints(
+    private static IEnumerable<ReplayCapsuleCommandHint> BuildCommandHints(
         string artifactRoot,
         ReplayCapsulePrimaryFailureResult? primaryFailure,
         bool scenarioDraftAvailable,

@@ -106,7 +106,7 @@ public sealed class AndroidViewBootstrap(
                 var approved = await consentApprover.TryApproveAsync(cancellationToken).ConfigureAwait(false);
                 if (!approved)
                 {
-                    var message = "MediaProjection consent prompt was not approved or could not be detected.";
+                    const string message = "MediaProjection consent prompt was not approved or could not be detected.";
                     Report(reportPhase, "mediaprojection_consent", ViewStartupPhaseStatus.Failed, message, null, "Approve the Android screen-capture prompt on the device, or use --capture-backend auto/screenrecord.");
                     throw new MediaProjectionConsentException(message);
                 }
@@ -334,6 +334,7 @@ public sealed class AndroidViewBootstrap(
         }
         catch
         {
+            // ignored
         }
 
         try

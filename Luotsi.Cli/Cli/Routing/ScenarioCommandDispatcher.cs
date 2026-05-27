@@ -39,7 +39,7 @@ internal sealed class ScenarioCommandDispatcher(
         return _authoringService.ExplainAsync(options);
     }
 
-    public bool RequiresRunner(CliOptions options)
+    public static bool RequiresRunner(CliOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
 

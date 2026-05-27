@@ -194,7 +194,7 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
         AddPart(parts, item, "status");
         AddPart(parts, item, "model");
         AddPart(parts, item, "name");
-        AddPart(parts, item, "summary");
+        AddSummaryPart(parts, item);
         AddPart(parts, item, "command");
         AddPart(parts, item, "path");
         AddPart(parts, item, "file");
@@ -203,12 +203,38 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
         return parts.Count == 0 ? null : string.Join("; ", parts);
     }
 
+    private static void AddSummaryPart(List<string> parts, JsonElement item)
+    {
+        if (TryGetScalarProperty(item, "summary", out var summary))
+        {
+            parts.Add($"summary={FormatScalar(summary)}");
+            return;
+        }
+
+        if (TryGetScalarProperty(item, "description", out var description))
+        {
+            parts.Add($"summary={FormatScalar(description)}");
+        }
+    }
+
     private static void AddPart(List<string> parts, JsonElement item, string propertyName)
     {
-        if (item.TryGetProperty(propertyName, out var property) && property.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array or JsonValueKind.Null or JsonValueKind.Undefined))
+        if (TryGetScalarProperty(item, propertyName, out var property))
         {
             parts.Add($"{propertyName}={FormatScalar(property)}");
         }
+    }
+
+    private static bool TryGetScalarProperty(JsonElement item, string propertyName, out JsonElement property)
+    {
+        if (item.TryGetProperty(propertyName, out property) &&
+            property.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array or JsonValueKind.Null or JsonValueKind.Undefined))
+        {
+            return true;
+        }
+
+        property = default;
+        return false;
     }
 
     private static string FormatScalar(JsonElement value) =>

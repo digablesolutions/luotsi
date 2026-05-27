@@ -126,7 +126,7 @@ internal sealed class ScenarioTimingMetricsCollector : IScenarioMetricsCollector
         scenario.Metrics ?? ScenarioMetrics.Empty;
 
     private static double GetMetric(IReadOnlyDictionary<string, double> metrics, string key) =>
-        metrics.TryGetValue(key, out var value) ? value : 0;
+        metrics.GetValueOrDefault(key, 0);
 }
 
 internal sealed class ScenarioActionMetricsCollector : IScenarioMetricsCollector
@@ -194,5 +194,5 @@ internal sealed class ScenarioAdbRetryMetricsCollector : IScenarioMetricsCollect
         };
 
     private static double GetMetric(IReadOnlyDictionary<string, double> metrics, string key) =>
-        metrics.TryGetValue(key, out var value) ? value : 0;
+        metrics.GetValueOrDefault(key, 0);
 }

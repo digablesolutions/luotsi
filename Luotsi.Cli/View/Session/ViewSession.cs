@@ -616,7 +616,7 @@ public sealed class ViewSession : IViewSession
         return new ViewConnectionInfo($"share-{Guid.NewGuid():N}", "unknown", ViewTransportConstants.CurrentProtocolVersion, 0, 0, port, "share-relay", "shared-tcp", host);
     }
 
-    private async IAsyncEnumerable<ViewPacket> RelayPacketsAsync(
+    private static async IAsyncEnumerable<ViewPacket> RelayPacketsAsync(
         IAsyncEnumerable<ViewPacket> packets,
         TcpViewShareServer shareServer,
         [EnumeratorCancellation] CancellationToken cancellationToken)

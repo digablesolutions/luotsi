@@ -17,8 +17,8 @@ internal sealed class SessionViewRenderer(
         ? statsEventInterval
         : throw new ArgumentOutOfRangeException(nameof(statsEventInterval));
     private readonly Func<ViewStats, Task> _onStatsAsync = onStatsAsync ?? throw new ArgumentNullException(nameof(onStatsAsync));
-    private readonly object _rendererStatsGate = new();
-    private readonly object _statsGate = new();
+    private readonly Lock _rendererStatsGate = new();
+    private readonly Lock _statsGate = new();
 
     private ViewStats? _pendingRendererStats;
     private ViewStats? _pendingStats;

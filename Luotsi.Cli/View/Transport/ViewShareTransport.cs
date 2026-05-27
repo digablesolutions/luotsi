@@ -113,7 +113,7 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
         }
     }
 
-    public async Task DisconnectObserversAsync(string reason, CancellationToken cancellationToken = default)
+    private async Task DisconnectObserversAsync(string reason, CancellationToken cancellationToken = default)
     {
         List<ObserverConnection> snapshot;
         lock (_gate)
@@ -182,7 +182,7 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
                 continue;
             }
 
-            var connection = new ObserverConnection(client, header, _bootstrapPackets, _writer, NotifyConnectionClosedAsync);
+            var connection = new ObserverConnection(client, header, _bootstrapPackets, NotifyConnectionClosedAsync);
             lock (_gate)
             {
                 _connections.Add(connection);
@@ -222,21 +222,15 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
 
     private static IReadOnlyList<ViewPacket> UpdateBootstrapPackets(IReadOnlyList<ViewPacket> currentBootstrapPackets, ViewPacket packet)
     {
-        if (packet.PacketType == ViewPacketType.Config)
+        if (packet.PacketType != ViewPacketType.Config &&
+            packet is not { PacketType: ViewPacketType.Frame, IsKeyFrame: true })
         {
-            var configs = currentBootstrapPackets.Where(existing => existing.PacketType == ViewPacketType.Config).ToList();
-            configs.Add(packet);
-            return configs;
+            return currentBootstrapPackets;
         }
 
-        if (packet is {PacketType: ViewPacketType.Frame, IsKeyFrame: true})
-        {
-            var configs = currentBootstrapPackets.Where(existing => existing.PacketType == ViewPacketType.Config).ToList();
-            configs.Add(packet);
-            return configs;
-        }
-
-        return currentBootstrapPackets;
+        var configs = currentBootstrapPackets.Where(existing => existing.PacketType == ViewPacketType.Config).ToList();
+        configs.Add(packet);
+        return configs;
     }
 
     private static void ConfigureObserverSocket(TcpClient client)
@@ -258,7 +252,6 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
         TcpClient client,
         ViewStreamHeader header,
         IReadOnlyList<ViewPacket> bootstrapPackets,
-        ViewPacketStreamWriter writer,
         Func<ObserverConnection, Task> onClosedAsync) : IAsyncDisposable
     {
         private readonly CancellationTokenSource _cancellation = new();
@@ -304,15 +297,15 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
             try
             {
                 await using var stream = client.GetStream();
-                await writer.WriteHeaderAsync(stream, header, _cancellation.Token).ConfigureAwait(false);
+                await ViewPacketStreamWriter.WriteHeaderAsync(stream, header, _cancellation.Token).ConfigureAwait(false);
                 foreach (var packet in bootstrapPackets)
                 {
-                    await writer.WritePacketAsync(stream, packet, _cancellation.Token).ConfigureAwait(false);
+                    await ViewPacketStreamWriter.WritePacketAsync(stream, packet, _cancellation.Token).ConfigureAwait(false);
                 }
 
                 await foreach (var packet in _packets.Reader.ReadAllAsync(_cancellation.Token).ConfigureAwait(false))
                 {
-                    await writer.WritePacketAsync(stream, packet, _cancellation.Token).ConfigureAwait(false);
+                    await ViewPacketStreamWriter.WritePacketAsync(stream, packet, _cancellation.Token).ConfigureAwait(false);
                 }
             }
             catch (OperationCanceledException) when (_cancellation.IsCancellationRequested)
@@ -333,7 +326,7 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
 
 internal sealed class ViewPacketStreamWriter
 {
-    public async Task WriteHeaderAsync(Stream stream, ViewStreamHeader header, CancellationToken cancellationToken = default)
+    public static async Task WriteHeaderAsync(Stream stream, ViewStreamHeader header, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(stream);
         ArgumentNullException.ThrowIfNull(header);
@@ -349,7 +342,7 @@ internal sealed class ViewPacketStreamWriter
         await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task WritePacketAsync(Stream stream, ViewPacket packet, CancellationToken cancellationToken = default)
+    public static async Task WritePacketAsync(Stream stream, ViewPacket packet, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(stream);
         ArgumentNullException.ThrowIfNull(packet);
@@ -410,12 +403,7 @@ internal static class ViewShareEndpointParser
         }
 
         var addresses = Dns.GetHostAddresses(host);
-        if (addresses.Length == 0)
-        {
-            throw new InvalidOperationException($"Share bind endpoint '{endpoint}' did not resolve to a host address.");
-        }
-
-        return (addresses[0], uri.Port);
+        return addresses.Length == 0 ? throw new InvalidOperationException($"Share bind endpoint '{endpoint}' did not resolve to a host address.") : (addresses[0], uri.Port);
     }
 
     private static Uri Parse(string endpoint, bool allowZeroPort)

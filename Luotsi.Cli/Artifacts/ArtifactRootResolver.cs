@@ -33,10 +33,8 @@ internal static class ArtifactRootResolver
             throw new UsageException($"Artifact root '{target}' does not exist, and search root '{baseRoot}' does not exist.");
         }
 
-        var matches = fileSystem.GetFiles(baseRoot, "*", SearchOption.AllDirectories)
-            .Select(path => FindAncestorByName(baseRoot, path, target))
-            .Where(static path => !string.IsNullOrWhiteSpace(path))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+        var matches = ResolveArtifactRootCandidates(fileSystem, baseRoot)
+            .Where(root => string.Equals(GetArtifactRootName(root), target, StringComparison.OrdinalIgnoreCase))
             .Order(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -91,29 +89,6 @@ internal static class ArtifactRootResolver
 
     private static string GetArtifactRootName(string root) =>
         Path.GetFileName(TrimDirectoryEnding(root));
-
-    private static string? FindAncestorByName(string baseRoot, string filePath, string name)
-    {
-        var current = Path.GetDirectoryName(filePath);
-        var fullBase = TrimDirectoryEnding(Path.GetFullPath(baseRoot));
-        while (!string.IsNullOrWhiteSpace(current))
-        {
-            if (string.Equals(Path.GetFileName(current), name, StringComparison.OrdinalIgnoreCase))
-            {
-                return current;
-            }
-
-            var fullCurrent = TrimDirectoryEnding(Path.GetFullPath(current));
-            if (string.Equals(fullCurrent, fullBase, StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
-            current = Path.GetDirectoryName(current);
-        }
-
-        return null;
-    }
 
     private static bool IsDirectArtifactRootMarker(string fullBase, string file)
     {

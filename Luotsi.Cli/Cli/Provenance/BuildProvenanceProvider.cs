@@ -25,7 +25,7 @@ internal sealed class BuildProvenanceProvider(IEnvironmentVariables environment)
             RuntimeInformation.FrameworkDescription);
     }
 
-    private string GetVersion(Assembly assembly) =>
+    private static string GetVersion(Assembly assembly) =>
         assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
         ?? assembly.GetName().Version?.ToString()
         ?? "unknown";

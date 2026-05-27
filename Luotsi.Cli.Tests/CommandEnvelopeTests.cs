@@ -275,9 +275,12 @@ public sealed partial class AppTests
 
         Assert.Equal(0, exitCode);
         Assert.Equal("update_started", envelope.RootElement.GetProperty("data").GetProperty("status").GetString());
+        Assert.True(envelope.RootElement.GetProperty("data").TryGetProperty("detached_installer_stdout_log", out _));
+        Assert.True(envelope.RootElement.GetProperty("data").TryGetProperty("detached_installer_stderr_log", out _));
         var call = Assert.Single(processRunner.Calls);
         Assert.Contains("Start-Process", string.Join(" ", call.Args), StringComparison.Ordinal);
-        Assert.Contains("Wait-Process", string.Join(" ", call.Args), StringComparison.Ordinal);
+        Assert.Contains("-EncodedCommand", string.Join(" ", call.Args), StringComparison.Ordinal);
+        Assert.DoesNotContain("Wait-Process", string.Join(" ", call.Args), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -3573,7 +3576,8 @@ public sealed partial class AppTests
         Assert.Equal(3, data.GetProperty("entry_count").GetInt32());
         Assert.False(data.GetProperty("dry_run").GetBoolean());
         Assert.Equal(Path.Join("/tmp/unpacked", "index.html"), data.GetProperty("index_path").GetString());
-        Assert.Equal(Path.Join("/tmp/unpacked", "luotsi-artifact-package.json"), data.GetProperty("manifest_path").GetString());
+        Assert.Equal("luotsi-artifact-package.json", data.GetProperty("manifest_path").GetString());
+        Assert.Equal(Path.Join("/tmp/unpacked", "luotsi-artifact-package.json"), data.GetProperty("manifest_output_path").GetString());
         Assert.Equal("20260526-120000-run", data.GetProperty("manifest").GetProperty("run_id").GetString());
         Assert.Matches("^[0-9a-f]{64}$", data.GetProperty("sha256").GetString());
         Assert.True(fileSystem.FileExists(Path.GetFullPath(Path.Join(outputDirectory!, "index.html"))));
@@ -3626,11 +3630,102 @@ public sealed partial class AppTests
         Assert.True(data.GetProperty("dry_run").GetBoolean());
         Assert.Equal(2, data.GetProperty("entry_count").GetInt32());
         Assert.False(data.TryGetProperty("index_path", out _));
-        Assert.Equal(Path.Join("/tmp/unpacked", "luotsi-artifact-package.json"), data.GetProperty("manifest_path").GetString());
+        Assert.Equal("luotsi-artifact-package.json", data.GetProperty("manifest_path").GetString());
+        Assert.Equal(Path.Join("/tmp/unpacked", "luotsi-artifact-package.json"), data.GetProperty("manifest_output_path").GetString());
         Assert.Equal("20260526-120000-run", data.GetProperty("manifest").GetProperty("run_id").GetString());
         Assert.Matches("^[0-9a-f]{64}$", data.GetProperty("sha256").GetString());
         Assert.False(fileSystem.DirectoryExists("/tmp/unpacked"));
         Assert.False(fileSystem.FileExists(Path.GetFullPath(Path.Join("/tmp/unpacked", "index.html"))));
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsUnpack_Rejects_Archive_Entry_Not_Declared_In_Manifest()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var packagePath = "/tmp/share/replay.zip";
+        fileSystem.CreateDirectory("/tmp/share");
+        await using (var packageStream = fileSystem.OpenWrite(packagePath))
+        {
+            using var archive = new ZipArchive(packageStream, ZipArchiveMode.Create, leaveOpen: true);
+            var index = archive.CreateEntry("index.html");
+            await using (var entry = index.Open())
+            await using (var writer = new StreamWriter(entry))
+            {
+                await writer.WriteAsync("<!doctype html>");
+            }
+
+            var extra = archive.CreateEntry("extra.txt");
+            await using (var entry = extra.Open())
+            await using (var writer = new StreamWriter(entry))
+            {
+                await writer.WriteAsync("extra");
+            }
+
+            var manifest = archive.CreateEntry("luotsi-artifact-package.json");
+            await using (var entry = manifest.Open())
+            await using (var writer = new StreamWriter(entry))
+            {
+                await writer.WriteAsync("""
+                {"schema":"luotsi-artifact-package.v1","run_id":"20260526-120000-run","created_at":"2026-05-26T12:00:00Z","source_file_count":1,"category_counts":{"screenshots":0,"videos":0,"reports":0,"logs":0,"timelines":0,"other":1},"recommended_commands":[{"kind":"open_artifacts","summary":"Open the unpacked artifact root locally.","command":"luotsi artifacts open <unpacked-artifact-root>"}],"files":["index.html"]}
+                """);
+            }
+        }
+
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "unpack", packagePath, "--output", "/tmp/unpacked"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("not declared in manifest", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsUnpack_Rejects_Manifest_File_Missing_From_Archive()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var packagePath = "/tmp/share/replay.zip";
+        fileSystem.CreateDirectory("/tmp/share");
+        await using (var packageStream = fileSystem.OpenWrite(packagePath))
+        {
+            using var archive = new ZipArchive(packageStream, ZipArchiveMode.Create, leaveOpen: true);
+            var index = archive.CreateEntry("index.html");
+            await using (var entry = index.Open())
+            await using (var writer = new StreamWriter(entry))
+            {
+                await writer.WriteAsync("<!doctype html>");
+            }
+
+            var manifest = archive.CreateEntry("luotsi-artifact-package.json");
+            await using (var entry = manifest.Open())
+            await using (var writer = new StreamWriter(entry))
+            {
+                await writer.WriteAsync("""
+                {"schema":"luotsi-artifact-package.v1","run_id":"20260526-120000-run","created_at":"2026-05-26T12:00:00Z","source_file_count":2,"category_counts":{"screenshots":0,"videos":0,"reports":0,"logs":0,"timelines":0,"other":2},"recommended_commands":[{"kind":"open_artifacts","summary":"Open the unpacked artifact root locally.","command":"luotsi artifacts open <unpacked-artifact-root>"}],"files":["index.html","missing.txt"]}
+                """);
+            }
+        }
+
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "unpack", packagePath, "--output", "/tmp/unpacked"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("missing from the package", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("missing.txt", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -3725,6 +3820,39 @@ public sealed partial class AppTests
         Assert.Contains(expectedMessage, envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("""{"schema":"luotsi-artifact-package.v1","run_id":"20260526-120000-run","created_at":"2026-05-26T12:00:00Z","source_file_count":1,"category_counts":{"other":1},"recommended_commands":[],"files":["../escape.txt"]}""", "invalid files[0] entry")]
+    [InlineData("""{"schema":"luotsi-artifact-package.v1","run_id":"20260526-120000-run","created_at":"2026-05-26T12:00:00Z","source_file_count":1,"category_counts":{"other":1},"recommended_commands":[],"files":["luotsi-artifact-package.json"]}""", "invalid files[0] entry")]
+    [InlineData("""{"schema":"luotsi-artifact-package.v1","run_id":"20260526-120000-run","created_at":"2026-05-26T12:00:00Z","source_file_count":2,"category_counts":{"other":2},"recommended_commands":[],"files":["index.html","index.html"]}""", "duplicate files[1] entry")]
+    public async Task RunAsync_ArtifactsUnpack_Rejects_Manifest_With_Invalid_File_Entries(string manifestJson, string expectedMessage)
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var packagePath = "/tmp/share/replay.zip";
+        fileSystem.CreateDirectory("/tmp/share");
+        await using (var packageStream = fileSystem.OpenWrite(packagePath))
+        {
+            using var archive = new ZipArchive(packageStream, ZipArchiveMode.Create, leaveOpen: true);
+            _ = archive.CreateEntry("index.html");
+            var manifest = archive.CreateEntry("luotsi-artifact-package.json");
+            await using var entry = manifest.Open();
+            await using var writer = new StreamWriter(entry);
+            await writer.WriteAsync(manifestJson);
+        }
+
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "unpack", packagePath, "--output", "/tmp/unpacked"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains(expectedMessage, envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
     [Fact]
     public async Task RunAsync_ArtifactsPack_Then_Unpack_RoundTrips_Manifest_And_Commands()
     {

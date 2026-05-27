@@ -22,6 +22,7 @@ internal sealed record ScenarioRunReport(
     ScenarioDeviceAllocation? DeviceAllocation,
     BuildProvenance Provenance,
     IReadOnlyList<ScenarioReportScenario> Scenarios,
+    string? ProgressMode = null,
     ErrorInfo? Error = null);
 
 internal sealed record ScenarioReportScenario(

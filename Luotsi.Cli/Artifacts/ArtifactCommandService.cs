@@ -168,8 +168,8 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         }
 
         var packageManifest = ReadPackageManifest(packagePath);
-        var entries = ValidateArtifactPackage(packagePath, outputDirectory, force);
-        var manifestPath = Path.Join(outputDirectory, PackageManifestFileName);
+        var entries = ValidateArtifactPackage(packagePath, outputDirectory, force, packageManifest);
+        var manifestOutputPath = Path.Join(outputDirectory, PackageManifestFileName);
         string? indexPath = null;
         if (!dryRun)
         {
@@ -184,7 +184,8 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             entries,
             dryRun,
             indexPath,
-            manifestPath,
+            PackageManifestFileName,
+            manifestOutputPath,
             packageManifest,
             ComputeSha256(packagePath),
             [
@@ -324,6 +325,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
                 throw new UsageException($"Artifact package manifest '{manifestPath}' has source_file_count={sourceFileCount}, but files contains {files.Length} entries.");
             }
 
+            files = ValidateManifestFiles(files, manifestPath);
             var commands = recommendedCommandsElement.EnumerateArray()
                 .Select((element, index) =>
                 {
@@ -393,6 +395,38 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             GetOptionalInt(root, "timelines"),
             GetOptionalInt(root, "other"));
 
+    private static string[] ValidateManifestFiles(IReadOnlyList<string> files, string manifestPath)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var normalizedFiles = new string[files.Count];
+
+        for (var index = 0; index < files.Count; index++)
+        {
+            string normalized;
+            try
+            {
+                normalized = NormalizeZipEntryName(NormalizePackageEntryName(files[index]));
+            }
+            catch (UsageException)
+            {
+                throw new UsageException($"Artifact package manifest '{manifestPath}' has invalid files[{index}] entry '{files[index]}'.");
+            }
+
+            if (string.Equals(normalized, PackageManifestFileName, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new UsageException($"Artifact package manifest '{manifestPath}' has invalid files[{index}] entry '{files[index]}'.");
+            }
+
+            if (!seen.Add(normalized))
+            {
+                throw new UsageException($"Artifact package manifest '{manifestPath}' has duplicate files[{index}] entry '{files[index]}'.");
+            }
+
+            normalizedFiles[index] = normalized;
+        }
+
+        return normalizedFiles;
+    }
     private static int GetOptionalInt(JsonElement root, string propertyName) =>
         root.TryGetProperty(propertyName, out var value) && value.TryGetInt32(out var parsed)
             ? parsed
@@ -423,17 +457,40 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         return count;
     }
 
-    private int ValidateArtifactPackage(string packagePath, string outputDirectory, bool force)
+    private int ValidateArtifactPackage(string packagePath, string outputDirectory, bool force, ArtifactPackageManifestResult manifest)
     {
         var fullOutputDirectory = Path.GetFullPath(outputDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var count = 0;
+        var manifestFiles = manifest.Files.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var seenEntries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         using var input = _fileSystem.OpenRead(packagePath);
         using var archive = new ZipArchive(input, ZipArchiveMode.Read, leaveOpen: false);
         foreach (var entry in archive.Entries.Where(static entry => !string.IsNullOrWhiteSpace(entry.Name)))
         {
             var safeEntryName = NormalizePackageEntryName(entry.FullName);
             _ = ResolvePackageDestination(outputDirectory, fullOutputDirectory, safeEntryName, entry.FullName, force);
+            var manifestEntryName = NormalizeZipEntryName(safeEntryName);
+            if (!seenEntries.Add(manifestEntryName))
+            {
+                throw new UsageException($"Artifact package entry '{entry.FullName}' is duplicated in the archive.");
+            }
+
+            if (!string.Equals(manifestEntryName, PackageManifestFileName, StringComparison.OrdinalIgnoreCase) &&
+                !manifestFiles.Contains(manifestEntryName))
+            {
+                throw new UsageException($"Artifact package entry '{entry.FullName}' is not declared in manifest '{PackageManifestFileName}'.");
+            }
+
             count++;
+        }
+
+        var missingManifestFiles = manifest.Files
+            .Where(file => !seenEntries.Contains(file))
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (missingManifestFiles.Length > 0)
+        {
+            throw new UsageException($"Artifact package manifest '{PackageManifestFileName}' declares files that are missing from the package: {string.Join(", ", missingManifestFiles)}.");
         }
 
         return count;
@@ -648,6 +705,7 @@ internal sealed record ArtifactUnpackResult(
     bool DryRun,
     string? IndexPath,
     string ManifestPath,
+    string ManifestOutputPath,
     ArtifactPackageManifestResult Manifest,
     string Sha256,
     IReadOnlyList<ArtifactRecommendedCommandResult> RecommendedCommands);
