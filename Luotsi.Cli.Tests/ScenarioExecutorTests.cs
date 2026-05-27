@@ -1353,7 +1353,8 @@ public sealed partial class AppTests
             "run",
             "--file", "/tmp/scenario.json",
             "--events-jsonl", "/tmp/events.jsonl",
-            "--report-json", "/tmp/report.json"]);
+            "--report-json", "/tmp/report.json",
+            "--progress", "jsonl"]);
         var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
         using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
         var scenario = report.RootElement.GetProperty("scenarios")[0];
@@ -1409,12 +1410,14 @@ public sealed partial class AppTests
             "run",
             "--file", "/tmp/scenario.json",
             "--events-jsonl", "/tmp/events.jsonl",
-            "--report-json", "/tmp/report.json"]);
+            "--report-json", "/tmp/report.json",
+            "--progress", "jsonl"]);
         var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
         using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
 
         Assert.Equal(1, exitCode);
         Assert.Contains("main step", report.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Equal("jsonl", report.RootElement.GetProperty("progress_mode").GetString());
         Assert.DoesNotContain("cleanup failed", report.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
         Assert.Equal("main", report.RootElement.GetProperty("scenarios")[0].GetProperty("failed_step").GetProperty("phase").GetString());
         Assert.Contains(events, static evt =>
@@ -1509,7 +1512,8 @@ public sealed partial class AppTests
             "run",
             "--path", "/tmp/scenarios",
             "--events-jsonl", "/tmp/events.jsonl",
-            "--report-json", "/tmp/report.json"]);
+            "--report-json", "/tmp/report.json",
+            "--progress", "line"]);
         var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
         using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
 
@@ -1518,6 +1522,7 @@ public sealed partial class AppTests
         Assert.Equal("failed", events[^1].GetProperty("status").GetString());
         Assert.Equal("usage_error", events[^1].GetProperty("error").GetProperty("category").GetString());
         Assert.Equal("failed", report.RootElement.GetProperty("status").GetString());
+        Assert.Equal("line", report.RootElement.GetProperty("progress_mode").GetString());
         Assert.Equal("usage_error", report.RootElement.GetProperty("error").GetProperty("category").GetString());
         Assert.Equal(1, report.RootElement.GetProperty("failed_count").GetInt32());
         Assert.Equal("scenario discovery", report.RootElement.GetProperty("scenarios")[0].GetProperty("scenario").GetString());
@@ -1551,7 +1556,8 @@ public sealed partial class AppTests
             "run",
             "--path", "/tmp/scenarios",
             "--events-jsonl", "/tmp/events.jsonl",
-            "--report-json", "/tmp/report.json"]);
+            "--report-json", "/tmp/report.json",
+            "--progress", "jsonl"]);
         var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
         using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
 
@@ -1559,6 +1565,7 @@ public sealed partial class AppTests
         Assert.Equal(1, events[^1].GetProperty("total_count").GetInt32());
         Assert.Equal(1, events[^1].GetProperty("selected_count").GetInt32());
         Assert.Equal(1, report.RootElement.GetProperty("total_count").GetInt32());
+        Assert.Equal("jsonl", report.RootElement.GetProperty("progress_mode").GetString());
         Assert.Equal(1, report.RootElement.GetProperty("selected_count").GetInt32());
         Assert.Equal(1, report.RootElement.GetProperty("failed_count").GetInt32());
         Assert.Equal("scenario run", report.RootElement.GetProperty("scenarios")[0].GetProperty("scenario").GetString());

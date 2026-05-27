@@ -12,7 +12,8 @@ internal static class ScenarioRunReportFactory
         DateTimeOffset startedAt,
         DateTimeOffset endedAt,
         ScenarioArtifactAttachmentPolicy attachmentPolicy,
-        BuildProvenance provenance) =>
+        BuildProvenance provenance,
+        string? progressMode = null) =>
         new(
             ReportSchema,
             file,
@@ -33,7 +34,7 @@ internal static class ScenarioRunReportFactory
             result.DeviceAllocation,
             provenance,
             [CreateScenarioFromSuccess(result, file, attachmentPolicy)],
-            result.ProgressMode);
+            result.ProgressMode ?? progressMode);
 
     public static ScenarioRunReport FromSingleFailure(
         string file,
@@ -41,7 +42,8 @@ internal static class ScenarioRunReportFactory
         DateTimeOffset startedAt,
         DateTimeOffset endedAt,
         ScenarioArtifactAttachmentPolicy attachmentPolicy,
-        BuildProvenance provenance)
+        BuildProvenance provenance,
+        string? progressMode = null)
     {
         var error = ScenarioErrorInfo.From(exception);
         var failureData = ScenarioFailureDetails.TryGetData(exception);
@@ -69,6 +71,7 @@ internal static class ScenarioRunReportFactory
             deviceAllocation,
             provenance,
             [scenario],
+            progressMode,
             Error: error);
     }
 
@@ -77,7 +80,8 @@ internal static class ScenarioRunReportFactory
         DateTimeOffset startedAt,
         DateTimeOffset endedAt,
         ScenarioArtifactAttachmentPolicy attachmentPolicy,
-        BuildProvenance provenance) =>
+        BuildProvenance provenance,
+        string? progressMode = null) =>
         new(
             ReportSchema,
             result.Path,
@@ -98,7 +102,7 @@ internal static class ScenarioRunReportFactory
             result.DeviceAllocation,
             provenance,
             result.Scenarios.Select(scenario => CreateScenarioFromBatchItem(scenario, attachmentPolicy)).ToArray(),
-            result.ProgressMode);
+            result.ProgressMode ?? progressMode);
 
     public static ScenarioRunReport FromBatchFailure(
         ScenarioRunPlan plan,
@@ -106,7 +110,8 @@ internal static class ScenarioRunReportFactory
         DateTimeOffset startedAt,
         DateTimeOffset endedAt,
         ScenarioArtifactAttachmentPolicy attachmentPolicy,
-        BuildProvenance provenance)
+        BuildProvenance provenance,
+        string? progressMode = null)
     {
         var error = ScenarioErrorInfo.From(exception);
         var failureData = ScenarioFailureDetails.TryGetData(exception);
@@ -134,6 +139,7 @@ internal static class ScenarioRunReportFactory
             deviceAllocation,
             provenance,
             scenarios,
+            progressMode,
             Error: error);
     }
 
@@ -142,7 +148,8 @@ internal static class ScenarioRunReportFactory
         Exception exception,
         DateTimeOffset startedAt,
         DateTimeOffset endedAt,
-        BuildProvenance provenance)
+        BuildProvenance provenance,
+        string? progressMode = null)
     {
         var error = ScenarioErrorInfo.From(exception);
         return new ScenarioRunReport(
@@ -165,6 +172,7 @@ internal static class ScenarioRunReportFactory
             null,
             provenance,
             [CreateScenarioFromException(query.Path, exception, "scenario discovery", $"{query.Path}::discovery")],
+            progressMode,
             Error: error);
     }
 
