@@ -900,6 +900,86 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task ScenarioValidateAsync_File_Progress_Line_Writes_Report_And_Stderr_Progress()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "name": "pause", "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync([
+            "scenario-validate",
+            "--file", "/tmp/scenario.json",
+            "--progress", "line",
+            "--report-json", "/tmp/report.json"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("validated", envelope.RootElement.GetProperty("data").GetProperty("status").GetString());
+        Assert.Equal("line", envelope.RootElement.GetProperty("data").GetProperty("progress_mode").GetString());
+        Assert.Equal("line", report.RootElement.GetProperty("progress_mode").GetString());
+        Assert.Contains(console.ErrorLines, static line => line.StartsWith("run started", StringComparison.Ordinal));
+        Assert.Contains(console.ErrorLines, static line => line.StartsWith("run validated", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_File_Progress_Auto_Uses_Line_Mode_In_CI()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "name": "pause", "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console,
+            Environment = new FakeEnvironmentVariables(new Dictionary<string, string> { ["CI"] = "true" })
+        });
+
+        var exitCode = await app.RunAsync([
+            "run",
+            "--file", "/tmp/scenario.json",
+            "--validate-only",
+            "--report-json", "/tmp/report.json"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("line", envelope.RootElement.GetProperty("data").GetProperty("progress_mode").GetString());
+        Assert.Equal("line", report.RootElement.GetProperty("progress_mode").GetString());
+        Assert.Contains(console.ErrorLines, static line => line.StartsWith("run started", StringComparison.Ordinal));
+        Assert.DoesNotContain(console.ErrorLines, static line => line.StartsWith("Run started:", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task RunAsync_File_Prepares_Device_And_Writes_Allocation_Metadata()
     {
         var fileSystem = new FakeFileSystem();

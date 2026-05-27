@@ -234,7 +234,7 @@ Luotsi reads the `LUOTSI_DEVICE_TELEMETRY` logcat marker to parse structured sem
 |---|---|
 | `scenario-init [--file <path>] [--name <name>] [--package <app.id>]` | Generate a starter scenario with metadata, setup, screenshot-oriented steps, teardown, docs link, and next commands |
 | `scenario-list --path <scenario-file-or-directory-or-glob> [filters]` | Discover scenario files and report matched names, tags, and actions without executing them |
-| `scenario-validate (--file <path> | --path <path>)` | Validate one or many scenarios without creating a device host |
+| `scenario-validate (--file <path> | --path <path>)` | Validate one or many scenarios without creating a device host; supports reports, JSONL events, and `--progress` like `run --validate-only` |
 | `scenario-explain --file <path>` | Summarize scenario metadata, lifecycle step counts, actions, docs, and suggested commands |
 | `run --device <serial> --file <path>` | Execute one JSON scenario playbook; also supports `--validate-only`, `--progress`, `--events-jsonl`, `--report-json`, `--report-junit`, `--capture-on`, and `--attach-artifacts` |
 | `run --device <serial> --path <scenario-file-or-directory-or-glob>` | Execute one or many scenario files discovered from a file, directory, or glob; supports filtering, `--dry-run`, `--validate-only`, progress, reporting, artifact-policy flags, and sharding |
