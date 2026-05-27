@@ -66,7 +66,11 @@ internal sealed class ScenarioRunOrchestrator(
             file,
             runEvents,
             runReports,
-            sink => CreateValidationExecutor(sink).ValidateFileAsync(file)).ConfigureAwait(false);
+            async sink =>
+            {
+                var result = await CreateValidationExecutor(sink).ValidateFileAsync(file).ConfigureAwait(false);
+                return AttachProgressMode(result, configuration);
+            }).ConfigureAwait(false);
     }
 
     public async Task<ScenarioRunBatchResult> ValidatePathAsync(ScenarioQuery query, ScenarioRunConfiguration configuration)
@@ -81,7 +85,11 @@ internal sealed class ScenarioRunOrchestrator(
             preparedPlan,
             runEvents,
             runReports,
-            sink => CreateValidationExecutor(sink).ValidatePlanAsync(preparedPlan)).ConfigureAwait(false);
+            async sink =>
+            {
+                var result = await CreateValidationExecutor(sink).ValidatePlanAsync(preparedPlan).ConfigureAwait(false);
+                return AttachProgressMode(result, configuration);
+            }).ConfigureAwait(false);
     }
 
     private async Task<ScenarioRunResult> RunFileCoreAsync(
@@ -101,7 +109,7 @@ internal sealed class ScenarioRunOrchestrator(
                 try
                 {
                     var result = await _scenarioExecutorFactory.Create(runner, sink, configuration.FailureArtifactCapturePolicy).RunAsync(file).ConfigureAwait(false);
-                    return ScenarioMetadataCompatibility.Attach(result, allocation);
+                    return AttachProgressMode(ScenarioMetadataCompatibility.Attach(result, allocation), configuration);
                 }
                 catch (Exception ex) when (!IsFatalException(ex) && ex is not UsageException)
                 {
@@ -128,7 +136,7 @@ internal sealed class ScenarioRunOrchestrator(
                 try
                 {
                     var result = await _scenarioBatchExecutorFactory.Create(runner, sink, configuration.FailureArtifactCapturePolicy).RunAsync(preparedPlan).ConfigureAwait(false);
-                    return ScenarioMetadataCompatibility.Attach(result, allocation);
+                    return AttachProgressMode(ScenarioMetadataCompatibility.Attach(result, allocation), configuration);
                 }
                 catch (Exception ex) when (!IsFatalException(ex) && ex is not UsageException)
                 {
@@ -221,6 +229,15 @@ internal sealed class ScenarioRunOrchestrator(
 
     private ScenarioValidationExecutor CreateValidationExecutor(IScenarioEventSink sink) =>
         _scenarioValidationExecutorFactory.Create(sink);
+
+    private static ScenarioRunResult AttachProgressMode(ScenarioRunResult result, ScenarioRunConfiguration configuration) =>
+        result with { ProgressMode = FormatProgressMode(configuration.ProgressMode) };
+
+    private static ScenarioRunBatchResult AttachProgressMode(ScenarioRunBatchResult result, ScenarioRunConfiguration configuration) =>
+        result with { ProgressMode = FormatProgressMode(configuration.ProgressMode) };
+
+    private static string FormatProgressMode(ScenarioProgressMode progressMode) =>
+        progressMode.ToString().ToLowerInvariant();
 
     private static bool IsFatalException(Exception exception) =>
         exception is OutOfMemoryException

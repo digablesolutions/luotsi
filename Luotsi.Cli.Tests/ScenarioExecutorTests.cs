@@ -363,7 +363,8 @@ public sealed partial class AppTests
             "--validate-only",
             "--events-jsonl", "/tmp/events.jsonl",
             "--report-json", "/tmp/report.json",
-            "--report-junit", "/tmp/junit.xml"]);
+            "--report-junit", "/tmp/junit.xml",
+            "--progress", "plain"]);
         using var envelope = console.ParseSingleOutputAsJson();
         var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
         using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
@@ -382,6 +383,7 @@ public sealed partial class AppTests
         Assert.Equal(durationMs, envelope.RootElement.GetProperty("data").GetProperty("timing").GetProperty("total_ms").GetDouble());
         Assert.Equal(durationMs, envelope.RootElement.GetProperty("data").GetProperty("timing").GetProperty("non_step_ms").GetDouble());
         Assert.Equal("validated", report.RootElement.GetProperty("status").GetString());
+        Assert.Equal("plain", report.RootElement.GetProperty("progress_mode").GetString());
         Assert.Equal(0, report.RootElement.GetProperty("failed_count").GetInt32());
         Assert.Equal(durationMs, report.RootElement.GetProperty("scenarios")[0].GetProperty("duration_ms").GetDouble());
         Assert.Empty(junit.Root!.Elements("testcase").Single().Elements("failure"));
@@ -439,11 +441,13 @@ public sealed partial class AppTests
             "--path", "/tmp/scenarios",
             "--validate-only",
             "--include-tag", "smoke",
+            "--progress", "line",
             "--report-json", "/tmp/report.json"]);
         using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
 
         Assert.Equal(1, exitCode);
         Assert.Equal("failed", report.RootElement.GetProperty("status").GetString());
+        Assert.Equal("line", report.RootElement.GetProperty("progress_mode").GetString());
         Assert.Equal(3, report.RootElement.GetProperty("total_count").GetInt32());
         Assert.Equal(2, report.RootElement.GetProperty("selected_count").GetInt32());
         Assert.Equal(1, report.RootElement.GetProperty("failed_count").GetInt32());
@@ -778,6 +782,8 @@ public sealed partial class AppTests
 
         Assert.Equal(0, exitCode);
         Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Single(console.OutputLines);
+        Assert.Equal("jsonl", envelope.RootElement.GetProperty("data").GetProperty("progress_mode").GetString());
         Assert.NotEmpty(console.ErrorLines);
         using var first = JsonDocument.Parse(console.ErrorLines[0]);
         Assert.Equal("luotsi-scenario-progress.v1", first.RootElement.GetProperty("schema").GetString());
@@ -786,6 +792,78 @@ public sealed partial class AppTests
         using var last = JsonDocument.Parse(console.ErrorLines[^1]);
         Assert.Equal("scenario_run_ended", last.RootElement.GetProperty("event").GetProperty("event").GetString());
         Assert.Equal("validated", last.RootElement.GetProperty("event").GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public async Task RunAsync_File_Progress_Plain_Writes_Human_Progress_To_Stderr()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "name": "pause", "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json", "--validate-only", "--progress", "plain"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("plain", envelope.RootElement.GetProperty("data").GetProperty("progress_mode").GetString());
+        Assert.DoesNotContain(console.ErrorLines, static line => line.TrimStart().StartsWith('{'));
+        Assert.Contains(console.ErrorLines, static line => line.StartsWith("Run started:", StringComparison.Ordinal));
+        Assert.Contains(console.ErrorLines, static line => line.StartsWith("Scenario validated:", StringComparison.Ordinal));
+        Assert.Contains(console.ErrorLines, static line => line.StartsWith("Run validated:", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_File_Progress_Line_Writes_Compact_Progress_To_Stderr()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "name": "pause", "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json", "--validate-only", "--progress", "line"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("line", envelope.RootElement.GetProperty("data").GetProperty("progress_mode").GetString());
+        Assert.DoesNotContain(console.ErrorLines, static line => line.TrimStart().StartsWith('{'));
+        Assert.Contains(console.ErrorLines, static line => line.StartsWith("run started", StringComparison.Ordinal));
+        Assert.Contains(console.ErrorLines, static line => line.StartsWith("scenario validated", StringComparison.Ordinal));
+        Assert.Contains(console.ErrorLines, static line => line.StartsWith("run validated", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -817,7 +895,88 @@ public sealed partial class AppTests
 
         Assert.Equal(0, exitCode);
         Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("quiet", envelope.RootElement.GetProperty("data").GetProperty("progress_mode").GetString());
         Assert.Empty(console.ErrorLines);
+    }
+
+    [Fact]
+    public async Task ScenarioValidateAsync_File_Progress_Line_Writes_Report_And_Stderr_Progress()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "name": "pause", "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync([
+            "scenario-validate",
+            "--file", "/tmp/scenario.json",
+            "--progress", "line",
+            "--report-json", "/tmp/report.json"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("validated", envelope.RootElement.GetProperty("data").GetProperty("status").GetString());
+        Assert.Equal("line", envelope.RootElement.GetProperty("data").GetProperty("progress_mode").GetString());
+        Assert.Equal("line", report.RootElement.GetProperty("progress_mode").GetString());
+        Assert.Contains(console.ErrorLines, static line => line.StartsWith("run started", StringComparison.Ordinal));
+        Assert.Contains(console.ErrorLines, static line => line.StartsWith("run validated", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_File_Progress_Auto_Uses_Line_Mode_In_CI()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "name": "pause", "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            Console = console,
+            Environment = new FakeEnvironmentVariables(new Dictionary<string, string> { ["CI"] = "true" })
+        });
+
+        var exitCode = await app.RunAsync([
+            "run",
+            "--file", "/tmp/scenario.json",
+            "--validate-only",
+            "--report-json", "/tmp/report.json"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("line", envelope.RootElement.GetProperty("data").GetProperty("progress_mode").GetString());
+        Assert.Equal("line", report.RootElement.GetProperty("progress_mode").GetString());
+        Assert.Contains(console.ErrorLines, static line => line.StartsWith("run started", StringComparison.Ordinal));
+        Assert.DoesNotContain(console.ErrorLines, static line => line.StartsWith("Run started:", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -1274,7 +1433,8 @@ public sealed partial class AppTests
             "run",
             "--file", "/tmp/scenario.json",
             "--events-jsonl", "/tmp/events.jsonl",
-            "--report-json", "/tmp/report.json"]);
+            "--report-json", "/tmp/report.json",
+            "--progress", "jsonl"]);
         var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
         using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
         var scenario = report.RootElement.GetProperty("scenarios")[0];
@@ -1330,12 +1490,14 @@ public sealed partial class AppTests
             "run",
             "--file", "/tmp/scenario.json",
             "--events-jsonl", "/tmp/events.jsonl",
-            "--report-json", "/tmp/report.json"]);
+            "--report-json", "/tmp/report.json",
+            "--progress", "jsonl"]);
         var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
         using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
 
         Assert.Equal(1, exitCode);
         Assert.Contains("main step", report.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Equal("jsonl", report.RootElement.GetProperty("progress_mode").GetString());
         Assert.DoesNotContain("cleanup failed", report.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
         Assert.Equal("main", report.RootElement.GetProperty("scenarios")[0].GetProperty("failed_step").GetProperty("phase").GetString());
         Assert.Contains(events, static evt =>
@@ -1430,7 +1592,8 @@ public sealed partial class AppTests
             "run",
             "--path", "/tmp/scenarios",
             "--events-jsonl", "/tmp/events.jsonl",
-            "--report-json", "/tmp/report.json"]);
+            "--report-json", "/tmp/report.json",
+            "--progress", "line"]);
         var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
         using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
 
@@ -1439,6 +1602,7 @@ public sealed partial class AppTests
         Assert.Equal("failed", events[^1].GetProperty("status").GetString());
         Assert.Equal("usage_error", events[^1].GetProperty("error").GetProperty("category").GetString());
         Assert.Equal("failed", report.RootElement.GetProperty("status").GetString());
+        Assert.Equal("line", report.RootElement.GetProperty("progress_mode").GetString());
         Assert.Equal("usage_error", report.RootElement.GetProperty("error").GetProperty("category").GetString());
         Assert.Equal(1, report.RootElement.GetProperty("failed_count").GetInt32());
         Assert.Equal("scenario discovery", report.RootElement.GetProperty("scenarios")[0].GetProperty("scenario").GetString());
@@ -1472,7 +1636,8 @@ public sealed partial class AppTests
             "run",
             "--path", "/tmp/scenarios",
             "--events-jsonl", "/tmp/events.jsonl",
-            "--report-json", "/tmp/report.json"]);
+            "--report-json", "/tmp/report.json",
+            "--progress", "jsonl"]);
         var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
         using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
 
@@ -1480,6 +1645,7 @@ public sealed partial class AppTests
         Assert.Equal(1, events[^1].GetProperty("total_count").GetInt32());
         Assert.Equal(1, events[^1].GetProperty("selected_count").GetInt32());
         Assert.Equal(1, report.RootElement.GetProperty("total_count").GetInt32());
+        Assert.Equal("jsonl", report.RootElement.GetProperty("progress_mode").GetString());
         Assert.Equal(1, report.RootElement.GetProperty("selected_count").GetInt32());
         Assert.Equal(1, report.RootElement.GetProperty("failed_count").GetInt32());
         Assert.Equal("scenario run", report.RootElement.GetProperty("scenarios")[0].GetProperty("scenario").GetString());

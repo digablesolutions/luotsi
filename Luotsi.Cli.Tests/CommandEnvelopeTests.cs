@@ -351,6 +351,22 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_Scenario_Help_Writes_Validate_Progress_Options()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["help", "scenario"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(console.OutputLines);
+        Assert.Single(console.ErrorLines);
+        Assert.Contains("Luotsi help: scenarios", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("scenario-validate (--file <scenario.json> | --path <scenario-file-or-directory-or-glob>)", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("--progress auto|line|plain|quiet|jsonl", console.ErrorLines[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_Unknown_Help_Topic_Returns_Usage_Exit_Code()
     {
         var console = new FakeConsole();

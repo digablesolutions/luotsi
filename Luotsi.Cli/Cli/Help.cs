@@ -384,6 +384,8 @@ Usage:
   luotsi scenario-init [--file <scenario.json>] [--name <name>] [--package <app.id>] [--activity <activity>] [--force]
   luotsi scenario-list --path <scenario-file-or-directory-or-glob> [filters]
   luotsi scenario-validate (--file <scenario.json> | --path <scenario-file-or-directory-or-glob>)
+                           [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>]
+                           [--progress auto|line|plain|quiet|jsonl]
   luotsi scenario-explain --file <scenario.json>
 
 Examples:
@@ -394,7 +396,9 @@ Examples:
 Notes:
   Scenario metadata can declare tags, expected package/activity, screen size,
   orientation, and notes so Luotsi can warn when a device does not match the
-  scenario authoring target.
+  scenario authoring target. scenario-validate uses the same stderr progress
+  modes and report writers as run --validate-only, while stdout remains the
+  final command envelope.
 """,
         ["view"] = """
 Luotsi help: view
@@ -608,7 +612,7 @@ Command groups:
   Scenarios and CI reports
     scenario-init [--file <scenario.json>] [--name <name>] [--package <app.id>] [--activity <activity>] [--width <px>] [--height <px>] [--orientation <name>] [--force]
     scenario-list --path <scenario-file-or-directory-or-glob> [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>]
-    scenario-validate (--file <scenario.json> | --path <scenario-file-or-directory-or-glob>) [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>]
+    scenario-validate (--file <scenario.json> | --path <scenario-file-or-directory-or-glob>) [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--progress auto|line|plain|quiet|jsonl]
     scenario-explain --file <scenario.json>
     run --file <scenario.json> [--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--progress auto|line|plain|quiet|jsonl]
     run --path <scenario-file-or-directory-or-glob> [--dry-run|--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--progress auto|line|plain|quiet|jsonl] [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>] [--shard-count <n> --shard-index <zero-based>] [--shard-strategy index|hash]
