@@ -178,7 +178,7 @@ public sealed class ArtifactSession
             throw new UsageException("Use either --artifacts or --output-dir for the artifact root, not both.");
         }
 
-        return artifacts ?? outputDir ?? Path.Combine(fileSystem.GetTempPath(), "luotsi");
+        return artifacts ?? outputDir ?? Path.Join(fileSystem.GetTempPath(), "luotsi");
     }
 
     private static string SanitizePathSegment(string? value)
