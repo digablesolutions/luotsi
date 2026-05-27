@@ -213,7 +213,8 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         using var archive = new ZipArchive(input, ZipArchiveMode.Read, leaveOpen: false);
         foreach (var entry in archive.Entries.Where(static entry => !string.IsNullOrWhiteSpace(entry.Name)))
         {
-            var destinationPath = ResolvePackageDestination(outputDirectory, fullOutputDirectory, entry.FullName, force);
+            var safeEntryName = NormalizePackageEntryName(entry.FullName);
+            var destinationPath = ResolvePackageDestination(outputDirectory, fullOutputDirectory, safeEntryName, entry.FullName, force);
             var destinationDirectory = Path.GetDirectoryName(destinationPath);
             if (!string.IsNullOrWhiteSpace(destinationDirectory))
             {
@@ -237,20 +238,21 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         using var archive = new ZipArchive(input, ZipArchiveMode.Read, leaveOpen: false);
         foreach (var entry in archive.Entries.Where(static entry => !string.IsNullOrWhiteSpace(entry.Name)))
         {
-            _ = ResolvePackageDestination(outputDirectory, fullOutputDirectory, entry.FullName, force);
+            var safeEntryName = NormalizePackageEntryName(entry.FullName);
+            _ = ResolvePackageDestination(outputDirectory, fullOutputDirectory, safeEntryName, entry.FullName, force);
             count++;
         }
 
         return count;
     }
 
-    private string ResolvePackageDestination(string outputDirectory, string fullOutputDirectory, string entryName, bool force)
+    private string ResolvePackageDestination(string outputDirectory, string fullOutputDirectory, string safeEntryName, string originalEntryName, bool force)
     {
-        var destinationPath = Path.GetFullPath(Path.Join(outputDirectory, entryName));
+        var destinationPath = Path.GetFullPath(Path.Join(outputDirectory, safeEntryName));
         if (!destinationPath.StartsWith(fullOutputDirectory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
             !destinationPath.StartsWith(fullOutputDirectory + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
         {
-            throw new UsageException($"Artifact package entry '{entryName}' would write outside the output directory.");
+            throw new UsageException($"Artifact package entry '{originalEntryName}' would write outside the output directory.");
         }
 
         if (_fileSystem.FileExists(destinationPath) && !force)
@@ -259,6 +261,25 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         }
 
         return destinationPath;
+    }
+
+    private static string NormalizePackageEntryName(string entryName)
+    {
+        var normalized = entryName
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar);
+        if (string.IsNullOrWhiteSpace(normalized) || Path.IsPathRooted(normalized))
+        {
+            throw new UsageException($"Artifact package entry '{entryName}' would write outside the output directory.");
+        }
+
+        var segments = normalized.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Any(static segment => segment is "." or ".."))
+        {
+            throw new UsageException($"Artifact package entry '{entryName}' would write outside the output directory.");
+        }
+
+        return Path.Join(segments);
     }
 
     private int CountPackableFiles(string artifactRoot) => GetArtifactFiles(artifactRoot).Length;
@@ -364,7 +385,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
     {
         var fullBase = Path.GetFullPath(baseRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var files = _fileSystem.GetFiles(baseRoot, "*", SearchOption.AllDirectories);
-        if (files.Any(file => string.Equals(Path.GetDirectoryName(file)?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), fullBase, StringComparison.OrdinalIgnoreCase)))
+        if (files.Any(file => IsDirectArtifactRootMarker(fullBase, file)))
         {
             return [baseRoot];
         }
@@ -376,6 +397,19 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             .Order(StringComparer.OrdinalIgnoreCase)
             .ToArray()!;
     }
+
+    private static bool IsDirectArtifactRootMarker(string fullBase, string file)
+    {
+        var directory = Path.GetDirectoryName(file)?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return string.Equals(directory, fullBase, StringComparison.OrdinalIgnoreCase) &&
+            IsArtifactRootMarker(Path.GetFileName(file));
+    }
+
+    private static bool IsArtifactRootMarker(string fileName) =>
+        string.Equals(fileName, HtmlIndexFileName, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(fileName, MarkdownIndexFileName, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(fileName, "session-timeline.jsonl", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(fileName, "session-replay.json", StringComparison.OrdinalIgnoreCase);
 
     private static string? ResolveDirectChildRoot(string fullBase, string file)
     {

@@ -131,12 +131,10 @@ public sealed partial class AppTests
         foreach (var contentFile in contentFiles)
         {
             var content = File.ReadAllText(contentFile);
-            foreach (var link in ExtractLocalLinks(content))
+            foreach (var link in ExtractLocalLinks(content)
+                         .Where(link => !ResolveLocalDocumentationLinkTargets(contentFile, link).Any(TargetExists)))
             {
-                if (!ResolveLocalDocumentationLinkTargets(contentFile, link).Any(TargetExists))
-                {
-                    missingLinks.Add($"{Path.GetRelativePath(contentRoot, contentFile)} -> {link}");
-                }
+                missingLinks.Add($"{Path.GetRelativePath(contentRoot, contentFile)} -> {link}");
             }
         }
 

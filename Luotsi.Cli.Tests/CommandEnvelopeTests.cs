@@ -3205,6 +3205,7 @@ public sealed partial class AppTests
         var firstRoot = Path.Join(searchRoot, "20260526-110000-view");
         var secondRoot = Path.Join(searchRoot, "20260526-120000-run");
         fileSystem.CreateDirectory(searchRoot);
+        fileSystem.AddFile(Path.Join(searchRoot, ".DS_Store"), "ignored");
         fileSystem.AddFile(Path.Join(firstRoot, "index.html"), "<!doctype html>");
         fileSystem.AddFile(Path.Join(secondRoot, "session-timeline.jsonl"), "{\"type\":\"session_started\"}");
         fileSystem.AddFile(Path.Join(secondRoot, "session-replay.json"), "{}");
@@ -3505,6 +3506,33 @@ public sealed partial class AppTests
         });
 
         var exitCode = await app.RunAsync(["artifacts", "unpack", packagePath, "--output", "/tmp/unpacked"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("outside the output directory", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsUnpack_Rejects_Rooted_Zip_Entry()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var packagePath = "/tmp/share/bad-rooted.zip";
+        fileSystem.CreateDirectory("/tmp/share");
+        await using (var packageStream = fileSystem.OpenWrite(packagePath))
+        {
+            using var archive = new ZipArchive(packageStream, ZipArchiveMode.Create, leaveOpen: true);
+            _ = archive.CreateEntry("/escape.txt");
+        }
+
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "unpack", packagePath, "--output", "/tmp/unpacked", "--dry-run"]);
         using var envelope = console.ParseSingleOutputAsJson();
 
         Assert.Equal(2, exitCode);
