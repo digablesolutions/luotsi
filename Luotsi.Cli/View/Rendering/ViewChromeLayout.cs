@@ -113,16 +113,6 @@ public static class ViewChromeLayout
         var buttonTop = Padding;
         var buttonLeft = Padding;
 
-        void AddButton(ViewChromeButtonKind kind, bool enabled, bool active = false)
-        {
-            buttons.Add(new ViewChromeButtonLayout(
-                kind,
-                new ViewChromeRect(buttonLeft, buttonTop, ButtonSize, ButtonSize),
-                enabled,
-                active));
-            buttonLeft += ButtonSize + ButtonGap;
-        }
-
         AddButton(ViewChromeButtonKind.Screenshot, chrome.CanTakeScreenshot);
         AddButton(ViewChromeButtonKind.Record, chrome.CanToggleRecording, chrome.IsRecording);
         AddButton(ViewChromeButtonKind.Reconnect, chrome.CanReconnect);
@@ -172,6 +162,16 @@ public static class ViewChromeLayout
             : new ViewChromeBadgeLayout(new ViewChromeRect(Math.Max(Padding, clientWidth - ShareBadgeWidth - Padding), buttonTop, ShareBadgeWidth, ButtonSize), chrome.ObserverCount, chrome.ShareEndpoint!);
 
         return new ViewChromeRenderLayout(buttons, deviceSlots, toolbarBounds, shelfBounds, shareBadge);
+
+        void AddButton(ViewChromeButtonKind kind, bool enabled, bool active = false)
+        {
+            buttons.Add(new ViewChromeButtonLayout(
+                kind,
+                new ViewChromeRect(buttonLeft, buttonTop, ButtonSize, ButtonSize),
+                enabled,
+                active));
+            buttonLeft += ButtonSize + ButtonGap;
+        }
     }
 
     private static string? DescribeTooltip(ViewChromeButtonLayout button, ViewScaleMode scaleMode, bool isFullscreen) =>

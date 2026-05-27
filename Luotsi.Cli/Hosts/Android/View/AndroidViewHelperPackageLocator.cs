@@ -58,8 +58,7 @@ public sealed class AndroidViewHelperPackageLocator(IEnvironmentVariables enviro
         if (string.IsNullOrWhiteSpace(localPath))
         {
             resolutionSource = "repository_default";
-            localPath = _pathResolver
-                .GetRepositoryRelativeFileCandidates(AndroidRuntimeDefaults.DefaultViewHelperRelativePath)
+            localPath = ViewHostPathResolver.GetRepositoryRelativeFileCandidates(AndroidRuntimeDefaults.DefaultViewHelperRelativePath)
                 .Where(_fileSystem.FileExists)
                 .FirstOrDefault();
         }

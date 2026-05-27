@@ -318,6 +318,8 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
                 throw new UsageException($"Artifact package manifest '{manifestPath}' has source_file_count={sourceFileCount}, but files contains {files.Length} entries.");
             }
 
+            files = ValidateManifestFiles(files, manifestPath);
+
             var commands = recommendedCommandsElement.EnumerateArray()
                 .Select((element, index) =>
                 {
@@ -386,6 +388,39 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             GetOptionalInt(root, "logs"),
             GetOptionalInt(root, "timelines"),
             GetOptionalInt(root, "other"));
+
+    private static string[] ValidateManifestFiles(IReadOnlyList<string> files, string manifestPath)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var normalizedFiles = new string[files.Count];
+
+        for (var index = 0; index < files.Count; index++)
+        {
+            string normalized;
+            try
+            {
+                normalized = NormalizeZipEntryName(NormalizePackageEntryName(files[index]));
+            }
+            catch (UsageException)
+            {
+                throw new UsageException($"Artifact package manifest '{manifestPath}' has invalid files[{index}] entry '{files[index]}'.");
+            }
+
+            if (string.Equals(normalized, PackageManifestFileName, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new UsageException($"Artifact package manifest '{manifestPath}' has invalid files[{index}] entry '{files[index]}'.");
+            }
+
+            if (!seen.Add(normalized))
+            {
+                throw new UsageException($"Artifact package manifest '{manifestPath}' has duplicate files[{index}] entry '{files[index]}'.");
+            }
+
+            normalizedFiles[index] = normalized;
+        }
+
+        return normalizedFiles;
+    }
 
     private static int GetOptionalInt(JsonElement root, string propertyName) =>
         root.TryGetProperty(propertyName, out var value) && value.TryGetInt32(out var parsed)

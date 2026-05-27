@@ -94,7 +94,7 @@ internal static class ReplayGraphEvidenceBuilder
             .ToArray();
 
     private static string? GetProperty(ReplayGraphNodeResult node, string name) =>
-        node.Properties.TryGetValue(name, out var value) ? value : null;
+        node.Properties.GetValueOrDefault(name);
 
     private static int Rank(string kind) => kind switch
     {

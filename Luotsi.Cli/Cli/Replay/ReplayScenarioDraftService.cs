@@ -123,7 +123,7 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
         DraftStep candidate,
         out ReplayScenarioDraftNormalization normalization)
     {
-        normalization = default!;
+        normalization = null!;
         var candidateKey = GetWaitKey(candidate.Step);
         if (candidateKey is null)
         {

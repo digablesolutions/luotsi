@@ -390,6 +390,8 @@ Usage:
   luotsi scenario-init [--file <scenario.json>] [--name <name>] [--package <app.id>] [--activity <activity>] [--force]
   luotsi scenario-list --path <scenario-file-or-directory-or-glob> [filters]
   luotsi scenario-validate (--file <scenario.json> | --path <scenario-file-or-directory-or-glob>)
+                           [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>]
+                           [--progress auto|line|plain|quiet|jsonl]
   luotsi scenario-explain --file <scenario.json>
 
 Examples:
@@ -400,7 +402,9 @@ Examples:
 Notes:
   Scenario metadata can declare tags, expected package/activity, screen size,
   orientation, and notes so Luotsi can warn when a device does not match the
-  scenario authoring target.
+  scenario authoring target. scenario-validate uses the same stderr progress
+  modes and report writers as run --validate-only, while stdout remains the
+  final command envelope.
 """,
         ["view"] = """
 Luotsi help: view

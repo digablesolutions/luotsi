@@ -4,7 +4,7 @@ namespace Luotsi.Cli.Artifacts;
 
 internal sealed class ArtifactMarkdownIndexRenderer
 {
-    public string Render(ArtifactIndexModel model)
+    public static string Render(ArtifactIndexModel model)
     {
         ArgumentNullException.ThrowIfNull(model);
 

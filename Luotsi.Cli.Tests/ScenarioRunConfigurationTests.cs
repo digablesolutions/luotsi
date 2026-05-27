@@ -90,6 +90,21 @@ public sealed class ScenarioRunConfigurationTests
         Assert.Equal(ScenarioProgressMode.Line, configuration.ProgressMode);
     }
 
+    [Theory]
+    [InlineData("0")]
+    [InlineData("false")]
+    [InlineData("")]
+    public void Create_Auto_Progress_Uses_Plain_Mode_When_CI_Is_Disabled(string ci)
+    {
+        var options = CliOptions.Parse(["run"]);
+
+        var configuration = ScenarioRunConfiguration.Create(
+            options,
+            new FakeEnvironmentVariables(new Dictionary<string, string> { ["CI"] = ci }));
+
+        Assert.Equal(ScenarioProgressMode.Plain, configuration.ProgressMode);
+    }
+
     [Fact]
     public void Create_Invalid_Progress_Throws_UsageException()
     {

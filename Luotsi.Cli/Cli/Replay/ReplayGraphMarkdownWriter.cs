@@ -356,5 +356,5 @@ internal static class ReplayGraphMarkdownWriter
             .Replace("\n", " ", StringComparison.Ordinal);
 
     private static string? GetProperty(ReplayGraphEdgeResult edge, string name) =>
-        edge.Properties.TryGetValue(name, out var value) ? value : null;
+        edge.Properties.GetValueOrDefault(name);
 }

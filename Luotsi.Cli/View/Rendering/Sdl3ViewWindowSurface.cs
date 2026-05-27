@@ -1418,6 +1418,15 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
         var bottomY = top + height - thickness;
         var rightX = left + width - thickness;
 
+        Segment((mask & segmentA) != 0, left, top, width, thickness);
+        Segment((mask & segmentB) != 0, rightX, top, thickness, height / 2f);
+        Segment((mask & segmentC) != 0, rightX, middleY, thickness, height / 2f);
+        Segment((mask & segmentD) != 0, left, bottomY, width, thickness);
+        Segment((mask & segmentE) != 0, left, middleY, thickness, height / 2f);
+        Segment((mask & segmentF) != 0, left, top, thickness, height / 2f);
+        Segment((mask & segmentG) != 0, left, middleY, width, thickness);
+        return;
+
         void Segment(bool enabled, float x, float y, float w, float h)
         {
             if (!enabled)
@@ -1427,14 +1436,6 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
 
             FillRect(new ViewChromeRect((int)MathF.Round(x), (int)MathF.Round(y), (int)MathF.Round(w), (int)MathF.Round(h)), scaleX, scaleY, r, g, b, a);
         }
-
-        Segment((mask & segmentA) != 0, left, top, width, thickness);
-        Segment((mask & segmentB) != 0, rightX, top, thickness, height / 2f);
-        Segment((mask & segmentC) != 0, rightX, middleY, thickness, height / 2f);
-        Segment((mask & segmentD) != 0, left, bottomY, width, thickness);
-        Segment((mask & segmentE) != 0, left, middleY, thickness, height / 2f);
-        Segment((mask & segmentF) != 0, left, top, thickness, height / 2f);
-        Segment((mask & segmentG) != 0, left, middleY, width, thickness);
     }
 
     private void DrawTooltip(ViewChromeTooltip tooltip, int logicalWidth, int logicalHeight, float scaleX, float scaleY)
@@ -1445,8 +1446,8 @@ internal sealed class Sdl3ViewWindowSurface : IViewWindowSurface
             return;
         }
 
-        var glyphWidth = 5 * TooltipGlyphCellSize;
-        var glyphHeight = 7 * TooltipGlyphCellSize;
+        const int glyphWidth = 5 * TooltipGlyphCellSize;
+        const int glyphHeight = 7 * TooltipGlyphCellSize;
         var textWidth = text.Length * glyphWidth + Math.Max(0, text.Length - 1) * TooltipGlyphGap;
         var tooltipWidth = textWidth + TooltipPaddingX * 2;
         var tooltipHeight = glyphHeight + TooltipPaddingY * 2;

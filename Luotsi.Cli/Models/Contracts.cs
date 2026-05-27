@@ -486,4 +486,3 @@ public sealed record ErrorInfo(string Type, string Message, string Category)
         return "scenario_error";
     }
 }
-

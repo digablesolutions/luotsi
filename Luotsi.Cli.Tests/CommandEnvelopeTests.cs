@@ -272,9 +272,12 @@ public sealed partial class AppTests
 
         Assert.Equal(0, exitCode);
         Assert.Equal("update_started", envelope.RootElement.GetProperty("data").GetProperty("status").GetString());
+        Assert.True(envelope.RootElement.GetProperty("data").TryGetProperty("detached_installer_stdout_log", out _));
+        Assert.True(envelope.RootElement.GetProperty("data").TryGetProperty("detached_installer_stderr_log", out _));
         var call = Assert.Single(processRunner.Calls);
         Assert.Contains("Start-Process", string.Join(" ", call.Args), StringComparison.Ordinal);
-        Assert.Contains("Wait-Process", string.Join(" ", call.Args), StringComparison.Ordinal);
+        Assert.Contains("-EncodedCommand", string.Join(" ", call.Args), StringComparison.Ordinal);
+        Assert.DoesNotContain("Wait-Process", string.Join(" ", call.Args), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -3602,6 +3605,40 @@ public sealed partial class AppTests
     [InlineData("""{"schema":"luotsi-artifact-package.v1","created_at":"2026-05-26T12:00:00Z","source_file_count":1,"category_counts":{"other":1},"recommended_commands":[],"files":["index.html"]}""", "missing string property 'run_id'")]
     [InlineData("""{"schema":"luotsi-artifact-package.v1","run_id":"20260526-120000-run","created_at":"2026-05-26T12:00:00Z","category_counts":{"other":1},"recommended_commands":[],"files":["index.html"]}""", "missing integer property 'source_file_count'")]
     public async Task RunAsync_ArtifactsUnpack_Rejects_Manifest_Missing_Required_Field(string manifestJson, string expectedMessage)
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var packagePath = "/tmp/share/replay.zip";
+        fileSystem.CreateDirectory("/tmp/share");
+        await using (var packageStream = fileSystem.OpenWrite(packagePath))
+        {
+            using var archive = new ZipArchive(packageStream, ZipArchiveMode.Create, leaveOpen: true);
+            _ = archive.CreateEntry("index.html");
+            var manifest = archive.CreateEntry("luotsi-artifact-package.json");
+            await using var entry = manifest.Open();
+            await using var writer = new StreamWriter(entry);
+            await writer.WriteAsync(manifestJson);
+        }
+
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "unpack", packagePath, "--output", "/tmp/unpacked"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains(expectedMessage, envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("""{"schema":"luotsi-artifact-package.v1","run_id":"20260526-120000-run","created_at":"2026-05-26T12:00:00Z","source_file_count":1,"category_counts":{"other":1},"recommended_commands":[],"files":["../escape.txt"]}""", "invalid files[0] entry")]
+    [InlineData("""{"schema":"luotsi-artifact-package.v1","run_id":"20260526-120000-run","created_at":"2026-05-26T12:00:00Z","source_file_count":1,"category_counts":{"other":1},"recommended_commands":[],"files":["luotsi-artifact-package.json"]}""", "invalid files[0] entry")]
+    [InlineData("""{"schema":"luotsi-artifact-package.v1","run_id":"20260526-120000-run","created_at":"2026-05-26T12:00:00Z","source_file_count":2,"category_counts":{"other":2},"recommended_commands":[],"files":["index.html","index.html"]}""", "duplicate files[1] entry")]
+    public async Task RunAsync_ArtifactsUnpack_Rejects_Manifest_With_Invalid_File_Entries(string manifestJson, string expectedMessage)
     {
         var fileSystem = new FakeFileSystem();
         var console = new FakeConsole();

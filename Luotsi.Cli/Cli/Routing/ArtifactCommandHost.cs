@@ -36,33 +36,33 @@ internal sealed class ArtifactCommandHost(
 
     private Task<ArtifactInfoResult> InfoAsync(CliOptions options)
     {
-        var target = RequireTarget(options, "info");
+        var target = RequireTarget(options, "info", "<artifact-root-or-run-id>");
         return _artifactCommandService.InfoAsync(target, options.Get("artifacts"));
     }
 
     private Task<ArtifactOpenResult> OpenAsync(CliOptions options)
     {
-        var target = RequireTarget(options, "open");
+        var target = RequireTarget(options, "open", "<artifact-root-or-run-id>");
         return _artifactCommandService.OpenAsync(target, options.Get("artifacts"), options.HasFlag("dry-run"));
     }
 
     private Task<ArtifactPackResult> PackAsync(CliOptions options)
     {
-        var target = RequireTarget(options, "pack");
+        var target = RequireTarget(options, "pack", "<artifact-root-or-run-id>");
         return _artifactCommandService.PackAsync(target, options.Get("artifacts"), options.Get("output"), options.HasFlag("force"), options.HasFlag("dry-run"));
     }
 
     private Task<ArtifactUnpackResult> UnpackAsync(CliOptions options)
     {
-        var target = RequireTarget(options, "unpack");
+        var target = RequireTarget(options, "unpack", "<artifact.zip>");
         return _artifactCommandService.UnpackAsync(target, options.Get("output"), options.HasFlag("force"), options.HasFlag("dry-run"));
     }
 
-    private static string RequireTarget(CliOptions options, string subcommand)
+    private static string RequireTarget(CliOptions options, string subcommand, string argumentName)
     {
         if (options.Arguments.Count < 2 || string.IsNullOrWhiteSpace(options.Arguments[1]))
         {
-            throw new UsageException($"artifacts {subcommand} requires <artifact-root-or-run-id>.");
+            throw new UsageException($"artifacts {subcommand} requires {argumentName}.");
         }
 
         return options.Arguments[1];

@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -12,7 +13,7 @@ internal interface ISelfUpdateService
 {
     Task<LuotsiVersionInfo> GetVersionInfoAsync(CancellationToken cancellationToken = default);
 
-    Task<LuotsiUpdateResult> UpdateAsync(CliOptions options, CancellationToken cancellationToken = default);
+    Task<LuotsiUpdateResult> UpdateAsync(CliOptions options, string? artifactRoot = null, CancellationToken cancellationToken = default);
 }
 
 internal sealed class SelfUpdateService(
@@ -58,7 +59,7 @@ internal sealed class SelfUpdateService(
             manifest is not null);
     }
 
-    public async Task<LuotsiUpdateResult> UpdateAsync(CliOptions options, CancellationToken cancellationToken = default)
+    public async Task<LuotsiUpdateResult> UpdateAsync(CliOptions options, string? artifactRoot = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(options);
 
@@ -81,7 +82,7 @@ internal sealed class SelfUpdateService(
             throw new UsageException("update on Windows requires --detach because Luotsi must hand off to a background installer after the current process exits.");
         }
 
-        var command = BuildInstallerCommand(manifest, requestedVersion, detached);
+        var command = BuildInstallerCommand(manifest, requestedVersion, detached, artifactRoot);
         var target = requestedVersion ?? "latest stable release";
         if (options.HasFlag("dry-run"))
         {
@@ -92,7 +93,9 @@ internal sealed class SelfUpdateService(
                 manifest.InstallRoot,
                 manifest.Rid,
                 command.FileName,
-                command.Args);
+                command.Args,
+                command.DetachedInstallerStdoutLog,
+                command.DetachedInstallerStderrLog);
         }
 
         var process = await _processRunner.RunAsync(command.FileName, command.Args, cancellationToken).ConfigureAwait(false);
@@ -110,6 +113,8 @@ internal sealed class SelfUpdateService(
             manifest.Rid,
             command.FileName,
             command.Args,
+            command.DetachedInstallerStdoutLog,
+            command.DetachedInstallerStderrLog,
             process);
     }
 
@@ -170,33 +175,40 @@ internal sealed class SelfUpdateService(
         }
     }
 
-    private static InstallerCommand BuildInstallerCommand(LuotsiInstallManifest manifest, string? version, bool detached)
+    private static InstallerCommand BuildInstallerCommand(LuotsiInstallManifest manifest, string? version, bool detached, string? artifactRoot)
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
             var installScript = BuildPowerShellInstallScript(manifest, version);
             if (detached)
             {
-                var escapedInstallScript = EscapePowerShellSingleQuoted($"Wait-Process -Id {Environment.ProcessId}; {installScript}");
-                var launcher = $"Start-Process -WindowStyle Hidden powershell -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-Command','{escapedInstallScript}')";
-                return new InstallerCommand("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", launcher], "update_started");
+                var detachedScript = BuildDetachedPowerShellInstallScript(installScript);
+                var encodedCommand = EncodePowerShellCommand(detachedScript);
+                var (stdoutLog, stderrLog) = BuildDetachedInstallerLogPaths(artifactRoot);
+                var launcher = $"Start-Process -WindowStyle Hidden powershell -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-EncodedCommand','{encodedCommand}')";
+                if (stdoutLog is not null && stderrLog is not null)
+                {
+                    launcher += $" -RedirectStandardOutput '{EscapePowerShellSingleQuoted(stdoutLog)}' -RedirectStandardError '{EscapePowerShellSingleQuoted(stderrLog)}'";
+                }
+
+                return new InstallerCommand("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", launcher], "update_started", stdoutLog, stderrLog);
             }
 
-            return new InstallerCommand("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", installScript], "updated");
+            return new InstallerCommand("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", installScript], "updated", null, null);
         }
 
-        var shellCommand = $"curl -fsSL https://github.com/{Owner}/{Repository}/releases/latest/download/luotsi-install.sh | sh -s -- --install-root {QuoteShell(manifest.InstallRoot)} --skip-path-update";
+        var shellCommand = $"curl -fsSL {QuoteShell(GetInstallerScriptUrl("luotsi-install.sh", version))} | sh -s -- --install-root {QuoteShell(manifest.InstallRoot)} --skip-path-update";
         if (!string.IsNullOrWhiteSpace(version))
         {
             shellCommand += $" --version {QuoteShell(version)}";
         }
 
-        return new InstallerCommand("sh", ["-c", shellCommand], "updated");
+        return new InstallerCommand("sh", ["-c", shellCommand], "updated", null, null);
     }
 
     private static string BuildPowerShellInstallScript(LuotsiInstallManifest manifest, string? version)
     {
-        var script = $"& ([scriptblock]::Create((irm https://github.com/{Owner}/{Repository}/releases/latest/download/luotsi-install.ps1))) -InstallRoot '{EscapePowerShellSingleQuoted(manifest.InstallRoot)}' -SkipPathUpdate";
+        var script = $"& ([scriptblock]::Create((irm {GetInstallerScriptUrl("luotsi-install.ps1", version)}))) -InstallRoot '{EscapePowerShellSingleQuoted(manifest.InstallRoot)}' -SkipPathUpdate";
         if (!string.IsNullOrWhiteSpace(version))
         {
             script += $" -Version {version}";
@@ -204,6 +216,22 @@ internal sealed class SelfUpdateService(
 
         return script;
     }
+
+    private static string BuildDetachedPowerShellInstallScript(string installScript) =>
+        $"$ErrorActionPreference = 'Stop'; Wait-Process -Id {Environment.ProcessId} -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 250; {installScript}";
+
+    private static string EncodePowerShellCommand(string command) =>
+        Convert.ToBase64String(Encoding.Unicode.GetBytes(command));
+
+    private static string GetInstallerScriptUrl(string scriptName, string? version) =>
+        string.IsNullOrWhiteSpace(version)
+            ? $"https://github.com/{Owner}/{Repository}/releases/latest/download/{scriptName}"
+            : $"https://github.com/{Owner}/{Repository}/releases/download/{version}/{scriptName}";
+
+    private static (string? StdoutLog, string? StderrLog) BuildDetachedInstallerLogPaths(string? artifactRoot) =>
+        string.IsNullOrWhiteSpace(artifactRoot)
+            ? (null, null)
+            : (Path.Join(artifactRoot, "detached-installer.out.log"), Path.Join(artifactRoot, "detached-installer.err.log"));
 
     private static string? NormalizeTag(string? value)
     {
@@ -233,7 +261,12 @@ internal sealed class SelfUpdateService(
     private static string PreferError(ProcessResult result) =>
         string.IsNullOrWhiteSpace(result.Stderr) ? result.Stdout : result.Stderr;
 
-    private sealed record InstallerCommand(string FileName, IReadOnlyList<string> Args, string ResultStatus);
+    private sealed record InstallerCommand(
+        string FileName,
+        IReadOnlyList<string> Args,
+        string ResultStatus,
+        string? DetachedInstallerStdoutLog,
+        string? DetachedInstallerStderrLog);
 }
 
 internal sealed record LuotsiVersionInfo(
@@ -261,15 +294,17 @@ internal sealed record LuotsiUpdateResult(
     string Rid,
     string Installer,
     IReadOnlyList<string> InstallerArgs,
+    string? DetachedInstallerStdoutLog,
+    string? DetachedInstallerStderrLog,
     int? ExitCode,
     string? Stdout,
     string? Stderr)
 {
-    public static LuotsiUpdateResult DryRun(string? currentTag, string target, string channel, string installRoot, string rid, string installer, IReadOnlyList<string> args) =>
-        new("dry_run", currentTag, target, channel, installRoot, rid, installer, args, null, null, null);
+    public static LuotsiUpdateResult DryRun(string? currentTag, string target, string channel, string installRoot, string rid, string installer, IReadOnlyList<string> args, string? detachedInstallerStdoutLog, string? detachedInstallerStderrLog) =>
+        new("dry_run", currentTag, target, channel, installRoot, rid, installer, args, detachedInstallerStdoutLog, detachedInstallerStderrLog, null, null, null);
 
-    public static LuotsiUpdateResult Updated(string status, string? currentTag, string target, string channel, string installRoot, string rid, string installer, IReadOnlyList<string> args, ProcessResult process) =>
-        new(status, currentTag, target, channel, installRoot, rid, installer, args, process.ExitCode, process.Stdout, process.Stderr);
+    public static LuotsiUpdateResult Updated(string status, string? currentTag, string target, string channel, string installRoot, string rid, string installer, IReadOnlyList<string> args, string? detachedInstallerStdoutLog, string? detachedInstallerStderrLog, ProcessResult process) =>
+        new(status, currentTag, target, channel, installRoot, rid, installer, args, detachedInstallerStdoutLog, detachedInstallerStderrLog, process.ExitCode, process.Stdout, process.Stderr);
 }
 
 internal sealed record LuotsiInstallManifest(
