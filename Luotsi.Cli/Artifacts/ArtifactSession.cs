@@ -172,7 +172,8 @@ public sealed class ArtifactSession
     {
         var artifacts = options.Get("artifacts");
         var outputDir = options.Get("output-dir");
-        if (!string.IsNullOrWhiteSpace(artifacts) && !string.IsNullOrWhiteSpace(outputDir) &&
+        if (!string.IsNullOrWhiteSpace(artifacts) &&
+            !string.IsNullOrWhiteSpace(outputDir) &&
             !string.Equals(Path.GetFullPath(artifacts), Path.GetFullPath(outputDir), StringComparison.OrdinalIgnoreCase))
         {
             throw new UsageException("Use either --artifacts or --output-dir for the artifact root, not both.");
