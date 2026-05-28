@@ -380,7 +380,10 @@ Artifacts:
   Runs can emit JSONL lifecycle events, JSON summaries, JUnit XML, failure
   bundles, screenshots, recordings, and a browsable artifact index. Successful
   run results also include artifact_commands with exact artifacts open,
-  artifacts pack, and replay open commands for the run artifact root.
+  artifacts pack, and replay open commands for the run artifact root. With
+  --human or --console-output human, failed runs are rendered as a compact
+  triage capsule that surfaces the primary failure, evidence counts, and next
+  command.
 
 Progress:
   Run prints progress to stderr by default and keeps the final command envelope
@@ -645,7 +648,8 @@ Common options:
   --output-dir <directory>     run alias for --artifacts
   --poll-artifacts <final|per-attempt|none>
   -o, --output <mode>          view: human|json|jsonl
-  --human                      one-shot commands: print a concise text envelope
+  --human                      one-shot commands: print a concise text envelope;
+                               run/replay triage uses capsule-style summaries
   --console-output <human|json|quiet>
                                one-shot commands: choose terminal envelope mode
   --json                       view: stream JSONL events; one-shot commands: JSON envelope
