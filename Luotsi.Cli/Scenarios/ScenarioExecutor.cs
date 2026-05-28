@@ -201,7 +201,8 @@ public sealed class ScenarioExecutor
                         null,
                         lifecycleContext.ScenarioId,
                         lifecycleContext.File,
-                        scenario.Metadata));
+                        scenario.Metadata,
+                        Governance: ScenarioGovernanceClassifier.FromStatus("passed", null)));
             }).ConfigureAwait(false);
     }
 
@@ -380,7 +381,8 @@ public sealed class ScenarioExecutor
             failureSteps,
             failureArtifacts,
             context.ScenarioId,
-            context.Scenario.Metadata);
+            context.Scenario.Metadata,
+            Governance: ScenarioGovernanceClassifier.FromError(failedStep.Error, failedStep: CreateFailedStepResult(context.NextStepIndex, failedStep)));
     }
 
     private ScenarioRunFailureData CreateFinalFailureData(

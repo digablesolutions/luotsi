@@ -15,7 +15,8 @@ internal static class ScenarioMetadataCompatibility
         return result with
         {
             DeviceAllocation = allocation,
-            MetadataWarnings = Evaluate(result.Metadata, allocation)
+            MetadataWarnings = Evaluate(result.Metadata, allocation),
+            Governance = ScenarioGovernanceClassifier.FromScenarioResult(result with { DeviceAllocation = allocation })
         };
     }
 
@@ -24,11 +25,12 @@ internal static class ScenarioMetadataCompatibility
         ArgumentNullException.ThrowIfNull(result);
         ArgumentNullException.ThrowIfNull(allocation);
 
-        return result with
+        var updatedResult = result with
         {
             DeviceAllocation = allocation,
             Scenarios = result.Scenarios.Select(scenario => Attach(scenario, allocation)).ToArray()
         };
+        return updatedResult with { Governance = ScenarioGovernanceClassifier.FromBatch(updatedResult) };
     }
 
     public static ScenarioBatchItemResult Attach(ScenarioBatchItemResult result, ScenarioDeviceAllocation allocation)
@@ -37,10 +39,14 @@ internal static class ScenarioMetadataCompatibility
         ArgumentNullException.ThrowIfNull(allocation);
 
         var data = result.Data is null ? null : Attach(result.Data, allocation);
-        return result with
+        var updatedResult = result with
         {
             Data = data,
             MetadataWarnings = Evaluate(data?.Metadata ?? result.Metadata, allocation)
+        };
+        return updatedResult with
+        {
+            Governance = ScenarioGovernanceClassifier.FromBatchItem(updatedResult, allocation)
         };
     }
 
@@ -49,7 +55,11 @@ internal static class ScenarioMetadataCompatibility
         ArgumentNullException.ThrowIfNull(result);
         ArgumentNullException.ThrowIfNull(allocation);
 
-        return result with { MetadataWarnings = Evaluate(result.Metadata, allocation) };
+        return result with
+        {
+            MetadataWarnings = Evaluate(result.Metadata, allocation),
+            Governance = ScenarioGovernanceClassifier.FromFailureData(result, allocation)
+        };
     }
 
     public static IReadOnlyList<ScenarioMetadataWarning> Evaluate(

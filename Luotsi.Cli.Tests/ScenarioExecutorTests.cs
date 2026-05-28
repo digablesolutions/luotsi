@@ -381,9 +381,14 @@ public sealed partial class AppTests
         Assert.Equal(durationMs, endedEvent.GetProperty("duration_ms").GetDouble());
         Assert.Equal(durationMs, envelope.RootElement.GetProperty("data").GetProperty("timing").GetProperty("total_ms").GetDouble());
         Assert.Equal(durationMs, envelope.RootElement.GetProperty("data").GetProperty("timing").GetProperty("non_step_ms").GetDouble());
+        Assert.Equal("validated", envelope.RootElement.GetProperty("data").GetProperty("governance").GetProperty("kind").GetString());
         Assert.Equal("validated", report.RootElement.GetProperty("status").GetString());
         Assert.Equal(0, report.RootElement.GetProperty("failed_count").GetInt32());
+        Assert.Equal("validated", report.RootElement.GetProperty("governance").GetProperty("kind").GetString());
+        Assert.Equal("validated", report.RootElement.GetProperty("scenarios")[0].GetProperty("governance").GetProperty("kind").GetString());
         Assert.Equal(durationMs, report.RootElement.GetProperty("scenarios")[0].GetProperty("duration_ms").GetDouble());
+        Assert.Equal("validated", endedEvent.GetProperty("governance").GetProperty("kind").GetString());
+        Assert.Equal("validated", events[^1].GetProperty("governance").GetProperty("kind").GetString());
         Assert.Empty(junit.Root!.Elements("testcase").Single().Elements("failure"));
         Assert.Empty(host.StartAppRequests);
         Assert.Empty(host.KeyEventRequests);
@@ -1041,11 +1046,66 @@ public sealed partial class AppTests
         var eventAllocation = endedEvent.GetProperty("device_allocation");
         Assert.Equal("SER123", eventAllocation.GetProperty("serial").GetString());
         Assert.Equal("dev.luotsi.app", eventAllocation.GetProperty("package").GetString());
+        Assert.Equal("scenario_observable_failure", endedEvent.GetProperty("governance").GetProperty("kind").GetString());
+        Assert.True(endedEvent.GetProperty("governance").GetProperty("regression_candidate").GetBoolean());
+        Assert.Contains("step 1", endedEvent.GetProperty("governance").GetProperty("summary").GetString(), StringComparison.Ordinal);
 
         var reportAllocation = report.RootElement.GetProperty("device_allocation");
         Assert.Equal("SER123", reportAllocation.GetProperty("serial").GetString());
         Assert.Equal("dev.luotsi.app", reportAllocation.GetProperty("package").GetString());
+        Assert.Equal("scenario_observable_failure", report.RootElement.GetProperty("governance").GetProperty("kind").GetString());
+        Assert.Equal("scenario_observable_failure", report.RootElement.GetProperty("scenarios")[0].GetProperty("governance").GetProperty("kind").GetString());
+        Assert.Contains("step 1", report.RootElement.GetProperty("governance").GetProperty("summary").GetString(), StringComparison.Ordinal);
       }
+
+    [Fact]
+    public async Task RunAsync_File_Startup_Device_Failure_Classifies_Lab_Infrastructure_In_Events_And_Report()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var host = new FakeDeviceHost
+        {
+            PreflightTemplate = new PreflightResult("Old Box", "16", "36", "focus", null, null, "fingerprint", "arm64-v8a", "SER123"),
+            DeviceFingerprintException = new InvalidOperationException("device offline")
+        };
+        host.ConnectedDevices.Add(new DeviceInfo("SER123", "offline", "product:box model:Old_Box device:box usb:1-1"));
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync([
+            "run",
+            "--file", "/tmp/scenario.json",
+            "--events-jsonl", "/tmp/events.jsonl",
+            "--report-json", "/tmp/report.json"]);
+        var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal("lab_infrastructure_failure", events[^1].GetProperty("governance").GetProperty("kind").GetString());
+        Assert.True(events[^1].GetProperty("governance").GetProperty("infrastructure_related").GetBoolean());
+        Assert.True(events[^1].GetProperty("governance").GetProperty("quarantine_candidate").GetBoolean());
+        Assert.Contains("SER123", events[^1].GetProperty("governance").GetProperty("summary").GetString(), StringComparison.Ordinal);
+        Assert.Equal("lab_infrastructure_failure", report.RootElement.GetProperty("governance").GetProperty("kind").GetString());
+        Assert.Equal("lab_infrastructure_failure", report.RootElement.GetProperty("scenarios")[0].GetProperty("governance").GetProperty("kind").GetString());
+        Assert.True(report.RootElement.GetProperty("governance").GetProperty("quarantine_candidate").GetBoolean());
+        Assert.Contains("SER123", report.RootElement.GetProperty("governance").GetProperty("summary").GetString(), StringComparison.Ordinal);
+    }
 
     [Fact]
     public async Task RunAsync_File_Runs_Setup_Steps_Teardown_In_Order()
@@ -1522,9 +1582,11 @@ public sealed partial class AppTests
         Assert.Equal("luotsi", report.RootElement.GetProperty("provenance").GetProperty("tool").GetString());
         Assert.True(report.RootElement.GetProperty("provenance").TryGetProperty("framework", out _));
         Assert.Equal(1, report.RootElement.GetProperty("passed_count").GetInt32());
+        Assert.Equal("passed", report.RootElement.GetProperty("governance").GetProperty("kind").GetString());
         Assert.Equal("single", report.RootElement.GetProperty("scenarios")[0].GetProperty("scenario").GetString());
         Assert.Equal("/tmp/scenario.json::single", report.RootElement.GetProperty("scenarios")[0].GetProperty("scenario_id").GetString());
         Assert.Equal("/tmp/scenario.json", report.RootElement.GetProperty("scenarios")[0].GetProperty("file").GetString());
+        Assert.Equal("passed", report.RootElement.GetProperty("scenarios")[0].GetProperty("governance").GetProperty("kind").GetString());
         Assert.Equal("sleep", report.RootElement.GetProperty("scenarios")[0].GetProperty("steps")[0].GetProperty("action").GetString());
         Assert.Equal(1, report.RootElement.GetProperty("metrics").GetProperty("step_count").GetInt32());
         Assert.Equal(1, report.RootElement.GetProperty("scenarios")[0].GetProperty("metrics").GetProperty("action.sleep.count").GetInt32());
@@ -1603,6 +1665,17 @@ public sealed partial class AppTests
         Assert.Equal("/tmp/scenarios/fails.json", failed.Attribute("classname")!.Value);
         Assert.Equal("/tmp/scenarios/fails.json::fails", failed.Attribute("id")!.Value);
         Assert.Contains("metric: step_count=", failed.Element("system-out")!.Value, StringComparison.Ordinal);
+        var suiteGovernance = report.Root.Element("properties")!.Elements("property").ToDictionary(
+            static property => property.Attribute("name")!.Value,
+            static property => property.Attribute("value")!.Value,
+            StringComparer.Ordinal);
+        Assert.Equal("scenario_observable_failure", suiteGovernance["luotsi.governance.kind"]);
+        var failedGovernance = failed.Element("properties")!.Elements("property").ToDictionary(
+            static property => property.Attribute("name")!.Value,
+            static property => property.Attribute("value")!.Value,
+            StringComparer.Ordinal);
+        Assert.Equal("scenario_observable_failure", failedGovernance["luotsi.governance.kind"]);
+        Assert.Equal("true", failedGovernance["luotsi.governance.regression_candidate"]);
     }
 
     [Fact]
@@ -1942,6 +2015,8 @@ public sealed partial class AppTests
         Assert.Equal(1, events[^1].GetProperty("matched_count").GetInt32());
         Assert.Equal(1, events[^1].GetProperty("selected_count").GetInt32());
         Assert.Equal(0, events[^1].GetProperty("sharded_out_count").GetInt32());
+        Assert.Equal("environment_failure", events[^1].GetProperty("governance").GetProperty("kind").GetString());
+        Assert.Equal("high", events[^1].GetProperty("governance").GetProperty("confidence").GetString());
       }
 
 
@@ -2491,6 +2566,8 @@ public sealed partial class AppTests
         Assert.Equal("log_wait_timeout", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
         Assert.Equal("failed", envelope.RootElement.GetProperty("data").GetProperty("status").GetString());
         Assert.Equal("wait for ready marker", envelope.RootElement.GetProperty("data").GetProperty("failed_step").GetProperty("name").GetString());
+        Assert.Equal("scenario_observable_failure", envelope.RootElement.GetProperty("data").GetProperty("governance").GetProperty("kind").GetString());
+        Assert.True(envelope.RootElement.GetProperty("data").GetProperty("governance").GetProperty("regression_candidate").GetBoolean());
         var failureArtifacts = envelope.RootElement.GetProperty("data").GetProperty("failure_artifacts");
         Assert.Equal(ResultSchemas.FailureBundle, failureArtifacts.GetProperty("schema").GetString());
         Assert.True(failureArtifacts.GetProperty("artifacts").GetArrayLength() >= 2);

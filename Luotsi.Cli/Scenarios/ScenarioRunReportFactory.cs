@@ -34,7 +34,8 @@ internal static class ScenarioRunReportFactory
             result.DeviceAllocation,
             provenance,
             [CreateScenarioFromSuccess(result, file, attachmentPolicy)],
-            result.ProgressMode ?? progressMode);
+            Governance: result.Governance,
+            ProgressMode: result.ProgressMode ?? progressMode);
 
     public static ScenarioRunReport FromSingleFailure(
         string file,
@@ -71,7 +72,8 @@ internal static class ScenarioRunReportFactory
             deviceAllocation,
             provenance,
             [scenario],
-            progressMode,
+            Governance: ScenarioGovernanceClassifier.FromException(exception),
+            ProgressMode: progressMode,
             Error: error);
     }
 
@@ -102,7 +104,8 @@ internal static class ScenarioRunReportFactory
             result.DeviceAllocation,
             provenance,
             result.Scenarios.Select(scenario => CreateScenarioFromBatchItem(scenario, attachmentPolicy)).ToArray(),
-            result.ProgressMode ?? progressMode);
+            Governance: result.Governance,
+            ProgressMode: result.ProgressMode ?? progressMode);
 
     public static ScenarioRunReport FromBatchFailure(
         ScenarioRunPlan plan,
@@ -139,7 +142,8 @@ internal static class ScenarioRunReportFactory
             deviceAllocation,
             provenance,
             scenarios,
-            progressMode,
+            Governance: ScenarioGovernanceClassifier.FromException(exception),
+            ProgressMode: progressMode,
             Error: error);
     }
 
@@ -172,7 +176,8 @@ internal static class ScenarioRunReportFactory
             null,
             provenance,
             [CreateScenarioFromException(query.Path, exception, "scenario discovery", $"{query.Path}::discovery")],
-            progressMode,
+            Governance: ScenarioGovernanceClassifier.FromException(exception),
+            ProgressMode: progressMode,
             Error: error);
     }
 
@@ -193,7 +198,8 @@ internal static class ScenarioRunReportFactory
             ScenarioReportArtifactProjection.FromSteps(result.Steps, attachmentPolicy),
             null,
             result.Metadata,
-            result.MetadataWarnings);
+            result.MetadataWarnings,
+            result.Governance);
 
     private static ScenarioReportScenario CreateScenarioFromFailure(
         ScenarioRunFailureData data,
@@ -212,7 +218,8 @@ internal static class ScenarioRunReportFactory
             ScenarioReportArtifactProjection.FromFailureAndSteps(data.Steps, data.FailureArtifacts, attachmentPolicy),
             error,
             data.Metadata,
-            data.MetadataWarnings);
+            data.MetadataWarnings,
+            data.Governance);
 
     private static ScenarioReportScenario CreateScenarioFromBatchItem(
         ScenarioBatchItemResult item,
@@ -239,7 +246,8 @@ internal static class ScenarioRunReportFactory
             item.Steps is null ? [] : ScenarioReportArtifactProjection.FromSteps(item.Steps, attachmentPolicy),
             item.Error,
             item.Metadata,
-            item.MetadataWarnings);
+            item.MetadataWarnings,
+            item.Governance);
     }
 
     private static ScenarioReportScenario CreateScenarioFromException(
@@ -260,7 +268,8 @@ internal static class ScenarioRunReportFactory
             [],
             null,
             [],
-            ScenarioErrorInfo.From(exception));
+            ScenarioErrorInfo.From(exception),
+            Governance: ScenarioGovernanceClassifier.FromException(exception));
     }
 
     private static double CalculateDurationMs(DateTimeOffset startedAt, DateTimeOffset endedAt) =>

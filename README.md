@@ -184,6 +184,12 @@ If you already have a device connected, start from the workflow that matches wha
   luotsi run --path scenarios --device <serial> --report-junit junit.xml
   ```
 
+  Run JSON reports, JSONL lifecycle events, and failed run payloads include an
+  additive `governance` verdict so CI can tell whether a red run looks like
+  observable scenario/app behavior, lab/device trouble, environment/setup debt,
+  or a Luotsi/harness-side failure. JUnit mirrors that metadata under
+  `luotsi.governance.*` properties.
+
 The CLI also exposes this directly via `luotsi help quickstart`.
 
 ## Code layout

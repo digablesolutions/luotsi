@@ -178,7 +178,8 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
                 FailedCount: IsFailed(result.Status) ? 1 : 0,
                 Metrics: result.Metrics,
                 DeviceAllocation: result.DeviceAllocation,
-                Provenance: _provenance),
+                Provenance: _provenance,
+                Governance: result.Governance),
             ex => CreateFailedRunEndedEvent(file, ex, passedCount: 0, failedCount: 1)).ConfigureAwait(false);
     }
 
@@ -217,7 +218,8 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
                 ShardStrategy: result.ShardStrategy,
                 Metrics: result.Metrics,
                 DeviceAllocation: result.DeviceAllocation,
-                Provenance: _provenance),
+                Provenance: _provenance,
+                Governance: result.Governance),
             ex => CreateFailedRunEndedEvent(
                 plan.Query.Path,
                 ex,
@@ -334,7 +336,8 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
             Metrics: ScenarioFailureDetails.TryGetMetrics(exception),
             DeviceAllocation: ScenarioFailureDetails.TryGetDeviceAllocation(exception),
             Provenance: _provenance,
-            Error: ScenarioErrorInfo.From(exception));
+            Error: ScenarioErrorInfo.From(exception),
+            Governance: ScenarioGovernanceClassifier.FromException(exception));
 }
 
 internal readonly record struct ScenarioLifecycleContext(
@@ -380,7 +383,8 @@ internal sealed class ScenarioLifecycleCoordinator(TimeProvider timeProvider, IS
                 ScenarioId: context.ScenarioId,
                 Scenario: context.ScenarioName,
                 DurationMs: Math.Max(0, (endedAt - context.StartedAt).TotalMilliseconds),
-                Metrics: result.Metrics)).ConfigureAwait(false);
+                Metrics: result.Metrics,
+                Governance: result.Governance)).ConfigureAwait(false);
             return result;
         }
         catch (Exception ex)
@@ -394,7 +398,8 @@ internal sealed class ScenarioLifecycleCoordinator(TimeProvider timeProvider, IS
                 ScenarioId: context.ScenarioId,
                 Scenario: context.ScenarioName,
                 DurationMs: Math.Max(0, (endedAt - context.StartedAt).TotalMilliseconds),
-                Metrics: ScenarioFailureDetails.TryGetMetrics(ex))).ConfigureAwait(false);
+                Metrics: ScenarioFailureDetails.TryGetMetrics(ex),
+                Governance: ScenarioGovernanceClassifier.FromException(ex))).ConfigureAwait(false);
             throw;
         }
     }
@@ -425,7 +430,8 @@ internal sealed record ScenarioEvent(
     [property: JsonPropertyName("metrics")] IReadOnlyDictionary<string, double>? Metrics = null,
     [property: JsonPropertyName("device_allocation")] ScenarioDeviceAllocation? DeviceAllocation = null,
     [property: JsonPropertyName("provenance")] BuildProvenance? Provenance = null,
-    [property: JsonPropertyName("error")] object? Error = null);
+    [property: JsonPropertyName("error")] object? Error = null,
+    [property: JsonPropertyName("governance")] ScenarioGovernanceVerdict? Governance = null);
 
 internal sealed record ScenarioReplayTimelineEvent(
     [property: JsonPropertyName("type")] string Type,
@@ -452,7 +458,8 @@ internal sealed record ScenarioReplayTimelineEvent(
     [property: JsonPropertyName("metrics")] IReadOnlyDictionary<string, double>? Metrics = null,
     [property: JsonPropertyName("device_allocation")] ScenarioDeviceAllocation? DeviceAllocation = null,
     [property: JsonPropertyName("provenance")] BuildProvenance? Provenance = null,
-    [property: JsonPropertyName("error")] object? Error = null)
+    [property: JsonPropertyName("error")] object? Error = null,
+    [property: JsonPropertyName("governance")] ScenarioGovernanceVerdict? Governance = null)
 {
     public static ScenarioReplayTimelineEvent FromScenarioEvent(ScenarioEvent scenarioEvent)
     {
@@ -483,6 +490,7 @@ internal sealed record ScenarioReplayTimelineEvent(
             scenarioEvent.Metrics,
             scenarioEvent.DeviceAllocation,
             scenarioEvent.Provenance,
-            scenarioEvent.Error);
+            scenarioEvent.Error,
+            scenarioEvent.Governance);
     }
 }

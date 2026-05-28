@@ -1,3 +1,4 @@
+using Luotsi.Cli.Errors;
 using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Scenarios;
@@ -29,6 +30,11 @@ internal static class ScenarioErrorInfo
     public static string GetCategory(Exception exception)
     {
         ArgumentNullException.ThrowIfNull(exception);
+        if (exception is UsageException)
+        {
+            return "usage_error";
+        }
+
         return exception is ICommandFailureDetails failure
             ? failure.CategoryOverride
             : ErrorInfo.Classify(exception.Message);

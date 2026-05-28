@@ -275,7 +275,7 @@ Scenario runner flags:
 - `--validate-only` validates the selected scenario file(s) and writes reports without creating a device host or executing device work.
 - `--dry-run` is available only with `run --path`; it returns the selected scenario plan after filtering and sharding without validating or executing it.
 - `--validate-only` and `--dry-run` are mutually exclusive.
-- `--events-jsonl`, `--report-json`, and `--report-junit` write machine-readable run outputs for validation and execution flows.
+- `--events-jsonl`, `--report-json`, and `--report-junit` write machine-readable run outputs for validation and execution flows. Run JSON payloads now include an additive `governance` object with `kind`, `confidence`, `summary`, and operator signals such as `regression_candidate`, `infrastructure_related`, and `quarantine_candidate`. JUnit mirrors the same verdict under `luotsi.governance.*` testsuite/testcase properties.
 - `--progress auto|line|plain|quiet|jsonl` controls live progress on stderr. `--quiet` also selects quiet progress for `run` unless `--progress quiet` is supplied explicitly. The final command envelope stays on stdout unless one-shot quiet output is enabled; `--events-jsonl` remains the durable event artifact.
 - `--output-dir <directory>` is a scenario-run alias for `--artifacts <directory>`. Successful run results include `artifact_commands` with exact `artifacts open`, `artifacts pack`, and `replay open` commands for the run artifact root.
 - `--capture-on failure|never` controls runtime failure capture during scenario execution.

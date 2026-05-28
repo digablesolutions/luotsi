@@ -68,6 +68,7 @@ internal sealed class JUnitScenarioRunReportWriter(IFileSystem fileSystem, strin
                 new XAttribute("skipped", 0),
                 new XAttribute("time", Seconds(report.DurationMs)),
                 new XAttribute("timestamp", report.StartedAt.ToString("O", CultureInfo.InvariantCulture)),
+                CreateGovernanceProperties(report.Governance),
                 testCases));
     }
 
@@ -79,6 +80,11 @@ internal sealed class JUnitScenarioRunReportWriter(IFileSystem fileSystem, strin
             new XAttribute("name", scenario.Scenario),
             new XAttribute("id", scenario.ScenarioId ?? scenario.Scenario),
             new XAttribute("time", Seconds(scenario.DurationMs ?? 0)));
+        var governanceProperties = CreateGovernanceProperties(scenario.Governance);
+        if (governanceProperties is not null)
+        {
+            element.Add(governanceProperties);
+        }
 
         if (string.Equals(scenario.Status, "failed", StringComparison.OrdinalIgnoreCase))
         {
@@ -110,6 +116,26 @@ internal sealed class JUnitScenarioRunReportWriter(IFileSystem fileSystem, strin
 
     private static string Seconds(double milliseconds) =>
         Math.Max(0, milliseconds / 1000d).ToString("0.###", CultureInfo.InvariantCulture);
+
+    private static XElement? CreateGovernanceProperties(ScenarioGovernanceVerdict? governance)
+    {
+        if (governance is null)
+        {
+            return null;
+        }
+
+        return new XElement(
+            "properties",
+            new XElement("property", new XAttribute("name", "luotsi.governance.kind"), new XAttribute("value", governance.Kind)),
+            new XElement("property", new XAttribute("name", "luotsi.governance.confidence"), new XAttribute("value", governance.Confidence)),
+            new XElement("property", new XAttribute("name", "luotsi.governance.summary"), new XAttribute("value", governance.Summary)),
+            new XElement("property", new XAttribute("name", "luotsi.governance.regression_candidate"), new XAttribute("value", governance.RegressionCandidate.ToString().ToLowerInvariant())),
+            new XElement("property", new XAttribute("name", "luotsi.governance.infrastructure_related"), new XAttribute("value", governance.InfrastructureRelated.ToString().ToLowerInvariant())),
+            new XElement("property", new XAttribute("name", "luotsi.governance.quarantine_candidate"), new XAttribute("value", governance.QuarantineCandidate.ToString().ToLowerInvariant())),
+            string.IsNullOrWhiteSpace(governance.RecommendedAction)
+                ? null
+                : new XElement("property", new XAttribute("name", "luotsi.governance.recommended_action"), new XAttribute("value", governance.RecommendedAction)));
+    }
 }
 
 internal static class ScenarioReportFileSystem
