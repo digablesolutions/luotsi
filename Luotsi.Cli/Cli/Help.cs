@@ -383,7 +383,11 @@ Artifacts:
   artifacts pack, and replay open commands for the run artifact root. With
   --human or --console-output human, failed runs are rendered as a compact
   triage capsule that surfaces the primary failure, evidence counts, and next
-  command.
+  command. JSON reports, JSONL lifecycle events, and failed run payloads also
+  include an additive governance verdict so CI and operators can distinguish
+  observable scenario failures from lab/device or environment/setup failures.
+  JUnit output mirrors that verdict under luotsi.governance.* testcase and
+  testsuite properties.
 
 Progress:
   Run prints progress to stderr by default and keeps the final command envelope

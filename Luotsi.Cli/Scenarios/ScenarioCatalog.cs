@@ -75,6 +75,7 @@ public sealed record ScenarioRunResult(
     string? File = null,
     ScenarioMetadata? Metadata = null,
     IReadOnlyList<ScenarioMetadataWarning>? MetadataWarnings = null,
+    ScenarioGovernanceVerdict? Governance = null,
     string? ProgressMode = null,
     IReadOnlyList<ScenarioArtifactCommandHint>? ArtifactCommands = null);
 
@@ -89,7 +90,8 @@ public sealed record ScenarioRunFailureData(
     FailureArtifactBundle FailureArtifacts,
     string? ScenarioId = null,
     ScenarioMetadata? Metadata = null,
-    IReadOnlyList<ScenarioMetadataWarning>? MetadataWarnings = null);
+    IReadOnlyList<ScenarioMetadataWarning>? MetadataWarnings = null,
+    ScenarioGovernanceVerdict? Governance = null);
 
 public sealed record ScenarioMetadataWarning(
     string Code,
@@ -108,7 +110,8 @@ public sealed record ScenarioBatchItemResult(
     ErrorInfo? Error = null,
     string? ScenarioId = null,
     ScenarioMetadata? Metadata = null,
-    IReadOnlyList<ScenarioMetadataWarning>? MetadataWarnings = null)
+    IReadOnlyList<ScenarioMetadataWarning>? MetadataWarnings = null,
+    ScenarioGovernanceVerdict? Governance = null)
 {
     public static ScenarioBatchItemResult FromSuccess(ScenarioRunResult result, ScenarioCatalogEntry? catalogEntry = null)
     {
@@ -122,7 +125,8 @@ public sealed record ScenarioBatchItemResult(
             result.File ?? catalogEntry?.File,
             ScenarioId: result.ScenarioId ?? catalogEntry?.Id,
             Metadata: result.Metadata ?? catalogEntry?.Metadata,
-            MetadataWarnings: result.MetadataWarnings);
+            MetadataWarnings: result.MetadataWarnings,
+            Governance: result.Governance);
     }
 
     public static ScenarioBatchItemResult FromFailure(string scenario, string file, ScenarioRunFailureData? data, ErrorInfo error, string? scenarioId = null)
@@ -137,7 +141,8 @@ public sealed record ScenarioBatchItemResult(
             Error: error,
             ScenarioId: scenarioId ?? data?.ScenarioId ?? ScenarioIdentity.Create(file, scenario),
             Metadata: data?.Metadata,
-            MetadataWarnings: data?.MetadataWarnings);
+            MetadataWarnings: data?.MetadataWarnings,
+            Governance: data?.Governance ?? ScenarioGovernanceClassifier.FromError(error));
     }
 }
 
@@ -156,6 +161,7 @@ public sealed record ScenarioRunBatchResult(
     string ShardStrategy = ScenarioShardStrategies.Index,
     IReadOnlyDictionary<string, double>? Metrics = null,
     ScenarioDeviceAllocation? DeviceAllocation = null,
+    ScenarioGovernanceVerdict? Governance = null,
     string? ProgressMode = null,
     IReadOnlyList<ScenarioArtifactCommandHint>? ArtifactCommands = null);
 

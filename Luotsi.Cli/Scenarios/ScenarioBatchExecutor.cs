@@ -44,7 +44,11 @@ internal sealed class ScenarioBatchExecutor(
             plan.Query.ShardIndex,
             results,
             plan.Query.ShardStrategy);
-        return result with { Metrics = _metricsCollector.CollectBatch(new ScenarioBatchMetricContext(result)) };
+        return result with
+        {
+            Metrics = _metricsCollector.CollectBatch(new ScenarioBatchMetricContext(result)),
+            Governance = ScenarioGovernanceClassifier.FromBatch(result)
+        };
     }
 
     private static ScenarioBatchItemResult CreateFailureResult(ScenarioCatalogEntry scenario, Exception exception)
