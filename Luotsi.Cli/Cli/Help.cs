@@ -77,10 +77,10 @@ Artifacts:
   non-dry-run restores, and reports the manifest plus SHA-256 before you open
   or replay it.
   artifacts info/open also accept --last so you can jump straight back to the
-  latest artifact root under the default temp artifact root or
+  latest run artifact root under the default Luotsi run-artifact home or
   --artifacts <directory>.
   When the target is a run id rather than a full path, Luotsi searches the
-  default temp artifact root or --artifacts <directory>.
+  default Luotsi run-artifact home or --artifacts <directory>.
 
 Examples:
   luotsi screen-state --device emulator-5554 --artifacts artifacts
@@ -152,9 +152,9 @@ Common workflows:
     luotsi run --path scenarios --device <adb serial> --report-junit junit.xml
 
 Tips:
-  Use --artifacts <directory> when you want a stable output location instead of
-  the default temp folder. For scenario runs, --output-dir <directory> is a
-  clearer alias for the same root.
+  Scenario runs write artifacts into the default Luotsi run-artifact home
+  unless you override it with --artifacts <directory>. --output-dir <directory>
+  is a clearer alias for the same root.
   Use luotsi help view, luotsi help scenario, and luotsi help lab when you want
   a deeper command family reference.
 """,

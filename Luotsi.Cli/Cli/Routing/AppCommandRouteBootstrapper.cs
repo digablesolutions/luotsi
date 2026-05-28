@@ -92,7 +92,12 @@ internal sealed class AppCommandRouteBootstrapper(
             return ArtifactSession.AttachExisting(artifactRoot, _fileSystem, options.Get("poll-artifacts"));
         }
 
-        return ArtifactSession.Create(options, _fileSystem, _timeProvider);
+        return ArtifactSession.Create(
+            options,
+            _fileSystem,
+            _timeProvider,
+            _environment,
+            preferWorkspaceHome: ShouldPreferWorkspaceHome(options));
     }
 
     private string ResolveReplayArtifactRoot(CliOptions options)
@@ -100,7 +105,7 @@ internal sealed class AppCommandRouteBootstrapper(
         var artifactRoot = options.Get("artifacts");
         if (IsReplayOpenCommand(options) && options.HasFlag("last"))
         {
-            return ArtifactRootResolver.ResolveLatestArtifactRoot(_fileSystem, artifactRoot);
+            return ArtifactRootResolver.ResolveLatestArtifactRoot(_fileSystem, artifactRoot, _environment, preferWorkspaceHome: true);
         }
 
         if (!string.IsNullOrWhiteSpace(artifactRoot))
@@ -119,6 +124,9 @@ internal sealed class AppCommandRouteBootstrapper(
     private static bool IsReplayOpenCommand(CliOptions options) =>
         options.Arguments.Count > 0 &&
         string.Equals(options.Arguments[0], "open", StringComparison.OrdinalIgnoreCase);
+
+    private static bool ShouldPreferWorkspaceHome(CliOptions options) =>
+        string.Equals(options.Command, "run", StringComparison.OrdinalIgnoreCase);
 }
 
 internal sealed record AppCommandRouteSetup(string AdbExecutable, ArtifactSession Artifacts);
