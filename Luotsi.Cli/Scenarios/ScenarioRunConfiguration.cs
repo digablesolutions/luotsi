@@ -20,6 +20,13 @@ internal enum ScenarioProgressMode
     Jsonl
 }
 
+internal enum ScenarioCiPolicyMode
+{
+    Off,
+    Advisory,
+    Enforced
+}
+
 internal sealed record ScenarioRunConfiguration(
     string? EventsJsonlPath,
     string? JsonReportPath,
@@ -31,7 +38,11 @@ internal sealed record ScenarioRunConfiguration(
     int DeviceWaitTimeoutSec,
     string? DeviceReadinessPackage,
     ScenarioProgressMode ProgressMode = ScenarioProgressMode.Plain,
-    LabLeaseResult? LabLease = null)
+    LabLeaseResult? LabLease = null,
+    ScenarioCiPolicyMode CiPolicyMode = ScenarioCiPolicyMode.Advisory,
+    int DeviceHealthWindowDays = 30,
+    int RetryBudget = 2,
+    int PassThreshold = 2)
 {
     public static ScenarioRunConfiguration Create(CliOptions options, IEnvironmentVariables? environment = null)
     {
@@ -47,7 +58,11 @@ internal sealed record ScenarioRunConfiguration(
             !options.HasFlag("no-require-device-ready"),
             options.Int("device-ready-timeout-sec", CliDefaults.DefaultTimeoutSeconds),
             NormalizePackage(options.Get("package")),
-            ParseProgressMode(options.Get("progress"), options.HasFlag("quiet"), environment));
+            ParseProgressMode(options.Get("progress"), options.HasFlag("quiet"), environment),
+            CiPolicyMode: ParseCiPolicyMode(options.Get("ci-policy")),
+            DeviceHealthWindowDays: ParsePositiveInt(options.Get("device-health-window-days"), 30, "--device-health-window-days"),
+            RetryBudget: ParseNonNegativeInt(options.Get("retry-budget"), 2, "--retry-budget"),
+            PassThreshold: ParsePositiveInt(options.Get("pass-threshold"), 2, "--pass-threshold"));
     }
 
     private static string? NormalizePath(string? value) =>
@@ -125,5 +140,51 @@ internal sealed record ScenarioRunConfiguration(
         return !string.IsNullOrWhiteSpace(ci) &&
             !string.Equals(ci, "0", StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(ci, "false", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static ScenarioCiPolicyMode ParseCiPolicyMode(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return ScenarioCiPolicyMode.Advisory;
+        }
+
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "off" => ScenarioCiPolicyMode.Off,
+            "advisory" => ScenarioCiPolicyMode.Advisory,
+            "enforced" => ScenarioCiPolicyMode.Enforced,
+            _ => throw new UsageException("--ci-policy must be one of: off, advisory, enforced.")
+        };
+    }
+
+    private static int ParsePositiveInt(string? value, int defaultValue, string optionName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return defaultValue;
+        }
+
+        if (!int.TryParse(value, out var parsed) || parsed <= 0)
+        {
+            throw new UsageException($"{optionName} must be greater than zero.");
+        }
+
+        return parsed;
+    }
+
+    private static int ParseNonNegativeInt(string? value, int defaultValue, string optionName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return defaultValue;
+        }
+
+        if (!int.TryParse(value, out var parsed) || parsed < 0)
+        {
+            throw new UsageException($"{optionName} must be zero or greater.");
+        }
+
+        return parsed;
     }
 }

@@ -88,6 +88,39 @@ public sealed class AppCommandShellTests
     }
 
     [Fact]
+    public void Resolve_Uses_Enforced_Ci_Policy_Exit_Code_When_Present()
+    {
+        var result = new ScenarioRunBatchResult(
+            "/tmp/scenarios",
+            "failed",
+            1,
+            1,
+            1,
+            0,
+            1,
+            0,
+            null,
+            null,
+            [],
+            CiPolicy: new ScenarioCiPolicyResult(
+                "enforced",
+                "device_quarantined",
+                20,
+                true,
+                1,
+                0,
+                2,
+                false,
+                true,
+                true,
+                "Device is quarantined."));
+
+        var exitCode = AppCommandExitCodeResolver.Resolve(result);
+
+        Assert.Equal(20, exitCode);
+    }
+
+    [Fact]
     public void WriteUsageError_Returns_Usage_Exit_Code()
     {
         var console = new FakeConsole();
@@ -99,6 +132,44 @@ public sealed class AppCommandShellTests
         using var envelope = console.ParseSingleOutputAsJson();
         Assert.Equal(2, exitCode);
         Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+    }
+
+    [Fact]
+    public async Task WriteFailureAsync_Uses_Enforced_Ci_Policy_Exit_Code_When_Failure_Data_Provides_It()
+    {
+        var console = new FakeConsole();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-18T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var responder = new AppCommandFailureResponder(new AppCommandEnvelopeWriter(console, timeProvider, CreateProvenance()));
+        var context = new AppExecutionContext(timeProvider.GetUtcNow(), CliOptions.Parse(["run", "--artifacts", "/tmp/artifacts"]));
+        var failure = new ScenarioStepFailureException(
+            "Device is quarantined.",
+            "configuration_error",
+            new ScenarioRunFailureData(
+                "login smoke",
+                "/tmp/scenarios/login.json",
+                "failed",
+                new ScenarioRunTiming(1000, 100, 850, 50),
+                ScenarioMetrics.Empty,
+                new ScenarioFailedStepResult(1, "wait login button", "waitVisible", 500, new ScenarioStepTiming(500, 100, null, 400)),
+                [],
+                new FailureArtifactBundle(ResultSchemas.FailureBundle, timeProvider.GetUtcNow(), "scenario", "login smoke", "/tmp/scenarios/login.json", 1, "wait login button", "waitVisible", "System.InvalidOperationException", "device offline", [], []),
+                CiPolicy: new ScenarioCiPolicyResult(
+                    "enforced",
+                    "device_quarantined",
+                    20,
+                    true,
+                    1,
+                    0,
+                    2,
+                    false,
+                    true,
+                    true,
+                    "Device is quarantined.")),
+            new InvalidOperationException("Device is quarantined."));
+
+        var exitCode = await responder.WriteFailureAsync("run", timeProvider.GetUtcNow(), context, failure);
+
+        Assert.Equal(20, exitCode);
     }
 
     [Fact]
