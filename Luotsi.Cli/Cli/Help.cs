@@ -394,7 +394,7 @@ Artifacts:
   recommended CI disposition. Artifacts also persist device-health.json and
   ci-policy.json beside the normal run evidence. JUnit mirrors these signals
   under luotsi.governance.*, luotsi.device_health.*, and luotsi.policy.*
-  testsuite properties.
+  testsuite and testcase properties.
 
 CI policy:
   --ci-policy advisory keeps the existing command exit behavior and emits the

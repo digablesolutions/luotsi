@@ -116,9 +116,22 @@ internal sealed class ScenarioDeviceHealthRegistry(IFileSystem fileSystem, TimeP
             observations);
 
         _fileSystem.CreateDirectory(GetRegistryRoot());
-        await using (var stream = _fileSystem.OpenWrite(path, overwrite: true))
+        var tempPath = $"{path}.tmp-{Guid.NewGuid():N}";
+        try
         {
-            await JsonSerializer.SerializeAsync(stream, updatedRecord, AppJson.Options).ConfigureAwait(false);
+            await using (var stream = _fileSystem.OpenWrite(tempPath, overwrite: true))
+            {
+                await JsonSerializer.SerializeAsync(stream, updatedRecord, AppJson.Options).ConfigureAwait(false);
+            }
+
+            _fileSystem.CopyFile(tempPath, path, overwrite: true);
+        }
+        finally
+        {
+            if (_fileSystem.FileExists(tempPath))
+            {
+                _fileSystem.DeleteFile(tempPath);
+            }
         }
 
         return new ScenarioDeviceHealthSnapshot(

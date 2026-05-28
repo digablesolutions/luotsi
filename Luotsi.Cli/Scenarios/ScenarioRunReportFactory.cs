@@ -274,6 +274,7 @@ internal static class ScenarioRunReportFactory
         string? scenarioId = null)
     {
         var scenarioName = scenario ?? Path.GetFileNameWithoutExtension(file);
+        var failureData = ScenarioFailureDetails.TryGetData(exception);
         return new ScenarioReportScenario(
             scenarioName,
             scenarioId ?? ScenarioIdentity.Create(file, scenarioName),
@@ -287,8 +288,8 @@ internal static class ScenarioRunReportFactory
             [],
             ScenarioErrorInfo.From(exception),
             Governance: ScenarioGovernanceClassifier.FromException(exception),
-            DeviceHealth: ScenarioFailureDetails.TryGetData(exception)?.DeviceHealth,
-            CiPolicy: ScenarioFailureDetails.TryGetData(exception)?.CiPolicy);
+            DeviceHealth: failureData?.DeviceHealth,
+            CiPolicy: failureData?.CiPolicy);
     }
 
     private static double CalculateDurationMs(DateTimeOffset startedAt, DateTimeOffset endedAt) =>
