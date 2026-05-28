@@ -22,7 +22,14 @@ internal static class ScenarioGovernanceClassifier
     public static ScenarioGovernanceVerdict FromFailureData(ScenarioRunFailureData data, ScenarioDeviceAllocation? allocation = null)
     {
         ArgumentNullException.ThrowIfNull(data);
-        return FromError(data.Steps[data.FailedStep.Index - 1].Error, allocation, data.FailedStep);
+        var failedStepIndex = data.FailedStep.Index - 1;
+        if (failedStepIndex < 0 || failedStepIndex >= data.Steps.Count)
+        {
+            return CreateUnknownFailure(
+                $"The run failed at step {data.FailedStep.Index} ({data.FailedStep.Name}) but the step payload did not contain a matching failed step.");
+        }
+
+        return FromError(data.Steps[failedStepIndex].Error, allocation, data.FailedStep);
     }
 
     public static ScenarioGovernanceVerdict FromBatchItem(ScenarioBatchItemResult item, ScenarioDeviceAllocation? allocation = null)

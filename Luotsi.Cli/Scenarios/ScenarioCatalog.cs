@@ -75,9 +75,9 @@ public sealed record ScenarioRunResult(
     string? File = null,
     ScenarioMetadata? Metadata = null,
     IReadOnlyList<ScenarioMetadataWarning>? MetadataWarnings = null,
-    ScenarioGovernanceVerdict? Governance = null,
     string? ProgressMode = null,
-    IReadOnlyList<ScenarioArtifactCommandHint>? ArtifactCommands = null);
+    IReadOnlyList<ScenarioArtifactCommandHint>? ArtifactCommands = null,
+    ScenarioGovernanceVerdict? Governance = null);
 
 public sealed record ScenarioRunFailureData(
     string Scenario,
@@ -161,9 +161,9 @@ public sealed record ScenarioRunBatchResult(
     string ShardStrategy = ScenarioShardStrategies.Index,
     IReadOnlyDictionary<string, double>? Metrics = null,
     ScenarioDeviceAllocation? DeviceAllocation = null,
-    ScenarioGovernanceVerdict? Governance = null,
     string? ProgressMode = null,
-    IReadOnlyList<ScenarioArtifactCommandHint>? ArtifactCommands = null);
+    IReadOnlyList<ScenarioArtifactCommandHint>? ArtifactCommands = null,
+    ScenarioGovernanceVerdict? Governance = null);
 
 public sealed record ScenarioArtifactCommandHint(
     string Kind,
