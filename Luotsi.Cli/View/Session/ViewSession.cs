@@ -132,6 +132,8 @@ public sealed class ViewSession : IViewSession
     private readonly IArtifactFolderOpener _artifactFolderOpener;
     private readonly TimeSpan _autoReconnectAfter;
     private readonly Lock _writeGate = new();
+    private SessionReplayArtifacts? _replayArtifacts;
+    private ViewConsoleEventWriter? _consoleEventWriter;
 
     public ViewSession(IDeviceHost deviceHost, ArtifactSession artifacts, ViewSessionRuntime runtime)
     {
@@ -159,13 +161,22 @@ public sealed class ViewSession : IViewSession
         ArgumentNullException.ThrowIfNull(options);
 
         var sessionId = Guid.NewGuid().ToString("N");
+        var replayStartedAt = _timeProvider.GetUtcNow();
         var activeDeviceSelector = options.DeviceSelector;
         var usesSharedTransport = !string.IsNullOrWhiteSpace(options.JoinShareEndpoint);
         var emittedShareStarted = false;
         TcpViewShareServer? shareServer = null;
+        _replayArtifacts = new SessionReplayArtifacts(_artifacts, "view", sessionId, replayStartedAt);
+        _replayArtifacts.SetTarget(usesSharedTransport ? options.JoinShareEndpoint : activeDeviceSelector);
+        _consoleEventWriter = new ViewConsoleEventWriter(_console, options);
 
         try
         {
+            if (!usesSharedTransport)
+            {
+                await EnsureSelectedDeviceVisibleAsync(activeDeviceSelector).ConfigureAwait(false);
+            }
+
             await using var recorder = new SessionControlledViewRecorder(_viewRecorderFactory, options);
             IViewRenderer? renderer = null;
             SessionViewRenderer sessionRenderer;
@@ -417,13 +428,22 @@ public sealed class ViewSession : IViewSession
                     await sessionRenderer.FlushPendingStatsAsync().ConfigureAwait(false);
                 }
 
+                var endedAt = _timeProvider.GetUtcNow();
                 WriteJsonLine(new
                 {
                     type = SessionEventTypes.View.Ended,
                     session_id = sessionId,
-                    ended_at = _timeProvider.GetUtcNow(),
+                    ended_at = endedAt,
                     reason = endReason
                 });
+
+                var replayArtifacts = _replayArtifacts;
+                if (replayArtifacts is not null)
+                {
+                    await replayArtifacts.PersistAsync(endedAt, endReason, 0).ConfigureAwait(false);
+                }
+
+                _replayArtifacts = null;
 
                 return 0;
             }
@@ -437,11 +457,23 @@ public sealed class ViewSession : IViewSession
         }
         catch (Exception ex)
         {
+            var diagnostic = ViewRuntimeDiagnostic.From(ex, options);
+            var endedAt = _timeProvider.GetUtcNow();
+            WriteJsonLine(new
+            {
+                type = SessionEventTypes.View.Diagnostic,
+                session_id = sessionId,
+                occurred_at = endedAt,
+                category = diagnostic.Category,
+                message = diagnostic.Message,
+                next_command = diagnostic.NextCommand
+            });
+
             WriteJsonLine(new
             {
                 type = SessionEventTypes.View.Error,
                 session_id = sessionId,
-                occurred_at = _timeProvider.GetUtcNow(),
+                occurred_at = endedAt,
                 error = ErrorInfo.From(ex, ex is UsageException ? "usage_error" : ErrorInfo.Classify(ex.Message))
             });
 
@@ -449,9 +481,18 @@ public sealed class ViewSession : IViewSession
             {
                 type = SessionEventTypes.View.Ended,
                 session_id = sessionId,
-                ended_at = _timeProvider.GetUtcNow(),
+                ended_at = endedAt,
                 reason = "error"
             });
+
+            var replayArtifacts = _replayArtifacts;
+            if (replayArtifacts is not null)
+            {
+                await replayArtifacts.PersistAsync(endedAt, "error", 1).ConfigureAwait(false);
+            }
+
+            _replayArtifacts = null;
+            _consoleEventWriter = null;
 
             return 1;
         }
@@ -468,6 +509,7 @@ public sealed class ViewSession : IViewSession
             }
 
             _ = _deviceHost;
+            _consoleEventWriter = null;
         }
     }
 
@@ -475,8 +517,75 @@ public sealed class ViewSession : IViewSession
     {
         lock (_writeGate)
         {
-            _console.WriteLine(JsonSerializer.Serialize(value, OutputJsonOptions));
+            var json = JsonSerializer.Serialize(value, OutputJsonOptions);
+            if (_consoleEventWriter is null)
+            {
+                _console.WriteLine(json);
+            }
+            else
+            {
+                _consoleEventWriter.Write(json);
+            }
+
+            _replayArtifacts?.RecordSerializedEvent(json);
         }
+    }
+
+    private async Task EnsureSelectedDeviceVisibleAsync(string deviceSelector)
+    {
+        DeviceListResult devices;
+        try
+        {
+            devices = await _deviceHost.GetDevicesAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException)
+        {
+            return;
+        }
+
+        if (devices.Devices.Count == 0 ||
+            devices.Devices.Any(device => string.Equals(device.Serial, deviceSelector, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        var visibleSerials = devices.Devices
+            .Where(static device => !string.IsNullOrWhiteSpace(device.Serial))
+            .Select(static device => device.Serial!)
+            .ToArray();
+        var suggestion = FindDeviceSuggestion(deviceSelector, visibleSerials);
+        var visible = string.Join(", ", visibleSerials);
+        var message = $"Configured device '{deviceSelector}' is not visible to adb.";
+        if (!string.IsNullOrWhiteSpace(visible))
+        {
+            message += $" Visible devices: {visible}.";
+        }
+
+        if (!string.IsNullOrWhiteSpace(suggestion))
+        {
+            message += $" Did you mean '--device {suggestion}'?";
+        }
+
+        throw new UsageException(message);
+    }
+
+    private static string? FindDeviceSuggestion(string deviceSelector, IReadOnlyList<string> visibleSerials)
+    {
+        if (visibleSerials.Count == 1)
+        {
+            return visibleSerials[0];
+        }
+
+        var selectorHost = GetHostPart(deviceSelector);
+        return visibleSerials.FirstOrDefault(serial =>
+            serial.StartsWith(deviceSelector, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(GetHostPart(serial), selectorHost, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string GetHostPart(string serial)
+    {
+        var separator = serial.LastIndexOf(':');
+        return separator <= 0 ? serial : serial[..separator];
     }
 
     private async IAsyncEnumerable<ViewPacket> GuardReconnectBudgetAsync(
@@ -507,7 +616,7 @@ public sealed class ViewSession : IViewSession
         return new ViewConnectionInfo($"share-{Guid.NewGuid():N}", "unknown", ViewTransportConstants.CurrentProtocolVersion, 0, 0, port, "share-relay", "shared-tcp", host);
     }
 
-    private async IAsyncEnumerable<ViewPacket> RelayPacketsAsync(
+    private static async IAsyncEnumerable<ViewPacket> RelayPacketsAsync(
         IAsyncEnumerable<ViewPacket> packets,
         TcpViewShareServer shareServer,
         [EnumeratorCancellation] CancellationToken cancellationToken)
@@ -708,4 +817,83 @@ public sealed class ViewSession : IViewSession
         exception is InvalidOperationException invalidOperationException &&
         invalidOperationException.Message.Contains("Unexpected end of stream", StringComparison.Ordinal);
 }
+
+internal sealed record ViewRuntimeDiagnostic(string Category, string Message, string NextCommand)
+{
+    public static ViewRuntimeDiagnostic From(Exception exception, ViewOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        ArgumentNullException.ThrowIfNull(options);
+
+        var message = exception.Message;
+        var commandPrefix = BuildDiagnosticCommandPrefix(options);
+        var viewCommandPrefix = BuildViewCommandPrefix(options);
+
+        if (exception is UsageException && message.Contains("decoder", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ViewRuntimeDiagnostic(
+                "decoder",
+                "The requested host decoder is not available for live view.",
+                string.IsNullOrWhiteSpace(options.JoinShareEndpoint)
+                    ? $"{commandPrefix} --decoder ffmpeg --fix"
+                    : $"{viewCommandPrefix} --decoder ffmpeg");
+        }
+
+        if (exception is UsageException && message.Contains("not visible to adb", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ViewRuntimeDiagnostic(
+                "usage_error",
+                "Live view device selection is not usable.",
+                "luotsi devices");
+        }
+
+        if (message.Contains("Android view helper package was not found", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("view helper", StringComparison.OrdinalIgnoreCase) && message.Contains("manifest", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ViewRuntimeDiagnostic(
+                "helper",
+                "The Android view helper is missing or does not match the expected helper components.",
+                string.IsNullOrWhiteSpace(options.JoinShareEndpoint)
+                    ? $"luotsi view setup --device {options.DeviceSelector} --capture-backend {options.CaptureBackend} --fix"
+                    : $"{viewCommandPrefix} --capture-backend {options.CaptureBackend}");
+        }
+
+        if (exception is MediaProjectionConsentException ||
+            message.Contains("MediaProjection consent", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ViewRuntimeDiagnostic(
+                "mediaprojection_consent",
+                "MediaProjection could not start because Android screen-capture consent was not approved.",
+                $"{viewCommandPrefix} --capture-backend auto");
+        }
+
+        if (message.Contains("forward", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("localhost", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("Unexpected end of stream", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ViewRuntimeDiagnostic(
+                "transport",
+                "The adb-forward view transport did not become readable.",
+                string.IsNullOrWhiteSpace(options.JoinShareEndpoint)
+                    ? $"{commandPrefix} --capture-backend {options.CaptureBackend} --fix"
+                    : $"{viewCommandPrefix} --capture-backend {options.CaptureBackend}");
+        }
+
+        return new ViewRuntimeDiagnostic(
+            ErrorInfo.Classify(message),
+            "Live view failed before it reached a stable stream.",
+            $"{commandPrefix} --capture-backend {options.CaptureBackend}");
+    }
+
+    private static string BuildDiagnosticCommandPrefix(ViewOptions options) =>
+        string.IsNullOrWhiteSpace(options.JoinShareEndpoint)
+            ? $"luotsi view-doctor --device {options.DeviceSelector}"
+            : $"luotsi view --join-share {options.JoinShareEndpoint}";
+
+    private static string BuildViewCommandPrefix(ViewOptions options) =>
+        string.IsNullOrWhiteSpace(options.JoinShareEndpoint)
+            ? $"luotsi view --device {options.DeviceSelector}"
+            : $"luotsi view --join-share {options.JoinShareEndpoint}";
+}
+
 

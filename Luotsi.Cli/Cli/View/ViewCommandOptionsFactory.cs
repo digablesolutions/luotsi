@@ -16,7 +16,12 @@ internal static class ViewCommandOptionsFactory
         var device = options.Get("device");
         if (!allowJoinShare || string.IsNullOrWhiteSpace(joinShareEndpoint))
         {
-            device = options.Require("device");
+            if (string.IsNullOrWhiteSpace(device))
+            {
+                throw new UsageException(allowJoinShare
+                    ? $"{commandName} requires --device <adb serial> or --join-share <host:port>."
+                    : $"{commandName} requires --device <adb serial>.");
+            }
         }
         else if (!string.IsNullOrWhiteSpace(device))
         {
@@ -38,6 +43,7 @@ internal static class ViewCommandOptionsFactory
         }
 
         var captureBackend = ResolveCaptureBackend(options.Get("capture-backend"), commandName);
+        var consoleOutput = ResolveConsoleOutput(options.Get("output") ?? options.Get("o"), options.HasFlag("json"), options.HasFlag("quiet"), commandName);
 
         return new ViewOptions(
             device ?? joinShareEndpoint ?? string.Empty,
@@ -60,7 +66,8 @@ internal static class ViewCommandOptionsFactory
             options.HasFlag("always-on-top"),
             scaleMode,
             captureBackend,
-            commandTimeout);
+            commandTimeout,
+            consoleOutput);
     }
 
     private static int GetIntOrDefault(CliOptions options, string key, int defaultValue) =>
@@ -94,6 +101,32 @@ internal static class ViewCommandOptionsFactory
             ViewCaptureBackends.Screenrecord => ViewCaptureBackends.Screenrecord,
             ViewCaptureBackends.MediaProjection => ViewCaptureBackends.MediaProjection,
             _ => throw new UsageException($"{commandName} requires --capture-backend to be auto, screenrecord, or mediaprojection.")
+        };
+    }
+
+    private static string ResolveConsoleOutput(string? value, bool json, bool quiet, string commandName)
+    {
+        if (quiet)
+        {
+            return ViewConsoleOutputModes.Quiet;
+        }
+
+        if (json)
+        {
+            return ViewConsoleOutputModes.Jsonl;
+        }
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return ViewConsoleOutputModes.Human;
+        }
+
+        return value.Trim().ToLowerInvariant() switch
+        {
+            ViewConsoleOutputModes.Human => ViewConsoleOutputModes.Human,
+            ViewConsoleOutputModes.Json => ViewConsoleOutputModes.Jsonl,
+            ViewConsoleOutputModes.Jsonl => ViewConsoleOutputModes.Jsonl,
+            _ => throw new UsageException($"{commandName} requires --output to be human, json, or jsonl.")
         };
     }
 }

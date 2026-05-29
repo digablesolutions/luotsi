@@ -13,24 +13,41 @@
     <SelfContained Condition="'$(SelfContained)' == ''">true</SelfContained>
     <PublishTrimmed Condition="'$(PublishTrimmed)' == ''">false</PublishTrimmed>
     <IncludeNativeLibrariesForSelfExtract Condition="'$(IncludeNativeLibrariesForSelfExtract)' == ''">true</IncludeNativeLibrariesForSelfExtract>
+    <ApplicationIcon>Assets\luotsi-icon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="FFmpeg.AutoGen" Version="8.1.0" />
-    <PackageReference Include="ppy.SDL3-CS" Version="2025.1115.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Resilience" Version="10.6.0" />
+    <PackageReference Include="ppy.SDL3-CS" Version="2026.520.0" />
+    <PackageReference Include="Scriban" Version="7.2.1" />
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="Assets\luotsi-icon.bmp" LogicalName="Luotsi.Cli.Assets.luotsi-icon.bmp" />
+    <EmbeddedResource Include="Artifacts\Templates\artifact-index.scriban" LogicalName="Luotsi.Cli.Artifacts.Templates.artifact-index.scriban" />
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="..\ffmpeg\download-ffmpeg.ps1"
-             Link="ffmpeg\download-ffmpeg.ps1"
+    <Content Include="../ffmpeg/download-ffmpeg.ps1"
+             Link="ffmpeg/download-ffmpeg.ps1"
+             ExcludeFromSingleFile="true"
              CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="..\Luotsi.ViewServer.Android\**\*"
-             Exclude="..\Luotsi.ViewServer.Android\**\bin\**;..\Luotsi.ViewServer.Android\**\obj\**;..\Luotsi.ViewServer.Android\**\.gradle\**;..\Luotsi.ViewServer.Android\**\build\**"
-             Link="Luotsi.ViewServer.Android\%(RecursiveDir)%(Filename)%(Extension)"
+    <Content Include="../ffmpeg/bin/**/*"
+             Condition="Exists('$(MSBuildProjectDirectory)/../ffmpeg/bin')"
+             Link="ffmpeg/bin/%(RecursiveDir)%(Filename)%(Extension)"
+             ExcludeFromSingleFile="true"
+             CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Luotsi.ViewServer.Android/**/*"
+             Exclude="../Luotsi.ViewServer.Android/**/bin/**;../Luotsi.ViewServer.Android/**/obj/**;../Luotsi.ViewServer.Android/**/.gradle/**;../Luotsi.ViewServer.Android/**/build/**"
+             Link="Luotsi.ViewServer.Android/%(RecursiveDir)%(Filename)%(Extension)"
+             ExcludeFromSingleFile="true"
+             CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release.apk"
+             Condition="Exists('$(MSBuildProjectDirectory)/../Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release.apk')"
+             Link="Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release.apk"
+             ExcludeFromSingleFile="true"
              CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 

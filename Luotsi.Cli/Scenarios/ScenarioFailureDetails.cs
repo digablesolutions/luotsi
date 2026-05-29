@@ -24,12 +24,28 @@ internal static class ScenarioFailureDetails
             ? exception
             : new ScenarioAllocatedFailureException(exception, deviceAllocation);
     }
+
+    public static void UpdateDataPayload(Exception exception, ScenarioRunFailureData dataPayload)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        ArgumentNullException.ThrowIfNull(dataPayload);
+
+        switch (exception)
+        {
+            case ScenarioAllocatedFailureException allocatedFailure:
+                allocatedFailure.UpdateDataPayload(dataPayload);
+                break;
+            case ScenarioStepFailureException stepFailure:
+                stepFailure.UpdateDataPayload(dataPayload);
+                break;
+        }
+    }
 }
 
 internal sealed class ScenarioAllocatedFailureException : Exception, ICommandFailureDetails
 {
     private readonly ICommandFailureDetails? _failureDetails;
-    private readonly object? _dataPayload;
+    private object? _dataPayload;
 
     public ScenarioAllocatedFailureException(Exception innerException, ScenarioDeviceAllocation deviceAllocation)
         : base(innerException.Message, innerException)
@@ -48,4 +64,10 @@ internal sealed class ScenarioAllocatedFailureException : Exception, ICommandFai
     public object? DataPayload => _dataPayload;
 
     public ScenarioDeviceAllocation DeviceAllocation { get; }
+
+    internal void UpdateDataPayload(ScenarioRunFailureData dataPayload)
+    {
+        ArgumentNullException.ThrowIfNull(dataPayload);
+        _dataPayload = dataPayload;
+    }
 }

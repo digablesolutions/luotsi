@@ -87,10 +87,48 @@ public sealed class ViewTransportTests
         Assert.Equal(["forward", "tcp:0", "localabstract:luotsi_view_session123"], adb.RunCommands[1]);
         Assert.Contains("CLASSPATH='/data/local/tmp/luotsi-view-server.apk' app_process / 'dev.luotsi.view.Main'", adb.ShellCommands[0], StringComparison.Ordinal);
         Assert.Contains("--codec 'h264'", adb.ShellCommands[0], StringComparison.Ordinal);
-        Assert.Contains(phases, phase => phase.Phase == "helper_resolve" && phase.Status == ViewStartupPhaseStatus.Succeeded);
-        Assert.Contains(phases, phase => phase.Phase == "helper_push" && phase.Status == ViewStartupPhaseStatus.Succeeded);
-        Assert.Contains(phases, phase => phase.Phase == "adb_forward" && phase.Status == ViewStartupPhaseStatus.Succeeded);
-        Assert.Contains(phases, phase => phase.Phase == "screenrecord_process" && phase.Status == ViewStartupPhaseStatus.Succeeded);
+        Assert.Contains(phases, phase => phase is {Phase: "helper_resolve", Status: ViewStartupPhaseStatus.Succeeded});
+        Assert.Contains(phases, phase => phase is {Phase: "helper_push", Status: ViewStartupPhaseStatus.Succeeded});
+        Assert.Contains(phases, phase => phase is {Phase: "adb_forward", Status: ViewStartupPhaseStatus.Succeeded});
+        Assert.Contains(phases, phase => phase is {Phase: "screenrecord_process", Status: ViewStartupPhaseStatus.Succeeded});
+    }
+
+    [Fact]
+    public async Task AndroidViewServerInstaller_VerifyInstalledAsync_Accepts_Short_Service_Component_From_Dump()
+    {
+        var adb = new FakeAdbClient();
+        adb.EnqueueRunResult(new ProcessResult(0, "dev.luotsi.view/.ConsentActivity", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, """
+            Service Resolver Table:
+              Non-Data Actions:
+                  dev.luotsi.view/.CaptureService
+            Services:
+              ServiceRecord{abc dev.luotsi.view/.CaptureService}
+            """, string.Empty));
+        var locator = new FakeAndroidViewHelperPackageLocator(new AndroidViewHelperPackage("C:/tmp/helper.apk", "/data/local/tmp/luotsi-view-server.apk", "dev.luotsi.view.Main", "test-helper"));
+        var installer = new AndroidViewServerInstaller(adb, locator);
+
+        await installer.VerifyInstalledAsync(locator.Resolve());
+
+        Assert.Equal(["shell", "cmd", "package", "resolve-activity", "--brief", "dev.luotsi.view/.ConsentActivity"], adb.RunCommands[0]);
+        Assert.Equal(["shell", "pm", "dump", "dev.luotsi.view"], adb.RunCommands[1]);
+    }
+
+    [Fact]
+    public async Task AndroidViewServerInstaller_VerifyInstalledAsync_Does_Not_Fail_When_Package_Dump_Omits_Service()
+    {
+        var adb = new FakeAdbClient();
+        adb.EnqueueRunResult(new ProcessResult(0, "dev.luotsi.view/.ConsentActivity", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "Package [dev.luotsi.view]\n", string.Empty));
+        var phases = new List<ViewStartupPhase>();
+        var locator = new FakeAndroidViewHelperPackageLocator(new AndroidViewHelperPackage("C:/tmp/helper.apk", "/data/local/tmp/luotsi-view-server.apk", "dev.luotsi.view.Main", "test-helper"));
+        var installer = new AndroidViewServerInstaller(adb, locator, phases.Add);
+
+        await installer.VerifyInstalledAsync(locator.Resolve());
+
+        Assert.Contains(phases, phase =>
+            phase is {Phase: "helper_verify", Status: ViewStartupPhaseStatus.Succeeded} &&
+            phase.Detail?.Contains("not listed by package dump", StringComparison.Ordinal) == true);
     }
 
     [Fact]
@@ -125,7 +163,7 @@ public sealed class ViewTransportTests
         await bootstrap.StartAsync(new ViewStartRequest("adb", "device-1", 1280, 30, "8M", "h264", ViewCaptureBackends.Screenrecord));
         await bootstrap.StopAsync();
 
-        Assert.Equal(["forward", "--remove", "tcp:38543"], adb.RunCommands[2]);
+        Assert.Equal(["forward", "--remove", "tcp:38543"], adb.RunCommands[3]);
         Assert.Contains("pkill -f luotsi_view_session123", adb.ShellCommands[1], StringComparison.Ordinal);
         Assert.Contains("rm -f /data/local/tmp/luotsi-view-server.apk", adb.ShellCommands[2], StringComparison.Ordinal);
     }
@@ -146,7 +184,7 @@ public sealed class ViewTransportTests
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => bootstrap.StartAsync(new ViewStartRequest("adb", "device-1", 1280, 30, "8M", "h264", ViewCaptureBackends.Screenrecord)));
 
         Assert.Contains("view helper start failed", error.Message, StringComparison.Ordinal);
-        Assert.Equal(["forward", "--remove", "tcp:38543"], adb.RunCommands[2]);
+        Assert.Equal(["forward", "--remove", "tcp:38543"], adb.RunCommands[3]);
         Assert.Contains("pkill -f luotsi_view_session123", adb.ShellCommands[1], StringComparison.Ordinal);
         Assert.Contains("rm -f /data/local/tmp/luotsi-view-server.apk", adb.ShellCommands[2], StringComparison.Ordinal);
     }
@@ -207,11 +245,12 @@ public sealed class ViewTransportTests
         Assert.Equal(["shell", "cmd", "package", "resolve-activity", "--brief", "dev.luotsi.view/.ConsentActivity"], adb.RunCommands[1]);
         Assert.Equal(["shell", "pm", "dump", "dev.luotsi.view"], adb.RunCommands[2]);
         Assert.Equal(["forward", "tcp:0", "localabstract:luotsi_view_session123"], adb.RunCommands[3]);
-        Assert.Equal("shell", adb.RunCommands[4][0]);
-        Assert.Equal("am", adb.RunCommands[4][1]);
-        Assert.Equal("start", adb.RunCommands[4][2]);
-        Assert.Contains("dev.luotsi.view/.ConsentActivity", adb.RunCommands[4], StringComparer.Ordinal);
-        Assert.Contains("luotsi_view_session123", adb.RunCommands[4], StringComparer.Ordinal);
+        Assert.Equal(["forward", "--list"], adb.RunCommands[4]);
+        Assert.Equal("shell", adb.RunCommands[5][0]);
+        Assert.Equal("am", adb.RunCommands[5][1]);
+        Assert.Equal("start", adb.RunCommands[5][2]);
+        Assert.Contains("dev.luotsi.view/.ConsentActivity", adb.RunCommands[5], StringComparer.Ordinal);
+        Assert.Contains("luotsi_view_session123", adb.RunCommands[5], StringComparer.Ordinal);
         Assert.Contains("uiautomator dump /data/local/tmp/luotsi-view-window.xml", adb.ShellCommands[0], StringComparison.Ordinal);
         Assert.Contains("cat /data/local/tmp/luotsi-view-window.xml", adb.ShellCommands[0], StringComparison.Ordinal);
         Assert.Equal("input tap 1276 665", adb.ShellCommands[1]);
@@ -308,7 +347,7 @@ public sealed class ViewTransportTests
     public void AndroidViewHelperPackageLocator_Uses_Default_Project_Output_When_Environment_Is_Missing()
     {
         var fileSystem = new FakeFileSystem();
-        var expectedPath = Path.GetFullPath(Path.Join(Directory.GetCurrentDirectory(), "Luotsi.ViewServer.Android", "app", "build", "outputs", "apk", "debug", "app-debug.apk"));
+        var expectedPath = Path.GetFullPath(Path.Join(Directory.GetCurrentDirectory(), "Luotsi.ViewServer.Android", "app", "build", "outputs", "apk", "release", "app-release.apk"));
         fileSystem.AddFile(expectedPath, "apk");
         var locator = new AndroidViewHelperPackageLocator(new FakeEnvironmentVariables(new Dictionary<string, string>()), fileSystem);
 
@@ -322,7 +361,7 @@ public sealed class ViewTransportTests
     public void AndroidViewHelperPackageLocator_Uses_Published_App_Project_Output_When_Environment_Is_Missing()
     {
         var fileSystem = new FakeFileSystem();
-        var expectedPath = Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "Luotsi.ViewServer.Android", "app", "build", "outputs", "apk", "debug", "app-debug.apk"));
+        var expectedPath = Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "Luotsi.ViewServer.Android", "app", "build", "outputs", "apk", "release", "app-release.apk"));
         fileSystem.AddFile(expectedPath, "apk");
         var locator = new AndroidViewHelperPackageLocator(new FakeEnvironmentVariables(new Dictionary<string, string>()), fileSystem);
 
@@ -331,6 +370,19 @@ public sealed class ViewTransportTests
         Assert.Equal(expectedPath, package.LocalPath);
         Assert.Equal("/data/local/tmp/luotsi-view-server.apk", package.RemotePath);
         Assert.Equal("repository_default", package.ResolutionSource);
+    }
+
+    [Fact]
+    public void AndroidViewHelperPackageLocator_Missing_Helper_Message_Points_To_Setup_And_Release_Bundle()
+    {
+        var fileSystem = new FakeFileSystem();
+        var locator = new AndroidViewHelperPackageLocator(new FakeEnvironmentVariables(new Dictionary<string, string>()), fileSystem);
+
+        var error = Assert.Throws<InvalidOperationException>(locator.Resolve);
+
+        Assert.Contains("luotsi view setup --device <serial> --fix", error.Message, StringComparison.Ordinal);
+        Assert.Contains("LUOTSI_VIEW_HELPER_APK", error.Message, StringComparison.Ordinal);
+        Assert.Contains("release bundle", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -374,13 +426,30 @@ public sealed class ViewTransportTests
     }
 
     [Fact]
+    public void LibavNativeLibraryLoader_Prefers_Published_App_Ffmpeg_Before_Working_Directory()
+    {
+        var appFfmpeg = Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "ffmpeg", "bin"));
+        var binder = new FakeLibavNativeLibraryBinder();
+        binder.SucceedFor(appFfmpeg);
+        var loader = new LibavNativeLibraryLoader(
+            new FakeEnvironmentVariables(new Dictionary<string, string>()),
+            binder);
+
+        var resolvedRoot = loader.EnsureLoaded();
+
+        Assert.Equal(appFfmpeg, resolvedRoot);
+        Assert.Equal(appFfmpeg, binder.AttemptedRoots[0]);
+        Assert.Single(binder.AttemptedRoots);
+    }
+
+    [Fact]
     public void LibavNativeLibraryLoader_Missing_Libraries_Throws_Clear_Error()
     {
         var loader = new LibavNativeLibraryLoader(
             new FakeEnvironmentVariables(new Dictionary<string, string>()),
             new FakeLibavNativeLibraryBinder());
 
-        var error = Assert.Throws<InvalidOperationException>(() => loader.EnsureLoaded());
+        var error = Assert.Throws<InvalidOperationException>(loader.EnsureLoaded);
 
         Assert.Contains("LUOTSI_FFMPEG_ROOT", error.Message, StringComparison.Ordinal);
         Assert.Contains("ffmpeg", error.Message, StringComparison.OrdinalIgnoreCase);
@@ -838,10 +907,12 @@ public sealed class ViewTransportTests
 
         var commandHit = Assert.IsType<ViewChromeCommandHitTarget>(ViewChromeLayout.HitTest(1280, 720, 20, 20, chrome));
         var rotateHit = Assert.IsType<ViewChromeCommandHitTarget>(ViewChromeLayout.HitTest(1280, 720, 260, 20, chrome));
+        var helpHit = Assert.IsType<ViewChromeLocalHitTarget>(ViewChromeLayout.HitTest(1280, 720, 460, 20, chrome));
         var switchHit = Assert.IsType<ViewChromeSwitchDeviceHitTarget>(ViewChromeLayout.HitTest(1280, 720, 140, 692, chrome));
 
         Assert.Equal(ViewWindowCommand.TakeScreenshot, commandHit.Command);
         Assert.Equal(ViewWindowCommand.Rotate, rotateHit.Command);
+        Assert.Equal(ViewChromeLocalAction.ToggleHelpOverlay, helpHit.Action);
         Assert.Equal("device-b", switchHit.DeviceSelector);
     }
 
@@ -888,18 +959,45 @@ public sealed class ViewTransportTests
         var screenshotTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 20, 20, idleChrome, ViewScaleMode.Fit, false));
         var recordTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 60, 20, idleChrome, ViewScaleMode.Fit, false));
         var activeRecordTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 60, 20, recordingChrome, ViewScaleMode.Fit, false));
+        var backTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 140, 20, idleChrome, ViewScaleMode.Fit, false));
+        var homeTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 180, 20, idleChrome, ViewScaleMode.Fit, false));
         var rotateTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 260, 20, idleChrome, ViewScaleMode.Fit, false));
         var openArtifactsTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 340, 20, idleChrome, ViewScaleMode.Fit, false));
         var scaleTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 380, 20, idleChrome, ViewScaleMode.Fit, false));
         var fullscreenTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 420, 20, idleChrome, ViewScaleMode.Fit, true));
+        var helpTooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 460, 20, idleChrome, ViewScaleMode.Fit, false));
 
-        Assert.Equal("Screenshot", screenshotTooltip.Text);
-        Assert.Equal("Start Recording", recordTooltip.Text);
-        Assert.Equal("Stop Recording", activeRecordTooltip.Text);
-        Assert.Equal("Rotate", rotateTooltip.Text);
-        Assert.Equal("Open Artifacts", openArtifactsTooltip.Text);
-        Assert.Equal("Fill", scaleTooltip.Text);
-        Assert.Equal("Windowed", fullscreenTooltip.Text);
+        Assert.Equal("Screenshot F12", screenshotTooltip.Text);
+        Assert.Equal("Start Recording F9", recordTooltip.Text);
+        Assert.Equal("Stop Recording F9", activeRecordTooltip.Text);
+        Assert.Equal("Back F1", backTooltip.Text);
+        Assert.Equal("Home F2", homeTooltip.Text);
+        Assert.Equal("Rotate F4", rotateTooltip.Text);
+        Assert.Equal("Open Artifacts F7", openArtifactsTooltip.Text);
+        Assert.Equal("Fill F8", scaleTooltip.Text);
+        Assert.Equal("Windowed F11", fullscreenTooltip.Text);
+        Assert.Equal("Help F10", helpTooltip.Text);
+    }
+
+    [Fact]
+    public void ViewChromeLayout_ResolveTooltip_Describes_Share_Badge()
+    {
+        var chrome = new ViewChromeState(
+            "device-a",
+            [new ViewChromeDevice(1, "device-a", "device", "Primary", true)],
+            false,
+            false,
+            false,
+            true,
+            true,
+            true,
+            false,
+            "127.0.0.1:4040",
+            3);
+
+        var tooltip = Assert.IsType<ViewChromeTooltip>(ViewChromeLayout.ResolveTooltip(1280, 720, 1230, 20, chrome, ViewScaleMode.Fit, false));
+
+        Assert.Equal("Share 3 observers 127.0.0.1:4040", tooltip.Text);
     }
 
     [Fact]
@@ -951,32 +1049,36 @@ public sealed class ViewTransportTests
 
     private static async Task WaitForObserverCountAsync(TcpViewShareServer server, int expectedCount)
     {
-        for (var attempt = 0; attempt < 100; attempt++)
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (!timeout.IsCancellationRequested)
         {
             if (server.ObserverCount >= expectedCount)
             {
                 return;
             }
 
-            await Task.Delay(10);
+            await Task.Delay(20);
         }
 
-        throw new InvalidOperationException($"Timed out waiting for {expectedCount} share observer connections.");
+        throw new InvalidOperationException(
+            $"Timed out waiting for {expectedCount} share observer connections. Current observer count: {server.ObserverCount}.");
     }
 
     private static async Task WaitForObserverCountExactlyAsync(TcpViewShareServer server, int expectedCount)
     {
-        for (var attempt = 0; attempt < 100; attempt++)
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (!timeout.IsCancellationRequested)
         {
             if (server.ObserverCount == expectedCount)
             {
                 return;
             }
 
-            await Task.Delay(10);
+            await Task.Delay(20);
         }
 
-        throw new InvalidOperationException($"Timed out waiting for {expectedCount} share observer connections.");
+        throw new InvalidOperationException(
+            $"Timed out waiting for {expectedCount} share observer connections. Current observer count: {server.ObserverCount}.");
     }
 }
 

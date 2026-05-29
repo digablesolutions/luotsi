@@ -1,0 +1,57 @@
+---
+title: Inspect And Scenarios
+description: Choose between interactive JSONL inspection sessions and repeatable JSON playbooks.
+---
+
+Luotsi gives you two different automation surfaces on purpose.
+
+## Inspect: for exploration
+
+`inspect` is a long-lived JSONL session for agent-driven exploration.
+
+```bash
+luotsi inspect --device <serial>
+```
+
+Use it when you are still learning the screen flow, want structured snapshots and deltas, or need an agent to reason about the UI incrementally.
+
+Typical emitted events include:
+
+- `session_started`
+- `screen_snapshot`
+- `screen_delta`
+- `command_result`
+- `session_ended`
+
+## Scenarios: for repeatability
+
+Scenario files are plain JSON playbooks with optional `setup`, required `steps`, and optional `teardown` phases.
+
+```bash
+luotsi scenario-init --file scenarios/smoke.json --name "smoke"
+luotsi scenario-validate --path scenarios
+luotsi run --file scenarios/smoke.json --device <serial>
+```
+
+Use them when you want a checked-in flow with validation, timing, artifacts, and CI-friendly reports.
+
+## What scenario files support
+
+- Root variables and lightweight template substitution
+- App, device, and layout metadata for calibrated runs
+- Direct interaction steps, waits, assertions, app lifecycle, and artifact capture
+- Failure bundles and replay metadata when something breaks
+
+## A practical split
+
+Use `inspect` first when the flow is still changing. Once you know the sequence and the assertions you care about, move that behavior into a scenario JSON file and run it under `luotsi run`.
+
+## Where replay fits
+
+Scenario runs and long-lived sessions write artifact roots on purpose. Once a flow has been codified, use `luotsi replay summarize`, `replay timeline`, or `replay open` to debug the run after the device session ends instead of reconnecting blindly.
+
+## Next steps
+
+- Read [CLI command groups](../../reference/cli-command-groups/)
+- Read [Scenario playbooks](../../reference/scenario-playbooks/)
+- Read [Replay and artifacts](../replay-and-artifacts/)

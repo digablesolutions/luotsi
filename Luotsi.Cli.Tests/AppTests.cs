@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.IO.Compression;
+using System.Text;
 using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Tests;
@@ -55,6 +57,50 @@ public sealed partial class AppTests
         WriteBigEndian(bytes, 16, width);
         WriteBigEndian(bytes, 20, height);
         return bytes;
+    }
+
+    private static byte[] CreatePngRgba(int width, int height, byte[] rgba)
+    {
+        using var output = new MemoryStream();
+        output.Write([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+        WriteChunk(output, "IHDR", CreateIhdr(width, height));
+        using var raw = new MemoryStream();
+        for (var y = 0; y < height; y++)
+        {
+            raw.WriteByte(0);
+            raw.Write(rgba, y * width * 4, width * 4);
+        }
+
+        using var compressed = new MemoryStream();
+        using (var zlib = new ZLibStream(compressed, CompressionLevel.SmallestSize, leaveOpen: true))
+        {
+            raw.Position = 0;
+            raw.CopyTo(zlib);
+        }
+
+        WriteChunk(output, "IDAT", compressed.ToArray());
+        WriteChunk(output, "IEND", []);
+        return output.ToArray();
+    }
+
+    private static byte[] CreateIhdr(int width, int height)
+    {
+        var ihdr = new byte[13];
+        WriteBigEndian(ihdr, 0, width);
+        WriteBigEndian(ihdr, 4, height);
+        ihdr[8] = 8;
+        ihdr[9] = 6;
+        return ihdr;
+    }
+
+    private static void WriteChunk(Stream stream, string type, byte[] data)
+    {
+        var length = new byte[4];
+        WriteBigEndian(length, 0, data.Length);
+        stream.Write(length);
+        stream.Write(Encoding.ASCII.GetBytes(type));
+        stream.Write(data);
+        stream.Write(new byte[4]);
     }
 
     private static void WriteBigEndian(byte[] bytes, int offset, int value)

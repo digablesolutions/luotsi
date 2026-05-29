@@ -1,0 +1,73 @@
+---
+title: Quickstart
+description: Connect a device, run doctor, open live view, and execute a first scenario in a few commands.
+---
+
+This is the shortest path from a connected Android device to a meaningful Luotsi workflow.
+
+## 1. Confirm device visibility
+
+```bash
+luotsi devices
+luotsi device-status --device <serial>
+```
+
+Use the adb transport selector from `luotsi devices` or `adb devices -l` as your `--device` value.
+
+## 2. Run the onboarding check
+
+```bash
+luotsi doctor --device <serial>
+luotsi doctor --device <serial> --fix
+```
+
+This verifies adb, device readiness, and live-view prerequisites. If you only care about the view stack, you can also use:
+
+```bash
+luotsi view setup --device <serial>
+```
+
+## 3. Choose a workflow
+
+### Operator loop
+
+```bash
+luotsi view --device <serial>
+```
+
+Use this when you want a local SDL mirror, operator hotkeys, screenshots, or manual interaction.
+
+### Agent loop
+
+```bash
+luotsi inspect --device <serial>
+```
+
+Use this when you want structured JSONL snapshots and command results for an agent-driven exploration loop.
+
+### Repeatable automation loop
+
+```bash
+luotsi scenario-init --file scenarios/smoke.json --name "smoke"
+luotsi scenario-validate --path scenarios
+luotsi run --path scenarios --device <serial> --report-junit junit.xml
+```
+
+Use this when you want a versioned playbook with timing, artifacts, and CI-friendly reporting.
+
+## 4. Keep the artifacts
+
+Most commands and sessions write useful output under an artifact root. Override it when you want a stable location:
+
+```bash
+luotsi view --device <serial> --artifacts ./artifacts/live-view
+luotsi run --file scenarios/smoke.json --device <serial> --artifacts ./artifacts/smoke-run
+```
+
+## 5. Go deeper
+
+- Read [Device readiness](../device-readiness/)
+- Read [Live view](../../core-workflows/live-view/)
+- Read [Inspect and scenarios](../../core-workflows/inspect-and-scenarios/)
+- Read [Replay and artifacts](../../core-workflows/replay-and-artifacts/)
+- Browse [CLI command groups](../../reference/cli-command-groups/)

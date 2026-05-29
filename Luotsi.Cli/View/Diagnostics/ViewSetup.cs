@@ -1,7 +1,5 @@
-using System.Linq;
 using Luotsi.Cli.Hosts.Android.View;
 using Luotsi.Cli.Infrastructure.Contracts;
-using Luotsi.Cli.Models;
 using Luotsi.Cli.View.Contracts;
 
 namespace Luotsi.Cli.View.Diagnostics;
@@ -132,12 +130,54 @@ public sealed class ViewSetup : IViewSetup
         {
             await installer.InstallAsync(package, cancellationToken).ConfigureAwait(false);
         }
+        catch (Exception ex) when (IsInstallUpdateIncompatible(ex))
+        {
+            await UninstallIncompatibleHelperAsync(adb, installer, package, steps, cancellationToken).ConfigureAwait(false);
+        }
         catch (Exception ex) when (IsExpectedSetupException(ex))
         {
             _ = ex;
             // The installer already reported the exact helper_install or helper_verify failure phase.
         }
     }
+
+    private static async Task UninstallIncompatibleHelperAsync(
+        IAdbClient adb,
+        AndroidViewServerInstaller installer,
+        AndroidViewHelperPackage package,
+        List<ViewSetupStep> steps,
+        CancellationToken cancellationToken)
+    {
+        steps.Add(new ViewSetupStep(
+            "helper_uninstall",
+            ViewStartupPhaseStatus.Started,
+            "Uninstalling incompatible Android view helper.",
+            package.PackageName));
+        try
+        {
+            var uninstall = await adb.RunAsync(["uninstall", package.PackageName], cancellationToken).ConfigureAwait(false);
+            uninstall.EnsureSuccess("view helper uninstall failed");
+            steps.Add(new ViewSetupStep(
+                "helper_uninstall",
+                ViewStartupPhaseStatus.Succeeded,
+                "Incompatible Android view helper uninstalled.",
+                uninstall.Stdout.Trim()));
+            await installer.InstallAsync(package, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception uninstallOrReinstallError) when (IsExpectedSetupException(uninstallOrReinstallError))
+        {
+            steps.Add(new ViewSetupStep(
+                "helper_uninstall",
+                ViewStartupPhaseStatus.Failed,
+                "Could not repair incompatible Android view helper install.",
+                uninstallOrReinstallError.Message,
+                $"Run `adb uninstall {package.PackageName}`, then rerun `luotsi view setup --device <serial> --fix`."));
+        }
+    }
+
+    private static bool IsInstallUpdateIncompatible(Exception exception) =>
+        exception is InvalidOperationException &&
+        exception.Message.Contains("INSTALL_FAILED_UPDATE_INCOMPATIBLE", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsExpectedSetupException(Exception exception) =>
         exception is InvalidOperationException or IOException or UnauthorizedAccessException;

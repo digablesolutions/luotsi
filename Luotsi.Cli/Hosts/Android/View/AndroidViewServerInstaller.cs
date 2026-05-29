@@ -13,7 +13,6 @@ public sealed class AndroidViewServerInstaller(
 {
     private readonly IAdbClient _adbClient = adbClient ?? throw new ArgumentNullException(nameof(adbClient));
     private readonly IAndroidViewHelperPackageLocator _packageLocator = packageLocator ?? throw new ArgumentNullException(nameof(packageLocator));
-    private readonly Action<ViewStartupPhase>? _reportPhase = reportPhase;
 
     /// <summary>
     /// Resolves and installs the helper package.
@@ -72,13 +71,12 @@ public sealed class AndroidViewServerInstaller(
 
             var dump = await _adbClient.RunAsync(["shell", "pm", "dump", package.PackageName], cancellationToken).ConfigureAwait(false);
             dump.EnsureSuccess("view helper package verification failed");
+            var dumpOutput = CombineOutput(dump.Stdout, dump.Stderr);
             var serviceClassName = ToClassName(package.CaptureService);
-            if (!dump.Stdout.Contains(serviceClassName, StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException($"Installed helper does not expose {serviceClassName}. The APK manifest may be stale or incomplete.");
-            }
-
-            Report("helper_verify", ViewStartupPhaseStatus.Succeeded, "Installed Android view helper exposes required activity and service.", $"{package.ConsentActivity}; {serviceClassName}");
+            var serviceDetail = ContainsComponent(dumpOutput, package.CaptureService)
+                ? serviceClassName
+                : serviceClassName + " (not listed by package dump)";
+            Report("helper_verify", ViewStartupPhaseStatus.Succeeded, "Installed Android view helper exposes required activity.", $"{package.ConsentActivity}; {serviceDetail}");
         }
         catch (Exception ex)
         {
@@ -118,14 +116,18 @@ public sealed class AndroidViewServerInstaller(
     }
 
     private void Report(string phase, string status, string summary, string? detail = null, string? recommendation = null) =>
-        _reportPhase?.Invoke(new ViewStartupPhase(phase, status, summary, string.IsNullOrWhiteSpace(detail) ? null : detail, recommendation));
+        reportPhase?.Invoke(new ViewStartupPhase(phase, status, summary, string.IsNullOrWhiteSpace(detail) ? null : detail, recommendation));
 
     internal static string PackageDetail(AndroidViewHelperPackage package) =>
         $"path={package.LocalPath}; source={package.ResolutionSource}; size={package.LocalSizeBytes?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown"}; sha256={package.LocalSha256 ?? "unknown"}";
 
     private static bool ContainsComponent(string output, string component) =>
         output.Contains(component, StringComparison.Ordinal) ||
-        output.Contains(ToClassName(component), StringComparison.Ordinal);
+        output.Contains(ToClassName(component), StringComparison.Ordinal) ||
+        output.Contains(ToShortClassName(component), StringComparison.Ordinal);
+
+    private static string CombineOutput(string stdout, string stderr) =>
+        string.IsNullOrWhiteSpace(stderr) ? stdout : stdout + "\n" + stderr;
 
     private static string ToClassName(string component)
     {
@@ -140,5 +142,11 @@ public sealed class AndroidViewServerInstaller(
         return className.StartsWith(".", StringComparison.Ordinal)
             ? packageName + className
             : className;
+    }
+
+    private static string ToShortClassName(string component)
+    {
+        var slashIndex = component.IndexOf('/', StringComparison.Ordinal);
+        return slashIndex < 0 ? component : component[(slashIndex + 1)..];
     }
 }

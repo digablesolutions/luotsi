@@ -6,17 +6,24 @@ using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Cli.Routing;
 
-internal sealed class AppCommandHost(AppCommandHostDependencies dependencies)
+internal sealed class AppCommandHost(
+    AppCommandEnvelopeWriter envelopeWriter,
+    AppCommandExitCodeResolver exitCodeResolver,
+    ViewProfileCoordinator profileCoordinator,
+    AppCommandDispatcher commandDispatcher)
 {
-    private readonly AppCommandHostDependencies _dependencies = dependencies ?? throw new ArgumentNullException(nameof(dependencies));
+    private readonly AppCommandEnvelopeWriter _envelopeWriter = envelopeWriter ?? throw new ArgumentNullException(nameof(envelopeWriter));
+    private readonly AppCommandExitCodeResolver _exitCodeResolver = exitCodeResolver ?? throw new ArgumentNullException(nameof(exitCodeResolver));
+    private readonly ViewProfileCoordinator _profileCoordinator = profileCoordinator ?? throw new ArgumentNullException(nameof(profileCoordinator));
+    private readonly AppCommandDispatcher _commandDispatcher = commandDispatcher ?? throw new ArgumentNullException(nameof(commandDispatcher));
 
     public async Task<int> RunProfileListAsync(CliOptions options, DateTimeOffset started, ArtifactSession artifacts)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(artifacts);
 
-        var profiles = await _dependencies.ProfileCoordinator.ListAsync().ConfigureAwait(false);
-        _dependencies.EnvelopeWriter.WriteSuccess(options.Command!, started, new ViewProfileListResult(profiles), artifacts.ToData());
+        var profiles = await _profileCoordinator.ListAsync().ConfigureAwait(false);
+        _envelopeWriter.WriteSuccess(options.Command!, started, new ViewProfileListResult(profiles), artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
         return 0;
     }
 
@@ -26,8 +33,8 @@ internal sealed class AppCommandHost(AppCommandHostDependencies dependencies)
         ArgumentNullException.ThrowIfNull(artifacts);
 
         var profileName = options.Require("name");
-        var deleted = await _dependencies.ProfileCoordinator.DeleteAsync(profileName).ConfigureAwait(false);
-        _dependencies.EnvelopeWriter.WriteSuccess(options.Command!, started, new ViewProfileDeleteResult(profileName, deleted), artifacts.ToData());
+        var deleted = await _profileCoordinator.DeleteAsync(profileName).ConfigureAwait(false);
+        _envelopeWriter.WriteSuccess(options.Command!, started, new ViewProfileDeleteResult(profileName, deleted), artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
         return 0;
     }
 
@@ -35,7 +42,7 @@ internal sealed class AppCommandHost(AppCommandHostDependencies dependencies)
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        return _dependencies.CommandDispatcher.RequiresRunner(options);
+        return _commandDispatcher.RequiresRunner(options);
     }
 
     public async Task<int> RunCommandAsync(CliOptions options, DateTimeOffset started, string adbExecutable, IDeviceHost? runner, ArtifactSession artifacts)
@@ -43,14 +50,8 @@ internal sealed class AppCommandHost(AppCommandHostDependencies dependencies)
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(artifacts);
 
-        var data = await _dependencies.CommandDispatcher.ExecuteAsync(options.Command!, options, adbExecutable, runner).ConfigureAwait(false);
-        _dependencies.EnvelopeWriter.WriteSuccess(options.Command!, started, data, artifacts.ToData());
-        return _dependencies.ExitCodeResolver.Resolve(data);
+        var data = await _commandDispatcher.ExecuteAsync(options.Command!, options, adbExecutable, runner, artifacts).ConfigureAwait(false);
+        _envelopeWriter.WriteSuccess(options.Command!, started, data, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
+        return AppCommandExitCodeResolver.Resolve(data);
     }
 }
-
-internal sealed record AppCommandHostDependencies(
-    AppCommandEnvelopeWriter EnvelopeWriter,
-    AppCommandExitCodeResolver ExitCodeResolver,
-    ViewProfileCoordinator ProfileCoordinator,
-    AppCommandDispatcher CommandDispatcher);

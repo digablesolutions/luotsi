@@ -34,6 +34,7 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
       prerelease: ${{ steps.version.outputs.prerelease }}
+      android_version_code: ${{ steps.version.outputs.android_version_code }}
 
     steps:
       - name: Checkout
@@ -62,10 +63,14 @@ jobs:
           if [[ "$version" == *-* ]]; then
             prerelease=true
           fi
+          core_version="${version%%-*}"
+          IFS='.' read -r major minor patch <<< "$core_version"
+          android_version_code=$((10#$major * 1000000 + 10#$minor * 1000 + 10#$patch))
 
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "android_version_code=$android_version_code" >> "$GITHUB_OUTPUT"
 
       - name: Verify tag is on default branch
         env:
@@ -132,6 +137,35 @@ jobs:
           --blame-hang
           --blame-hang-timeout 2m
 
+      - name: Generate coverage report
+        if: always()
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $coverageFiles = Get-ChildItem -LiteralPath artifacts/test-results -Recurse -Filter coverage.cobertura.xml -File -ErrorAction SilentlyContinue
+          if ($coverageFiles.Count -eq 0) {
+            Add-Content $env:GITHUB_STEP_SUMMARY "## Coverage"
+            Add-Content $env:GITHUB_STEP_SUMMARY ""
+            Add-Content $env:GITHUB_STEP_SUMMARY "No Cobertura coverage files were produced."
+            exit 0
+          }
+
+          dotnet tool install dotnet-reportgenerator-globaltool --tool-path ./.tools --version 5.5.10
+          $reports = ($coverageFiles | ForEach-Object { $_.FullName }) -join ";"
+          & ./.tools/reportgenerator.exe "-reports:$reports" "-targetdir:artifacts/coverage-report" "-reporttypes:Html;MarkdownSummaryGithub" "-verbosity:Warning"
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+          $summary = Get-ChildItem -LiteralPath artifacts/coverage-report -Filter *.md -File -ErrorAction SilentlyContinue | Select-Object -First 1
+          Add-Content $env:GITHUB_STEP_SUMMARY "## Coverage"
+          Add-Content $env:GITHUB_STEP_SUMMARY ""
+          if ($null -eq $summary) {
+            Add-Content $env:GITHUB_STEP_SUMMARY "Coverage report was generated under ``artifacts/coverage-report``."
+          } else {
+            Get-Content -LiteralPath $summary.FullName | Add-Content $env:GITHUB_STEP_SUMMARY
+          }
+
       - name: Upload validation diagnostics
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -140,6 +174,14 @@ jobs:
           path: |
             artifacts/binlogs
             artifacts/test-results
+          if-no-files-found: ignore
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-coverage-report
+          path: artifacts/coverage-report
           if-no-files-found: ignore
 
   package:
@@ -185,9 +227,70 @@ jobs:
             **/packages.lock.json
             global.json
 
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
       - name: Verify locked restore
         shell: pwsh
         run: dotnet restore $env:SOLUTION --locked-mode /bl:artifacts/binlogs/release-publish-restore-${{ matrix.rid }}.binlog
+
+      - name: Build Android view helper
+        shell: pwsh
+        env:
+          LUOTSI_ANDROID_KEYSTORE_BASE64: ${{ secrets.LUOTSI_ANDROID_KEYSTORE_BASE64 }}
+          LUOTSI_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.LUOTSI_ANDROID_KEYSTORE_PASSWORD }}
+          LUOTSI_ANDROID_KEY_ALIAS: ${{ secrets.LUOTSI_ANDROID_KEY_ALIAS }}
+          LUOTSI_ANDROID_KEY_PASSWORD: ${{ secrets.LUOTSI_ANDROID_KEY_PASSWORD }}
+          LUOTSI_ANDROID_VERSION_NAME: ${{ needs.validate-tag.outputs.version }}
+          LUOTSI_ANDROID_VERSION_CODE: ${{ needs.validate-tag.outputs.android_version_code }}
+        run: |
+          $required = @(
+            "LUOTSI_ANDROID_KEYSTORE_BASE64",
+            "LUOTSI_ANDROID_KEYSTORE_PASSWORD",
+            "LUOTSI_ANDROID_KEY_ALIAS",
+            "LUOTSI_ANDROID_KEY_PASSWORD"
+          )
+          $missing = $required | Where-Object { [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) }
+          if ($missing.Count -gt 0) {
+            throw "Release packaging requires Android signing secrets: $($missing -join ', ')"
+          }
+
+          $keystore = Join-Path $env:RUNNER_TEMP "luotsi-view-helper-release.jks"
+          [IO.File]::WriteAllBytes($keystore, [Convert]::FromBase64String($env:LUOTSI_ANDROID_KEYSTORE_BASE64))
+          $env:LUOTSI_ANDROID_KEYSTORE_PATH = $keystore
+          Write-Host "Using Luotsi Android release signing key from GitHub secrets."
+          Write-Host "Stamping Android helper version $env:LUOTSI_ANDROID_VERSION_NAME ($env:LUOTSI_ANDROID_VERSION_CODE)."
+
+          if ($IsWindows) {
+            & ".\Luotsi.ViewServer.Android\gradlew.bat" -p Luotsi.ViewServer.Android :app:assembleRelease
+          } else {
+            & bash "./Luotsi.ViewServer.Android/gradlew" -p Luotsi.ViewServer.Android :app:assembleRelease
+          }
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+          $releaseApkDir = Join-Path $PWD "Luotsi.ViewServer.Android/app/build/outputs/apk/release"
+          $canonicalApk = Join-Path $releaseApkDir "app-release.apk"
+          if (!(Test-Path -LiteralPath $canonicalApk)) {
+            $candidate = Get-ChildItem -LiteralPath $releaseApkDir -Filter "*.apk" -File -ErrorAction SilentlyContinue |
+              Sort-Object Name |
+              Select-Object -First 1
+            if ($null -eq $candidate) {
+              throw "Android view helper release APK was not produced under $releaseApkDir."
+            }
+
+            Copy-Item -LiteralPath $candidate.FullName -Destination $canonicalApk -Force
+            Write-Host "Normalized Android helper APK $($candidate.Name) to app-release.apk."
+          }
+
+          Get-ChildItem -LiteralPath $releaseApkDir | ForEach-Object {
+            Write-Host "Android helper output: $($_.FullName)"
+          }
 
       - name: Publish
         shell: pwsh
@@ -200,6 +303,74 @@ jobs:
           /p:ContinuousIntegrationBuild=true
           /p:Version=${{ needs.validate-tag.outputs.version }}
           /bl:artifacts/binlogs/release-publish-${{ matrix.rid }}.binlog
+
+      - name: Verify helper APK was packaged
+        shell: pwsh
+        run: |
+          $helper = "artifacts/publish/${{ matrix.rid }}/Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release.apk"
+          if (!(Test-Path -LiteralPath $helper)) {
+            $publishRoot = "artifacts/publish/${{ matrix.rid }}"
+            $candidate = Get-ChildItem -LiteralPath $publishRoot -Recurse -File |
+              Where-Object { $_.Name -like "*app-release.apk" } |
+              Sort-Object FullName |
+              Select-Object -First 1
+            if ($null -eq $candidate) {
+              $builtHelper = "Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release.apk"
+              if (Test-Path -LiteralPath $builtHelper) {
+                $candidate = Get-Item -LiteralPath $builtHelper
+              }
+            }
+
+            if ($null -eq $candidate) {
+              Get-ChildItem -LiteralPath $publishRoot -Recurse -File | ForEach-Object {
+                Write-Host "Published file: $($_.FullName)"
+              }
+              throw "Published Luotsi bundle is missing the Android view helper APK: $helper"
+            }
+
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $helper) | Out-Null
+            Copy-Item -LiteralPath $candidate.FullName -Destination $helper -Force
+            Write-Host "Normalized published Android helper APK $($candidate.FullName) to $helper."
+          }
+
+      - name: Verify helper APK signature
+        shell: pwsh
+        env:
+          LUOTSI_ANDROID_CERT_SHA256: ${{ secrets.LUOTSI_ANDROID_CERT_SHA256 }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:LUOTSI_ANDROID_CERT_SHA256)) {
+            throw "Release packaging requires LUOTSI_ANDROID_CERT_SHA256 to verify the Android helper signing certificate."
+          }
+
+          $helper = "artifacts/publish/${{ matrix.rid }}/Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release.apk"
+          $buildToolsRoot = Join-Path $env:ANDROID_HOME "build-tools"
+          $apksignerName = if ($IsWindows) { "apksigner.bat" } else { "apksigner" }
+          $apksigner = Get-ChildItem -Path $buildToolsRoot -Filter $apksignerName -Recurse |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+          if ($null -eq $apksigner) {
+            throw "Android SDK apksigner was not found under $buildToolsRoot."
+          }
+
+          $output = & $apksigner.FullName verify --print-certs $helper 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            $output | ForEach-Object { Write-Host $_ }
+            throw "Android helper APK signature verification failed."
+          }
+
+          $actual = ($output | Select-String -Pattern "SHA-256 digest:" | Select-Object -First 1).Line
+          if ([string]::IsNullOrWhiteSpace($actual)) {
+            $output | ForEach-Object { Write-Host $_ }
+            throw "Could not read Android helper signing certificate SHA-256 digest."
+          }
+
+          $actual = ($actual -replace ".*SHA-256 digest:\s*", "").Trim().Replace(":", "").ToLowerInvariant()
+          $expected = $env:LUOTSI_ANDROID_CERT_SHA256.Trim().Replace(":", "").ToLowerInvariant()
+          if ($actual -ne $expected) {
+            throw "Android helper signing certificate mismatch. Expected $expected but got $actual."
+          }
+
+          Write-Host "Android helper signing certificate verified: $actual"
 
       - name: Normalize non-Windows apphost permissions
         if: matrix.archive_ext == 'tar.gz'
@@ -251,7 +422,12 @@ jobs:
 
       - name: Upload publish binlog
         if: always()
+<<<<<<< HEAD
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+=======
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+>>>>>>> origin/main
         with:
           name: release-publish-binlog-${{ matrix.rid }}
           path: |
@@ -303,6 +479,30 @@ jobs:
           done < <(find . -maxdepth 1 -type f \( -name "*.zip" -o -name "*.tar.gz" -o -name "*.ps1" -o -name "*.sh" \) -print0 | sort -z) > SHA256SUMS
           cat SHA256SUMS
 
+      - name: Resolve handwritten release intro
+        id: release_intro
+        shell: bash
+        env:
+          TAG: ${{ needs.validate-tag.outputs.tag }}
+        run: |
+          tag_file=".github/release-notes/${TAG}.md"
+          stable_file=".github/release-notes/stable.md"
+          prerelease_file=".github/release-notes/prerelease.md"
+
+          if [[ -f "$tag_file" ]]; then
+            echo "path=$tag_file" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "${{ needs.validate-tag.outputs.prerelease }}" == "true" && -f "$prerelease_file" ]]; then
+            echo "path=$prerelease_file" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "${{ needs.validate-tag.outputs.prerelease }}" != "true" && -f "$stable_file" ]]; then
+            echo "path=$stable_file" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Attest release assets
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
         with:
@@ -319,6 +519,7 @@ jobs:
           TAG: ${{ needs.validate-tag.outputs.tag }}
           VERSION: ${{ needs.validate-tag.outputs.version }}
           PRERELEASE: ${{ needs.validate-tag.outputs.prerelease }}
+          RELEASE_INTRO_PATH: ${{ steps.release_intro.outputs.path }}
         shell: bash
         run: |
           args=(
@@ -330,6 +531,11 @@ jobs:
             --verify-tag
             --generate-notes
           )
+
+          if [[ -n "$RELEASE_INTRO_PATH" ]]; then
+            intro="$(cat "$RELEASE_INTRO_PATH")"
+            args+=(--notes "$intro")
+          fi
 
           if [[ "$PRERELEASE" == "true" ]]; then
             args+=(--prerelease)
@@ -351,4 +557,8 @@ jobs:
             echo
             echo "Published assets:"
             find release-assets -maxdepth 1 -type f -printf "- \`%f\`\n" | sort
+            if [[ -n "${{ steps.release_intro.outputs.path }}" ]]; then
+              echo
+              echo "Handwritten release intro source: \`${{ steps.release_intro.outputs.path }}\`"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"

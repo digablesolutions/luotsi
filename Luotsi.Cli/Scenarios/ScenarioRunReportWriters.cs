@@ -68,6 +68,7 @@ internal sealed class JUnitScenarioRunReportWriter(IFileSystem fileSystem, strin
                 new XAttribute("skipped", 0),
                 new XAttribute("time", Seconds(report.DurationMs)),
                 new XAttribute("timestamp", report.StartedAt.ToString("O", CultureInfo.InvariantCulture)),
+                CreateRunProperties(report.Governance, report.DeviceHealth, report.CiPolicy),
                 testCases));
     }
 
@@ -79,6 +80,11 @@ internal sealed class JUnitScenarioRunReportWriter(IFileSystem fileSystem, strin
             new XAttribute("name", scenario.Scenario),
             new XAttribute("id", scenario.ScenarioId ?? scenario.Scenario),
             new XAttribute("time", Seconds(scenario.DurationMs ?? 0)));
+        var governanceProperties = CreateRunProperties(scenario.Governance, scenario.DeviceHealth, scenario.CiPolicy);
+        if (governanceProperties is not null)
+        {
+            element.Add(governanceProperties);
+        }
 
         if (string.Equals(scenario.Status, "failed", StringComparison.OrdinalIgnoreCase))
         {
@@ -110,6 +116,54 @@ internal sealed class JUnitScenarioRunReportWriter(IFileSystem fileSystem, strin
 
     private static string Seconds(double milliseconds) =>
         Math.Max(0, milliseconds / 1000d).ToString("0.###", CultureInfo.InvariantCulture);
+
+    private static XElement? CreateRunProperties(
+        ScenarioGovernanceVerdict? governance,
+        ScenarioDeviceHealthSnapshot? deviceHealth = null,
+        ScenarioCiPolicyResult? ciPolicy = null)
+    {
+        if (governance is null && deviceHealth is null && ciPolicy is null)
+        {
+            return null;
+        }
+
+        var properties = new List<object>();
+        if (governance is not null)
+        {
+            properties.Add(new XElement("property", new XAttribute("name", "luotsi.governance.kind"), new XAttribute("value", governance.Kind)));
+            properties.Add(new XElement("property", new XAttribute("name", "luotsi.governance.confidence"), new XAttribute("value", governance.Confidence)));
+            properties.Add(new XElement("property", new XAttribute("name", "luotsi.governance.summary"), new XAttribute("value", governance.Summary)));
+            properties.Add(new XElement("property", new XAttribute("name", "luotsi.governance.regression_candidate"), new XAttribute("value", governance.RegressionCandidate.ToString().ToLowerInvariant())));
+            properties.Add(new XElement("property", new XAttribute("name", "luotsi.governance.infrastructure_related"), new XAttribute("value", governance.InfrastructureRelated.ToString().ToLowerInvariant())));
+            properties.Add(new XElement("property", new XAttribute("name", "luotsi.governance.quarantine_candidate"), new XAttribute("value", governance.QuarantineCandidate.ToString().ToLowerInvariant())));
+            if (!string.IsNullOrWhiteSpace(governance.RecommendedAction))
+            {
+                properties.Add(new XElement("property", new XAttribute("name", "luotsi.governance.recommended_action"), new XAttribute("value", governance.RecommendedAction)));
+            }
+        }
+
+        if (deviceHealth is not null)
+        {
+            properties.Add(new XElement("property", new XAttribute("name", "luotsi.device_health.state"), new XAttribute("value", deviceHealth.State)));
+            properties.Add(new XElement("property", new XAttribute("name", "luotsi.device_health.retry_budget"), new XAttribute("value", deviceHealth.RetryBudget.ToString(CultureInfo.InvariantCulture))));
+            properties.Add(new XElement("property", new XAttribute("name", "luotsi.device_health.remaining_retry_budget"), new XAttribute("value", deviceHealth.RemainingRetryBudget.ToString(CultureInfo.InvariantCulture))));
+            properties.Add(new XElement("property", new XAttribute("name", "luotsi.device_health.pass_threshold"), new XAttribute("value", deviceHealth.PassThreshold.ToString(CultureInfo.InvariantCulture))));
+            properties.Add(new XElement("property", new XAttribute("name", "luotsi.device_health.pass_threshold_satisfied"), new XAttribute("value", deviceHealth.PassThresholdSatisfied.ToString().ToLowerInvariant())));
+            properties.Add(new XElement("property", new XAttribute("name", "luotsi.device_health.auto_quarantined"), new XAttribute("value", deviceHealth.AutoQuarantined.ToString().ToLowerInvariant())));
+        }
+
+        if (ciPolicy is not null)
+        {
+            properties.Add(new XElement("property", new XAttribute("name", "luotsi.policy.mode"), new XAttribute("value", ciPolicy.Mode)));
+            properties.Add(new XElement("property", new XAttribute("name", "luotsi.policy.outcome"), new XAttribute("value", ciPolicy.Outcome)));
+            properties.Add(new XElement("property", new XAttribute("name", "luotsi.policy.recommended_exit_code"), new XAttribute("value", ciPolicy.RecommendedExitCode.ToString(CultureInfo.InvariantCulture))));
+            properties.Add(new XElement("property", new XAttribute("name", "luotsi.policy.exit_code_applied"), new XAttribute("value", ciPolicy.ExitCodeApplied.ToString().ToLowerInvariant())));
+            properties.Add(new XElement("property", new XAttribute("name", "luotsi.policy.retry_recommended"), new XAttribute("value", ciPolicy.RetryRecommended.ToString().ToLowerInvariant())));
+            properties.Add(new XElement("property", new XAttribute("name", "luotsi.policy.summary"), new XAttribute("value", ciPolicy.Summary)));
+        }
+
+        return new XElement("properties", properties);
+    }
 }
 
 internal static class ScenarioReportFileSystem

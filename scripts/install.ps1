@@ -21,6 +21,7 @@ param(
     [string]$Owner = "digablesolutions",
     [string]$Repository = "luotsi",
     [switch]$SkipPathUpdate,
+    [switch]$SkipFfmpeg,
     [switch]$DryRun
 )
 
@@ -94,6 +95,78 @@ function Invoke-Download([string]$Uri, [string]$DestinationPath) {
     Invoke-WebRequest -Headers @{ "User-Agent" = "luotsi-installer" } -Uri $Uri -OutFile $DestinationPath
 }
 
+function Get-NativeLastExitCode {
+    $lastExitCode = Get-Variable -Name LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue
+    if ($null -eq $lastExitCode) {
+        return 0
+    }
+
+    return [int]$lastExitCode.Value
+}
+
+function Install-ViewExtras([string]$CurrentDirectory, [string]$Rid, [bool]$Skip) {
+    $ffmpegRoot = Join-Path $CurrentDirectory "ffmpeg"
+    $ffmpegBin = Join-Path $ffmpegRoot "bin"
+
+    if ($Skip) {
+        return [ordered]@{
+            view_extras = "skipped"
+            ffmpeg_staged = $false
+            ffmpeg_path = $ffmpegBin
+            ffmpeg_detail = "Skipped by installer option."
+        }
+    }
+
+    if ($Rid -ne "win-x64") {
+        return [ordered]@{
+            view_extras = "unsupported"
+            ffmpeg_staged = $false
+            ffmpeg_path = $ffmpegBin
+            ffmpeg_detail = "Automatic FFmpeg staging is not supported by the Windows installer for $Rid."
+        }
+    }
+
+    $scriptPath = Join-Path $ffmpegRoot "download-ffmpeg.ps1"
+    if (-not (Test-Path -LiteralPath $scriptPath)) {
+        return [ordered]@{
+            view_extras = "missing_staging_script"
+            ffmpeg_staged = $false
+            ffmpeg_path = $ffmpegBin
+            ffmpeg_detail = "FFmpeg staging script was not found at $scriptPath."
+        }
+    }
+
+    Write-Host "Installing view extras..."
+    try {
+        $output = & $scriptPath -Platform $Rid 2>&1
+        $exitCode = Get-NativeLastExitCode
+    }
+    catch {
+        return [ordered]@{
+            view_extras = "failed"
+            ffmpeg_staged = $false
+            ffmpeg_path = $ffmpegBin
+            ffmpeg_detail = $_.Exception.Message
+        }
+    }
+
+    if ($exitCode -ne 0) {
+        return [ordered]@{
+            view_extras = "failed"
+            ffmpeg_staged = $false
+            ffmpeg_path = $ffmpegBin
+            ffmpeg_detail = (($output | ForEach-Object { $_.ToString() }) -join "`n")
+        }
+    }
+
+    return [ordered]@{
+        view_extras = "installed"
+        ffmpeg_staged = $true
+        ffmpeg_path = $ffmpegBin
+        ffmpeg_detail = (($output | ForEach-Object { $_.ToString() }) -join "`n")
+    }
+}
+
 function Get-Checksum([string]$ChecksumFile, [string]$AssetName) {
     $pattern = '^(?<hash>[0-9a-fA-F]{64})\s+\*?(?<name>.+)$'
     foreach ($line in Get-Content -LiteralPath $ChecksumFile) {
@@ -115,6 +188,25 @@ function Get-Checksum([string]$ChecksumFile, [string]$AssetName) {
 function Ensure-Directory([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path)) {
         New-Item -ItemType Directory -Path $Path -Force | Out-Null
+    }
+}
+
+function Invoke-InstallFileOperation([scriptblock]$Operation, [string]$Description) {
+    $maxAttempts = 12
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        try {
+            & $Operation
+            return
+        }
+        catch {
+            if ($attempt -eq $maxAttempts) {
+                throw "$Description failed after $maxAttempts attempts. $($_.Exception.Message)"
+            }
+
+            $delayMs = [Math]::Min(2000, 200 * $attempt)
+            Write-Host "$Description failed; retrying in $delayMs ms. $($_.Exception.Message)"
+            Start-Sleep -Milliseconds $delayMs
+        }
     }
 }
 
@@ -169,7 +261,8 @@ function Write-Manifest(
     [string]$Rid,
     [string]$ArchiveName,
     [string]$ArchiveUrl,
-    [string]$ChecksumUrl) {
+    [string]$ChecksumUrl,
+    [System.Collections.IDictionary]$ViewExtras) {
 
     $manifest = [ordered]@{
         schema = "luotsi-install.v1"
@@ -181,9 +274,14 @@ function Write-Manifest(
         current_root = (Join-Path $InstallDirectory "current")
         bin_directory = $BinDirectory
         command_path = $CommandPath
+        helper_apk_path = (Join-Path $InstallDirectory "current\Luotsi.ViewServer.Android\app\build\outputs\apk\release\app-release.apk")
         archive_name = $ArchiveName
         archive_url = $ArchiveUrl
         checksum_url = $ChecksumUrl
+        view_extras = $ViewExtras.view_extras
+        ffmpeg_staged = $ViewExtras.ffmpeg_staged
+        ffmpeg_path = $ViewExtras.ffmpeg_path
+        ffmpeg_detail = $ViewExtras.ffmpeg_detail
         installed_at_utc = [DateTimeOffset]::UtcNow.ToString("O")
     }
 
@@ -218,6 +316,7 @@ Write-Host "  Runtime:      $rid"
 Write-Host "  Install root: $resolvedInstallRoot"
 Write-Host "  Command dir:  $binDirectory"
 Write-Host "  Asset:        $archiveName"
+Write-Host "  View extras:  $(if ($SkipFfmpeg) { 'skip FFmpeg' } else { 'stage FFmpeg when supported' })"
 
 if ($DryRun) {
     Write-Host "Dry run only. No files were downloaded or changed."
@@ -228,6 +327,7 @@ $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("luotsi-install-" + [Guid]::Ne
 $archivePath = Join-Path $tempRoot $archiveName
 $checksumPath = Join-Path $tempRoot "SHA256SUMS"
 $extractDirectory = Join-Path $tempRoot "payload"
+$installCommitted = $false
 
 try {
     Ensure-Directory $tempRoot
@@ -258,20 +358,24 @@ try {
     }
 
     if (Test-Path -LiteralPath $previousDirectory) {
-        Remove-Item -LiteralPath $previousDirectory -Recurse -Force
+        Invoke-InstallFileOperation { Remove-Item -LiteralPath $previousDirectory -Recurse -Force } "Remove previous install directory"
     }
 
     if (Test-Path -LiteralPath $currentDirectory) {
-        Move-Item -LiteralPath $currentDirectory -Destination $previousDirectory
+        Invoke-InstallFileOperation { Move-Item -LiteralPath $currentDirectory -Destination $previousDirectory } "Move current install directory aside"
     }
 
-    Move-Item -LiteralPath $payloadRoot -Destination $currentDirectory
-    if (Test-Path -LiteralPath $previousDirectory) {
-        Remove-Item -LiteralPath $previousDirectory -Recurse -Force
-    }
+    Invoke-InstallFileOperation { Move-Item -LiteralPath $payloadRoot -Destination $currentDirectory } "Move new release payload into place"
+
+    $viewExtras = Install-ViewExtras $currentDirectory $rid $SkipFfmpeg.IsPresent
 
     Write-CommandShim $commandPath
-    Write-Manifest $manifestPath $resolvedInstallRoot $binDirectory $commandPath $resolvedTag $rid $archiveName $archiveUrl $checksumUrl
+    Write-Manifest $manifestPath $resolvedInstallRoot $binDirectory $commandPath $resolvedTag $rid $archiveName $archiveUrl $checksumUrl $viewExtras
+    $installCommitted = $true
+
+    if (Test-Path -LiteralPath $previousDirectory) {
+        Invoke-InstallFileOperation { Remove-Item -LiteralPath $previousDirectory -Recurse -Force -ErrorAction SilentlyContinue } "Remove previous install directory"
+    }
 
     $pathUpdated = $false
     if (-not $SkipPathUpdate) {
@@ -280,6 +384,7 @@ try {
 
     Write-Host "Install complete."
     Write-Host "  Command: $commandPath"
+    Write-Host "  View extras: $($viewExtras.view_extras)"
     if ($pathUpdated) {
         Write-Host "  User PATH was updated. Open a new terminal before running 'luotsi'."
     }
@@ -291,8 +396,14 @@ try {
     }
 }
 catch {
-    if (-not (Test-Path -LiteralPath $currentDirectory) -and (Test-Path -LiteralPath $previousDirectory)) {
-        Move-Item -LiteralPath $previousDirectory -Destination $currentDirectory
+    if (-not $installCommitted) {
+        if (Test-Path -LiteralPath $currentDirectory) {
+            Remove-Item -LiteralPath $currentDirectory -Recurse -Force -ErrorAction SilentlyContinue
+        }
+
+        if (Test-Path -LiteralPath $previousDirectory) {
+            Move-Item -LiteralPath $previousDirectory -Destination $currentDirectory
+        }
     }
 
     throw

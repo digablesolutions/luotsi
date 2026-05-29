@@ -1,0 +1,78 @@
+---
+title: Troubleshooting
+description: Fix the common Luotsi setup and runtime failure shapes before you start debugging the app itself.
+---
+
+Most first-run problems are not app bugs. Start with the part of the system that is actually unstable: device selection, adb transport, live-view prerequisites, or an older Android platform with weak hierarchy support.
+
+## Device is offline, unauthorized, or missing
+
+Use the readiness commands before you retry anything else:
+
+```bash
+luotsi devices
+luotsi lab status
+luotsi adb reconnect offline
+luotsi doctor --device <serial>
+```
+
+- If the device is `unauthorized`, unlock it and accept the adb authorization prompt.
+- If multiple transports match, use `lab status` or `lab doctor` to see why Luotsi rejected or preferred each candidate.
+- If the device is visible but not yet ready for the target app, rerun `doctor` with `--package <app.id>` so package-aware preflight is included.
+
+## Live view or helper setup fails
+
+Use the view-specific diagnostic path when the transport is fine but the stream is not:
+
+```bash
+luotsi view-doctor --device <serial>
+luotsi view setup --device <serial> --fix
+```
+
+- `view-doctor` reports decoder, helper, capture-backend, MediaProjection, and recording readiness without opening a stream.
+- `view setup --fix` is the first-stop repair path when the helper APK or local decoder assets are missing.
+- If `--capture-backend mediaprojection` cannot start because consent was not granted, unlock the device and accept the capture dialog. `--capture-backend auto` can fall back to `screenrecord` when MediaProjection is unavailable.
+
+## Wireless pairing is awkward on purpose
+
+`wireless-pair` without `--code` returns a structured error instead of trying to drive an interactive terminal prompt. That is intentional.
+
+```bash
+luotsi wireless-scan
+luotsi wireless-pair --endpoint <host:port> --code <code>
+luotsi wireless-connect --service <name>
+```
+
+If the device is still easier to reach over USB, validate readiness over USB first and only then switch to wireless debugging.
+
+## Older devices can break hierarchy extraction
+
+Some legacy Android builds return unusable output from `uiautomator dump`, which means selector-heavy workflows are the wrong first move.
+
+In that case:
+
+- prefer `tapPoint`, `takeScreenshot`, `assertScreenshot`, and `captureArtifacts`
+- keep `metadata` in the scenario so Luotsi can warn when layout assumptions drift
+- use replay and screenshot artifacts to debug the run after the fact
+
+The Buggy Controller tutorial shows this failure shape on a real Android 6 device and why screenshot-oriented scenarios are still workable there.
+
+## Artifact root confusion after a failure
+
+If you want predictable outputs, choose the artifact root explicitly:
+
+```bash
+luotsi run --path scenarios --device <serial> --artifacts ./artifacts/demo-run
+luotsi replay summarize --artifacts ./artifacts/demo-run
+luotsi replay open --artifacts ./artifacts/demo-run
+```
+
+The replay commands are the fastest way to understand what already happened without reconnecting to the device or re-running a flaky flow.
+
+## Related pages
+
+- [Device readiness](../device-readiness/)
+- [Live view](../../core-workflows/live-view/)
+- [Lab and device claims](../../reference/lab-and-device-claims/)
+- [Scenario playbooks](../../reference/scenario-playbooks/)
+- [Buggy Controller demo](../../tutorials/buggy-controller-live-demo/)

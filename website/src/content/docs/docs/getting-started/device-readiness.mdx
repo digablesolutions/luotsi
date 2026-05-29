@@ -1,0 +1,58 @@
+---
+title: Device Readiness
+description: Use the lab and device readiness commands to confirm the right Android transport is selected before you debug the app itself.
+---
+
+Luotsi is most effective when device selection and first-run health checks are explicit. The CLI has separate commands for lab-wide visibility, a selected device's readiness, and package-specific preflight.
+
+## Lab-level checks
+
+Use these when multiple transports are attached, devices are offline, or you want Luotsi to explain ambiguous selection results.
+
+```bash
+luotsi devices
+luotsi lab status
+luotsi lab doctor
+luotsi adb reconnect offline
+```
+
+## Selected-device checks
+
+Use these after you know which transport you want to operate on.
+
+```bash
+luotsi device-status --device <serial>
+luotsi wait-for-device --device <serial>
+luotsi screen-state --device <serial>
+```
+
+## Package-aware preflight
+
+When the workflow depends on a target app, include the package and let Luotsi capture a device fingerprint as part of the readiness story.
+
+```bash
+luotsi preflight --device <serial> --package <app.id>
+luotsi doctor --device <serial> --package <app.id>
+luotsi doctor --device <serial> --package <app.id> --fix
+```
+
+`doctor` is the broader onboarding entry point. It reuses adb checks, optional package preflight, and the same live-view readiness flow exposed by `view setup` and `view-doctor`.
+
+If selection itself is ambiguous, start with `lab status` or `lab doctor`. If the selected device is known but the workflow still is not ready, switch to `doctor`, `view-doctor`, or `view setup --fix` so Luotsi can explain the missing prerequisite.
+
+## When each command matters
+
+- `devices`: raw inventory of adb-visible transports
+- `lab status`: why a selector matches or rejects devices
+- `lab doctor`: stale or ambiguous lab state with remediation commands
+- `device-status`: readiness details for one resolved transport
+- `preflight`: package-aware device and app context
+- `doctor`: single first-run report with optional repair behavior
+
+## Next steps
+
+- Continue to [Quickstart](../quickstart/)
+- Read [Lab and device claims](../../reference/lab-and-device-claims/)
+- Read [Wireless and port forwarding](../../reference/wireless-and-port-forwarding/)
+- Read [Troubleshooting](../troubleshooting/)
+- Browse [CLI command groups](../../reference/cli-command-groups/#device-and-adb)

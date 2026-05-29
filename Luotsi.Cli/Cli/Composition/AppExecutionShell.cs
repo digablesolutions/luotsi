@@ -6,20 +6,36 @@ using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Cli.Composition;
 
-internal sealed class AppExecutionShell(AppExecutionShellDependencies dependencies)
+internal sealed class AppExecutionShell(
+    IConsoleIo console,
+    TimeProvider timeProvider,
+    AppCommandFailureResponder failureResponder)
 {
-    private readonly AppExecutionShellDependencies _dependencies = dependencies ?? throw new ArgumentNullException(nameof(dependencies));
+    private readonly IConsoleIo _console = console ?? throw new ArgumentNullException(nameof(console));
+    private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+    private readonly AppCommandFailureResponder _failureResponder = failureResponder ?? throw new ArgumentNullException(nameof(failureResponder));
 
     public async Task<int> RunAsync(string[] args, Func<AppExecutionContext, Task<int>> dispatchAsync)
     {
         ArgumentNullException.ThrowIfNull(args);
         ArgumentNullException.ThrowIfNull(dispatchAsync);
 
-        var started = _dependencies.TimeProvider.GetUtcNow();
+        var started = _timeProvider.GetUtcNow();
         var options = CliOptions.Parse(args);
+        if (options.Command is null && options.HasFlag("version"))
+        {
+            _console.WriteLine($"luotsi {AppVersion.GetDisplayVersion()}");
+            return 0;
+        }
+
+        if (string.Equals(options.Command, "help", StringComparison.OrdinalIgnoreCase))
+        {
+            return WriteHelp(options);
+        }
+
         if (options.Command is null || options.HasFlag("help") || options.HasFlag("h"))
         {
-            _dependencies.Console.WriteErrorLine(Help.Text);
+            _console.WriteErrorLine(options.Command is null ? Help.Text : Help.GetTopic(options.Command));
             return options.HasFlag("help") || options.HasFlag("h") ? 0 : 2;
         }
 
@@ -27,26 +43,46 @@ internal sealed class AppExecutionShell(AppExecutionShellDependencies dependenci
 
         try
         {
+            if (ShouldValidateCommandEnvelopeOutput(options.Command))
+            {
+                _ = AppCommandConsoleOutputModeResolver.Resolve(options);
+            }
+
             return await dispatchAsync(context).ConfigureAwait(false);
         }
         catch (UsageException ex)
         {
-            return _dependencies.FailureResponder.WriteUsageError(options.Command, started, context.CreateArtifactData(), ex);
+            return _failureResponder.WriteUsageError(options, started, context.CreateArtifactData(), ex);
         }
         catch (Exception ex)
         {
-            return await _dependencies.FailureResponder.WriteFailureAsync(options.Command, started, context, ex).ConfigureAwait(false);
+            return await _failureResponder.WriteFailureAsync(options.Command, started, context, ex).ConfigureAwait(false);
         }
     }
-}
 
-internal sealed class AppExecutionShellDependencies
-{
-    public required IConsoleIo Console { get; init; }
+    private int WriteHelp(CliOptions options)
+    {
+        if (options.Arguments.Count == 0)
+        {
+            _console.WriteErrorLine(Help.Text);
+            return 0;
+        }
 
-    public required TimeProvider TimeProvider { get; init; }
+        var topic = options.Arguments[0];
+        if (!Help.TryGetTopic(topic, out var text))
+        {
+            _console.WriteErrorLine($"Unknown help topic '{topic}'. Available topics: {string.Join(", ", Help.SuggestedTopics)}.");
+            return 2;
+        }
 
-    public required AppCommandFailureResponder FailureResponder { get; init; }
+        _console.WriteErrorLine(text);
+        return 0;
+    }
+
+    private static bool ShouldValidateCommandEnvelopeOutput(string? command) =>
+        !string.Equals(command, "view", StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(command, "reconnect", StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(command, "inspect", StringComparison.OrdinalIgnoreCase);
 }
 
 internal sealed class AppExecutionContext(DateTimeOffset started, CliOptions options)

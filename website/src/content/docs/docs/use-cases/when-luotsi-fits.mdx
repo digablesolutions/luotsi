@@ -1,0 +1,49 @@
+---
+title: When Luotsi Fits
+description: Use this page to decide whether Luotsi matches your Android automation workflow, team shape, and failure-analysis needs.
+---
+
+Use this page when the main question is not how Luotsi works, but whether it is the right kind of tool for the job.
+
+## Luotsi is usually a good fit when
+
+- The workflow is built around real Android devices over adb rather than a browser DOM.
+- You want live view, structured inspection, repeatable scenario runs, and replay artifacts in one stack.
+- Engineers, agents, and CI need to share the same command surface and output contracts.
+- Post-run evidence matters. Screenshots, hierarchy dumps, logcat, telemetry, and replay summaries need to survive the session.
+- The same workflow should make sense on a laptop, a shared lab host, and a CI runner.
+
+## Luotsi is usually a weak fit when
+
+- The real problem is browser automation, not Android device automation.
+- You want a managed cloud platform to own both the devices and the orchestration model.
+- The team expects recorder-first authoring instead of explicit JSON playbooks and command-driven flows.
+- You need immediate cross-platform coverage, especially iOS, from the same tool.
+
+## Quick self-check
+
+If most of these are true, Luotsi likely fits:
+
+1. You already have or can get adb access to the devices that matter.
+2. You want machine-readable JSON or JSONL rather than a UI-only control path.
+3. You want failure triage to continue after the live device session ends.
+4. You want one workflow that can move from local exploration into CI or a shared lab.
+
+## Choose the next page by the job
+
+- Use [Android Automation For Engineering Leads](../android-automation-for-engineering-leads/) if the decision is about team architecture, rollout, or evaluation scope.
+- Use [Luotsi Alternatives And Comparison](../luotsi-alternatives-and-comparison/) if the decision is really about tradeoffs versus browser automation, device farms, or recorder-style tools.
+- Use [AI Agent Android Automation](../ai-agent-android-automation/) if the main question is whether an agent loop can drive the workflow.
+- Use [Android CI Device Lab Workflows](../android-ci-device-lab-workflows/) if the pressure comes from shared infrastructure and pipeline reliability.
+- Use [Replay-Driven Triage](../replay-driven-triage/) if the real bottleneck is what happens after a failed run.
+
+## Recommended first commands
+
+```bash
+luotsi doctor --device <serial>
+luotsi inspect --device <serial>
+luotsi scenario-validate --path scenarios
+luotsi run --path scenarios --device <serial>
+```
+
+Those commands cover the shortest path from device readiness to exploration and then into repeatable automation.

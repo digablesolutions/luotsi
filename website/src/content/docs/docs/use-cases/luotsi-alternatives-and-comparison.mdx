@@ -1,0 +1,56 @@
+---
+title: Luotsi Alternatives And Comparison
+description: Compare Luotsi with other Android automation approaches by control-plane location, workflow shape, and failure-analysis model.
+---
+
+The most useful way to compare Luotsi is not by counting features. It is by looking at where the control plane lives, what runtime contract the tool exposes, and how much evidence remains after a failure.
+
+## What Luotsi is optimizing for
+
+- Host-driven control over adb-visible Android devices.
+- A thin on-device helper instead of an always-on device server owning the workflow.
+- Structured JSON and JSONL surfaces for people, agents, and CI.
+- Replay-ready artifact roots that remain useful after the device session ends.
+
+## Comparison by workflow shape
+
+| Approach | Best when | Main tradeoff compared with Luotsi |
+| --- | --- | --- |
+| Luotsi | You need real-device adb workflows, structured sessions, and replay artifacts in one host-side stack. | You still own the host-side setup and device access. |
+| Browser or WebView automation | The product surface is mostly DOM and browser-driven. | Weak fit for native Android device state, live adb inspection, and replay from device artifacts. |
+| Hosted device farms or always-on device servers | You want infrastructure and orchestration supplied as a service or central platform. | The platform tends to own more of the control model, while Luotsi keeps policy and orchestration on your host or CI runner. |
+| Recorder-first or visual authoring tools | The team values quick recording more than explicit command and JSON contracts. | Luotsi favors explicit scenarios, inspect sessions, and artifact-driven debugging over visual recording as the primary abstraction. |
+| Ad hoc adb scripts | You only need one-off device commands with minimal structure. | Luotsi adds output contracts, shared workflows, and replay artifacts instead of leaving each script to invent them. |
+
+## Where Luotsi differs architecturally
+
+### Control plane
+
+Luotsi keeps orchestration, policy, and diagnostics on the engineer or CI machine. That is the core design choice behind its CLI, inspect, view, run, and replay surfaces.
+
+### Runtime contract
+
+Luotsi exposes one-shot JSON envelopes for commands and JSONL streams for long-lived sessions. That matters if the consumer is an agent, a CI job, or any tool that needs more than terminal prose.
+
+### Failure model
+
+Replay artifacts are part of the workflow contract. The run is expected to leave behind enough evidence to support later triage without another live device session.
+
+## Choose Luotsi when
+
+- Your Android workflow is already adb-first or can be.
+- You want one stack for live inspection, scenarios, and replay.
+- You need structured outputs that humans and automation can both consume.
+
+## Look elsewhere when
+
+- The real problem is browser automation rather than Android device automation.
+- You want a managed platform to own infrastructure and orchestration end to end.
+- The team only wants a recorder-style tool and does not want explicit scenario files or command contracts.
+
+## Open these next
+
+- [When Luotsi Fits](../when-luotsi-fits/)
+- [Android Automation For Engineering Leads](../android-automation-for-engineering-leads/)
+- [AI Agent Workflows](../../core-workflows/ai-agent-workflows/)
+- [Android CI Device Lab Workflows](../android-ci-device-lab-workflows/)

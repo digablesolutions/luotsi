@@ -16,7 +16,7 @@ public sealed class ViewHostPathResolver(IEnvironmentVariables environment)
     /// </summary>
     /// <param name="relativePath">Repository-relative path to probe.</param>
     /// <returns>Candidate host-local file paths.</returns>
-    public IEnumerable<string> GetRepositoryRelativeFileCandidates(string relativePath)
+    public static IEnumerable<string> GetRepositoryRelativeFileCandidates(string relativePath)
     {
         return GetRepositoryRelativePathCandidates(relativePath);
     }
@@ -26,7 +26,7 @@ public sealed class ViewHostPathResolver(IEnvironmentVariables environment)
     /// </summary>
     /// <param name="relativePath">Repository-relative path to probe.</param>
     /// <returns>Candidate host-local directory paths.</returns>
-    public IEnumerable<string> GetRepositoryRelativeDirectoryCandidates(string relativePath)
+    public static IEnumerable<string> GetRepositoryRelativeDirectoryCandidates(string relativePath)
     {
         return GetRepositoryRelativePathCandidates(relativePath);
     }
@@ -145,8 +145,8 @@ public sealed class ViewHostPathResolver(IEnvironmentVariables environment)
             throw new ArgumentException("Path must be process-relative.", nameof(relativePath));
         }
 
-        yield return Path.GetFullPath(Path.Join(Directory.GetCurrentDirectory(), relativePath));
         yield return Path.GetFullPath(Path.Join(AppContext.BaseDirectory, relativePath));
+        yield return Path.GetFullPath(Path.Join(Directory.GetCurrentDirectory(), relativePath));
     }
 
     private static IEnumerable<string> GetRepositoryRelativePathCandidates(string relativePath)

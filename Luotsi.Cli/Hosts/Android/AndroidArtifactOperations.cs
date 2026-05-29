@@ -24,6 +24,7 @@ internal sealed class AndroidArtifactOperations(
     private readonly IUniqueIdGenerator _idGenerator = idGenerator ?? throw new ArgumentNullException(nameof(idGenerator));
     private readonly IEnvironmentVariables _environment = environment ?? throw new ArgumentNullException(nameof(environment));
     private readonly AndroidScreenStateReadModel _screenStateReadModel = screenStateReadModel ?? throw new ArgumentNullException(nameof(screenStateReadModel));
+    private readonly AndroidScreenshotRegionArtifacts _screenshotRegionArtifacts = new(artifacts, fileSystem);
 
     public async Task<RecordResult> RecordAsync(string output, int timeLimitSec)
     {
@@ -49,10 +50,32 @@ internal sealed class AndroidArtifactOperations(
         return new TakeScreenshotResult(label, fileName, artifact.Width, artifact.Height, artifact.Sha256);
     }
 
-    public async Task<ScreenshotAssertionResult> AssertScreenshotAsync(string label, int? expectedWidth, int? expectedHeight, string? expectedSha256)
+    public async Task<ScreenshotAssertionResult> AssertScreenshotAsync(string label, int? expectedWidth, int? expectedHeight, string? expectedSha256, string? expectedSha256File = null, string? baselineFile = null, bool updateBaseline = false, ScreenshotAssertionRegion? region = null, string? expectedRegionSha256 = null, string? expectedRegionSha256File = null)
     {
         var fileName = DeviceArtifactNames.ScreenshotForLabel(Slugify(label));
         var artifact = await CaptureScreenshotAsync(fileName).ConfigureAwait(false);
+        expectedSha256 = await ResolveExpectedSha256Async(expectedSha256, expectedSha256File, updateBaseline ? null : baselineFile, updateBaseline).ConfigureAwait(false);
+        string? diffArtifact = null;
+        string? regionSha256 = null;
+        expectedRegionSha256 = await ResolveExpectedSha256Async(expectedRegionSha256, expectedRegionSha256File, null, false).ConfigureAwait(false);
+        if (region is not null)
+        {
+            ValidateScreenshotRegion(fileName, artifact, region);
+            if (!string.IsNullOrWhiteSpace(expectedRegionSha256))
+            {
+                regionSha256 = await _screenshotRegionArtifacts.ComputeRegionSha256Async(ResolveArtifactDestination(fileName), region).ConfigureAwait(false);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(expectedRegionSha256) &&
+            !string.Equals(regionSha256, expectedRegionSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            var regionPreview = await _screenshotRegionArtifacts.WritePreviewAsync(label, ResolveArtifactDestination(fileName), region).ConfigureAwait(false);
+            var regionDiff = await _screenshotRegionArtifacts.WriteDiffAsync(label, ResolveArtifactDestination(fileName), baselineFile, region).ConfigureAwait(false);
+            diffArtifact = await WriteScreenshotDiffAsync(label, fileName, artifact, expectedSha256, baselineFile, region, regionSha256, expectedRegionSha256, regionPreview, regionDiff).ConfigureAwait(false);
+            throw new InvalidOperationException($"Screenshot '{fileName}' region SHA-256 was {regionSha256 ?? "unknown"}; expected {expectedRegionSha256}. Diff artifact: {diffArtifact}.");
+        }
+
         if (expectedWidth is not null && artifact.Width != expectedWidth)
         {
             throw new InvalidOperationException($"Screenshot '{fileName}' width was {artifact.Width?.ToString(CultureInfo.InvariantCulture) ?? "unknown"}; expected {expectedWidth}.");
@@ -66,10 +89,25 @@ internal sealed class AndroidArtifactOperations(
         if (!string.IsNullOrWhiteSpace(expectedSha256) &&
             !string.Equals(artifact.Sha256, expectedSha256, StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException($"Screenshot '{fileName}' SHA-256 was {artifact.Sha256 ?? "unknown"}; expected {expectedSha256}.");
+            var regionDiff = await _screenshotRegionArtifacts.WriteDiffAsync(label, ResolveArtifactDestination(fileName), baselineFile, region).ConfigureAwait(false);
+            diffArtifact = await WriteScreenshotDiffAsync(label, fileName, artifact, expectedSha256, baselineFile, region, regionSha256, expectedRegionSha256, null, regionDiff).ConfigureAwait(false);
+            throw new InvalidOperationException($"Screenshot '{fileName}' SHA-256 was {artifact.Sha256 ?? "unknown"}; expected {expectedSha256}. Diff artifact: {diffArtifact}.");
         }
 
-        return new ScreenshotAssertionResult(label, fileName, artifact.Width, artifact.Height, artifact.Sha256, expectedWidth, expectedHeight, expectedSha256);
+        var baselineUpdated = false;
+        if (!string.IsNullOrWhiteSpace(baselineFile) && updateBaseline)
+        {
+            var baselineDirectory = Path.GetDirectoryName(baselineFile);
+            if (!string.IsNullOrWhiteSpace(baselineDirectory))
+            {
+                _fileSystem.CreateDirectory(baselineDirectory);
+            }
+
+            _fileSystem.CopyFile(ResolveArtifactDestination(fileName), baselineFile, overwrite: true);
+            baselineUpdated = true;
+        }
+
+        return new ScreenshotAssertionResult(label, fileName, artifact.Width, artifact.Height, artifact.Sha256, expectedWidth, expectedHeight, expectedSha256, baselineFile, baselineUpdated, region, regionSha256, expectedRegionSha256, diffArtifact);
     }
 
     public async Task<CaptureArtifactsResult> CaptureArtifactsAsync(string label)
@@ -93,23 +131,108 @@ internal sealed class AndroidArtifactOperations(
         await _adb.ShellAsync($"rm -f {remote}").ConfigureAwait(false);
         pull.EnsureSuccess("pull screenshot failed");
         await _artifacts.RefreshIndexAsync().ConfigureAwait(false);
-        return ReadScreenshotArtifact(fileName, destination);
+        return await ReadScreenshotArtifactAsync(fileName, destination).ConfigureAwait(false);
     }
 
-    private ScreenshotArtifactInfo ReadScreenshotArtifact(string fileName, string destination)
+    private async Task<ScreenshotArtifactInfo> ReadScreenshotArtifactAsync(string fileName, string destination)
     {
         if (!_fileSystem.FileExists(destination))
         {
             return new ScreenshotArtifactInfo(fileName, null, null, null);
         }
 
-        using var stream = _fileSystem.OpenRead(destination);
-        using var memory = new MemoryStream();
-        stream.CopyTo(memory);
-        var bytes = memory.ToArray();
+        var bytes = await _fileSystem.ReadAllBytesAsync(destination).ConfigureAwait(false);
         var (width, height) = ReadPngDimensions(bytes);
-        var sha256 = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+        var hash = SHA256.HashData(bytes);
+        var sha256 = Convert.ToHexString(hash).ToLowerInvariant();
         return new ScreenshotArtifactInfo(fileName, width, height, sha256);
+    }
+
+    private async Task<string?> ResolveExpectedSha256Async(string? expectedSha256, string? expectedSha256File, string? baselineFile, bool updateBaseline)
+    {
+        if (!string.IsNullOrWhiteSpace(expectedSha256))
+        {
+            return expectedSha256.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(expectedSha256File))
+        {
+            if (!_fileSystem.FileExists(expectedSha256File))
+            {
+                throw new FileNotFoundException($"Screenshot SHA-256 baseline file '{expectedSha256File}' was not found.", expectedSha256File);
+            }
+
+            var hash = (await _fileSystem.ReadAllTextAsync(expectedSha256File).ConfigureAwait(false))
+                .Split(['\r', '\n', ' ', '\t'], StringSplitOptions.RemoveEmptyEntries)
+                .FirstOrDefault();
+            return !string.IsNullOrWhiteSpace(hash)
+                ? hash
+                : throw new InvalidOperationException($"Screenshot SHA-256 baseline file '{expectedSha256File}' did not contain a hash.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(baselineFile))
+        {
+            if (!_fileSystem.FileExists(baselineFile))
+            {
+                if (updateBaseline)
+                {
+                    return null;
+                }
+
+                throw new FileNotFoundException($"Screenshot baseline file '{baselineFile}' was not found.", baselineFile);
+            }
+
+            await using var stream = _fileSystem.OpenRead(baselineFile);
+            var hash = await SHA256.HashDataAsync(stream).ConfigureAwait(false);
+            return Convert.ToHexString(hash).ToLowerInvariant();
+        }
+
+        return null;
+    }
+
+    private static void ValidateScreenshotRegion(string fileName, ScreenshotArtifactInfo artifact, ScreenshotAssertionRegion region)
+    {
+        if (artifact.Width is null || artifact.Height is null)
+        {
+            throw new InvalidOperationException($"Screenshot '{fileName}' dimensions were unknown; region assertions require a PNG screenshot with readable dimensions.");
+        }
+
+        if (region.X < 0 || region.Y < 0 || region.Width <= 0 || region.Height <= 0)
+        {
+            throw new InvalidOperationException($"Screenshot '{fileName}' region must have non-negative origin and positive size.");
+        }
+
+        if (region.X + region.Width > artifact.Width || region.Y + region.Height > artifact.Height)
+        {
+            throw new InvalidOperationException($"Screenshot '{fileName}' region {region.X},{region.Y},{region.Width}x{region.Height} exceeds image bounds {artifact.Width}x{artifact.Height}.");
+        }
+    }
+
+    private async Task<string> WriteScreenshotDiffAsync(string label, string fileName, ScreenshotArtifactInfo artifact, string? expectedSha256, string? baselineFile, ScreenshotAssertionRegion? region, string? regionSha256, string? expectedRegionSha256, string? regionPreviewFile, string? regionDiffFile)
+    {
+        var diffFile = $"{Slugify(label)}-screenshot-diff.json";
+        await _artifacts.WriteJsonAsync(diffFile, new
+        {
+            label,
+            file = fileName,
+            baseline_file = baselineFile,
+            observed = new
+            {
+                width = artifact.Width,
+                height = artifact.Height,
+                sha256 = artifact.Sha256
+            },
+            expected = new
+            {
+                sha256 = expectedSha256,
+                region_sha256 = expectedRegionSha256
+            },
+            region,
+            region_sha256 = regionSha256,
+            region_preview_file = regionPreviewFile,
+            region_diff_file = regionDiffFile
+        }).ConfigureAwait(false);
+        return diffFile;
     }
 
     private static (int? Width, int? Height) ReadPngDimensions(byte[] bytes)

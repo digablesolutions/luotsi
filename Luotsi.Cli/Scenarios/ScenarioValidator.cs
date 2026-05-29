@@ -139,9 +139,28 @@ internal static class ScenarioValidator
                 break;
 
             case "assertScreenshot":
-                if (step.ExpectedWidth is null && step.ExpectedHeight is null && string.IsNullOrWhiteSpace(step.ExpectedSha256))
+                if (step.UpdateBaseline is true && string.IsNullOrWhiteSpace(step.BaselineFile))
                 {
-                    throw new UsageException($"{stepLabel} assertScreenshot requires expectedWidth, expectedHeight, or expectedSha256.");
+                    throw new UsageException($"{stepLabel} assertScreenshot updateBaseline requires baselineFile.");
+                }
+
+                ValidateScreenshotRegion(stepLabel, step);
+                if (step.ExpectedWidth is null &&
+                    step.ExpectedHeight is null &&
+                    string.IsNullOrWhiteSpace(step.ExpectedSha256) &&
+                    string.IsNullOrWhiteSpace(step.ExpectedSha256File) &&
+                    string.IsNullOrWhiteSpace(step.ExpectedRegionSha256) &&
+                    string.IsNullOrWhiteSpace(step.ExpectedRegionSha256File) &&
+                    string.IsNullOrWhiteSpace(step.BaselineFile) &&
+                    step.UpdateBaseline is not true)
+                {
+                    throw new UsageException($"{stepLabel} assertScreenshot requires expectedWidth, expectedHeight, expectedSha256, expectedSha256File, expectedRegionSha256, expectedRegionSha256File, baselineFile, or updateBaseline.");
+                }
+
+                if ((!string.IsNullOrWhiteSpace(step.ExpectedRegionSha256) || !string.IsNullOrWhiteSpace(step.ExpectedRegionSha256File)) &&
+                    (step.RegionX is null || step.RegionY is null || step.RegionWidth is null || step.RegionHeight is null))
+                {
+                    throw new UsageException($"{stepLabel} assertScreenshot region SHA requires regionX, regionY, regionWidth, and regionHeight.");
                 }
 
                 break;
@@ -276,6 +295,25 @@ internal static class ScenarioValidator
         catch (ArgumentException ex)
         {
             throw new UsageException($"{messagePrefix}: {ex.Message}");
+        }
+    }
+
+    private static void ValidateScreenshotRegion(string stepLabel, ScenarioStep step)
+    {
+        var hasAnyRegionValue = step.RegionX is not null || step.RegionY is not null || step.RegionWidth is not null || step.RegionHeight is not null;
+        if (!hasAnyRegionValue)
+        {
+            return;
+        }
+
+        if (step.RegionX is null || step.RegionY is null || step.RegionWidth is null || step.RegionHeight is null)
+        {
+            throw new UsageException($"{stepLabel} assertScreenshot region requires regionX, regionY, regionWidth, and regionHeight.");
+        }
+
+        if (step.RegionX < 0 || step.RegionY < 0 || step.RegionWidth <= 0 || step.RegionHeight <= 0)
+        {
+            throw new UsageException($"{stepLabel} assertScreenshot region must have non-negative origin and positive size.");
         }
     }
 }

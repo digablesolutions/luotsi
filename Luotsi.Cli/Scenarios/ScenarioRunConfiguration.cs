@@ -1,5 +1,7 @@
 using Luotsi.Cli.Cli;
 using Luotsi.Cli.Errors;
+using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Scenarios;
 
@@ -8,6 +10,21 @@ internal enum ScenarioArtifactAttachmentPolicy
     Never,
     OnFailure,
     Always
+}
+
+internal enum ScenarioProgressMode
+{
+    Plain,
+    Line,
+    Quiet,
+    Jsonl
+}
+
+internal enum ScenarioCiPolicyMode
+{
+    Off,
+    Advisory,
+    Enforced
 }
 
 internal sealed record ScenarioRunConfiguration(
@@ -19,9 +36,17 @@ internal sealed record ScenarioRunConfiguration(
     bool ValidateOnly,
     bool RequireDeviceReady,
     int DeviceWaitTimeoutSec,
-    string? DeviceReadinessPackage)
+    string? DeviceReadinessPackage,
+    ScenarioProgressMode ProgressMode = ScenarioProgressMode.Plain,
+    LabLeaseResult? LabLease = null,
+    ScenarioCiPolicyMode CiPolicyMode = ScenarioCiPolicyMode.Advisory,
+    int DeviceHealthWindowDays = 30,
+    int RetryBudget = 2,
+    int PassThreshold = 2)
 {
-    public static ScenarioRunConfiguration Create(CliOptions options)
+    private const int MaxDeviceHealthWindowDays = 365000;
+
+    public static ScenarioRunConfiguration Create(CliOptions options, IEnvironmentVariables? environment = null)
     {
         ArgumentNullException.ThrowIfNull(options);
 
@@ -34,7 +59,12 @@ internal sealed record ScenarioRunConfiguration(
             options.HasFlag("validate-only"),
             !options.HasFlag("no-require-device-ready"),
             options.Int("device-ready-timeout-sec", CliDefaults.DefaultTimeoutSeconds),
-            NormalizePackage(options.Get("package")));
+            NormalizePackage(options.Get("package")),
+            ParseProgressMode(options.Get("progress"), options.HasFlag("quiet"), environment),
+            CiPolicyMode: ParseCiPolicyMode(options.Get("ci-policy")),
+            DeviceHealthWindowDays: ParsePositiveInt(options.Get("device-health-window-days"), 30, "--device-health-window-days", MaxDeviceHealthWindowDays),
+            RetryBudget: ParseNonNegativeInt(options.Get("retry-budget"), 2, "--retry-budget"),
+            PassThreshold: ParsePositiveInt(options.Get("pass-threshold"), 2, "--pass-threshold"));
     }
 
     private static string? NormalizePath(string? value) =>
@@ -72,5 +102,96 @@ internal sealed record ScenarioRunConfiguration(
             "always" => ScenarioArtifactAttachmentPolicy.Always,
             _ => throw new UsageException("--attach-artifacts must be one of: never, on-failure, always.")
         };
+    }
+
+    private static ScenarioProgressMode ParseProgressMode(string? value, bool quiet, IEnvironmentVariables? environment)
+    {
+        if (quiet && !string.IsNullOrWhiteSpace(value) && !string.Equals(value.Trim(), "quiet", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new UsageException("Use either --quiet or --progress auto/plain/line/jsonl; use --progress quiet for explicit quiet progress.");
+        }
+
+        if (quiet)
+        {
+            return ScenarioProgressMode.Quiet;
+        }
+
+        if (string.IsNullOrWhiteSpace(value) || string.Equals(value.Trim(), "auto", StringComparison.OrdinalIgnoreCase))
+        {
+            return IsCi(environment) ? ScenarioProgressMode.Line : ScenarioProgressMode.Plain;
+        }
+
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "plain" => ScenarioProgressMode.Plain,
+            "line" => ScenarioProgressMode.Line,
+            "quiet" => ScenarioProgressMode.Quiet,
+            "jsonl" => ScenarioProgressMode.Jsonl,
+            _ => throw new UsageException("--progress must be one of: auto, line, plain, quiet, jsonl.")
+        };
+    }
+
+    private static bool IsCi(IEnvironmentVariables? environment)
+    {
+        if (environment is null)
+        {
+            return false;
+        }
+
+        var ci = environment.GetEnvironmentVariable("CI");
+        return !string.IsNullOrWhiteSpace(ci) &&
+            !string.Equals(ci, "0", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(ci, "false", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static ScenarioCiPolicyMode ParseCiPolicyMode(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return ScenarioCiPolicyMode.Advisory;
+        }
+
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "off" => ScenarioCiPolicyMode.Off,
+            "advisory" => ScenarioCiPolicyMode.Advisory,
+            "enforced" => ScenarioCiPolicyMode.Enforced,
+            _ => throw new UsageException("--ci-policy must be one of: off, advisory, enforced.")
+        };
+    }
+
+    private static int ParsePositiveInt(string? value, int defaultValue, string optionName, int? maxValue = null)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return defaultValue;
+        }
+
+        if (!int.TryParse(value, out var parsed) || parsed <= 0)
+        {
+            throw new UsageException($"{optionName} must be greater than zero.");
+        }
+
+        if (maxValue is not null && parsed > maxValue.Value)
+        {
+            throw new UsageException($"{optionName} must be between 1 and {maxValue.Value}.");
+        }
+
+        return parsed;
+    }
+
+    private static int ParseNonNegativeInt(string? value, int defaultValue, string optionName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return defaultValue;
+        }
+
+        if (!int.TryParse(value, out var parsed) || parsed < 0)
+        {
+            throw new UsageException($"{optionName} must be zero or greater.");
+        }
+
+        return parsed;
     }
 }

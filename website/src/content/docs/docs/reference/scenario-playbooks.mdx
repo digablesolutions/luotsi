@@ -1,0 +1,118 @@
+---
+title: Scenario Playbooks
+description: Author repeatable JSON playbooks with setup, steps, teardown, metadata, waits, assertions, and artifact capture.
+---
+
+Scenarios are JSON files that drive a sequence of device actions. The format stays intentionally simple: plain JSON, explicit step actions, and no extra DSL layer.
+
+## Minimal shape
+
+```json
+{
+  "name": "android-home-smoke",
+  "variables": {
+    "appPackage": "com.example.app"
+  },
+  "setup": [
+    { "name": "start app", "action": "startApp", "package": "${var:appPackage}" }
+  ],
+  "steps": [
+    { "name": "go home", "action": "keyevent", "code": "KEYCODE_HOME" },
+    { "name": "capture screenshot", "action": "takeScreenshot", "label": "android-home-smoke" }
+  ],
+  "teardown": [
+    { "name": "stop app", "action": "forceStop", "package": "${var:appPackage}" }
+  ]
+}
+```
+
+## Lifecycle
+
+- `setup` is optional and runs before main steps
+- `steps` is required and is the main execution phase
+- `teardown` is optional and still runs after main-step failures
+
+Step results include a `phase` field so reports can separate setup, main flow, and cleanup.
+
+## Template syntax
+
+Scenario strings support lightweight substitution before execution:
+
+- `${env:NAME}` for a required environment variable
+- `${env:NAME|fallback}` for an optional variable with fallback
+- `${var:name}` for a root variable
+- `${now:HHmmss}` for a timestamp fragment
+
+## Metadata and calibration
+
+Use the optional `metadata` block when a scenario is calibrated against a known app, device, or layout. Luotsi can surface non-fatal `metadata_warnings` if the live run does not match the scenario's expected context.
+
+This matters most for coordinate-heavy steps where the wrong device or orientation can invalidate taps.
+
+## Action families
+
+- Interaction: `waitVisible`, `waitNotVisible`, `tapText`, `tapPoint`, `typeText`, `typePin`, `keyevent`
+- Waits and assertions: `waitLog`, `waitStep`, `waitActionReady`, `assertEvent`, `assertScreenshot`, `assertTextInputReady`, `assertBelow`, `assertAligned`, `assertAppVersion`
+- App and package: `startApp`, `startUri`, `forceStop`, `clear`, `waitForActivity`, `waitForNotActivity`, `grantPermission`, `revokePermission`
+- Artifacts and utility: `takeScreenshot`, `captureArtifacts`, `screenState`, `sleep`
+
+## Defaults and validation
+
+Common omitted values default intentionally, for example `timeoutSec` to `15`, `postTapDelayMs` to `300`, and `milliseconds` to `1000` for `sleep`.
+
+Validation rejects unsupported shapes such as:
+
+- `tapPoint` without coordinates or ratios
+- negative coordinates
+- `typePin` with non-digits
+- `startApp` with `wait: true` but no activity
+- screenshot region hash checks without a full region definition
+
+## When screenshot-first scenarios are the right call
+
+On older Android builds or screens with weak hierarchy output, prefer explicit `tapPoint`, `takeScreenshot`, `assertScreenshot`, and `captureArtifacts` steps over brittle selector assumptions. Pair those steps with `metadata` so Luotsi can emit non-fatal warnings when the device or layout no longer matches the scenario's calibrated target.
+
+## Authoring flow
+
+```bash
+luotsi scenario-init --file scenarios/smoke.json --name "smoke"
+luotsi scenario-validate --path scenarios
+luotsi scenario-explain --file scenarios/smoke.json
+luotsi run --path scenarios --device <serial>
+```
+
+## Runner modes and outputs
+
+Once scenarios exist, the important runner controls are about planning, validation, and artifact shape rather than just execution.
+
+```bash
+luotsi scenario-list --path scenarios --include-tag smoke
+luotsi run --path scenarios --dry-run --include-tag smoke
+luotsi run --path scenarios --validate-only --report-json reports/validate.json
+luotsi run --path scenarios --device <serial> --events-jsonl run.jsonl --report-json run.json --report-junit run.xml
+```
+
+- `scenario-list` and `run --path` share the same discovery filters: `--include-tag`, `--exclude-tag`, `--name`, and `--action`
+- `run --path --dry-run` returns the selected scenario plan after filtering and sharding without validating or touching a device host
+- `--validate-only` validates the selected files and still writes reports, but it does not create a device host or execute device work
+- `--dry-run` and `--validate-only` are intentionally mutually exclusive
+- `--events-jsonl`, `--report-json`, and `--report-junit` are the main machine-readable outputs for CI and artifact review
+- `--capture-on failure|never` and `--attach-artifacts never|on-failure|always` control how much runtime evidence gets attached to run outputs
+
+## Parallel and lab-aware runs
+
+When a scenario set grows beyond one device or one developer loop, the key runner controls are:
+
+- `--shard-count`, `--shard-index`, and `--shard-strategy` for parallel batches under `run --path`
+- `--claim-device` to create a host-side lab lease for the resolved device during the run
+- `--owner <name>` and `--ttl-sec <seconds>` to label that lease and keep its expiry explicit
+
+These controls matter when the same scenario catalog is being validated in CI, distributed across a device pool, or guarded from two operators grabbing the same hardware at once.
+
+## Read more
+
+- [Inspect and scenarios](../../core-workflows/inspect-and-scenarios/)
+- [Replay and artifacts](../../core-workflows/replay-and-artifacts/)
+- [Lab and device claims](../lab-and-device-claims/)
+- [Shared lab operations](../shared-lab-operations/)
+- [Buggy Controller demo](../../tutorials/buggy-controller-live-demo/)

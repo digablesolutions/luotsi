@@ -13,6 +13,18 @@ namespace Luotsi.Cli.Tests;
 public sealed partial class AppTests
 {
     [Fact]
+    public void ViewRuntimeDiagnostic_Uses_JoinShare_Command_For_Share_Sessions()
+    {
+        var options = new ViewOptions("127.0.0.1:9000", "adb", "h264", "ffmpeg", true, null, 1600, 60, "8M", false, false, JoinShareEndpoint: "127.0.0.1:9000");
+
+        var diagnostic = ViewRuntimeDiagnostic.From(new InvalidOperationException("Unexpected end of stream"), options);
+
+        Assert.Equal("transport", diagnostic.Category);
+        Assert.Contains("--join-share 127.0.0.1:9000", diagnostic.NextCommand, StringComparison.Ordinal);
+        Assert.DoesNotContain("--device 127.0.0.1:9000", diagnostic.NextCommand, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_View_Streams_Scaffold_Events()
     {
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
@@ -20,9 +32,10 @@ public sealed partial class AppTests
         var console = new FakeConsole();
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
         var backend = new FakeViewBackend("ffmpeg-native");
+        var artifacts = ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider);
         var session = CreateViewSession(
             host,
-            ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider),
+            artifacts,
             console,
             timeProvider,
             new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward")),
@@ -53,6 +66,149 @@ public sealed partial class AppTests
         Assert.Equal(SessionEventTypes.View.Ended, ended.RootElement.GetProperty("type").GetString());
         Assert.Equal("stream_ended", ended.RootElement.GetProperty("reason").GetString());
         Assert.Equal(2, backend.Packets.Count);
+
+        var replayPath = Path.Join(artifacts.Root, "session-replay.json");
+        var timelinePath = Path.Join(artifacts.Root, "session-timeline.jsonl");
+        Assert.True(fileSystem.FileExists(replayPath));
+        Assert.True(fileSystem.FileExists(timelinePath));
+
+        using var replay = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(replayPath));
+        Assert.Equal(ResultSchemas.SessionReplay, replay.RootElement.GetProperty("schema").GetString());
+        Assert.Equal("view", replay.RootElement.GetProperty("sessionKind").GetString());
+        Assert.Equal("192.168.0.134:5555", replay.RootElement.GetProperty("target").GetString());
+        Assert.Equal("session-timeline.jsonl", replay.RootElement.GetProperty("timelineFileName").GetString());
+        Assert.Equal(2, replay.RootElement.GetProperty("eventCount").GetInt32());
+
+        var timeline = await fileSystem.ReadAllTextAsync(timelinePath);
+        Assert.Contains(SessionEventTypes.View.Started, timeline, StringComparison.Ordinal);
+        Assert.Contains(SessionEventTypes.View.Ended, timeline, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_View_Human_Output_Still_Writes_Jsonl_Timeline()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var backend = new FakeViewBackend("ffmpeg-native");
+        var artifacts = ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider);
+        var session = CreateViewSession(
+            host,
+            artifacts,
+            console,
+            timeProvider,
+            new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward")),
+            new FakeViewBackendFactory(backend),
+            new FakeViewStreamConnector(
+                new ViewPacketStreamHarness()
+                    .WriteHeader("h264", 1080, 1920)
+                    .WritePacket(ViewPacketType.Config, 1, 0, false, [0x01, 0x02])
+                    .WritePacket(ViewPacketType.StreamEnd, 2, 33_000, false, [])
+                    .Build()),
+            new ViewPacketStreamReader());
+
+        var exitCode = await session.RunAsync(new ViewOptions(
+            "192.168.0.134:5555",
+            "adb",
+            "h264",
+            "ffmpeg",
+            true,
+            null,
+            1600,
+            60,
+            "8M",
+            false,
+            false,
+            ConsoleOutput: ViewConsoleOutputModes.Human));
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains(console.OutputLines, static line => line.Equals("View started", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, static line => line.Contains("device: 192.168.0.134:5555", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, static line => line.Contains("stream: 1080x1920 h264", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, static line => line.Equals("View ended: stream_ended", StringComparison.Ordinal));
+        Assert.DoesNotContain(console.OutputLines, static line => line.StartsWith('{'));
+
+        var timeline = await fileSystem.ReadAllTextAsync(Path.Join(artifacts.Root, "session-timeline.jsonl"));
+        Assert.Contains(SessionEventTypes.View.Started, timeline, StringComparison.Ordinal);
+        Assert.Contains(SessionEventTypes.View.Ended, timeline, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_View_Quiet_Output_Suppresses_Normal_Lifecycle_Events()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var artifacts = ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider);
+        var session = CreateViewSession(
+            host,
+            artifacts,
+            console,
+            timeProvider,
+            new FakeViewTransportBootstrap(new ViewConnectionInfo("session", "h264", 1, 1080, 1920, 27183, "helper", "adb-forward")),
+            new FakeViewBackendFactory(new FakeViewBackend("ffmpeg-native")),
+            new FakeViewStreamConnector(
+                new ViewPacketStreamHarness()
+                    .WriteHeader("h264", 1080, 1920)
+                    .WritePacket(ViewPacketType.StreamEnd, 1, 0, false, [])
+                    .Build()),
+            new ViewPacketStreamReader());
+
+        var exitCode = await session.RunAsync(new ViewOptions(
+            "192.168.0.134:5555",
+            "adb",
+            "h264",
+            "ffmpeg",
+            true,
+            null,
+            1600,
+            60,
+            "8M",
+            false,
+            false,
+            ConsoleOutput: ViewConsoleOutputModes.Quiet));
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(console.OutputLines);
+
+        var timeline = await fileSystem.ReadAllTextAsync(Path.Join(artifacts.Root, "session-timeline.jsonl"));
+        Assert.Contains(SessionEventTypes.View.Started, timeline, StringComparison.Ordinal);
+        Assert.Contains(SessionEventTypes.View.Ended, timeline, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_View_Fails_Before_Startup_When_Selected_Device_Is_Not_Visible()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        host.ConnectedDevices.Add(new DeviceInfo("192.168.0.134:5555", "device", "Panel"));
+        var artifacts = ArtifactSession.Create(CliOptions.Parse(["view"]), fileSystem, timeProvider);
+        using var stream = new MemoryStream();
+        var session = CreateViewSession(
+            host,
+            artifacts,
+            console,
+            timeProvider,
+            new FakeViewTransportBootstrap([new InvalidOperationException("transport should not start")]),
+            new FakeViewBackendFactory(new FakeViewBackend("ffmpeg-native")),
+            new FakeViewStreamConnector(stream),
+            new ViewPacketStreamReader());
+
+        var exitCode = await session.RunAsync(new ViewOptions("192.168.0.134:555", "adb", "h264", "ffmpeg", true, null, 1600, 60, "8M", false, false));
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal(3, console.OutputLines.Count);
+        using var diagnostic = JsonDocument.Parse(console.OutputLines[0]);
+        Assert.Equal(SessionEventTypes.View.Diagnostic, diagnostic.RootElement.GetProperty("type").GetString());
+        Assert.Equal("usage_error", diagnostic.RootElement.GetProperty("category").GetString());
+        Assert.Contains("Live view device selection is not usable.", diagnostic.RootElement.GetProperty("message").GetString(), StringComparison.Ordinal);
+
+        using var error = JsonDocument.Parse(console.OutputLines[1]);
+        Assert.Contains("Did you mean '--device 192.168.0.134:5555'?", error.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
 
@@ -230,7 +386,7 @@ public sealed partial class AppTests
         var streamConnector = new FakeViewStreamConnector(
             new ViewPacketStreamHarness()
                 .WriteHeader("h264", 1080, 1920)
-                .WritePacket(ViewPacketType.ServerError, 1, 0, false, System.Text.Encoding.UTF8.GetBytes("MediaCodec preflight failed"))
+                .WritePacket(ViewPacketType.ServerError, 1, 0, false, "MediaCodec preflight failed"u8.ToArray())
                 .WritePacket(ViewPacketType.StreamEnd, 2, 0, false, [])
                 .Build(),
             new ViewPacketStreamHarness()
@@ -304,7 +460,12 @@ public sealed partial class AppTests
         Assert.Equal(1, exitCode);
         Assert.Equal([ViewCaptureBackends.MediaProjection], bootstrap.StartRequests.Select(static request => request.CaptureBackend).ToArray());
 
-        using var error = JsonDocument.Parse(console.OutputLines[0]);
+        using var diagnostic = JsonDocument.Parse(console.OutputLines[0]);
+        Assert.Equal(SessionEventTypes.View.Diagnostic, diagnostic.RootElement.GetProperty("type").GetString());
+        Assert.Equal("mediaprojection_consent", diagnostic.RootElement.GetProperty("category").GetString());
+        Assert.Contains("capture-backend auto", diagnostic.RootElement.GetProperty("next_command").GetString(), StringComparison.Ordinal);
+
+        using var error = JsonDocument.Parse(console.OutputLines[1]);
         Assert.Equal(SessionEventTypes.View.Error, error.RootElement.GetProperty("type").GetString());
         Assert.Equal("usage_error", error.RootElement.GetProperty("error").GetProperty("category").GetString());
         Assert.Contains("--capture-backend screenrecord", error.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
@@ -319,7 +480,7 @@ public sealed partial class AppTests
         var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
         var backend = new FakeViewBackend();
         var bootstrap = new FakeViewTransportBootstrap([
-            new InvalidOperationException("Android view helper package was not found. Set LUOTSI_VIEW_HELPER_APK or build the helper APK at Luotsi.ViewServer.Android\\app\\build\\outputs\\apk\\debug\\app-debug.apk")
+            new InvalidOperationException("Android view helper package was not found. Run `luotsi view setup --device <serial> --fix` to build/install it from source, set LUOTSI_VIEW_HELPER_APK, or reinstall Luotsi from a release bundle that includes Luotsi.ViewServer.Android\\app\\build\\outputs\\apk\\release\\app-release.apk.")
         ]);
         using var stream = new MemoryStream();
         var session = CreateViewSession(
@@ -337,14 +498,19 @@ public sealed partial class AppTests
         Assert.Equal(1, exitCode);
         Assert.Equal([ViewCaptureBackends.Auto], bootstrap.StartRequests.Select(static request => request.CaptureBackend).ToArray());
         Assert.Equal(1, bootstrap.StopCallCount);
-        Assert.Equal(2, console.OutputLines.Count);
+        Assert.Equal(3, console.OutputLines.Count);
 
-        using var error = JsonDocument.Parse(console.OutputLines[0]);
+        using var diagnostic = JsonDocument.Parse(console.OutputLines[0]);
+        Assert.Equal(SessionEventTypes.View.Diagnostic, diagnostic.RootElement.GetProperty("type").GetString());
+        Assert.Equal("helper", diagnostic.RootElement.GetProperty("category").GetString());
+        Assert.Contains("view setup", diagnostic.RootElement.GetProperty("next_command").GetString(), StringComparison.Ordinal);
+
+        using var error = JsonDocument.Parse(console.OutputLines[1]);
         Assert.Equal(SessionEventTypes.View.Error, error.RootElement.GetProperty("type").GetString());
         Assert.Equal("configuration_error", error.RootElement.GetProperty("error").GetProperty("category").GetString());
         Assert.Contains("LUOTSI_VIEW_HELPER_APK", error.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
 
-        using var ended = JsonDocument.Parse(console.OutputLines[1]);
+        using var ended = JsonDocument.Parse(console.OutputLines[2]);
         Assert.Equal(SessionEventTypes.View.Ended, ended.RootElement.GetProperty("type").GetString());
         Assert.Equal("error", ended.RootElement.GetProperty("reason").GetString());
     }

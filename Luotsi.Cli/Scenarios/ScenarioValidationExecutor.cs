@@ -75,7 +75,11 @@ internal sealed class ScenarioValidationExecutor(
             plan.Query.ShardIndex,
             results,
             plan.Query.ShardStrategy);
-        return result with { Metrics = _metricsCollector.CollectBatch(new ScenarioBatchMetricContext(result)) };
+        return result with
+        {
+            Metrics = _metricsCollector.CollectBatch(new ScenarioBatchMetricContext(result)),
+            Governance = ScenarioGovernanceClassifier.FromBatch(result)
+        };
     }
 
     private IEnumerable<ScenarioStepResult> CreateStepResults(ScenarioFile scenario)
@@ -112,7 +116,8 @@ internal sealed class ScenarioValidationExecutor(
             null,
             context.ScenarioId,
             context.File,
-            scenario.Metadata);
+            scenario.Metadata,
+            Governance: ScenarioGovernanceClassifier.FromStatus("validated", null));
     }
 
     private static IEnumerable<(ScenarioStep Step, string Phase)> EnumerateSteps(ScenarioFile scenario)

@@ -11,7 +11,7 @@ internal sealed class ViewProfileCoordinator(IViewProfileStore viewProfileStore)
     {
         var profileName = options.Get("profile");
         if (string.IsNullOrWhiteSpace(profileName) &&
-            (options.HasFlag("last") || string.Equals(options.Command, "reconnect", StringComparison.OrdinalIgnoreCase)))
+            (ShouldUseLastProfile(options) || string.Equals(options.Command, "reconnect", StringComparison.OrdinalIgnoreCase)))
         {
             profileName = "last";
         }
@@ -42,6 +42,11 @@ internal sealed class ViewProfileCoordinator(IViewProfileStore viewProfileStore)
             ? Task.CompletedTask
             : _viewProfileStore.SaveAsync(profileName, ViewProfile.FromResolvedOptions(options, viewOptions));
     }
+
+    private static bool ShouldUseLastProfile(CliOptions options) =>
+        options.HasFlag("last") &&
+        (string.Equals(options.Command, "view", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(options.Command, "reconnect", StringComparison.OrdinalIgnoreCase));
 
     public Task SaveConnectedDeviceAsync(string profileName, string deviceSelector, string adbExecutable, string? pollArtifacts) =>
         _viewProfileStore.SaveAsync(profileName, ViewProfile.CreateConnectedDeviceProfile(deviceSelector, adbExecutable, pollArtifacts));

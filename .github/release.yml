@@ -1,0 +1,25 @@
+changelog:
+  exclude:
+    labels:
+      - duplicate
+      - invalid
+      - question
+      - wontfix
+  categories:
+    - title: Features and workflow improvements
+      labels:
+        - enhancement
+    - title: Fixes and reliability
+      labels:
+        - bug
+    - title: Docs and discoverability
+      labels:
+        - documentation
+    - title: CI, packaging, and dependency updates
+      labels:
+        - github_actions
+        - dependencies
+        - java
+    - title: Other changes
+      labels:
+        - "*"

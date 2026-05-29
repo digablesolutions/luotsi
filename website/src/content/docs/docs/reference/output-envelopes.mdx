@@ -1,0 +1,101 @@
+---
+title: Output Envelopes
+description: Understand when Luotsi emits a single JSON envelope versus a long-lived JSONL stream and how error categories surface runtime failures.
+---
+
+Luotsi uses two output contracts on purpose.
+
+## One-shot command mode
+
+Most commands return a single final JSON envelope with:
+
+- `schema`
+- `ok`
+- `command`
+- `started_at`
+- `ended_at`
+- `data`
+- `artifacts`
+- `provenance`
+- `error`
+
+This is the default contract for CLI commands, including scenario execution unless you explicitly request raw replay output modes.
+
+For local terminal readability, one-shot commands also accept `--human` or `--console-output human`. That mode prints a concise text summary and artifact path, while the default and `--json` keep the full machine-readable envelope. Use `--quiet` or `--console-output quiet` to suppress successful command output while still printing failure envelopes. Luotsi does not use a global `--output` switch for this because some commands already use `--output` for file paths.
+
+## Long-lived session mode
+
+`inspect` is a JSONL session instead of one final object. `view` prints human startup/runtime progress by default, can stream raw JSONL events with `view -o jsonl`, `view --output jsonl`, or `view --json`, and always writes its JSONL timeline artifact for replay.
+
+Typical inspect events:
+
+- `session_started`
+- `screen_snapshot`
+- `screen_delta`
+- `command_result`
+- `session_ended`
+- `protocol_error`
+- `session_error`
+
+Typical view events:
+
+- `view_started`
+- `view_startup_phase`
+- `view_diagnostic`
+- `view_stats`
+- `view_reconnect_requested`
+- `view_reconnected`
+- `view_recording_started`
+- `view_recording_stopped`
+- `view_screenshot_captured`
+- `view_share_started`
+- `view_share_client_connected`
+- `view_artifacts_opened`
+- `view_file_pushed`
+- `view_file_pulled`
+- `view_package_installed`
+- `view_error`
+- `view_ended`
+
+Not every session emits every event family. Startup diagnostics appear during bring-up, share events only appear for shared sessions, and recording or file-transfer events only appear when the operator actually uses those controls.
+
+## Replay export exception
+
+`replay summarize --format json|jsonl` and `replay timeline --format json|jsonl` are intentional exceptions. They can emit raw replay output for CI-oriented consumers instead of the normal envelope.
+
+Raw replay `--format` modes cannot be combined with `--human`, `--quiet`, `--json`, or `--console-output` because those flags control envelope presentation, while `--format` replaces the envelope entirely.
+
+Replay commands that keep the normal envelope put their command-specific contract under `data`:
+
+- `replay capsule` returns a failure-capsule summary with `primary_failure`, `failure_timeline`, `artifact_manifest`, optional scenario draft summary fields, and `suggested_commands`.
+- `replay summarize` returns session summaries plus `commands` that route into capsule, open, scrub, graph, and clustering when failures are present.
+- `replay timeline` returns ordered events plus `commands` that route into capsule, open, scrub, and graph when selected events include failures.
+- `replay search` returns text matches plus `commands` back into capsule, open, scrub, and graph when matches are replay-relevant.
+- `replay scenario-draft` returns draft metadata, warnings, suggestions, review items, source summaries, step origins, normalizations, and the generated output paths. When persisted, the main review artifacts are `scenario-draft-summary.json` and `scenario-draft.md`.
+- `replay graph` returns a stable graph payload with `query`, `agent_summary`, counts, taxonomy, insights, actions, evidence, facts, causal chains, hypotheses, optional output paths, plus returned `nodes` and `edges`.
+- `replay cluster` groups failed replay sessions by normalized failure shape and returns cluster summaries plus suggested next triage commands.
+
+## Error categories
+
+The current public error categories include:
+
+- `usage_error`
+- `log_wait_timeout`
+- `oracle_timeout`
+- `configuration_error`
+- `selector_or_screen_state`
+- `scenario_error`
+
+Treat these as current API-visible values derived from the active failure paths rather than as a permanently closed enum.
+
+## Why this split matters
+
+- One-shot commands are easy to consume from scripts and CI
+- JSONL sessions are better for agents and long-lived operator loops
+- Keeping the split explicit prevents ambiguous mixed-output contracts
+
+## Related pages
+
+- [CLI command groups](../cli-command-groups/)
+- [Replay and artifacts](../../core-workflows/replay-and-artifacts/)
+- [Live view](../../core-workflows/live-view/)

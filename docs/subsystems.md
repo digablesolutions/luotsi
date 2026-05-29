@@ -7,7 +7,7 @@ that matches the code currently in the repo.
 
 - `App` dispatches one-shot commands and the two long-lived session modes.
 - One-shot commands return exactly one final JSON envelope.
-- `inspect` and `view` are JSONL sessions with startup and shutdown events.
+- `inspect` is a JSONL session. `view` is an interactive session that prints human progress by default, can stream JSONL with `-o jsonl` or `--json`, and always writes JSONL session timelines to artifacts.
 
 Relevant code:
 
@@ -75,6 +75,9 @@ The built-in mirror is now a real subsystem, not just a design sketch.
 - `ViewPacketStreamReader` parses the private packet stream.
 - `auto` capture prefers MediaProjection and retries with `screenrecord` if
   startup or consent fails before the stream header is established.
+- Optional TCP share relay (`--share-bind`) mirrors the packet stream to
+  observers and replays bootstrap packets (config + latest keyframe) for
+  late joins.
 
 Relevant code:
 
@@ -107,6 +110,8 @@ Relevant code:
 - The built-in live path currently assumes H.264 over the private packet stream.
 - MediaProjection currently requires H.264 and interactive Android consent;
   `screenrecord` remains the explicit fallback path.
+- `screenrecord` capture has platform limits, so long runs may reconnect
+  proactively before the backend limit window is reached.
 - The primary validated host path is Windows.
 - macOS and Linux are supported by the chosen SDL3/libav architecture, but they
   still need live validation passes on actual host machines.
@@ -118,6 +123,12 @@ Relevant code:
   capture-backend policy, adb device visibility, device preflight,
   MediaProjection readiness when requested, and optional recording output
   readiness.
+- Startup and doctor flows emit explicit startup-phase/diagnostic events
+  (`view_startup_phase`, `view_diagnostic`) so agents can track readiness
+  progress from the artifact timeline or JSONL stdout mode.
+- Stats cadence is split intentionally: `--stats-interval-ms` controls
+  `view_stats` timeline/JSONL events, while `--renderer-stats-interval-ms`
+  controls renderer/title update cadence.
 
 ## Suggested next docs to keep current
 

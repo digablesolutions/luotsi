@@ -9,10 +9,16 @@ internal sealed class AppCommandFailureResponder(AppCommandEnvelopeWriter envelo
 {
     private readonly AppCommandEnvelopeWriter _envelopeWriter = envelopeWriter ?? throw new ArgumentNullException(nameof(envelopeWriter));
 
-    public int WriteUsageError(string? command, DateTimeOffset started, ArtifactData artifacts, UsageException exception)
+    public int WriteUsageError(CliOptions options, DateTimeOffset started, ArtifactData artifacts, UsageException exception)
     {
+        ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(exception);
-        _envelopeWriter.WriteUsageError(command, started, artifacts, exception);
+        _envelopeWriter.WriteUsageError(
+            options.Command,
+            started,
+            artifacts,
+            exception,
+            AppCommandConsoleOutputModeResolver.ResolveForFailure(options));
         return 2;
     }
 
@@ -31,7 +37,16 @@ internal sealed class AppCommandFailureResponder(AppCommandEnvelopeWriter envelo
         }
 
         var category = failure?.CategoryOverride ?? ErrorInfo.Classify(exception.Message);
-        _envelopeWriter.WriteFailure(command, started, failureData, context.CreateArtifactData(), exception, category);
-        return 1;
+        _envelopeWriter.WriteFailure(
+            command,
+            started,
+            failureData,
+            context.CreateArtifactData(),
+            exception,
+            category,
+            AppCommandConsoleOutputModeResolver.ResolveForFailure(context.Options));
+        return failureData is ScenarioRunFailureData { CiPolicy: { ExitCodeApplied: true } ciPolicy }
+            ? ciPolicy.RecommendedExitCode
+            : 1;
     }
 }

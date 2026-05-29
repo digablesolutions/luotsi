@@ -1,0 +1,165 @@
+---
+title: Shared Lab Operations
+description: Practical device-query and lab-plan workflows for shared Android pools, CI runs, leases, and quarantine recovery.
+---
+
+This page is the workflow companion to [Lab and device claims](../lab-and-device-claims/).
+
+Use it when the commands themselves are already familiar, but the question is operational:
+
+- how should we shape `--device-query` in a shared pool?
+- when should we use `lab plan` before `lab claim` or `run --claim-device`?
+- how should CI jobs behave when the selected hardware is leased or quarantined?
+
+## Query rules that matter in practice
+
+`--device-query` is deliberately simple:
+
+- clauses use exact-match `key=value` syntax
+- clauses are comma-separated
+- matching is case-insensitive
+- Luotsi expects one selected target for commands such as `device-status`, `view`, `inspect`, or `run --claim-device`
+
+The useful public keys are:
+
+- `serial`
+- `state`
+- `transport`
+- `type`
+- `model`
+- `product`
+- `device`
+- `availability`
+
+Two fields are especially useful in shared labs:
+
+- `state=online` narrows to transports that adb currently considers usable
+- `availability=available` mirrors the adb-derived availability field from `luotsi devices`; lease and quarantine gates are still applied separately by `lab status`, `lab plan`, `lab claim`, and `run --claim-device`
+
+If you want raw inventory, use `luotsi devices`. If you want selection semantics, use `lab status` or `lab plan`. `devices` intentionally does not accept `--device-query`.
+
+## Example query patterns
+
+| Goal | Query |
+|---|---|
+| Any online physical device | `state=online,type=physical` |
+| One specific shared phone model | `state=online,type=physical,model=Pixel_9` |
+| Only adb-available pool hardware | `state=online,type=physical,availability=available` |
+| One Wi-Fi attached device class | `state=online,transport=wifi,model=Pixel_9` |
+| One emulator lane | `state=online,type=emulator` |
+
+Treat queries as selection contracts, not fuzzy searches. When a query is too broad, refine it with one more clause instead of relying on incidental device order.
+
+## Why `lab plan` should come before a claim
+
+`lab plan` is the dry-run allocator. It answers two questions without mutating lab state:
+
+- which device would Luotsi pick for this query?
+- if nothing can be picked, what command should the operator or agent run next?
+
+```bash
+luotsi lab status --device-query state=online,type=physical,availability=available
+luotsi lab plan --device-query state=online,type=physical,availability=available,model=Pixel_9
+```
+
+Use `lab plan` as the decision point before claiming or starting a CI run. It is the safest way to turn a broad pool into one explicit target and it already returns `recommended_commands` when the selection is blocked.
+
+That matters because `availability=available` only reflects adb-level readiness. Lease and quarantine blockers are surfaced by the lab commands themselves.
+
+## Workflow: one engineer, several attached devices
+
+This is the local debugging case where multiple transports are visible and you want one reliable target without guessing.
+
+```bash
+luotsi lab status --device-query state=online,type=physical
+luotsi lab plan --device-query state=online,type=physical,model=Pixel_9
+luotsi device-status --device-query state=online,type=physical,model=Pixel_9
+luotsi view --device-query state=online,type=physical,model=Pixel_9
+```
+
+Use `device-status --device-query ...` once the query is narrow enough to select exactly one target. If it still matches multiple devices, go back to `lab status` or `lab plan` and add another clause.
+
+## Workflow: one CI job, one leased device
+
+This is the default pool-safe automation pattern.
+
+```bash
+luotsi lab plan --device-query state=online,type=physical,availability=available,model=Pixel_9
+luotsi run --path scenarios --device-query state=online,type=physical,availability=available,model=Pixel_9 --claim-device --owner gh-actions-4821 --ttl-sec 1800 --report-junit junit.xml
+```
+
+Why this pattern works:
+
+- `lab plan` proves the query is sane before the job mutates lease state
+- `run --claim-device` keeps the lease lifecycle attached to the scenario run itself
+- `--owner` makes the lease visible as a CI job, not just as a generic host user
+- the lease is released from the run's cleanup path instead of relying on a separate human release step
+
+Use explicit `lab claim` first only when the lease boundary needs to outlive one command.
+
+## Workflow: one pool, multiple job classes
+
+When different jobs target different hardware classes, keep the distinction in the query itself.
+
+Examples:
+
+- smoke tests on emulators: `state=online,type=emulator`
+- camera-sensitive runs on physical Wi-Fi devices: `state=online,type=physical,transport=wifi`
+- one model-specific regression lane: `state=online,type=physical,model=Pixel_9,availability=available`
+
+That keeps the allocation policy visible in source control instead of hidden in whoever happens to know the current lab state.
+
+## Workflow: blocked by an existing lease
+
+When a query matches only leased devices, Luotsi will fail selection on purpose instead of silently stealing hardware.
+
+```bash
+luotsi lab plan --device-query state=online,type=physical,model=Pixel_9
+luotsi lab leases
+luotsi lab release --serial <serial>
+```
+
+Use `lab plan` first because it already tells you whether the blocked state is a lease problem and suggests the next commands. Use `lab extend` instead of release/reclaim if the current owner is still valid and the job simply needs more time.
+
+## Workflow: blocked by quarantine
+
+Quarantine is not just another failure. It is an explicit operator decision that the device should stay out of rotation.
+
+```bash
+luotsi lab plan --device-query state=online,type=physical,model=Pixel_9
+luotsi lab quarantines
+luotsi lab unquarantine --serial <serial>
+```
+
+Only unquarantine after the hardware is actually healthy again. If the issue is still real, keep the device quarantined and adjust the selection query or pool routing instead.
+
+## When to use `lab claim` directly
+
+Use explicit `lab claim` when the device lease needs to span more than one Luotsi command, for example:
+
+- a human operator is about to do `view`, `inspect`, and then `run`
+- a CI workflow has a preflight/setup stage before the scenario run starts
+- a device should be reserved while another system prepares the app or environment
+
+```bash
+luotsi lab claim --device-query state=online,type=physical,model=Pixel_9 --owner local-debug --ttl-sec 3600
+luotsi view --device-query state=online,type=physical,model=Pixel_9
+luotsi inspect --device-query state=online,type=physical,model=Pixel_9
+luotsi lab release --serial <serial>
+```
+
+If the unit of ownership is the scenario run itself, prefer `run --claim-device` instead.
+
+## Common operator rules
+
+- Prefer `state=online` over guessing from raw adb status text.
+- Prefer `lab status` or `lab plan` when the pool is shared and lease or quarantine state matters; `availability=available` only reflects adb-level readiness.
+- Use `lab status` for explanation, `lab plan` for dry-run allocation, `lab claim` for longer-lived reservation, and `run --claim-device` for run-scoped reservation.
+- Use either `--device` or `--device-query`, never both.
+
+## Related pages
+
+- [Lab and device claims](../lab-and-device-claims/)
+- [Scenario playbooks](../scenario-playbooks/)
+- [Device readiness](../../getting-started/device-readiness/)
+- [Troubleshooting](../../getting-started/troubleshooting/)

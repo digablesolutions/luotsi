@@ -1,7 +1,6 @@
 using System.IO.Enumeration;
 using System.Text.Json;
 using Luotsi.Cli.Artifacts;
-using Luotsi.Cli.Cli;
 using Luotsi.Cli.Cli.View;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Infrastructure.Time;
@@ -32,12 +31,11 @@ internal sealed class ManualTimeProvider(DateTimeOffset utcNow) : TimeProvider
 internal sealed class SteppingTimeProvider(DateTimeOffset utcNow, TimeSpan step) : TimeProvider
 {
     private DateTimeOffset _utcNow = utcNow;
-    private readonly TimeSpan _step = step;
 
     public override DateTimeOffset GetUtcNow()
     {
         var current = _utcNow;
-        _utcNow = _utcNow.Add(_step);
+        _utcNow = _utcNow.Add(step);
         return current;
     }
 
@@ -142,6 +140,11 @@ internal sealed class FakeFileSystem : IFileSystem
     public Task<string> ReadAllTextAsync(string path, CancellationToken cancellationToken = default) =>
         Task.FromResult(_files.TryGetValue(path, out var text) ? text : System.Text.Encoding.UTF8.GetString(_binaryFiles[path]));
 
+    public Task<byte[]> ReadAllBytesAsync(string path, CancellationToken cancellationToken = default) =>
+        Task.FromResult(_files.TryGetValue(path, out var text)
+            ? System.Text.Encoding.UTF8.GetBytes(text)
+            : _binaryFiles[path]);
+
     public Stream OpenRead(string path)
     {
         if (_files.TryGetValue(path, out var text))
@@ -229,6 +232,18 @@ internal sealed class FakeFileSystem : IFileSystem
 
     private sealed class FakeWriteStream(FakeFileSystem fileSystem, string path) : MemoryStream
     {
+        public override void Flush()
+        {
+            fileSystem.WriteBinaryFile(path, ToArray());
+            base.Flush();
+        }
+
+        public override Task FlushAsync(CancellationToken cancellationToken)
+        {
+            fileSystem.WriteBinaryFile(path, ToArray());
+            return base.FlushAsync(cancellationToken);
+        }
+
         protected override void Dispose(bool disposing)
         {
             if (disposing)
@@ -285,16 +300,16 @@ internal sealed class FakeAdbClient(string? serial = null) : IAdbClient
             return Task.FromResult(new AdbCommandResult("adb", serial, finalArgs, new ProcessResult(0, string.Empty, string.Empty)));
         }
 
-                var result = _runResults.Count > 0
-                        ? _runResults.Dequeue()
-                        : finalArgs.Length == 4 &&
-                            string.Equals(finalArgs[0], "exec-out", StringComparison.Ordinal) &&
-                            string.Equals(finalArgs[1], "uiautomator", StringComparison.Ordinal) &&
-                            string.Equals(finalArgs[2], "dump", StringComparison.Ordinal) &&
-                            string.Equals(finalArgs[3], "/dev/tty", StringComparison.Ordinal) &&
-                            _shellResults.Count > 0
-                                ? _shellResults.Dequeue()
-                                : new ProcessResult(0, string.Empty, string.Empty);
+        var result = _runResults.Count > 0
+            ? _runResults.Dequeue()
+            : finalArgs.Length == 4 &&
+              string.Equals(finalArgs[0], "exec-out", StringComparison.Ordinal) &&
+              string.Equals(finalArgs[1], "uiautomator", StringComparison.Ordinal) &&
+              string.Equals(finalArgs[2], "dump", StringComparison.Ordinal) &&
+              string.Equals(finalArgs[3], "/dev/tty", StringComparison.Ordinal) &&
+              _shellResults.Count > 0
+                ? _shellResults.Dequeue()
+                : new ProcessResult(0, string.Empty, string.Empty);
         return Task.FromResult(new AdbCommandResult("adb", serial, finalArgs, result));
     }
 
@@ -469,7 +484,7 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public List<string> TakeScreenshotRequests { get; } = [];
 
-    public List<(string Label, int? ExpectedWidth, int? ExpectedHeight, string? ExpectedSha256)> AssertScreenshotRequests { get; } = [];
+    public List<(string Label, int? ExpectedWidth, int? ExpectedHeight, string? ExpectedSha256, string? ExpectedSha256File, string? BaselineFile, bool UpdateBaseline, ScreenshotAssertionRegion? Region, string? ExpectedRegionSha256, string? ExpectedRegionSha256File)> AssertScreenshotRequests { get; } = [];
 
     public List<string> RecordRequests { get; } = [];
 
@@ -499,6 +514,8 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public List<string> AdbDiagnostics { get; } = [];
 
+    public Queue<AdbDiagnosticResult> AdbServerStatusResults { get; } = new();
+
     public List<string> AdbReconnectTargets { get; } = [];
 
     public List<int> WaitForDeviceRequests { get; } = [];
@@ -510,10 +527,12 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
     public List<(string Local, string Remote, bool NoRebind)> ForwardRequests { get; } = [];
 
     public List<string> ForwardRemoveRequests { get; } = [];
+    public List<PortForwardEntry> ForwardEntries { get; } = [];
 
     public List<(string Remote, string Local, bool NoRebind)> ReverseRequests { get; } = [];
 
     public List<string> ReverseRemoveRequests { get; } = [];
+    public List<PortReverseEntry> ReverseEntries { get; } = [];
 
     public List<(string Package, string? Activity, bool Wait)> StartAppRequests { get; } = [];
 
@@ -580,7 +599,9 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
     public Task<AdbDiagnosticResult> GetAdbServerStatusAsync()
     {
         AdbDiagnostics.Add("server-status");
-        return Task.FromResult(CreateAdbDiagnostic("server-status", ["server-status"]));
+        return Task.FromResult(AdbServerStatusResults.Count > 0
+            ? AdbServerStatusResults.Dequeue()
+            : CreateAdbDiagnostic("server-status", ["server-status"]));
     }
 
     public Task<AdbDiagnosticResult> GetAdbVersionAsync()
@@ -681,9 +702,9 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
         return Task.FromResult(new TakeScreenshotResult(label, $"{label}.png"));
     }
 
-    public Task<ScreenshotAssertionResult> AssertScreenshotAsync(string label, int? expectedWidth, int? expectedHeight, string? expectedSha256)
+    public Task<ScreenshotAssertionResult> AssertScreenshotAsync(string label, int? expectedWidth, int? expectedHeight, string? expectedSha256, string? expectedSha256File = null, string? baselineFile = null, bool updateBaseline = false, ScreenshotAssertionRegion? region = null, string? expectedRegionSha256 = null, string? expectedRegionSha256File = null)
     {
-        AssertScreenshotRequests.Add((label, expectedWidth, expectedHeight, expectedSha256));
+        AssertScreenshotRequests.Add((label, expectedWidth, expectedHeight, expectedSha256, expectedSha256File, baselineFile, updateBaseline, region, expectedRegionSha256, expectedRegionSha256File));
         if (AssertScreenshotException is not null)
         {
             throw AssertScreenshotException;
@@ -697,7 +718,12 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
             AssertScreenshotObservedSha256,
             expectedWidth,
             expectedHeight,
-            expectedSha256));
+            expectedSha256,
+            baselineFile,
+            updateBaseline,
+            region,
+            null,
+            expectedRegionSha256));
     }
 
     public Task<CaptureArtifactsResult> CaptureArtifactsAsync(string label) => Task.FromResult(new CaptureArtifactsResult(label, $"{label}.png", $"{label}.txt", $"{label}.json", $"{label}.xml"));
@@ -831,7 +857,7 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
     }
 
     public Task<PortForwardListResult> ListForwardsAsync() =>
-        Task.FromResult(new PortForwardListResult([]));
+        Task.FromResult(new PortForwardListResult(ForwardEntries));
 
     public Task<PortForwardResult> ForwardAsync(string local, string remote, bool noRebind)
     {
@@ -846,7 +872,7 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
     }
 
     public Task<PortReverseListResult> ListReversesAsync() =>
-        Task.FromResult(new PortReverseListResult([]));
+        Task.FromResult(new PortReverseListResult(ReverseEntries));
 
     public Task<PortReverseResult> ReverseAsync(string remote, string local, bool noRebind)
     {

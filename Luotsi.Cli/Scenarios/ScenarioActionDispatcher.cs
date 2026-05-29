@@ -32,7 +32,17 @@ internal sealed class ScenarioActionDispatcher(
             "resetLog" => await _actionHost.ResetLogAsync().ConfigureAwait(false),
             "assertEvent" => await _actionHost.AssertEventAsync(step.Event ?? step.Text ?? throw new UsageException("assertEvent requires event or text."), step.Contains ?? [], step.DetailsPattern, step.TimeoutSec ?? 15, step.ObserveFromPreviousStep is true ? previousStepStartedAt : null).ConfigureAwait(false),
             "takeScreenshot" => await _actionHost.TakeScreenshotAsync(step.Label ?? step.Text ?? step.Name ?? throw new UsageException("takeScreenshot requires label, text, or name.")).ConfigureAwait(false),
-            "assertScreenshot" => await _screenshotAssertionHost.AssertScreenshotAsync(step.Label ?? step.Text ?? step.Name ?? "screenshot", step.ExpectedWidth, step.ExpectedHeight, step.ExpectedSha256).ConfigureAwait(false),
+            "assertScreenshot" => await _screenshotAssertionHost.AssertScreenshotAsync(
+                step.Label ?? step.Text ?? step.Name ?? "screenshot",
+                step.ExpectedWidth,
+                step.ExpectedHeight,
+                step.ExpectedSha256,
+                step.ExpectedSha256File,
+                step.BaselineFile,
+                step.UpdateBaseline is true,
+                BuildScreenshotRegion(step),
+                step.ExpectedRegionSha256,
+                step.ExpectedRegionSha256File).ConfigureAwait(false),
             "captureArtifacts" => await _actionHost.CaptureArtifactsAsync(step.Label ?? step.Text ?? step.Name ?? throw new UsageException("captureArtifacts requires label, text, or name.")).ConfigureAwait(false),
             "assertTextInputReady" => await _actionHost.AssertTextInputReadyAsync(step.RequireKeyboard ?? false, step.TimeoutSec ?? 15).ConfigureAwait(false),
             "assertBelow" => await _actionHost.AssertBelowAsync(step.Text ?? throw new UsageException("assertBelow requires text."), step.Below ?? throw new UsageException("assertBelow requires below."), step.MaxGapPx ?? 260).ConfigureAwait(false),
@@ -54,6 +64,19 @@ internal sealed class ScenarioActionDispatcher(
         };
     }
 
+    private static ScreenshotAssertionRegion? BuildScreenshotRegion(ScenarioStep step)
+    {
+        if (step.RegionX is null && step.RegionY is null && step.RegionWidth is null && step.RegionHeight is null)
+        {
+            return null;
+        }
+
+        return new ScreenshotAssertionRegion(
+            step.RegionX.GetValueOrDefault(),
+            step.RegionY.GetValueOrDefault(),
+            step.RegionWidth.GetValueOrDefault(),
+            step.RegionHeight.GetValueOrDefault());
+    }
     private async Task<SleepResult> SleepAsync(int milliseconds)
     {
         if (milliseconds < 0)

@@ -117,6 +117,79 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ViewSetup_Without_Device_Returns_Actionable_Usage_Error()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["view", "setup", "--fix"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("view-setup", envelope.RootElement.GetProperty("command").GetString());
+        Assert.Contains("view-setup requires --device <adb serial>.", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ViewSetup_Fix_Stages_Ffmpeg_When_Decoder_Is_Not_Ready()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var fileSystem = new FakeFileSystem();
+        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>());
+        var pathResolver = new ViewHostPathResolver(environment);
+        fileSystem.AddFile(ViewHostPathResolver.GetRepositoryRelativeFileCandidates("ffmpeg/download-ffmpeg.ps1").First(), "Write-Host 'ok'");
+
+        var processRunner = new FakeProcessRunner();
+        processRunner.EnqueueResult(new ProcessResult(0, "Done. Staged native libraries.", string.Empty));
+        var doctor = new FakeViewDoctor(options => new ViewDoctorResult(
+            false,
+            options.PresetName,
+            options,
+            [],
+            null,
+            [new ViewDoctorCheck("decoder", false, "FFmpeg native decoder is not ready.")]));
+        var setup = new FakeViewSetup((options, fix) => new ViewSetupResult(
+            true,
+            fix,
+            options.PresetName,
+            options,
+            [new ViewSetupStep("helper_install", ViewStartupPhaseStatus.Succeeded, "Installed.")],
+            new ViewDoctorResult(true, options.PresetName, options, [], null, [new ViewDoctorCheck("decoder", true, "FFmpeg native decoder is ready.")])));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            Environment = environment,
+            ProcessRunner = processRunner,
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            ViewDoctorFactory = new FakeViewDoctorFactory(doctor),
+            ViewSetupFactory = new FakeViewSetupFactory(setup)
+        });
+
+        var exitCode = await app.RunAsync([
+            "view",
+            "setup",
+            "--device", "192.168.0.134:5555",
+            "--fix"]);
+
+        using var envelope = console.ParseSingleOutputAsJson();
+        Assert.Equal(0, exitCode);
+        Assert.Equal("view-setup", envelope.RootElement.GetProperty("command").GetString());
+        var stepNames = envelope.RootElement.GetProperty("data").GetProperty("steps").EnumerateArray().Select(static item => item.GetProperty("name").GetString()).ToArray();
+        Assert.Collection(
+            stepNames,
+            name => Assert.Equal("ffmpeg_stage", name),
+            name => Assert.Equal("ffmpeg_stage", name),
+            name => Assert.Equal("helper_install", name));
+        Assert.Single(processRunner.Calls);
+        Assert.True(Assert.Single(setup.Calls).Fix);
+    }
+
+    [Fact]
     public async Task RunAsync_ViewDoctor_Fix_Runs_Setup()
     {
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
@@ -193,7 +266,7 @@ public sealed partial class AppTests
         var fileSystem = new FakeFileSystem();
         var environment = new FakeEnvironmentVariables(new Dictionary<string, string>());
         var pathResolver = new ViewHostPathResolver(environment);
-        fileSystem.AddFile(pathResolver.GetRepositoryRelativeFileCandidates("ffmpeg/download-ffmpeg.ps1").First(), "Write-Host 'ok'");
+        fileSystem.AddFile(ViewHostPathResolver.GetRepositoryRelativeFileCandidates("ffmpeg/download-ffmpeg.ps1").First(), "Write-Host 'ok'");
 
         var processRunner = new FakeProcessRunner();
         processRunner.EnqueueResult(new ProcessResult(0, "Done. Staged native libraries.", string.Empty));
@@ -244,6 +317,47 @@ public sealed partial class AppTests
         Assert.Equal(OperatingSystem.IsWindows() ? "pwsh" : "pwsh", call.FileName);
         Assert.Contains("-File", call.Args);
         Assert.True(Assert.Single(setup.Calls).Fix);
+    }
+
+    [Fact]
+    public async Task ViewSetup_Fix_Uninstalls_And_Reinstalls_Incompatible_Helper()
+    {
+        var fileSystem = new FakeFileSystem();
+        var helperPath = "/tmp/luotsi-view-helper.apk";
+        fileSystem.AddFile(helperPath, "apk");
+        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>
+        {
+            ["LUOTSI_VIEW_HELPER_APK"] = helperPath
+        });
+        var adb = new FakeAdbClient("192.168.0.134:5555");
+        adb.EnqueueRunResult(new ProcessResult(1, string.Empty, "Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: Package dev.luotsi.view signatures do not match previously installed version; ignoring!]"));
+        adb.EnqueueRunResult(new ProcessResult(0, "Success", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "Success", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "dev.luotsi.view/.ConsentActivity", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "dev.luotsi.view.CaptureService", string.Empty));
+
+        var setup = new ViewSetup(
+            new FakeDeviceHost(),
+            new AndroidViewHelperPackageLocator(environment, fileSystem),
+            new ViewHostPathResolver(environment),
+            new FakeViewDoctorFactory(new FakeViewDoctor()),
+            fileSystem,
+            new FakeProcessRunner(),
+            new FakeAdbClientFactory(adb));
+
+        var result = await setup.SetupAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", false, null, 1600, 60, "8M", false, false), fix: true);
+
+        Assert.True(result.Ready);
+        Assert.Contains(result.Steps, step => step is {Name: "helper_uninstall", Status: ViewStartupPhaseStatus.Succeeded});
+        Assert.Equal(
+            [
+                ["install", "-r", helperPath],
+                ["uninstall", "dev.luotsi.view"],
+                ["install", "-r", helperPath],
+                ["shell", "cmd", "package", "resolve-activity", "--brief", "dev.luotsi.view/.ConsentActivity"],
+                ["shell", "pm", "dump", "dev.luotsi.view"]
+            ],
+            adb.RunCommands);
     }
 
     [Fact]
@@ -443,7 +557,7 @@ public sealed partial class AppTests
         var environment = new FakeEnvironmentVariables(new Dictionary<string, string>());
         var fileSystem = new FakeFileSystem();
         var pathResolver = new ViewHostPathResolver(environment);
-        var projectDirectory = pathResolver.GetRepositoryRelativeDirectoryCandidates("Luotsi.ViewServer.Android").First();
+        var projectDirectory = ViewHostPathResolver.GetRepositoryRelativeDirectoryCandidates("Luotsi.ViewServer.Android").First();
         var wrapperPath = OperatingSystem.IsWindows()
             ? Path.Join(projectDirectory, "gradlew.bat")
             : Path.Join(projectDirectory, "gradlew");
@@ -466,7 +580,7 @@ public sealed partial class AppTests
         Assert.Same(package, resolved);
         var call = Assert.Single(processRunner.Calls);
         Assert.Equal(wrapperPath, call.FileName);
-        Assert.Equal(["-p", projectDirectory, ":app:assembleDebug"], call.Args);
+        Assert.Equal(["-p", projectDirectory, ":app:assembleRelease"], call.Args);
         Assert.Collection(
             steps,
             step =>
@@ -511,7 +625,52 @@ public sealed partial class AppTests
         var call = Assert.Single(processRunner.Calls);
         Assert.Equal("pwsh", call.FileName);
         Assert.Equal(["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath], call.Args);
-        Assert.Contains(steps, step => step.Name == "ffmpeg_stage" && step.Status == ViewStartupPhaseStatus.Started && step.Detail == scriptPath);
+        Assert.Contains(steps, step => step is {Name: "ffmpeg_stage", Status: ViewStartupPhaseStatus.Started} && step.Detail == scriptPath);
+    }
+
+    [Fact]
+    public async Task FfmpegSetupProvisioner_StageAsync_Retries_Transient_Download_Failure()
+    {
+        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>());
+        var fileSystem = new FakeFileSystem();
+        var processRunner = new FakeProcessRunner();
+        processRunner.EnqueueResult(new ProcessResult(1, string.Empty, "download timed out"));
+        processRunner.EnqueueResult(new ProcessResult(0, "Done. Staged native libraries.", string.Empty));
+        var scriptPath = Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "ffmpeg", "download-ffmpeg.ps1"));
+        fileSystem.AddFile(scriptPath, "Write-Host 'ok'");
+        var provisioner = new FfmpegSetupProvisioner(environment, fileSystem, processRunner);
+        var steps = new List<ViewSetupStep>();
+
+        var staged = await provisioner.StageAsync(steps.Add);
+
+        Assert.True(staged);
+        Assert.Equal(2, processRunner.Calls.Count);
+        Assert.Contains(steps, step =>
+            step is {Name: "ffmpeg_stage", Status: ViewStartupPhaseStatus.Succeeded} &&
+            step.Summary.Contains("after 2 attempts", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task FfmpegSetupProvisioner_StageAsync_Does_Not_Retry_ScriptPath_Download_Text()
+    {
+        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>());
+        var fileSystem = new FakeFileSystem();
+        var processRunner = new FakeProcessRunner();
+        processRunner.EnqueueResult(new ProcessResult(1, string.Empty, "C:/repo/ffmpeg/download-ffmpeg.ps1: access denied"));
+        processRunner.EnqueueResult(new ProcessResult(0, "Done. Staged native libraries.", string.Empty));
+        var scriptPath = Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "ffmpeg", "download-ffmpeg.ps1"));
+        fileSystem.AddFile(scriptPath, "Write-Host 'ok'");
+        var provisioner = new FfmpegSetupProvisioner(environment, fileSystem, processRunner);
+        var steps = new List<ViewSetupStep>();
+
+        var staged = await provisioner.StageAsync(steps.Add);
+
+        Assert.False(staged);
+        Assert.Single(processRunner.Calls);
+        Assert.Contains(steps, step =>
+            step is {Name: "ffmpeg_stage", Status: ViewStartupPhaseStatus.Failed} &&
+            step.Detail is not null &&
+            step.Detail.Contains("download-ffmpeg.ps1", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -543,8 +702,8 @@ public sealed partial class AppTests
         Assert.Same(package, resolved);
         var call = Assert.Single(processRunner.Calls);
         Assert.Equal(wrapperPath, call.FileName);
-        Assert.Equal(["-p", projectDirectory, ":app:assembleDebug"], call.Args);
-        Assert.Contains(steps, step => step.Name == "helper_build" && step.Status == ViewStartupPhaseStatus.Started && step.Detail == projectDirectory);
+        Assert.Equal(["-p", projectDirectory, ":app:assembleRelease"], call.Args);
+        Assert.Contains(steps, step => step is {Name: "helper_build", Status: ViewStartupPhaseStatus.Started} && step.Detail == projectDirectory);
     }
 
     private sealed class SequencedAndroidViewHelperPackageLocator(params object[] outcomes) : IAndroidViewHelperPackageLocator

@@ -1,8 +1,6 @@
-using System.Linq;
 using Luotsi.Cli.Hosts.Android.View;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
-using Luotsi.Cli.View;
 using Luotsi.Cli.View.Contracts;
 
 namespace Luotsi.Cli.View.Diagnostics;
@@ -65,7 +63,7 @@ internal sealed class AndroidViewHelperSetupProvisioner(
         }
 
         reportStep(new ViewSetupStep("helper_build", ViewStartupPhaseStatus.Started, "Building Android view helper APK.", projectDirectory));
-        var build = await _processRunner.RunAsync(wrapper, ["-p", projectDirectory, ":app:assembleDebug"], cancellationToken).ConfigureAwait(false);
+        var build = await _processRunner.RunAsync(wrapper, ["-p", projectDirectory, ":app:assembleRelease"], cancellationToken).ConfigureAwait(false);
         if (build.ExitCode != 0)
         {
             reportStep(new ViewSetupStep("helper_build", ViewStartupPhaseStatus.Failed, "Android view helper build failed.", PreferError(build), "Fix the Gradle build, then rerun view setup --fix."));
@@ -103,7 +101,7 @@ internal sealed class AndroidViewHelperSetupProvisioner(
 
     private string? ResolveHelperProjectDirectory()
     {
-        var candidates = _pathResolver.GetRepositoryRelativeDirectoryCandidates(HelperProjectDirectory);
+        var candidates = ViewHostPathResolver.GetRepositoryRelativeDirectoryCandidates(HelperProjectDirectory);
         return candidates.Where(_fileSystem.DirectoryExists).FirstOrDefault();
     }
 

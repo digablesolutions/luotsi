@@ -15,14 +15,24 @@ namespace Luotsi.Cli.Artifacts;
 public sealed class ArtifactSession
 {
     private readonly IFileSystem _fileSystem;
-    private const string ArtifactIndexFileName = "index.md";
+    private readonly ArtifactIndexRenderer _indexRenderer;
+    internal const string ArtifactIndexFileName = "index.md";
+    internal const string ArtifactHtmlIndexFileName = "index.html";
 
-    private ArtifactSession(string root, IFileSystem fileSystem, UiPollArtifactPolicy uiPollArtifactPolicy)
+    private ArtifactSession(string root, IFileSystem fileSystem, UiPollArtifactPolicy uiPollArtifactPolicy, bool ensureDirectoryExists)
     {
         Root = root;
         _fileSystem = fileSystem;
+        _indexRenderer = new ArtifactIndexRenderer(root, fileSystem);
         UiPollArtifactPolicy = uiPollArtifactPolicy;
-        _fileSystem.CreateDirectory(root);
+        if (ensureDirectoryExists)
+        {
+            _fileSystem.CreateDirectory(root);
+        }
+        else if (!_fileSystem.DirectoryExists(root))
+        {
+            throw new UsageException($"Artifact root '{root}' does not exist.");
+        }
     }
 
     /// <summary>
@@ -42,13 +52,29 @@ public sealed class ArtifactSession
     /// <param name="fileSystem"></param>
     /// <param name="timeProvider"></param>
     /// <returns>Artifact session.</returns>
-    public static ArtifactSession Create(CliOptions options, IFileSystem? fileSystem = null, TimeProvider? timeProvider = null)
+    public static ArtifactSession Create(
+        CliOptions options,
+        IFileSystem? fileSystem = null,
+        TimeProvider? timeProvider = null,
+        IEnvironmentVariables? environment = null,
+        bool preferWorkspaceHome = false)
     {
         var activeFileSystem = fileSystem ?? new PhysicalFileSystem();
         var activeTimeProvider = timeProvider ?? TimeProvider.System;
-        var baseDir = options.Get("artifacts") ?? Path.Combine(activeFileSystem.GetTempPath(), "luotsi");
-        var name = $"{activeTimeProvider.GetUtcNow():yyyyMMdd-HHmmss}-{options.Command ?? "command"}";
-        return new ArtifactSession(Path.Combine(baseDir, name), activeFileSystem, ParseUiPollArtifactPolicy(options.Get("poll-artifacts")));
+        var baseDir = ResolveBaseDirectory(options, activeFileSystem, environment, preferWorkspaceHome);
+        var name = $"{activeTimeProvider.GetUtcNow():yyyyMMdd-HHmmss}-{SanitizePathSegment(options.Command)}";
+        return new ArtifactSession(Path.Combine(baseDir, name), activeFileSystem, ParseUiPollArtifactPolicy(options.Get("poll-artifacts")), ensureDirectoryExists: true);
+    }
+
+    public static ArtifactSession AttachExisting(string root, IFileSystem? fileSystem = null, string? pollArtifacts = null)
+    {
+        if (string.IsNullOrWhiteSpace(root))
+        {
+            throw new UsageException("Artifact root must be a non-empty directory path.");
+        }
+
+        var activeFileSystem = fileSystem ?? new PhysicalFileSystem();
+        return new ArtifactSession(root, activeFileSystem, ParseUiPollArtifactPolicy(pollArtifacts), ensureDirectoryExists: false);
     }
 
     /// <summary>
@@ -59,7 +85,7 @@ public sealed class ArtifactSession
     public async Task WriteTextAsync(string name, string text)
     {
         await _fileSystem.WriteAllTextAsync(GetArtifactPath(name), text, Encoding.UTF8).ConfigureAwait(false);
-        await _fileSystem.WriteAllTextAsync(GetArtifactPath(ArtifactIndexFileName), BuildMarkdownIndex(), Encoding.UTF8).ConfigureAwait(false);
+        await RefreshIndexAsync().ConfigureAwait(false);
     }
 
     /// <summary>
@@ -70,22 +96,42 @@ public sealed class ArtifactSession
     public async Task WriteJsonAsync(string name, object value)
     {
         var path = GetArtifactPath(name);
-        await using var stream = _fileSystem.OpenWrite(path);
-        await JsonSerializer.SerializeAsync(stream, value, value.GetType(), AppJson.Options).ConfigureAwait(false);
+        await using (var stream = _fileSystem.OpenWrite(path))
+        {
+            await JsonSerializer.SerializeAsync(stream, value, value.GetType(), AppJson.Options).ConfigureAwait(false);
+        }
+
         await RefreshIndexAsync().ConfigureAwait(false);
     }
 
     /// <summary>
     /// Refreshes the Markdown index for artifacts written outside text/JSON helpers.
     /// </summary>
-    public Task RefreshIndexAsync() =>
-        _fileSystem.WriteAllTextAsync(GetArtifactPath(ArtifactIndexFileName), BuildMarkdownIndex(), Encoding.UTF8);
+    public async Task RefreshIndexAsync()
+    {
+        _ = await RefreshIndexWithSnapshotAsync().ConfigureAwait(false);
+    }
+
+    internal async Task<ArtifactIndexSnapshot> RefreshIndexWithSnapshotAsync()
+    {
+        var files = GetIndexedFiles();
+        var replaySummaries = new SessionReplaySummaryReader(Root, _fileSystem).ReadSummaries(files);
+        var snapshot = new ArtifactIndexSnapshot(files, replaySummaries);
+        var markdownIndex = await _indexRenderer.BuildMarkdownIndexAsync(files, replaySummaries).ConfigureAwait(false);
+        await _fileSystem.WriteAllTextAsync(GetArtifactPath(ArtifactIndexFileName), markdownIndex, Encoding.UTF8).ConfigureAwait(false);
+        var htmlIndex = await _indexRenderer.BuildHtmlIndexAsync(files, replaySummaries).ConfigureAwait(false);
+        await _fileSystem.WriteAllTextAsync(GetArtifactPath(ArtifactHtmlIndexFileName), htmlIndex, Encoding.UTF8).ConfigureAwait(false);
+        return snapshot;
+    }
 
     /// <summary>
     /// Returns JSON envelope artifact data.
     /// </summary>
     /// <returns>Artifact metadata.</returns>
     public ArtifactData ToData() => new(Root, ToOptionValue(UiPollArtifactPolicy));
+
+    internal Stream OpenArtifactWrite(string name, bool overwrite = true) =>
+        _fileSystem.OpenWrite(GetArtifactPath(name), overwrite);
 
     private string GetArtifactPath(string name)
     {
@@ -102,98 +148,14 @@ public sealed class ArtifactSession
         return Path.Join(Root, name);
     }
 
-    private string BuildMarkdownIndex()
-    {
-        var files = _fileSystem.GetFiles(Root, "*", SearchOption.AllDirectories)
+    private string[] GetIndexedFiles() =>
+        _fileSystem.GetFiles(Root, "*", SearchOption.AllDirectories)
             .Select(path => Path.GetRelativePath(Root, path))
             .Where(static path => !string.Equals(path, ArtifactIndexFileName, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(GetArtifactSortGroup)
+            .Where(static path => !string.Equals(path, ArtifactHtmlIndexFileName, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(ArtifactIndexRenderer.GetArtifactSortGroup)
             .ThenBy(static path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var builder = new StringBuilder();
-        builder.AppendLine("# Luotsi Artifacts");
-        builder.AppendLine();
-        builder.AppendLine($"Artifact root: `{Root}`");
-        builder.AppendLine();
-        if (files.Length == 0)
-        {
-            builder.AppendLine("No artifacts have been written yet.");
-            return builder.ToString();
-        }
-
-        foreach (var group in files.GroupBy(GetArtifactCategory))
-        {
-            builder.AppendLine($"## {group.Key}");
-            builder.AppendLine();
-            foreach (var file in group)
-            {
-                builder.AppendLine($"- [{file}]({EscapeMarkdownLink(file)})");
-            }
-
-            builder.AppendLine();
-        }
-
-        return builder.ToString();
-    }
-
-    private static int GetArtifactSortGroup(string path) =>
-        GetArtifactCategory(path) switch
-        {
-            "Screenshots" => 0,
-            "Recordings" => 1,
-            "Reports" => 2,
-            "Logs" => 3,
-            "Screen State" => 4,
-            "Hierarchy" => 5,
-            _ => 6
-        };
-
-    private static string GetArtifactCategory(string path)
-    {
-        var extension = Path.GetExtension(path);
-        var fileName = Path.GetFileName(path);
-        if (string.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(extension, ".jpg", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(extension, ".jpeg", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Screenshots";
-        }
-
-        if (string.Equals(extension, ".mp4", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(extension, ".webm", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Recordings";
-        }
-
-        if (fileName.Contains("report", StringComparison.OrdinalIgnoreCase) ||
-            fileName.Contains("junit", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(extension, ".trx", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Reports";
-        }
-
-        if (string.Equals(extension, ".txt", StringComparison.OrdinalIgnoreCase) ||
-            fileName.Contains("logcat", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Logs";
-        }
-
-        if (fileName.Contains("screen-state", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Screen State";
-        }
-
-        if (fileName.Contains("hierarchy", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(extension, ".xml", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Hierarchy";
-        }
-
-        return "Other";
-    }
-
-    private static string EscapeMarkdownLink(string path) =>
-        path.Replace("\\", "/", StringComparison.Ordinal).Replace(" ", "%20", StringComparison.Ordinal);
 
     private static UiPollArtifactPolicy ParseUiPollArtifactPolicy(string? value)
     {
@@ -211,6 +173,50 @@ public sealed class ArtifactSession
         };
     }
 
+    private static string ResolveBaseDirectory(CliOptions options, IFileSystem fileSystem, IEnvironmentVariables? environment, bool preferWorkspaceHome)
+    {
+        var artifacts = options.Get("artifacts");
+        var outputDir = options.Get("output-dir");
+        if (!string.IsNullOrWhiteSpace(artifacts) &&
+            !string.IsNullOrWhiteSpace(outputDir) &&
+            !string.Equals(Path.GetFullPath(artifacts), Path.GetFullPath(outputDir), StringComparison.OrdinalIgnoreCase))
+        {
+            throw new UsageException("Use either --artifacts or --output-dir for the artifact root, not both.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(artifacts) || !string.IsNullOrWhiteSpace(outputDir))
+        {
+            return artifacts ?? outputDir!;
+        }
+
+        return preferWorkspaceHome
+            ? ArtifactWorkspacePaths.ResolveDefaultRunArtifactBaseDirectory(fileSystem, environment)
+            : Path.Join(fileSystem.GetTempPath(), "luotsi");
+    }
+
+    private static string SanitizePathSegment(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "command";
+        }
+
+        var builder = new StringBuilder(value.Length);
+        foreach (var ch in value)
+        {
+            if (ch == Path.DirectorySeparatorChar || ch == Path.AltDirectorySeparatorChar || Array.IndexOf(Path.GetInvalidFileNameChars(), ch) >= 0)
+            {
+                builder.Append('-');
+                continue;
+            }
+
+            builder.Append(ch);
+        }
+
+        var sanitized = builder.ToString().Trim('-', '.');
+        return string.IsNullOrWhiteSpace(sanitized) ? "command" : sanitized;
+    }
+
     private static string ToOptionValue(UiPollArtifactPolicy policy) =>
         policy switch
         {
@@ -220,3 +226,7 @@ public sealed class ArtifactSession
             _ => throw new InvalidOperationException($"Unsupported poll artifact policy '{policy}'.")
         };
 }
+
+internal sealed record ArtifactIndexSnapshot(
+    IReadOnlyList<string> Files,
+    IReadOnlyList<SessionReplaySummary> ReplaySummaries);

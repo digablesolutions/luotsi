@@ -1,6 +1,7 @@
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Infrastructure.System;
+using Luotsi.Cli.Infrastructure.Telemetry;
 using Luotsi.Cli.Infrastructure.Time;
 using Luotsi.Cli.Models;
 
@@ -44,7 +45,17 @@ public interface IScenarioActionHost
 
 public interface IScenarioScreenshotAssertionHost
 {
-    Task<ScreenshotAssertionResult> AssertScreenshotAsync(string label, int? expectedWidth, int? expectedHeight, string? expectedSha256);
+    Task<ScreenshotAssertionResult> AssertScreenshotAsync(
+        string label,
+        int? expectedWidth,
+        int? expectedHeight,
+        string? expectedSha256,
+        string? expectedSha256File = null,
+        string? baselineFile = null,
+        bool updateBaseline = false,
+        ScreenshotAssertionRegion? region = null,
+        string? expectedRegionSha256 = null,
+        string? expectedRegionSha256File = null);
 }
 
 /// <summary>
@@ -190,7 +201,8 @@ public sealed class ScenarioExecutor
                         null,
                         lifecycleContext.ScenarioId,
                         lifecycleContext.File,
-                        scenario.Metadata));
+                        scenario.Metadata,
+                        Governance: ScenarioGovernanceClassifier.FromStatus("passed", null)));
             }).ConfigureAwait(false);
     }
 
@@ -249,6 +261,7 @@ public sealed class ScenarioExecutor
         {
             var step = scenarioSteps[index];
             using var delayScope = DelayMetrics.BeginScope();
+            using var adbRetryScope = AdbRetryMetrics.BeginScope();
             var started = _timeProvider.GetUtcNow();
             await EmitStepAsync("scenario_step_started", context.File, context.ScenarioId, context.Scenario.Name, phase, context.NextStepIndex, step, started).ConfigureAwait(false);
 
@@ -258,7 +271,7 @@ public sealed class ScenarioExecutor
                 var durationMs = (_timeProvider.GetUtcNow() - started).TotalMilliseconds;
                 context.ExecutedStepMs += durationMs;
                 context.PreviousStepStartedAt = started;
-                var stepResult = CreateStepResult(step, phase, "passed", durationMs, delayScope.TotalMilliseconds, result: result);
+                var stepResult = CreateStepResult(step, phase, "passed", durationMs, delayScope.TotalMilliseconds, adbRetryScope, result: result);
                 await EmitStepAsync("scenario_step_passed", context.File, context.ScenarioId, context.Scenario.Name, phase, context.NextStepIndex, step, _timeProvider.GetUtcNow(), "passed", stepResult.DurationMs, metrics: stepResult.Metrics).ConfigureAwait(false);
 
                 context.Steps.Add(stepResult);
@@ -276,6 +289,7 @@ public sealed class ScenarioExecutor
                     "continued_on_error",
                     durationMs,
                     delayScope.TotalMilliseconds,
+                    adbRetryScope,
                     stepStatus: "continued_on_error",
                     error: error);
                 await EmitStepAsync("scenario_step_continued_on_error", context.File, context.ScenarioId, context.Scenario.Name, phase, context.NextStepIndex, step, _timeProvider.GetUtcNow(), stepResult.Status, stepResult.DurationMs, error, stepResult.Metrics).ConfigureAwait(false);
@@ -297,6 +311,7 @@ public sealed class ScenarioExecutor
                     "failed",
                     durationMs,
                     delayScope.TotalMilliseconds,
+                    adbRetryScope,
                     stepStatus: "failed",
                     error: error);
                 await EmitStepAsync("scenario_step_failed", context.File, context.ScenarioId, context.Scenario.Name, phase, context.NextStepIndex, step, _timeProvider.GetUtcNow(), failedStep.Status, failedStep.DurationMs, error, failedStep.Metrics).ConfigureAwait(false);
@@ -324,12 +339,19 @@ public sealed class ScenarioExecutor
         string metricStatus,
         double durationMs,
         int harnessDelayMs,
+        AdbRetryMetrics.AdbRetryMetricScope adbRetryScope,
         object? result = null,
         string? stepStatus = null,
         ErrorInfo? error = null)
     {
         var timing = CreateTimingData(step, durationMs, harnessDelayMs);
-        var metrics = _metricsCollector.CollectStep(new ScenarioStepMetricContext(step, phase, metricStatus, timing));
+        var metrics = _metricsCollector.CollectStep(new ScenarioStepMetricContext(
+            step,
+            phase,
+            metricStatus,
+            timing,
+            adbRetryScope.CommandRetryCount,
+            adbRetryScope.CommandWithRetryCount));
         return new ScenarioStepResult(
             step.Name ?? step.Action,
             step.Action,
@@ -359,7 +381,8 @@ public sealed class ScenarioExecutor
             failureSteps,
             failureArtifacts,
             context.ScenarioId,
-            context.Scenario.Metadata);
+            context.Scenario.Metadata,
+            Governance: ScenarioGovernanceClassifier.FromError(failedStep.Error, failedStep: CreateFailedStepResult(context.NextStepIndex, failedStep)));
     }
 
     private ScenarioRunFailureData CreateFinalFailureData(

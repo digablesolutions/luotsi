@@ -16,6 +16,10 @@ public sealed class CliOptions
     new[]
     {
         "adb",
+        "artifacts",
+        "help",
+        "version",
+        "update",
         "devices",
         "device-status",
         "device-wait",
@@ -29,7 +33,10 @@ public sealed class CliOptions
         "view-setup",
         "profile-list",
         "profile-delete",
+        "scenario-init",
         "scenario-list",
+        "scenario-validate",
+        "scenario-explain",
         "wireless",
         "wireless-scan",
         "wireless-pair",
@@ -51,6 +58,7 @@ public sealed class CliOptions
         "list-installed-packages",
         "grant-permission",
         "revoke-permission",
+        "replay",
         "telemetry-tail",
         "telemetry-watch",
         "wait-for-device",
@@ -61,26 +69,34 @@ public sealed class CliOptions
         "wait-visible",
         "type-text",
         "keyevent",
+        "lab",
         "logcat",
         "wait-log",
         "record",
         "run"
     }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
+    public static IReadOnlyCollection<string> KnownCommandNames => KnownCommands;
+
     private static readonly FrozenSet<string> KnownFlagOptions =
     new[]
     {
         "always-on-top",
+        "detach",
         "defaults",
         "dry-run",
         "fix",
+        "force",
         "h",
         "headless",
+        "human",
         "help",
+        "json",
         "last",
         "overlay-screen-state",
         "overlay-telemetry",
         "no-require-device-ready",
+        "quiet",
         "read-only",
         "validate-only"
     }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);

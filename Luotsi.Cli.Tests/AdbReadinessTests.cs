@@ -1,10 +1,13 @@
 using System.Text.Json;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
+using Luotsi.Cli.Cli.Composition;
 using Luotsi.Cli.Cli.Provenance;
 using Luotsi.Cli.Hosts.Android;
 using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.Infrastructure.Telemetry;
 using Luotsi.Cli.Models;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Luotsi.Cli.Tests;
@@ -236,6 +239,34 @@ public sealed class AdbReadinessTests
     }
 
     [Fact]
+    public async Task RunAsync_DeviceStatus_Matches_Wifi_Transport_Serial_When_Preflight_Reports_Hardware_Serial()
+    {
+        var host = new FakeDeviceHost
+        {
+            PreflightTemplate = new PreflightResult("Panel", "12", "32", "focus", null, null, "fingerprint", "arm64-v8a", "C245A20107")
+        };
+        host.ConnectedDevices.Add(new DeviceInfo("192.168.0.134:5555", "device", "product:panel model:Panel device:panel"));
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = new FakeFileSystem(),
+            TimeProvider = DateTimeOffset.Parse("2026-05-15T12:00:00Z").ToTimeProvider(),
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var exitCode = await app.RunAsync(["device-status", "--device", "192.168.0.134:5555"]);
+        using var output = console.ParseSingleOutputAsJson();
+        var device = output.RootElement.GetProperty("data").GetProperty("device");
+        var readiness = output.RootElement.GetProperty("data").GetProperty("readiness");
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("192.168.0.134:5555", device.GetProperty("serial").GetString());
+        Assert.Equal("wifi", device.GetProperty("transport").GetString());
+        Assert.Equal("C245A20107", readiness.GetProperty("serial").GetString());
+    }
+
+    [Fact]
     public async Task RunAsync_DeviceStatus_Writes_Exact_Command_Envelope()
     {
         var started = DateTimeOffset.Parse("2026-05-15T12:00:00Z");
@@ -356,6 +387,59 @@ public sealed class AdbReadinessTests
         Assert.Null(factory.Configurations[0].DeviceSerial);
         Assert.Equal("192.168.0.44:5555", factory.Configurations[1].DeviceSerial);
         Assert.Equal([null], host.CommandPreflightRequests);
+    }
+
+    [Fact]
+    public async Task RunAsync_DeviceQuery_Does_Not_Select_Leased_Device()
+    {
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("USB123", "device", "product:oriole model:Pixel_6 device:oriole"));
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var factory = new FakeDeviceHostFactory(host);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            TimeProvider = DateTimeOffset.Parse("2026-05-15T12:00:00Z").ToTimeProvider(),
+            DeviceHostFactory = factory
+        });
+
+        var claimExitCode = await app.RunAsync(["lab", "claim", "--device-query", "model=Pixel_6", "--owner", "ci-job-1"]);
+        var preflightExitCode = await app.RunAsync(["preflight", "--device-query", "model=Pixel_6"]);
+        using var output = JsonDocument.Parse(console.OutputLines[1]);
+
+        Assert.Equal(0, claimExitCode);
+        Assert.Equal(2, preflightExitCode);
+        Assert.Contains("matched only leased devices", output.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("leased by ci-job-1", output.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Equal(2, factory.CreateCallCount);
+    }
+
+    [Fact]
+    public async Task RunAsync_DeviceQuery_Does_Not_Select_Quarantined_Device()
+    {
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("USB123", "device", "product:oriole model:Pixel_6 device:oriole"));
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var factory = new FakeDeviceHostFactory(host);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            TimeProvider = DateTimeOffset.Parse("2026-05-15T12:00:00Z").ToTimeProvider(),
+            DeviceHostFactory = factory
+        });
+
+        var quarantineExitCode = await app.RunAsync(["lab", "quarantine", "--device-query", "model=Pixel_6", "--reason", "bad battery", "--owner", "lab-admin"]);
+        var preflightExitCode = await app.RunAsync(["preflight", "--device-query", "model=Pixel_6"]);
+        using var output = JsonDocument.Parse(console.OutputLines[1]);
+
+        Assert.Equal(0, quarantineExitCode);
+        Assert.Equal(2, preflightExitCode);
+        Assert.Contains("matched only quarantined devices", output.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("bad battery", output.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -510,6 +594,50 @@ public sealed class AdbReadinessTests
         processRunner.EnqueueResult(new ProcessResult(0, string.Empty, string.Empty));
         processRunner.EnqueueResult(new ProcessResult(0, "Android Debug Bridge version 1.0.41", string.Empty));
         var adb = new AdbClient("adb", null, processRunner, TimeSpan.FromSeconds(5));
+
+        var result = await adb.RunAsync(["version"]);
+
+        Assert.Equal(2, result.AttemptCount);
+        Assert.Equal("adb protocol fault", result.Retry?.Reason);
+        Assert.Equal(["version"], processRunner.Calls[0].Args);
+        Assert.Equal(["start-server"], processRunner.Calls[1].Args);
+        Assert.Equal(["version"], processRunner.Calls[2].Args);
+    }
+
+    [Fact]
+    public async Task AdbClient_Records_Retry_Metrics_In_Current_Async_Flow()
+    {
+        var processRunner = new FakeProcessRunner();
+        processRunner.EnqueueResult(new ProcessResult(1, string.Empty, "protocol fault (no status)"));
+        processRunner.EnqueueResult(new ProcessResult(0, string.Empty, string.Empty));
+        processRunner.EnqueueResult(new ProcessResult(0, "Android Debug Bridge version 1.0.41", string.Empty));
+        var adb = new AdbClient("adb", null, processRunner, TimeSpan.FromSeconds(5));
+
+        using var retryScope = AdbRetryMetrics.BeginScope();
+        await adb.RunAsync(["version"]);
+
+        Assert.Equal(1, retryScope.CommandRetryCount);
+        Assert.Equal(1, retryScope.CommandWithRetryCount);
+        Assert.Equal("adb protocol fault", retryScope.LastRetryReason);
+    }
+
+    [Fact]
+    public async Task DefaultAdbClientFactory_Uses_Composed_Resilience_Pipeline()
+    {
+        using var serviceProvider = new ServiceCollection()
+            .AddLuotsiCli(new AppDependencies())
+            .BuildServiceProvider(new ServiceProviderOptions
+            {
+                ValidateOnBuild = true,
+                ValidateScopes = true
+            });
+        var processRunner = new FakeProcessRunner();
+        processRunner.EnqueueResult(new ProcessResult(1, string.Empty, "protocol fault (no status)"));
+        processRunner.EnqueueResult(new ProcessResult(0, string.Empty, string.Empty));
+        processRunner.EnqueueResult(new ProcessResult(0, "Android Debug Bridge version 1.0.41", string.Empty));
+
+        var factory = serviceProvider.GetRequiredService<IAdbClientFactory>();
+        var adb = factory.Create("adb", null, processRunner, TimeSpan.FromSeconds(5));
 
         var result = await adb.RunAsync(["version"]);
 

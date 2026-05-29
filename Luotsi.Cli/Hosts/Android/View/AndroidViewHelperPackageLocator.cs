@@ -1,4 +1,3 @@
-using System.Linq;
 using System.Security.Cryptography;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.View;
@@ -59,15 +58,15 @@ public sealed class AndroidViewHelperPackageLocator(IEnvironmentVariables enviro
         if (string.IsNullOrWhiteSpace(localPath))
         {
             resolutionSource = "repository_default";
-            localPath = _pathResolver
-                .GetRepositoryRelativeFileCandidates(AndroidRuntimeDefaults.DefaultViewHelperRelativePath)
+            localPath = ViewHostPathResolver.GetRepositoryRelativeFileCandidates(AndroidRuntimeDefaults.DefaultViewHelperRelativePath)
                 .Where(_fileSystem.FileExists)
                 .FirstOrDefault();
         }
 
         if (string.IsNullOrWhiteSpace(localPath) || !_fileSystem.FileExists(localPath))
         {
-            throw new InvalidOperationException($"Android view helper package was not found. Set {AndroidRuntimeDefaults.ViewHelperPathEnvironmentVariable} or build the helper APK at {AndroidRuntimeDefaults.DefaultViewHelperRelativePath}");
+            throw new InvalidOperationException(
+                $"Android view helper package was not found. Run `luotsi view setup --device <serial> --fix` to build/install it from source, set {AndroidRuntimeDefaults.ViewHelperPathEnvironmentVariable}, or reinstall Luotsi from a release bundle that includes {AndroidRuntimeDefaults.DefaultViewHelperRelativePath}.");
         }
 
         var normalizedPath = Path.GetFullPath(localPath);

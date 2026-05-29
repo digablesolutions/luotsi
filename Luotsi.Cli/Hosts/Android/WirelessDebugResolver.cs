@@ -177,8 +177,7 @@ internal static class WirelessDebugResolver
         var portText = trimmed[(separator + 1)..].Trim();
         if (parsedHost.Length == 0 ||
             !int.TryParse(portText, NumberStyles.None, CultureInfo.InvariantCulture, out var parsedPort) ||
-            parsedPort <= 0 ||
-            parsedPort > 65535)
+            parsedPort is <= 0 or > 65535)
         {
             return false;
         }

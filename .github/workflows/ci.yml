@@ -78,6 +78,35 @@ jobs:
           --blame-hang
           --blame-hang-timeout 2m
 
+      - name: Generate coverage report
+        if: always()
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $coverageFiles = Get-ChildItem -LiteralPath artifacts/test-results -Recurse -Filter coverage.cobertura.xml -File -ErrorAction SilentlyContinue
+          if ($coverageFiles.Count -eq 0) {
+            Add-Content $env:GITHUB_STEP_SUMMARY "## Coverage"
+            Add-Content $env:GITHUB_STEP_SUMMARY ""
+            Add-Content $env:GITHUB_STEP_SUMMARY "No Cobertura coverage files were produced."
+            exit 0
+          }
+
+          dotnet tool install dotnet-reportgenerator-globaltool --tool-path ./.tools --version 5.5.10
+          $reports = ($coverageFiles | ForEach-Object { $_.FullName }) -join ";"
+          & ./.tools/reportgenerator.exe "-reports:$reports" "-targetdir:artifacts/coverage-report" "-reporttypes:Html;MarkdownSummaryGithub" "-verbosity:Warning"
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+          $summary = Get-ChildItem -LiteralPath artifacts/coverage-report -Filter *.md -File -ErrorAction SilentlyContinue | Select-Object -First 1
+          Add-Content $env:GITHUB_STEP_SUMMARY "## Coverage"
+          Add-Content $env:GITHUB_STEP_SUMMARY ""
+          if ($null -eq $summary) {
+            Add-Content $env:GITHUB_STEP_SUMMARY "Coverage report was generated under ``artifacts/coverage-report``."
+          } else {
+            Get-Content -LiteralPath $summary.FullName | Add-Content $env:GITHUB_STEP_SUMMARY
+          }
+
       - name: Summarize validation
         if: always()
         shell: pwsh
@@ -97,6 +126,14 @@ jobs:
           path: artifacts/test-results
           if-no-files-found: ignore
 
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: artifacts/coverage-report
+          if-no-files-found: ignore
+
       - name: Upload MSBuild binlogs
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -104,6 +141,34 @@ jobs:
           name: msbuild-binlogs
           path: artifacts/binlogs
           if-no-files-found: ignore
+
+  website:
+    name: Validate website
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install website dependencies
+        working-directory: website
+        run: npm ci
+
+      - name: Validate website
+        working-directory: website
+        run: npm run check
+
+      - name: Build website
+        working-directory: website
+        run: npm run build
 
   publish:
     name: Publish ${{ matrix.rid }}
@@ -116,12 +181,16 @@ jobs:
         include:
           - rid: win-x64
             archive_ext: zip
+            stage_ffmpeg: true
           - rid: linux-x64
             archive_ext: tar.gz
+            stage_ffmpeg: true
           - rid: osx-x64
             archive_ext: tar.gz
+            stage_ffmpeg: false
           - rid: osx-arm64
             archive_ext: tar.gz
+            stage_ffmpeg: false
 
     steps:
       - name: Checkout
@@ -139,9 +208,33 @@ jobs:
             **/packages.lock.json
             global.json
 
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
       - name: Verify locked restore
         shell: pwsh
         run: dotnet restore $env:SOLUTION --locked-mode /bl:artifacts/binlogs/publish-restore-${{ matrix.rid }}.binlog
+
+      - name: Build Android view helper
+        shell: pwsh
+        run: |
+          $wrapper = ".\Luotsi.ViewServer.Android\gradlew.bat"
+          & $wrapper -p Luotsi.ViewServer.Android :app:assembleRelease
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+      - name: Stage FFmpeg native libraries
+        if: ${{ matrix.stage_ffmpeg == true }}
+        shell: pwsh
+        run: >
+          ./ffmpeg/download-ffmpeg.ps1
+          -Platform ${{ matrix.rid }}
+          -Force
 
       - name: Publish CLI
         shell: pwsh
@@ -188,7 +281,12 @@ jobs:
 
       - name: Upload publish binlog
         if: always()
+<<<<<<< HEAD
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+=======
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+>>>>>>> origin/main
         with:
           name: publish-binlog-${{ matrix.rid }}
           path: |
@@ -201,14 +299,15 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - validate
+      - website
       - publish
     if: always()
     steps:
       - name: Check required jobs
         shell: bash
         run: |
-          if [[ "${{ needs.validate.result }}" != "success" || "${{ needs.publish.result }}" != "success" ]]; then
-            echo "CI failed: validate=${{ needs.validate.result }}, publish=${{ needs.publish.result }}"
+          if [[ "${{ needs.validate.result }}" != "success" || "${{ needs.website.result }}" != "success" || "${{ needs.publish.result }}" != "success" ]]; then
+            echo "CI failed: validate=${{ needs.validate.result }}, website=${{ needs.website.result }}, publish=${{ needs.publish.result }}"
             exit 1
           fi
           echo "CI passed."

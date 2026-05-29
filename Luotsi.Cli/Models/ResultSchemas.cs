@@ -15,5 +15,17 @@ public static class ResultSchemas
     public const string AdbDiagnostic = "luotsi-adb-diagnostic.v1";
     public const string AdbReadiness = "luotsi-adb-readiness.v1";
     public const string DeviceFingerprint = "device-fingerprint.v1";
+    public const string SessionReplay = "luotsi-session-replay.v1";
+    public const string SessionReplaySummary = "luotsi-session-replay-summary.v1";
+    public const string ArtifactPackage = "luotsi-artifact-package.v1";
     public const string FailureBundle = "luotsi-failure-bundle.v1";
+    public const string FailureCapsule = "luotsi-failure-capsule.v1";
+    public const string ReplayOpen = "luotsi-replay-open.v1";
+    public const string ScenarioDraft = "luotsi-scenario-draft.v1";
+    public const string ReplaySearch = "luotsi-replay-search.v1";
+    public const string ReplayCapsule = "luotsi-replay-capsule.v1";
+    public const string ReplayTimeline = "luotsi-replay-timeline.v1";
+    public const string ReplayScrub = "luotsi-replay-scrub.v1";
+    public const string ReplayGraph = "luotsi-replay-graph.v1";
+    public const string ReplayClusters = "luotsi-replay-clusters.v1";
 }

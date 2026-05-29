@@ -19,7 +19,7 @@ internal sealed class InspectSessionLauncher(
         ArgumentNullException.ThrowIfNull(artifacts);
 
         var runner = _deviceHostLauncher.Create(options, adbExecutable, artifacts);
-        var inspectSession = new InspectSession(runner, _console, _timeProvider);
+        var inspectSession = new InspectSession(runner, artifacts, _console, _timeProvider, options.Get("device") ?? options.Get("device-query"));
         return await inspectSession.RunAsync().ConfigureAwait(false);
     }
 }
