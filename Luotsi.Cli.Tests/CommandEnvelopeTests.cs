@@ -2661,6 +2661,43 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task LabClaim_ClaimWaitSec_Waits_For_Lease_Expiry_And_Cleans_Queue()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var delay = new FakeDelay(timeProvider);
+        var store = new LabLeaseStore(fileSystem, timeProvider);
+        await store.ClaimAsync("usb-1", "ci-job-1", 2);
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("usb-1", "device", "product:p model:Pixel_9 device:komodo usb:1-1"));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            Delay = delay,
+            FileSystem = fileSystem,
+            TimeProvider = timeProvider,
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var claimExitCode = await app.RunAsync(["lab", "claim", "--device-query", "model=Pixel_9", "--owner", "ci-job-2", "--ttl-sec", "60", "--claim-wait-sec", "5"]);
+        using var claimEnvelope = JsonDocument.Parse(console.OutputLines[0]);
+
+        Assert.Equal(0, claimExitCode);
+        var claim = claimEnvelope.RootElement.GetProperty("data");
+        Assert.Equal("usb-1", claim.GetProperty("serial").GetString());
+        Assert.Equal("ci-job-2", claim.GetProperty("owner").GetString());
+        Assert.True(claim.TryGetProperty("last_heartbeat_at", out _));
+        Assert.Equal([1000, 1000], delay.Calls);
+
+        var queueExitCode = await app.RunAsync(["lab", "queue"]);
+        using var queueEnvelope = JsonDocument.Parse(console.OutputLines[1]);
+
+        Assert.Equal(0, queueExitCode);
+        Assert.Equal(0, queueEnvelope.RootElement.GetProperty("data").GetProperty("count").GetInt32());
+    }
+
+    [Fact]
     public async Task LabQuarantine_Marks_Device_Unallocatable_Until_Unquarantined()
     {
         var console = new FakeConsole();
@@ -2702,6 +2739,36 @@ public sealed partial class AppTests
 
         Assert.Equal(0, unquarantineExitCode);
         Assert.True(unquarantineEnvelope.RootElement.GetProperty("data").GetProperty("released").GetBoolean());
+    }
+
+    [Fact]
+    public async Task LabPlan_Queued_Device_Reports_BlockedReason_And_QueueDepth()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var store = new LabLeaseStore(fileSystem, timeProvider);
+        await store.EnqueueAsync("usb-1", "ci-job-1", 60);
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("usb-1", "device", "product:p model:Pixel_9 device:komodo usb:1-1"));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            TimeProvider = timeProvider,
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var exitCode = await app.RunAsync(["lab", "plan", "--device-query", "model=Pixel_9"]);
+        using var envelope = JsonDocument.Parse(console.OutputLines[0]);
+
+        Assert.Equal(0, exitCode);
+        var plan = envelope.RootElement.GetProperty("data");
+        Assert.Equal("blocked", plan.GetProperty("status").GetString());
+        Assert.Equal("queued", plan.GetProperty("blocked_reason").GetString());
+        Assert.Equal(1, plan.GetProperty("queue_depth").GetInt32());
+        Assert.Equal("luotsi lab queue", plan.GetProperty("recommended_commands")[0].GetString());
+        Assert.Equal("luotsi run --path <scenarios> --claim-device --device-query model=Pixel_9 --claim-wait-sec 60", plan.GetProperty("recommended_commands")[1].GetString());
     }
 
     [Fact]

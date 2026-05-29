@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Xml.Linq;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
+using Luotsi.Cli.Cli.Routing;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Hosts.Android;
 using Luotsi.Cli.Infrastructure.Processes;
@@ -921,7 +922,7 @@ public sealed partial class AppTests
             "--no-require-device-ready"]);
 
         Assert.Equal(0, exitCode);
-        Assert.False(fileSystem.FileExists(Path.Join("/tmp", "luotsi", "lab-leases", "SER123.json")));
+        Assert.False(fileSystem.FileExists(Path.Join("/tmp", "luotsi", "lab", "leases", "SER123.json")));
         using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
         var lease = report.RootElement.GetProperty("device_allocation").GetProperty("lease");
         Assert.Equal("SER123", lease.GetProperty("serial").GetString());
@@ -966,7 +967,58 @@ public sealed partial class AppTests
             "--no-require-device-ready"]);
 
         Assert.Equal(2, exitCode);
-        Assert.False(fileSystem.FileExists(Path.Join("/tmp", "luotsi", "lab-leases", "SER123.json")));
+        Assert.False(fileSystem.FileExists(Path.Join("/tmp", "luotsi", "lab", "leases", "SER123.json")));
+    }
+
+    [Fact]
+    public async Task RunAsync_File_ClaimDevice_Waits_For_Leased_Device_And_Releases_Lease_After_Run()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var delay = new FakeDelay(timeProvider);
+        var console = new FakeConsole();
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "single",
+          "steps": [
+            { "name": "pause", "action": "sleep", "milliseconds": 1 }
+          ]
+        }
+        """);
+        var store = new LabLeaseStore(fileSystem, timeProvider);
+        await store.ClaimAsync("SER123", "ci-job-1", 2);
+        var host = new FakeDeviceHost
+        {
+            PreflightTemplate = new PreflightResult("Pixel 7", "16", "36", "focus", null, null, "fingerprint", "arm64-v8a", "SER123")
+        };
+        host.ConnectedDevices.Add(new DeviceInfo("SER123", "device", "product:panther model:Pixel_7 device:panther"));
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = delay,
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync([
+            "run",
+            "--file", "/tmp/scenario.json",
+            "--device-query", "model=Pixel_7",
+            "--claim-device",
+            "--claim-wait-sec", "5",
+            "--owner", "ci-job-2",
+            "--report-json", "/tmp/report.json",
+            "--no-require-device-ready"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal([1000, 1000, 1], delay.Calls);
+        Assert.False(fileSystem.FileExists(Path.Join("/tmp", "luotsi", "lab", "leases", "SER123.json")));
+        using var report = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/report.json"));
+        var lease = report.RootElement.GetProperty("device_allocation").GetProperty("lease");
+        Assert.Equal("SER123", lease.GetProperty("serial").GetString());
+        Assert.Equal("ci-job-2", lease.GetProperty("owner").GetString());
     }
 
     [Fact]

@@ -25,6 +25,7 @@ internal static class LuotsiScenarioServices
         services.AddSingleton<ScenarioGovernancePolicyCoordinator>();
         services.AddSingleton<ScenarioRunOrchestrator>();
         services.AddSingleton<LabLeaseStore>();
+        services.AddSingleton<LabLeaseClaimCoordinator>();
         services.AddSingleton<LabQuarantineStore>();
         services.AddSingleton<ScenarioCommandDispatcher>();
         return services;

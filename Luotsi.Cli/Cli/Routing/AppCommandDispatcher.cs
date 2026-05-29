@@ -16,6 +16,7 @@ internal sealed class AppCommandDispatcher(
     ISelfUpdateService selfUpdateService,
     ViewProfileCoordinator profileCoordinator,
     LabLeaseStore labLeaseStore,
+    LabLeaseClaimCoordinator labLeaseClaimCoordinator,
     LabQuarantineStore labQuarantineStore,
     ResiliencePipelineProvider<string> resiliencePipelines)
 {
@@ -24,6 +25,7 @@ internal sealed class AppCommandDispatcher(
     private readonly ISelfUpdateService _selfUpdateService = selfUpdateService ?? throw new ArgumentNullException(nameof(selfUpdateService));
     private readonly ViewProfileCoordinator _profileCoordinator = profileCoordinator ?? throw new ArgumentNullException(nameof(profileCoordinator));
     private readonly LabLeaseStore _labLeaseStore = labLeaseStore ?? throw new ArgumentNullException(nameof(labLeaseStore));
+    private readonly LabLeaseClaimCoordinator _labLeaseClaimCoordinator = labLeaseClaimCoordinator ?? throw new ArgumentNullException(nameof(labLeaseClaimCoordinator));
     private readonly LabQuarantineStore _labQuarantineStore = labQuarantineStore ?? throw new ArgumentNullException(nameof(labQuarantineStore));
     private readonly ResiliencePipelineProvider<string> _resiliencePipelines = resiliencePipelines ?? throw new ArgumentNullException(nameof(resiliencePipelines));
 
@@ -138,14 +140,23 @@ internal sealed class AppCommandDispatcher(
                 _labQuarantineStore,
                 _resiliencePipelines.GetPipeline(LuotsiResiliencePipelines.LabProbePipelineName)).ConfigureAwait(false),
             "plan" => await LabCommandResolver.PlanAsync(runner, options.Get("device-query"), _labLeaseStore, _labQuarantineStore).ConfigureAwait(false),
-            "claim" => await LabCommandResolver.ClaimAsync(runner, options.Get("device-query"), options.Get("owner"), options.Int("ttl-sec", 3600), _labLeaseStore, _labQuarantineStore).ConfigureAwait(false),
+            "claim" => await LabCommandResolver.ClaimAsync(
+                runner,
+                options.Get("device-query"),
+                options.Get("owner"),
+                options.Int("ttl-sec", 3600),
+                ParseClaimWaitSeconds(options),
+                _labLeaseClaimCoordinator,
+                _labLeaseStore,
+                _labQuarantineStore).ConfigureAwait(false),
             "release" => await ReleaseLabLeaseAsync(options).ConfigureAwait(false),
             "extend" => await ExtendLabLeaseAsync(options).ConfigureAwait(false),
             "leases" => await _labLeaseStore.ListAsync().ConfigureAwait(false),
+            "queue" => await _labLeaseStore.ListQueueAsync().ConfigureAwait(false),
             "quarantine" => await LabCommandResolver.QuarantineAsync(runner, options.Get("device-query"), options.Require("reason"), options.Get("owner"), _labQuarantineStore).ConfigureAwait(false),
             "unquarantine" => await _labQuarantineStore.ReleaseAsync(options.Require("serial")).ConfigureAwait(false),
             "quarantines" => await _labQuarantineStore.ListAsync().ConfigureAwait(false),
-            _ => throw new UsageException("lab requires subcommand status, doctor, plan, claim, release, extend, leases, quarantine, unquarantine, or quarantines.")
+            _ => throw new UsageException("lab requires subcommand status, doctor, plan, claim, release, extend, leases, queue, quarantine, unquarantine, or quarantines.")
         };
     }
 
@@ -186,6 +197,17 @@ internal sealed class AppCommandDispatcher(
     private static IWirelessDebugHost GetWirelessHost(IDeviceHost? runner, string command) =>
         RequireRunner(runner, command) as IWirelessDebugHost
         ?? throw new InvalidOperationException("The selected device host does not support wireless ADB commands.");
+
+    private static int ParseClaimWaitSeconds(CliOptions options)
+    {
+        var waitSeconds = options.Int("claim-wait-sec", 0);
+        if (waitSeconds < 0)
+        {
+            throw new UsageException("--claim-wait-sec must be zero or greater.");
+        }
+
+        return waitSeconds;
+    }
 
     private static string? GetWirelessEndpoint(CliOptions options, string commandName)
     {
