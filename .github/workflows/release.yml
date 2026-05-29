@@ -11,11 +11,6 @@ on:
         required: true
         type: string
 
-permissions:
-  contents: write
-  id-token: write
-  attestations: write
-
 concurrency:
   group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
   cancel-in-progress: false
@@ -33,6 +28,8 @@ jobs:
     name: Validate release tag
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
     outputs:
       tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
@@ -40,9 +37,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Resolve version
         id: version
@@ -87,15 +85,18 @@ jobs:
     runs-on: windows-latest
     needs: validate-tag
     timeout-minutes: 20
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: ${{ needs.validate-tag.outputs.tag }}
+          persist-credentials: false
 
       - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
         with:
           global-json-file: global.json
           cache: true
@@ -133,7 +134,7 @@ jobs:
 
       - name: Upload validation diagnostics
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-validation-diagnostics
           path: |
@@ -148,6 +149,8 @@ jobs:
       - validate-tag
       - validate
     timeout-minutes: 20
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -167,12 +170,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: ${{ needs.validate-tag.outputs.tag }}
+          persist-credentials: false
 
       - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
         with:
           global-json-file: global.json
           cache: true
@@ -238,7 +242,7 @@ jobs:
           "$($hash.Hash.ToLowerInvariant())  $(Split-Path $archive -Leaf)" | Set-Content "$archive.sha256" -Encoding ascii
 
       - name: Upload package
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-package-${{ matrix.rid }}
           path: |
@@ -247,7 +251,7 @@ jobs:
 
       - name: Upload publish binlog
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-publish-binlog-${{ matrix.rid }}
           path: |
@@ -263,15 +267,20 @@ jobs:
       - validate
       - package
     timeout-minutes: 10
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
 
     steps:
       - name: Checkout tag
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: ${{ needs.validate-tag.outputs.tag }}
+          persist-credentials: false
 
       - name: Download release packages
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: release-package-*
           path: release-assets
@@ -295,7 +304,7 @@ jobs:
           cat SHA256SUMS
 
       - name: Attest release assets
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
         with:
           subject-path: |
             release-assets/*.zip
