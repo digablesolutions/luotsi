@@ -25,9 +25,17 @@ env:
 
 jobs:
   analyze:
-    name: Analyze C#
+    name: Analyze ${{ matrix.language }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: csharp
+            build-mode: manual
 
     steps:
       - name: Checkout
@@ -36,6 +44,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup .NET SDK
+        if: matrix.language == 'csharp'
         uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
         with:
           global-json-file: global.json
@@ -48,14 +57,16 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4
         with:
-          languages: csharp
-          build-mode: manual
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
 
       - name: Restore
+        if: matrix.language == 'csharp'
         shell: bash
         run: dotnet restore Luotsi.sln --locked-mode
 
       - name: Build
+        if: matrix.language == 'csharp'
         shell: bash
         run: dotnet build Luotsi.sln --configuration Release --no-restore
 
