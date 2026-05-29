@@ -23,6 +23,8 @@ internal sealed record ScenarioRunReport(
     BuildProvenance Provenance,
     IReadOnlyList<ScenarioReportScenario> Scenarios,
     ScenarioGovernanceVerdict? Governance = null,
+    ScenarioDeviceHealthSnapshot? DeviceHealth = null,
+    ScenarioCiPolicyResult? CiPolicy = null,
     string? ProgressMode = null,
     ErrorInfo? Error = null);
 
@@ -40,6 +42,8 @@ internal sealed record ScenarioReportScenario(
     ErrorInfo? Error,
     ScenarioMetadata? Metadata = null,
     IReadOnlyList<ScenarioMetadataWarning>? MetadataWarnings = null,
-    ScenarioGovernanceVerdict? Governance = null);
+    ScenarioGovernanceVerdict? Governance = null,
+    ScenarioDeviceHealthSnapshot? DeviceHealth = null,
+    ScenarioCiPolicyResult? CiPolicy = null);
 
 internal sealed record ScenarioReportArtifact(string Kind, string FileName, int? StepIndex, string? StepName);

@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Luotsi.Cli.Artifacts;
+using Luotsi.Cli.Cli.Envelope;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
@@ -179,7 +180,9 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
                 Metrics: result.Metrics,
                 DeviceAllocation: result.DeviceAllocation,
                 Provenance: _provenance,
-                Governance: result.Governance),
+                Governance: result.Governance,
+                DeviceHealth: result.DeviceHealth,
+                CiPolicy: result.CiPolicy),
             ex => CreateFailedRunEndedEvent(file, ex, passedCount: 0, failedCount: 1)).ConfigureAwait(false);
     }
 
@@ -219,7 +222,9 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
                 Metrics: result.Metrics,
                 DeviceAllocation: result.DeviceAllocation,
                 Provenance: _provenance,
-                Governance: result.Governance),
+                Governance: result.Governance,
+                DeviceHealth: result.DeviceHealth,
+                CiPolicy: result.CiPolicy),
             ex => CreateFailedRunEndedEvent(
                 plan.Query.Path,
                 ex,
@@ -286,7 +291,7 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
             var result = await runAsync(_eventSink).ConfigureAwait(false);
             var ended = createEnded(result);
             await _eventSink.EmitAsync(ended).ConfigureAwait(false);
-            await PersistReplayAsync(ended.Timestamp, ended.Status ?? "completed", ResolveResultExitCode(ended.Status)).ConfigureAwait(false);
+            await PersistReplayAsync(ended.Timestamp, ended.Status ?? "completed", ResolveResultExitCode(result)).ConfigureAwait(false);
             return result;
         }
         catch (Exception ex)
@@ -301,11 +306,16 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
     private Task PersistReplayAsync(DateTimeOffset endedAt, string reason, int exitCode) =>
         replayArtifacts?.PersistAsync(endedAt, reason, exitCode) ?? Task.CompletedTask;
 
-    private static int ResolveResultExitCode(string? status) =>
-        string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+    private static int ResolveResultExitCode<TResult>(TResult result) =>
+        AppCommandExitCodeResolver.Resolve(result!);
 
     private static int ResolveExceptionExitCode(Exception exception) =>
-        exception is UsageException ? 2 : 1;
+        exception switch
+        {
+            UsageException => 2,
+            _ when ScenarioFailureDetails.TryGetData(exception) is ScenarioRunFailureData { CiPolicy: { ExitCodeApplied: true } ciPolicy } => ciPolicy.RecommendedExitCode,
+            _ => 1
+        };
 
     private ScenarioEvent CreateFailedRunEndedEvent(
         string path,
@@ -337,7 +347,9 @@ internal sealed class ScenarioRunEventCoordinator(TimeProvider timeProvider, ISc
             DeviceAllocation: ScenarioFailureDetails.TryGetDeviceAllocation(exception),
             Provenance: _provenance,
             Error: ScenarioErrorInfo.From(exception),
-            Governance: ScenarioGovernanceClassifier.FromException(exception));
+            Governance: ScenarioGovernanceClassifier.FromException(exception),
+            DeviceHealth: ScenarioFailureDetails.TryGetData(exception)?.DeviceHealth,
+            CiPolicy: ScenarioFailureDetails.TryGetData(exception)?.CiPolicy);
 }
 
 internal readonly record struct ScenarioLifecycleContext(
@@ -384,11 +396,14 @@ internal sealed class ScenarioLifecycleCoordinator(TimeProvider timeProvider, IS
                 Scenario: context.ScenarioName,
                 DurationMs: Math.Max(0, (endedAt - context.StartedAt).TotalMilliseconds),
                 Metrics: result.Metrics,
-                Governance: result.Governance)).ConfigureAwait(false);
+                Governance: result.Governance,
+                DeviceHealth: result.DeviceHealth,
+                CiPolicy: result.CiPolicy)).ConfigureAwait(false);
             return result;
         }
         catch (Exception ex)
         {
+            var failureData = ScenarioFailureDetails.TryGetData(ex);
             var endedAt = _timeProvider.GetUtcNow();
             await _eventSink.EmitAsync(new ScenarioEvent(
                 "scenario_ended",
@@ -399,7 +414,9 @@ internal sealed class ScenarioLifecycleCoordinator(TimeProvider timeProvider, IS
                 Scenario: context.ScenarioName,
                 DurationMs: Math.Max(0, (endedAt - context.StartedAt).TotalMilliseconds),
                 Metrics: ScenarioFailureDetails.TryGetMetrics(ex),
-                Governance: ScenarioGovernanceClassifier.FromException(ex))).ConfigureAwait(false);
+                Governance: ScenarioGovernanceClassifier.FromException(ex),
+                DeviceHealth: failureData?.DeviceHealth,
+                CiPolicy: failureData?.CiPolicy)).ConfigureAwait(false);
             throw;
         }
     }
@@ -431,7 +448,9 @@ internal sealed record ScenarioEvent(
     [property: JsonPropertyName("device_allocation")] ScenarioDeviceAllocation? DeviceAllocation = null,
     [property: JsonPropertyName("provenance")] BuildProvenance? Provenance = null,
     [property: JsonPropertyName("error")] object? Error = null,
-    [property: JsonPropertyName("governance")] ScenarioGovernanceVerdict? Governance = null);
+    [property: JsonPropertyName("governance")] ScenarioGovernanceVerdict? Governance = null,
+    [property: JsonPropertyName("device_health")] ScenarioDeviceHealthSnapshot? DeviceHealth = null,
+    [property: JsonPropertyName("ci_policy")] ScenarioCiPolicyResult? CiPolicy = null);
 
 internal sealed record ScenarioReplayTimelineEvent(
     [property: JsonPropertyName("type")] string Type,
@@ -459,7 +478,9 @@ internal sealed record ScenarioReplayTimelineEvent(
     [property: JsonPropertyName("device_allocation")] ScenarioDeviceAllocation? DeviceAllocation = null,
     [property: JsonPropertyName("provenance")] BuildProvenance? Provenance = null,
     [property: JsonPropertyName("error")] object? Error = null,
-    [property: JsonPropertyName("governance")] ScenarioGovernanceVerdict? Governance = null)
+    [property: JsonPropertyName("governance")] ScenarioGovernanceVerdict? Governance = null,
+    [property: JsonPropertyName("device_health")] ScenarioDeviceHealthSnapshot? DeviceHealth = null,
+    [property: JsonPropertyName("ci_policy")] ScenarioCiPolicyResult? CiPolicy = null)
 {
     public static ScenarioReplayTimelineEvent FromScenarioEvent(ScenarioEvent scenarioEvent)
     {
@@ -491,6 +512,8 @@ internal sealed record ScenarioReplayTimelineEvent(
             scenarioEvent.DeviceAllocation,
             scenarioEvent.Provenance,
             scenarioEvent.Error,
-            scenarioEvent.Governance);
+            scenarioEvent.Governance,
+            scenarioEvent.DeviceHealth,
+            scenarioEvent.CiPolicy);
     }
 }

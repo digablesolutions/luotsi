@@ -35,6 +35,8 @@ internal static class ScenarioRunReportFactory
             provenance,
             [CreateScenarioFromSuccess(result, file, attachmentPolicy)],
             Governance: result.Governance,
+            DeviceHealth: result.DeviceHealth,
+            CiPolicy: result.CiPolicy,
             ProgressMode: result.ProgressMode ?? progressMode);
 
     public static ScenarioRunReport FromSingleFailure(
@@ -73,6 +75,8 @@ internal static class ScenarioRunReportFactory
             provenance,
             [scenario],
             Governance: ScenarioGovernanceClassifier.FromException(exception),
+            DeviceHealth: failureData?.DeviceHealth,
+            CiPolicy: failureData?.CiPolicy,
             ProgressMode: progressMode,
             Error: error);
     }
@@ -105,6 +109,8 @@ internal static class ScenarioRunReportFactory
             provenance,
             result.Scenarios.Select(scenario => CreateScenarioFromBatchItem(scenario, attachmentPolicy)).ToArray(),
             Governance: result.Governance,
+            DeviceHealth: result.DeviceHealth,
+            CiPolicy: result.CiPolicy,
             ProgressMode: result.ProgressMode ?? progressMode);
 
     public static ScenarioRunReport FromBatchFailure(
@@ -143,6 +149,8 @@ internal static class ScenarioRunReportFactory
             provenance,
             scenarios,
             Governance: ScenarioGovernanceClassifier.FromException(exception),
+            DeviceHealth: failureData?.DeviceHealth,
+            CiPolicy: failureData?.CiPolicy,
             ProgressMode: progressMode,
             Error: error);
     }
@@ -156,6 +164,7 @@ internal static class ScenarioRunReportFactory
         string? progressMode = null)
     {
         var error = ScenarioErrorInfo.From(exception);
+        var failureData = ScenarioFailureDetails.TryGetData(exception);
         return new ScenarioRunReport(
             ReportSchema,
             query.Path,
@@ -177,6 +186,8 @@ internal static class ScenarioRunReportFactory
             provenance,
             [CreateScenarioFromException(query.Path, exception, "scenario discovery", $"{query.Path}::discovery")],
             Governance: ScenarioGovernanceClassifier.FromException(exception),
+            DeviceHealth: failureData?.DeviceHealth,
+            CiPolicy: failureData?.CiPolicy,
             ProgressMode: progressMode,
             Error: error);
     }
@@ -199,7 +210,9 @@ internal static class ScenarioRunReportFactory
             null,
             result.Metadata,
             result.MetadataWarnings,
-            result.Governance);
+            result.Governance,
+            result.DeviceHealth,
+            result.CiPolicy);
 
     private static ScenarioReportScenario CreateScenarioFromFailure(
         ScenarioRunFailureData data,
@@ -219,7 +232,9 @@ internal static class ScenarioRunReportFactory
             error,
             data.Metadata,
             data.MetadataWarnings,
-            data.Governance);
+            data.Governance,
+            data.DeviceHealth,
+            data.CiPolicy);
 
     private static ScenarioReportScenario CreateScenarioFromBatchItem(
         ScenarioBatchItemResult item,
@@ -247,7 +262,9 @@ internal static class ScenarioRunReportFactory
             item.Error,
             item.Metadata,
             item.MetadataWarnings,
-            item.Governance);
+            item.Governance,
+            item.DeviceHealth,
+            item.CiPolicy);
     }
 
     private static ScenarioReportScenario CreateScenarioFromException(
@@ -257,6 +274,7 @@ internal static class ScenarioRunReportFactory
         string? scenarioId = null)
     {
         var scenarioName = scenario ?? Path.GetFileNameWithoutExtension(file);
+        var failureData = ScenarioFailureDetails.TryGetData(exception);
         return new ScenarioReportScenario(
             scenarioName,
             scenarioId ?? ScenarioIdentity.Create(file, scenarioName),
@@ -269,7 +287,9 @@ internal static class ScenarioRunReportFactory
             null,
             [],
             ScenarioErrorInfo.From(exception),
-            Governance: ScenarioGovernanceClassifier.FromException(exception));
+            Governance: ScenarioGovernanceClassifier.FromException(exception),
+            DeviceHealth: failureData?.DeviceHealth,
+            CiPolicy: failureData?.CiPolicy);
     }
 
     private static double CalculateDurationMs(DateTimeOffset startedAt, DateTimeOffset endedAt) =>

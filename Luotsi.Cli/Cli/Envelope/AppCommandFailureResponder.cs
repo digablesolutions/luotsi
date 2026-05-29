@@ -45,6 +45,8 @@ internal sealed class AppCommandFailureResponder(AppCommandEnvelopeWriter envelo
             exception,
             category,
             AppCommandConsoleOutputModeResolver.ResolveForFailure(context.Options));
-        return 1;
+        return failureData is ScenarioRunFailureData { CiPolicy: { ExitCodeApplied: true } ciPolicy }
+            ? ciPolicy.RecommendedExitCode
+            : 1;
     }
 }

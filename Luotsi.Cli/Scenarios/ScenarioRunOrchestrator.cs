@@ -11,7 +11,8 @@ internal sealed class ScenarioRunOrchestrator(
     ScenarioValidationExecutorFactory scenarioValidationExecutorFactory,
     ScenarioRunEventCoordinatorFactory scenarioRunEventCoordinatorFactory,
     ScenarioRunReportCoordinatorFactory scenarioRunReportCoordinatorFactory,
-    IScenarioDeviceAllocator deviceAllocator)
+    IScenarioDeviceAllocator deviceAllocator,
+    ScenarioGovernancePolicyCoordinator governancePolicyCoordinator)
 {
     private readonly ScenarioRunPlanner _runPlanner = runPlanner ?? throw new ArgumentNullException(nameof(runPlanner));
     private readonly ScenarioExecutorFactory _scenarioExecutorFactory = scenarioExecutorFactory ?? throw new ArgumentNullException(nameof(scenarioExecutorFactory));
@@ -20,6 +21,7 @@ internal sealed class ScenarioRunOrchestrator(
     private readonly ScenarioRunEventCoordinatorFactory _scenarioRunEventCoordinatorFactory = scenarioRunEventCoordinatorFactory ?? throw new ArgumentNullException(nameof(scenarioRunEventCoordinatorFactory));
     private readonly ScenarioRunReportCoordinatorFactory _scenarioRunReportCoordinatorFactory = scenarioRunReportCoordinatorFactory ?? throw new ArgumentNullException(nameof(scenarioRunReportCoordinatorFactory));
     private readonly IScenarioDeviceAllocator _deviceAllocator = deviceAllocator ?? throw new ArgumentNullException(nameof(deviceAllocator));
+    private readonly ScenarioGovernancePolicyCoordinator _governancePolicyCoordinator = governancePolicyCoordinator ?? throw new ArgumentNullException(nameof(governancePolicyCoordinator));
 
     public async Task<ScenarioRunResult> RunFileAsync(string file, IDeviceHost runner, ScenarioRunConfiguration configuration, ArtifactSession artifacts)
     {
@@ -71,7 +73,9 @@ internal sealed class ScenarioRunOrchestrator(
             async sink =>
             {
                 var result = await CreateValidationExecutor(sink).ValidateFileAsync(file).ConfigureAwait(false);
-                return AttachProgressMode(result, configuration);
+                return await _governancePolicyCoordinator.ApplyAsync(
+                    AttachProgressMode(result, configuration),
+                    configuration).ConfigureAwait(false);
             }).ConfigureAwait(false);
     }
 
@@ -90,7 +94,9 @@ internal sealed class ScenarioRunOrchestrator(
             async sink =>
             {
                 var result = await CreateValidationExecutor(sink).ValidatePlanAsync(preparedPlan).ConfigureAwait(false);
-                return AttachProgressMode(result, configuration);
+                return await _governancePolicyCoordinator.ApplyAsync(
+                    AttachProgressMode(result, configuration),
+                    configuration).ConfigureAwait(false);
             }).ConfigureAwait(false);
     }
 
@@ -112,11 +118,17 @@ internal sealed class ScenarioRunOrchestrator(
                 try
                 {
                     var result = await _scenarioExecutorFactory.Create(runner, sink, configuration.FailureArtifactCapturePolicy).RunAsync(file).ConfigureAwait(false);
-                    return AttachArtifactCommands(AttachProgressMode(ScenarioMetadataCompatibility.Attach(result, allocation), configuration), artifacts);
+                    return await _governancePolicyCoordinator.ApplyAsync(
+                        AttachArtifactCommands(AttachProgressMode(ScenarioMetadataCompatibility.Attach(result, allocation), configuration), artifacts),
+                        configuration,
+                        artifacts).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (!IsFatalException(ex) && ex is not UsageException)
                 {
-                    throw ScenarioFailureDetails.AttachDeviceAllocation(ex, allocation);
+                    throw await _governancePolicyCoordinator.ApplyAsync(
+                        ScenarioFailureDetails.AttachDeviceAllocation(ex, allocation),
+                        configuration,
+                        artifacts).ConfigureAwait(false);
                 }
             }).ConfigureAwait(false);
     }
@@ -140,11 +152,17 @@ internal sealed class ScenarioRunOrchestrator(
                 try
                 {
                     var result = await _scenarioBatchExecutorFactory.Create(runner, sink, configuration.FailureArtifactCapturePolicy).RunAsync(preparedPlan).ConfigureAwait(false);
-                    return AttachArtifactCommands(AttachProgressMode(ScenarioMetadataCompatibility.Attach(result, allocation), configuration), artifacts);
+                    return await _governancePolicyCoordinator.ApplyAsync(
+                        AttachArtifactCommands(AttachProgressMode(ScenarioMetadataCompatibility.Attach(result, allocation), configuration), artifacts),
+                        configuration,
+                        artifacts).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (!IsFatalException(ex) && ex is not UsageException)
                 {
-                    throw ScenarioFailureDetails.AttachDeviceAllocation(ex, allocation);
+                    throw await _governancePolicyCoordinator.ApplyAsync(
+                        ScenarioFailureDetails.AttachDeviceAllocation(ex, allocation),
+                        configuration,
+                        artifacts).ConfigureAwait(false);
                 }
             }).ConfigureAwait(false);
     }

@@ -114,4 +114,14 @@ public sealed class ScenarioRunConfigurationTests
 
         Assert.Contains("--progress", error.Message, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Create_TooLarge_DeviceHealthWindowDays_Throws_UsageException()
+    {
+        var options = CliOptions.Parse(["run", "--device-health-window-days", "1000000000"]);
+
+        var error = Assert.Throws<UsageException>(() => ScenarioRunConfiguration.Create(options));
+
+        Assert.Contains("--device-health-window-days", error.Message, StringComparison.Ordinal);
+    }
 }

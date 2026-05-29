@@ -9,7 +9,7 @@ internal static class ArtifactWorkspacePaths
     private const string WorkspaceFolderName = "luotsi";
     private const string ArtifactFolderName = "artifacts";
 
-    public static string ResolveDefaultRunArtifactBaseDirectory(IFileSystem fileSystem, IEnvironmentVariables? environment)
+    public static string ResolveDefaultWorkspaceRoot(IFileSystem fileSystem, IEnvironmentVariables? environment)
     {
         ArgumentNullException.ThrowIfNull(fileSystem);
 
@@ -20,10 +20,17 @@ internal static class ArtifactWorkspacePaths
 
         if (TryResolveUserLocalWorkspaceRoot(environment, out var workspaceRoot))
         {
-            return Path.Join(workspaceRoot, ArtifactFolderName);
+            return workspaceRoot!;
         }
 
         return ResolveTempFallback(fileSystem);
+    }
+
+    public static string ResolveDefaultRunArtifactBaseDirectory(IFileSystem fileSystem, IEnvironmentVariables? environment)
+    {
+        ArgumentNullException.ThrowIfNull(fileSystem);
+
+        return Path.Join(ResolveDefaultWorkspaceRoot(fileSystem, environment), ArtifactFolderName);
     }
 
     private static bool ShouldUseTempFallback(IFileSystem fileSystem, IEnvironmentVariables? environment) =>

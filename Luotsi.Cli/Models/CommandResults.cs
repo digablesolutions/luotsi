@@ -77,7 +77,8 @@ public sealed record LabQuarantineResult(
     string Reason,
     string Owner,
     DateTimeOffset QuarantinedAt,
-    string QuarantineFile);
+    string QuarantineFile,
+    string Source = "manual");
 
 public sealed record LabQuarantineReleaseResult(
     string Serial,

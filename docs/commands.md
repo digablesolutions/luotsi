@@ -275,12 +275,13 @@ Scenario runner flags:
 - `--validate-only` validates the selected scenario file(s) and writes reports without creating a device host or executing device work.
 - `--dry-run` is available only with `run --path`; it returns the selected scenario plan after filtering and sharding without validating or executing it.
 - `--validate-only` and `--dry-run` are mutually exclusive.
-- `--events-jsonl`, `--report-json`, and `--report-junit` write machine-readable run outputs for validation and execution flows. Run JSON payloads now include an additive `governance` object with `kind`, `confidence`, `summary`, and operator signals such as `regression_candidate`, `infrastructure_related`, and `quarantine_candidate`. JUnit mirrors the same verdict under `luotsi.governance.*` testsuite/testcase properties.
+- `--events-jsonl`, `--report-json`, and `--report-junit` write machine-readable run outputs for validation and execution flows. Run JSON payloads now include additive `governance`, `device_health`, and `ci_policy` objects. `governance` classifies whether the run looks product-, lab-, environment-, or harness-related; `device_health` tracks the rolling device state (`healthy`, `suspect`, `recovering`, `quarantined`) plus retry/pass-threshold counters; and `ci_policy` summarizes the recommended CI outcome and exit code. JUnit mirrors these signals under `luotsi.governance.*`, `luotsi.device_health.*`, and `luotsi.policy.*` testsuite and testcase properties.
 - `--progress auto|line|plain|quiet|jsonl` controls live progress on stderr. `--quiet` also selects quiet progress for `run` unless `--progress quiet` is supplied explicitly. The final command envelope stays on stdout unless one-shot quiet output is enabled; `--events-jsonl` remains the durable event artifact.
 - `--output-dir <directory>` is a scenario-run alias for `--artifacts <directory>`. Successful run results include `artifact_commands` with exact `artifacts open`, `artifacts pack`, and `replay open` commands for the run artifact root.
 - `--capture-on failure|never` controls runtime failure capture during scenario execution.
 - `--attach-artifacts never|on-failure|always` controls whether report outputs include artifact references.
 - `--claim-device` creates a host-side lab lease for the selected `--device` or `--device-query` serial and releases it in a `finally` path after the scenario run. Use `--owner <name>` and `--ttl-sec <seconds>` to identify the run and set the safety expiry.
+- `--ci-policy off|advisory|enforced` controls whether Luotsi only emits the CI policy (`advisory`) or also applies its recommended exit code directly (`enforced`). `--device-health-window-days`, `--retry-budget`, and `--pass-threshold` control the rolling registry window, auto-quarantine threshold, and recovery threshold for device trust.
 
 ---
 

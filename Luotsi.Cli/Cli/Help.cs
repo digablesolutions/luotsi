@@ -362,10 +362,14 @@ Luotsi help: run
 
 Usage:
   luotsi run --file <scenario.json> [--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600]
+             [--ci-policy off|advisory|enforced] [--device-health-window-days 30]
+             [--retry-budget 2] [--pass-threshold 2]
   luotsi run --path <scenario-file-or-directory-or-glob> [--dry-run|--validate-only]
              [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>]
              [--shard-count <n> --shard-index <zero-based>] [--shard-strategy index|hash]
              [--claim-device] [--owner <name>] [--ttl-sec 3600]
+             [--ci-policy off|advisory|enforced] [--device-health-window-days 30]
+             [--retry-budget 2] [--pass-threshold 2]
              [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>]
              [--capture-on failure|never] [--attach-artifacts never|on-failure|always]
              [--progress auto|line|plain|quiet|jsonl] [--output-dir <directory>]
@@ -384,10 +388,22 @@ Artifacts:
   --human or --console-output human, failed runs are rendered as a compact
   triage capsule that surfaces the primary failure, evidence counts, and next
   command. JSON reports, JSONL lifecycle events, and failed run payloads also
-  include an additive governance verdict so CI and operators can distinguish
-  observable scenario failures from lab/device or environment/setup failures.
-  JUnit output mirrors that verdict under luotsi.governance.* testcase and
-  testsuite properties.
+  include additive governance, device_health, and ci_policy objects so CI and
+  operators can distinguish observable scenario failures from lab/device or
+  environment/setup failures, track rolling device trust, and surface a
+  recommended CI disposition. Artifacts also persist device-health.json and
+  ci-policy.json beside the normal run evidence. JUnit mirrors these signals
+  under luotsi.governance.*, luotsi.device_health.*, and luotsi.policy.*
+  testsuite and testcase properties.
+
+CI policy:
+  --ci-policy advisory keeps the existing command exit behavior and emits the
+  policy only as machine-readable output. --ci-policy enforced applies the
+  policy's recommended exit code directly (for example, infra/quarantine
+  failures return a distinct code from product regressions). --retry-budget
+  controls how many recent infrastructure failures a device can absorb before
+  Luotsi auto-quarantines it, while --pass-threshold controls how many clean
+  runs are required before an auto-quarantined device is trusted again.
 
 Progress:
   Run prints progress to stderr by default and keeps the final command envelope
@@ -639,8 +655,8 @@ Command groups:
     scenario-list --path <scenario-file-or-directory-or-glob> [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>]
     scenario-validate (--file <scenario.json> | --path <scenario-file-or-directory-or-glob>) [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>]
     scenario-explain --file <scenario.json>
-    run --file <scenario.json> [--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--progress auto|line|plain|quiet|jsonl] [--output-dir <directory>]
-    run --path <scenario-file-or-directory-or-glob> [--dry-run|--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--progress auto|line|plain|quiet|jsonl] [--output-dir <directory>] [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>] [--shard-count <n> --shard-index <zero-based>] [--shard-strategy index|hash]
+    run --file <scenario.json> [--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--ci-policy off|advisory|enforced] [--device-health-window-days 30] [--retry-budget 2] [--pass-threshold 2] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--progress auto|line|plain|quiet|jsonl] [--output-dir <directory>]
+    run --path <scenario-file-or-directory-or-glob> [--dry-run|--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--ci-policy off|advisory|enforced] [--device-health-window-days 30] [--retry-budget 2] [--pass-threshold 2] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--progress auto|line|plain|quiet|jsonl] [--output-dir <directory>] [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>] [--shard-count <n> --shard-index <zero-based>] [--shard-strategy index|hash]
 
 Common options:
   --device <adb serial>
