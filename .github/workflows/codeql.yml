@@ -53,6 +53,7 @@ jobs:
             **/*.csproj
             **/packages.lock.json
             global.json
+            NuGet.config
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4

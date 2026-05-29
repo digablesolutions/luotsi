@@ -44,6 +44,7 @@ jobs:
             **/*.csproj
             **/packages.lock.json
             global.json
+            NuGet.config
 
       - name: SDK diagnostics
         shell: pwsh
@@ -207,6 +208,7 @@ jobs:
             **/*.csproj
             **/packages.lock.json
             global.json
+            NuGet.config
 
       - name: Setup Java
         uses: actions/setup-java@v5
