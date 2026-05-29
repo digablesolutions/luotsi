@@ -179,11 +179,106 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-coverage-report
           path: artifacts/coverage-report
           if-no-files-found: ignore
+
+  android-helper:
+    name: Build Android view helper
+    runs-on: windows-latest
+    needs: validate-tag
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ needs.validate-tag.outputs.tag }}
+          persist-credentials: false
+
+      - name: Setup Java
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Build signed Android helper APK
+        shell: pwsh
+        env:
+          LUOTSI_ANDROID_KEYSTORE_BASE64: ${{ secrets.LUOTSI_ANDROID_KEYSTORE_BASE64 }}
+          LUOTSI_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.LUOTSI_ANDROID_KEYSTORE_PASSWORD }}
+          LUOTSI_ANDROID_KEY_ALIAS: ${{ secrets.LUOTSI_ANDROID_KEY_ALIAS }}
+          LUOTSI_ANDROID_KEY_PASSWORD: ${{ secrets.LUOTSI_ANDROID_KEY_PASSWORD }}
+          LUOTSI_ANDROID_VERSION_NAME: ${{ needs.validate-tag.outputs.version }}
+          LUOTSI_ANDROID_VERSION_CODE: ${{ needs.validate-tag.outputs.android_version_code }}
+        run: |
+          $required = @(
+            "LUOTSI_ANDROID_KEYSTORE_BASE64",
+            "LUOTSI_ANDROID_KEYSTORE_PASSWORD",
+            "LUOTSI_ANDROID_KEY_ALIAS",
+            "LUOTSI_ANDROID_KEY_PASSWORD"
+          )
+          $missing = $required | Where-Object { [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) }
+          if ($missing.Count -gt 0) {
+            throw "Release packaging requires Android signing secrets: $($missing -join ', ')"
+          }
+
+          $keystore = Join-Path $env:RUNNER_TEMP "luotsi-view-helper-release.jks"
+          [IO.File]::WriteAllBytes($keystore, [Convert]::FromBase64String($env:LUOTSI_ANDROID_KEYSTORE_BASE64))
+          $env:LUOTSI_ANDROID_KEYSTORE_PATH = $keystore
+          Write-Host "Using Luotsi Android release signing key from GitHub secrets."
+          Write-Host "Stamping Android helper version $env:LUOTSI_ANDROID_VERSION_NAME ($env:LUOTSI_ANDROID_VERSION_CODE)."
+
+          $wrapper = ".\Luotsi.ViewServer.Android\gradlew.bat"
+          $arguments = @("--no-daemon", "-p", "Luotsi.ViewServer.Android", ":app:assembleRelease")
+          $maxAttempts = 3
+          $exitCode = 0
+
+          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            & $wrapper @arguments
+            $exitCode = $LASTEXITCODE
+            if ($exitCode -eq 0) {
+              break
+            }
+
+            if ($attempt -eq $maxAttempts) {
+              exit $exitCode
+            }
+
+            $delaySeconds = 20 * $attempt
+            Write-Warning "Android helper build failed with exit code $exitCode. Retrying in $delaySeconds seconds ($attempt/$maxAttempts)."
+            Start-Sleep -Seconds $delaySeconds
+          }
+
+          $releaseApkDir = Join-Path $PWD "Luotsi.ViewServer.Android/app/build/outputs/apk/release"
+          $canonicalApk = Join-Path $releaseApkDir "app-release.apk"
+          if (!(Test-Path -LiteralPath $canonicalApk)) {
+            $candidate = Get-ChildItem -LiteralPath $releaseApkDir -Filter "*.apk" -File -ErrorAction SilentlyContinue |
+              Sort-Object Name |
+              Select-Object -First 1
+            if ($null -eq $candidate) {
+              throw "Android view helper release APK was not produced under $releaseApkDir."
+            }
+
+            Copy-Item -LiteralPath $candidate.FullName -Destination $canonicalApk -Force
+            Write-Host "Normalized Android helper APK $($candidate.Name) to app-release.apk."
+          }
+
+          Get-ChildItem -LiteralPath $releaseApkDir | ForEach-Object {
+            Write-Host "Android helper output: $($_.FullName)"
+          }
+
+      - name: Upload Android helper APK
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: android-helper-apk
+          path: Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
 
   package:
     name: Package ${{ matrix.rid }}
@@ -191,6 +286,7 @@ jobs:
     needs:
       - validate-tag
       - validate
+      - android-helper
     timeout-minutes: 20
     permissions:
       contents: read
@@ -229,69 +325,22 @@ jobs:
             global.json
             NuGet.config
 
-      - name: Setup Java
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "17"
-          cache: gradle
-
       - name: Verify locked restore
         shell: pwsh
         run: dotnet restore $env:SOLUTION --locked-mode /bl:artifacts/binlogs/release-publish-restore-${{ matrix.rid }}.binlog
 
-      - name: Build Android view helper
+      - name: Download Android view helper
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: android-helper-apk
+          path: Luotsi.ViewServer.Android/app/build/outputs/apk/release
+
+      - name: Verify Android view helper
         shell: pwsh
-        env:
-          LUOTSI_ANDROID_KEYSTORE_BASE64: ${{ secrets.LUOTSI_ANDROID_KEYSTORE_BASE64 }}
-          LUOTSI_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.LUOTSI_ANDROID_KEYSTORE_PASSWORD }}
-          LUOTSI_ANDROID_KEY_ALIAS: ${{ secrets.LUOTSI_ANDROID_KEY_ALIAS }}
-          LUOTSI_ANDROID_KEY_PASSWORD: ${{ secrets.LUOTSI_ANDROID_KEY_PASSWORD }}
-          LUOTSI_ANDROID_VERSION_NAME: ${{ needs.validate-tag.outputs.version }}
-          LUOTSI_ANDROID_VERSION_CODE: ${{ needs.validate-tag.outputs.android_version_code }}
         run: |
-          $required = @(
-            "LUOTSI_ANDROID_KEYSTORE_BASE64",
-            "LUOTSI_ANDROID_KEYSTORE_PASSWORD",
-            "LUOTSI_ANDROID_KEY_ALIAS",
-            "LUOTSI_ANDROID_KEY_PASSWORD"
-          )
-          $missing = $required | Where-Object { [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) }
-          if ($missing.Count -gt 0) {
-            throw "Release packaging requires Android signing secrets: $($missing -join ', ')"
-          }
-
-          $keystore = Join-Path $env:RUNNER_TEMP "luotsi-view-helper-release.jks"
-          [IO.File]::WriteAllBytes($keystore, [Convert]::FromBase64String($env:LUOTSI_ANDROID_KEYSTORE_BASE64))
-          $env:LUOTSI_ANDROID_KEYSTORE_PATH = $keystore
-          Write-Host "Using Luotsi Android release signing key from GitHub secrets."
-          Write-Host "Stamping Android helper version $env:LUOTSI_ANDROID_VERSION_NAME ($env:LUOTSI_ANDROID_VERSION_CODE)."
-
-          if ($IsWindows) {
-            & ".\Luotsi.ViewServer.Android\gradlew.bat" -p Luotsi.ViewServer.Android :app:assembleRelease
-          } else {
-            & bash "./Luotsi.ViewServer.Android/gradlew" -p Luotsi.ViewServer.Android :app:assembleRelease
-          }
-          if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
-          }
-
-          $releaseApkDir = Join-Path $PWD "Luotsi.ViewServer.Android/app/build/outputs/apk/release"
-          $canonicalApk = Join-Path $releaseApkDir "app-release.apk"
-          if (!(Test-Path -LiteralPath $canonicalApk)) {
-            $candidate = Get-ChildItem -LiteralPath $releaseApkDir -Filter "*.apk" -File -ErrorAction SilentlyContinue |
-              Sort-Object Name |
-              Select-Object -First 1
-            if ($null -eq $candidate) {
-              throw "Android view helper release APK was not produced under $releaseApkDir."
-            }
-
-            Copy-Item -LiteralPath $candidate.FullName -Destination $canonicalApk -Force
-            Write-Host "Normalized Android helper APK $($candidate.Name) to app-release.apk."
-          }
-
-          Get-ChildItem -LiteralPath $releaseApkDir | ForEach-Object {
-            Write-Host "Android helper output: $($_.FullName)"
+          $helper = "Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release.apk"
+          if (!(Test-Path -LiteralPath $helper)) {
+            throw "Downloaded Android view helper APK is missing: $helper"
           }
 
       - name: Publish
