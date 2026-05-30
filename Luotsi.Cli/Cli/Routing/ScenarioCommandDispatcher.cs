@@ -10,13 +10,15 @@ internal sealed class ScenarioCommandDispatcher(
     ScenarioRunOrchestrator scenarioRunOrchestrator,
     ScenarioAuthoringService authoringService,
     IEnvironmentVariables environment,
-    LabLeaseStore? labLeaseStore = null)
+    LabLeaseStore? labLeaseStore = null,
+    LabLeaseClaimCoordinator? labLeaseClaimCoordinator = null)
 {
     private readonly ScenarioRunPlanner _runPlanner = runPlanner ?? throw new ArgumentNullException(nameof(runPlanner));
     private readonly ScenarioRunOrchestrator _scenarioRunOrchestrator = scenarioRunOrchestrator ?? throw new ArgumentNullException(nameof(scenarioRunOrchestrator));
     private readonly ScenarioAuthoringService _authoringService = authoringService ?? throw new ArgumentNullException(nameof(authoringService));
     private readonly IEnvironmentVariables _environment = environment ?? throw new ArgumentNullException(nameof(environment));
     private readonly LabLeaseStore? _labLeaseStore = labLeaseStore;
+    private readonly LabLeaseClaimCoordinator? _labLeaseClaimCoordinator = labLeaseClaimCoordinator;
 
     public async Task<ScenarioListResult> ListAsync(CliOptions options)
     {
@@ -122,13 +124,22 @@ internal sealed class ScenarioCommandDispatcher(
             throw new InvalidOperationException("Scenario device claiming is not available in this command host.");
         }
 
+        if (_labLeaseClaimCoordinator is null)
+        {
+            throw new InvalidOperationException("Scenario device claiming coordinator is not available in this command host.");
+        }
+
         var serial = options.Get("device");
         if (string.IsNullOrWhiteSpace(serial))
         {
             throw new UsageException("run --claim-device requires --device or --device-query so Luotsi can claim the selected serial.");
         }
 
-        var lease = await _labLeaseStore.ClaimAsync(serial, options.Get("owner") ?? "luotsi-run", options.Int("ttl-sec", 3600)).ConfigureAwait(false);
+        var lease = await _labLeaseClaimCoordinator.ClaimAsync(
+            serial,
+            options.Get("owner") ?? "luotsi-run",
+            options.Int("ttl-sec", 3600),
+            ParseClaimWaitSeconds(options)).ConfigureAwait(false);
         try
         {
             return await runAsync(configuration with { LabLease = lease }).ConfigureAwait(false);
@@ -137,6 +148,17 @@ internal sealed class ScenarioCommandDispatcher(
         {
             await _labLeaseStore.ReleaseAsync(lease.LeaseId).ConfigureAwait(false);
         }
+    }
+
+    private static int ParseClaimWaitSeconds(CliOptions options)
+    {
+        var waitSeconds = options.Int("claim-wait-sec", 0);
+        if (waitSeconds < 0)
+        {
+            throw new UsageException("--claim-wait-sec must be zero or greater.");
+        }
+
+        return waitSeconds;
     }
 
     private static IDeviceHost RequireRunner(IDeviceHost? runner) =>

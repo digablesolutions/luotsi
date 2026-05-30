@@ -12,7 +12,13 @@ public sealed record DeviceInventoryResult(IReadOnlyList<DeviceState> Devices);
 
 public sealed record DeviceStatusResult(DeviceState Device, PreflightResult Readiness);
 
-public sealed record LabDeviceDecision(string? Serial, string Status, string Reason, bool Selected, IReadOnlyList<string>? Capabilities = null);
+public sealed record LabDeviceDecision(
+    string? Serial,
+    string Status,
+    string Reason,
+    bool Selected,
+    IReadOnlyList<string>? Capabilities = null,
+    int QueueDepth = 0);
 
 public sealed record LabStatusResult(
     int Total,
@@ -20,7 +26,8 @@ public sealed record LabStatusResult(
     int Unavailable,
     IReadOnlyList<DeviceState> Devices,
     IReadOnlyList<LabDeviceDecision> Decisions,
-    IReadOnlyList<LabDoctorProbe>? Probes = null);
+    IReadOnlyList<LabDoctorProbe>? Probes = null,
+    int QueuedClaims = 0);
 
 public sealed record LabDoctorResult(
     string Status,
@@ -44,7 +51,11 @@ public sealed record LabPlanResult(
     string? SelectedSerial,
     string Summary,
     IReadOnlyList<string> RecommendedCommands,
-    IReadOnlyList<LabDeviceDecision> Decisions);
+    IReadOnlyList<LabDeviceDecision> Decisions,
+    string? BlockedReason = null,
+    DateTimeOffset? NextCapacityAt = null,
+    int? SuggestedWaitSec = null,
+    int QueueDepth = 0);
 
 public sealed record LabLeaseResult(
     string LeaseId,
@@ -52,7 +63,8 @@ public sealed record LabLeaseResult(
     string Owner,
     DateTimeOffset ClaimedAt,
     DateTimeOffset ExpiresAt,
-    string LeaseFile);
+    string LeaseFile,
+    DateTimeOffset? LastHeartbeatAt = null);
 
 public sealed record LabLeaseReleaseResult(
     string LeaseId,
@@ -71,6 +83,20 @@ public sealed record LabLeaseExtendResult(
 public sealed record LabLeasesResult(
     int Count,
     IReadOnlyList<LabLeaseResult> Leases);
+
+public sealed record LabQueueEntryResult(
+    string QueueId,
+    string Serial,
+    string Owner,
+    DateTimeOffset RequestedAt,
+    DateTimeOffset LastHeartbeatAt,
+    DateTimeOffset HeartbeatExpiresAt,
+    DateTimeOffset WaitUntil,
+    string QueueFile);
+
+public sealed record LabQueueResult(
+    int Count,
+    IReadOnlyList<LabQueueEntryResult> Waiters);
 
 public sealed record LabQuarantineResult(
     string Serial,

@@ -45,12 +45,19 @@ internal static class DeviceSelectorResolver
         var inventoryHost = deviceHostLauncher.Create(options, adbExecutable, artifacts, deviceSelector: null);
         var inventory = DeviceInventory.FromDeviceList(await inventoryHost.GetDevicesAsync().ConfigureAwait(false));
         var leases = leaseStore?.ReadActiveLeasesBySerial() ?? new Dictionary<string, LabLeaseResult>(StringComparer.OrdinalIgnoreCase);
+        var queueDepthBySerial = leaseStore?.ReadActiveQueueDepthBySerial() ?? new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var quarantines = quarantineStore?.ReadBySerial() ?? new Dictionary<string, LabQuarantineResult>(StringComparer.OrdinalIgnoreCase);
-        if (leases.Count > 0 || quarantines.Count > 0)
+        if (CanWaitForClaim(options) && TryResolveSingleScheduledMatch(inventory, query, quarantines, out var scheduledSerial))
+        {
+            return scheduledSerial;
+        }
+
+        if (leases.Count > 0 || queueDepthBySerial.Count > 0 || quarantines.Count > 0)
         {
             ThrowIfOnlyLeasedDevicesMatch(inventory, query, leases);
+            ThrowIfOnlyQueuedDevicesMatch(inventory, query, queueDepthBySerial);
             ThrowIfOnlyQuarantinedDevicesMatch(inventory, query, quarantines);
-            inventory = ApplyLabExclusions(inventory, leases, quarantines);
+            inventory = ApplyLabExclusions(inventory, leases, queueDepthBySerial, quarantines);
         }
 
         var selected = DeviceQuerySelector.Select(inventory, query);
@@ -65,15 +72,16 @@ internal static class DeviceSelectorResolver
     private static DeviceInventoryResult ApplyLabExclusions(
         DeviceInventoryResult inventory,
         IReadOnlyDictionary<string, LabLeaseResult> leases,
+        IReadOnlyDictionary<string, int> queueDepthBySerial,
         IReadOnlyDictionary<string, LabQuarantineResult> quarantines)
     {
-        if (leases.Count == 0 && quarantines.Count == 0)
+        if (leases.Count == 0 && queueDepthBySerial.Count == 0 && quarantines.Count == 0)
         {
             return inventory;
         }
 
         return new DeviceInventoryResult(inventory.Devices
-            .Where(device => device.Serial is null || !leases.ContainsKey(device.Serial) && !quarantines.ContainsKey(device.Serial))
+            .Where(device => device.Serial is null || !leases.ContainsKey(device.Serial) && !queueDepthBySerial.ContainsKey(device.Serial) && !quarantines.ContainsKey(device.Serial))
             .ToArray());
     }
 
@@ -101,6 +109,33 @@ internal static class DeviceSelectorResolver
                 return $"{device.Serial} leased by {lease.Owner} until {lease.ExpiresAt:O}";
             });
         throw new UsageException($"--device-query '{query}' matched only leased devices: {string.Join(", ", details)}. Run `luotsi lab leases` or release a lease before selecting this device.");
+    }
+
+    private static void ThrowIfOnlyQueuedDevicesMatch(DeviceInventoryResult inventory, string query, IReadOnlyDictionary<string, int> queueDepthBySerial)
+    {
+        if (queueDepthBySerial.Count == 0)
+        {
+            return;
+        }
+
+        var parsed = new DeviceQuery(query);
+        var matches = inventory.Devices.Where(parsed.Matches).ToArray();
+        if (matches.Length == 0)
+        {
+            return;
+        }
+
+        var queuedMatches = matches
+            .Where(device => device.Serial is not null && queueDepthBySerial.ContainsKey(device.Serial))
+            .ToArray();
+        if (queuedMatches.Length != matches.Length)
+        {
+            return;
+        }
+
+        var details = queuedMatches
+            .Select(device => $"{device.Serial} has queue depth {queueDepthBySerial[device.Serial!]}");
+        throw new UsageException($"--device-query '{query}' matched only devices with queued claims: {string.Join(", ", details)}. Run `luotsi lab queue` or use --claim-wait-sec to join the queue.");
     }
 
     private static void ThrowIfOnlyQuarantinedDevicesMatch(DeviceInventoryResult inventory, string query, IReadOnlyDictionary<string, LabQuarantineResult> quarantines)
@@ -132,5 +167,33 @@ internal static class DeviceSelectorResolver
                 return $"{device.Serial} quarantined by {quarantine.Owner} at {quarantine.QuarantinedAt:O}: {quarantine.Reason}";
             });
         throw new UsageException($"--device-query '{query}' matched only quarantined devices: {string.Join(", ", details)}. Run `luotsi lab quarantines` or unquarantine a healthy device before selecting it.");
+    }
+
+    private static bool CanWaitForClaim(CliOptions options) =>
+        string.Equals(options.Command, "run", StringComparison.OrdinalIgnoreCase) &&
+        options.HasFlag("claim-device") &&
+        options.Int("claim-wait-sec", 0) > 0;
+
+    private static bool TryResolveSingleScheduledMatch(
+        DeviceInventoryResult inventory,
+        string query,
+        IReadOnlyDictionary<string, LabQuarantineResult> quarantines,
+        out string? serial)
+    {
+        serial = null;
+        var parsed = new DeviceQuery(query);
+        var matches = inventory.Devices.Where(parsed.Matches).ToArray();
+        if (matches.Length != 1 || string.IsNullOrWhiteSpace(matches[0].Serial))
+        {
+            return false;
+        }
+
+        if (quarantines.ContainsKey(matches[0].Serial!))
+        {
+            return false;
+        }
+
+        serial = matches[0].Serial;
+        return true;
     }
 }

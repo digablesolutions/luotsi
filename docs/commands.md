@@ -52,8 +52,9 @@ The CLI includes the same flow-oriented summary in `luotsi help quickstart`.
 | `lab status [--device-query <query>]` | Summarize attached-device availability, explain selection decisions, and include ADB probe attempt/retry counts |
 | `lab doctor [--device-query <query>]` | Detect stale/offline/ambiguous lab state, retry transient probes, and return concrete remediation commands |
 | `lab plan [--device-query <query>]` | Dry-run lab allocation and explain the selected or rejected devices, including recommended claim/run commands |
-| `lab claim [--device-query <query>] [--owner <name>] [--ttl-sec 3600]` | Claim exactly one selected device with a host-side lease token |
+| `lab claim [--device-query <query>] [--owner <name>] [--ttl-sec 3600] [--claim-wait-sec 60]` | Claim exactly one selected device with a host-side lease token, or join the scheduler queue and wait fairly |
 | `lab leases` | List active host-side device leases |
+| `lab queue` | List active queued claim waiters for the lab scheduler |
 | `lab release (--lease <lease-id> | --serial <adb serial>)` | Release a host-side device lease |
 | `lab extend (--lease <lease-id> | --serial <adb serial>) [--ttl-sec 3600]` | Renew an active host-side device lease |
 | `lab quarantine [--device-query <query>] --reason <text> [--owner <name>]` | Mark exactly one selected device unavailable until explicitly unquarantined |
@@ -72,10 +73,10 @@ The CLI includes the same flow-oriented summary in `luotsi help quickstart`.
 | `screen-state --device <serial>` | Dump current screen state |
 
 `wait-for-device` is also available as `device-wait` or `adb wait-for-device`.
-Active `lab claim` leases are honored by `--device-query` selection so CI and agent workflows do not accidentally target an already claimed device. Stale leases can be released by lease id or directly by serial with `lab release --serial <adb serial>`.
+Active `lab claim` leases are honored by `--device-query` selection so CI and agent workflows do not accidentally target an already claimed device. `--claim-wait-sec` lets an operator or agent join a durable queue for the selected serial instead of failing immediately, and `lab queue` exposes that wait state for diagnostics. Stale leases can be released by lease id or directly by serial with `lab release --serial <adb serial>`.
 Long-running jobs can renew an active lease with `lab extend --serial <adb serial> --ttl-sec <seconds>`.
 Active quarantines are also honored by `--device-query`; use them for unhealthy hardware that should stay out of local and CI allocation until repaired.
-When `lab plan` is ready, `recommended_commands` includes both an explicit `lab claim` command and a direct `run --path <scenarios> --claim-device ...` command for agents or CI jobs that want allocation and execution in one step.
+When `lab plan` is ready, `recommended_commands` includes both an explicit `lab claim` command and a direct `run --path <scenarios> --claim-device ...` command for agents or CI jobs that want allocation and execution in one step. Blocked plans now also return additive scheduler hints such as `blocked_reason`, `next_capacity_at`, `suggested_wait_sec`, and `queue_depth`.
 
 `doctor` is the first-run entry point. It reuses the existing adb/version checks, optional package-specific preflight, and the same live-view readiness report exposed by `view-doctor`. `doctor --fix` stages Luotsi-owned FFmpeg native libraries when the requested decoder is missing them, retrying transient setup/download failures before reporting a final setup result, then routes through the same helper/install readiness path as `view setup`. Published Luotsi bundles include those repair assets; source checkouts continue to resolve them from the repository layout.
 
@@ -280,7 +281,7 @@ Scenario runner flags:
 - `--output-dir <directory>` is a scenario-run alias for `--artifacts <directory>`. Successful run results include `artifact_commands` with exact `artifacts open`, `artifacts pack`, and `replay open` commands for the run artifact root.
 - `--capture-on failure|never` controls runtime failure capture during scenario execution.
 - `--attach-artifacts never|on-failure|always` controls whether report outputs include artifact references.
-- `--claim-device` creates a host-side lab lease for the selected `--device` or `--device-query` serial and releases it in a `finally` path after the scenario run. Use `--owner <name>` and `--ttl-sec <seconds>` to identify the run and set the safety expiry.
+- `--claim-device` creates a host-side lab lease for the selected `--device` or `--device-query` serial and releases it in a `finally` path after the scenario run. Use `--owner <name>` and `--ttl-sec <seconds>` to identify the run and set the safety expiry. Add `--claim-wait-sec <seconds>` to join the durable scheduler queue and wait fairly for the selected serial when it is already leased or already has queued claimers.
 - `--ci-policy off|advisory|enforced` controls whether Luotsi only emits the CI policy (`advisory`) or also applies its recommended exit code directly (`enforced`). `--device-health-window-days`, `--retry-budget`, and `--pass-threshold` control the rolling registry window, auto-quarantine threshold, and recovery threshold for device trust.
 
 ---

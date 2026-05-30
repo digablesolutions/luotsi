@@ -193,6 +193,9 @@ If you already have a device connected, start from the workflow that matches wha
   applies the recommended policy exit code directly. JUnit mirrors the same
   signals under `luotsi.governance.*`, `luotsi.device_health.*`, and
   `luotsi.policy.*` properties.
+  For shared labs, `--claim-device --claim-wait-sec <seconds>` joins Luotsi's
+  durable lease queue instead of failing immediately when the selected serial is
+  already leased; inspect pending waiters with `luotsi lab queue`.
 
 The CLI also exposes this directly via `luotsi help quickstart`.
 

@@ -171,8 +171,9 @@ Usage:
   luotsi lab status [--device-query <query>]
   luotsi lab doctor [--device-query <query>] [--fix]
   luotsi lab plan [--device-query <query>]
-  luotsi lab claim [--device-query <query>] [--owner <name>] [--ttl-sec 3600]
+  luotsi lab claim [--device-query <query>] [--owner <name>] [--ttl-sec 3600] [--claim-wait-sec 60]
   luotsi lab leases
+  luotsi lab queue
   luotsi lab release (--lease <lease-id> | --serial <adb serial>)
   luotsi lab extend (--lease <lease-id> | --serial <adb serial>) [--ttl-sec 3600]
   luotsi lab quarantine [--device-query <query>] --reason <text> [--owner <name>]
@@ -186,7 +187,9 @@ Examples:
   luotsi lab status --device-query state=device,type=physical
   luotsi lab plan --device-query model=Pixel_9
   luotsi lab claim --device-query model=Pixel_9 --owner ci-job-1 --ttl-sec 1800
+  luotsi lab claim --device-query model=Pixel_9 --owner ci-job-2 --claim-wait-sec 60
   luotsi lab leases
+  luotsi lab queue
   luotsi lab extend --serial emulator-5554 --ttl-sec 7200
   luotsi lab quarantine --device-query serial=emulator-5554 --reason "flaky touchscreen"
   luotsi lab quarantines
@@ -198,7 +201,9 @@ Output:
   reports ambiguous selection, offline devices, stale devices, and recommended
   repair commands. With --fix, Luotsi may run safe host-side recovery actions.
   Lab claim creates a host-side lease token so CI and agents can avoid selecting
-  a device already claimed by another workflow. Active leases are honored by
+  a device already claimed by another workflow. With --claim-wait-sec, Luotsi
+  joins a persistent queue and waits fairly for the selected serial instead of
+  failing immediately. Active leases and queued claims are honored by
   --device-query selection. Lab quarantine marks unhealthy devices unavailable
   until they are explicitly unquarantined. Lab plan is a dry-run allocator that
   explains which device would be selected or why selection is blocked, and
@@ -361,13 +366,13 @@ Notes:
 Luotsi help: run
 
 Usage:
-  luotsi run --file <scenario.json> [--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600]
+  luotsi run --file <scenario.json> [--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--claim-wait-sec 60]
              [--ci-policy off|advisory|enforced] [--device-health-window-days 30]
              [--retry-budget 2] [--pass-threshold 2]
   luotsi run --path <scenario-file-or-directory-or-glob> [--dry-run|--validate-only]
              [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>]
              [--shard-count <n> --shard-index <zero-based>] [--shard-strategy index|hash]
-             [--claim-device] [--owner <name>] [--ttl-sec 3600]
+             [--claim-device] [--owner <name>] [--ttl-sec 3600] [--claim-wait-sec 60]
              [--ci-policy off|advisory|enforced] [--device-health-window-days 30]
              [--retry-budget 2] [--pass-threshold 2]
              [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>]
@@ -377,6 +382,7 @@ Usage:
 Examples:
   luotsi run --path scenarios --device emulator-5554 --report-junit junit.xml
   luotsi run --path scenarios --device-query model=Pixel_9 --claim-device --owner ci-job-1
+  luotsi run --path scenarios --device-query model=Pixel_9 --claim-device --claim-wait-sec 60
   luotsi run --path scenarios --include-tag smoke --dry-run
   luotsi run --path scenarios --shard-count 4 --shard-index 0 --events-jsonl events.jsonl
 
@@ -416,7 +422,9 @@ Progress:
 Failure modes:
   scenarioRunEnded is emitted even when parsing, ADB readiness, install, or a
   step fails. Use --validate-only for null-device CI validation. --claim-device
-  releases its lab lease from a finally path after execution.
+  releases its lab lease from a finally path after execution, and
+  --claim-wait-sec lets run join the durable lab scheduler queue first when the
+  selected serial is already leased or queued.
 """,
         ["scenario"] = """
 Luotsi help: scenarios
@@ -563,8 +571,9 @@ Command groups:
     lab status [--device-query <query>]
     lab doctor [--device-query <query>] [--fix]
     lab plan [--device-query <query>]
-    lab claim [--device-query <query>] [--owner <name>] [--ttl-sec 3600]
+    lab claim [--device-query <query>] [--owner <name>] [--ttl-sec 3600] [--claim-wait-sec 60]
     lab leases
+    lab queue
     lab release (--lease <lease-id> | --serial <adb serial>)
     lab extend (--lease <lease-id> | --serial <adb serial>) [--ttl-sec 3600]
     lab quarantine [--device-query <query>] --reason <text> [--owner <name>]
@@ -655,8 +664,8 @@ Command groups:
     scenario-list --path <scenario-file-or-directory-or-glob> [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>]
     scenario-validate (--file <scenario.json> | --path <scenario-file-or-directory-or-glob>) [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>]
     scenario-explain --file <scenario.json>
-    run --file <scenario.json> [--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--ci-policy off|advisory|enforced] [--device-health-window-days 30] [--retry-budget 2] [--pass-threshold 2] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--progress auto|line|plain|quiet|jsonl] [--output-dir <directory>]
-    run --path <scenario-file-or-directory-or-glob> [--dry-run|--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--ci-policy off|advisory|enforced] [--device-health-window-days 30] [--retry-budget 2] [--pass-threshold 2] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--progress auto|line|plain|quiet|jsonl] [--output-dir <directory>] [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>] [--shard-count <n> --shard-index <zero-based>] [--shard-strategy index|hash]
+    run --file <scenario.json> [--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--claim-wait-sec 60] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--ci-policy off|advisory|enforced] [--device-health-window-days 30] [--retry-budget 2] [--pass-threshold 2] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--progress auto|line|plain|quiet|jsonl] [--output-dir <directory>]
+    run --path <scenario-file-or-directory-or-glob> [--dry-run|--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--claim-wait-sec 60] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--ci-policy off|advisory|enforced] [--device-health-window-days 30] [--retry-budget 2] [--pass-threshold 2] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--progress auto|line|plain|quiet|jsonl] [--output-dir <directory>] [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>] [--shard-count <n> --shard-index <zero-based>] [--shard-strategy index|hash]
 
 Common options:
   --device <adb serial>
