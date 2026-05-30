@@ -169,9 +169,13 @@ Usage:
   luotsi preflight [--package <app.id>]
   luotsi doctor --device <adb serial> [--package <app.id>] [--fix]
   luotsi lab status [--device-query <query>]
+                   [--device-pool <pool>] [--require-capabilities <csv>]
   luotsi lab doctor [--device-query <query>] [--fix]
+                   [--device-pool <pool>] [--require-capabilities <csv>]
   luotsi lab plan [--device-query <query>]
+                 [--device-pool <pool>] [--require-capabilities <csv>]
   luotsi lab claim [--device-query <query>] [--owner <name>] [--ttl-sec 3600] [--claim-wait-sec 60]
+                  [--device-pool <pool>] [--require-capabilities <csv>]
   luotsi lab leases
   luotsi lab queue
   luotsi lab release (--lease <lease-id> | --serial <adb serial>)
@@ -179,12 +183,16 @@ Usage:
   luotsi lab quarantine [--device-query <query>] --reason <text> [--owner <name>]
   luotsi lab quarantines
   luotsi lab unquarantine --serial <adb serial>
+  luotsi lab inventory list
+  luotsi lab inventory set (--serial <adb serial> | --device-query <query>) [--pool <pool>] [--capabilities <csv>] [--owner <name>]
+  luotsi lab inventory clear --serial <adb serial>
 
 Examples:
   luotsi devices
   luotsi device-status --device emulator-5554
   luotsi lab status
   luotsi lab status --device-query state=device,type=physical
+  luotsi lab status --device-pool smoke --require-capabilities camera,nfc
   luotsi lab plan --device-query model=Pixel_9
   luotsi lab claim --device-query model=Pixel_9 --owner ci-job-1 --ttl-sec 1800
   luotsi lab claim --device-query model=Pixel_9 --owner ci-job-2 --claim-wait-sec 60
@@ -193,6 +201,7 @@ Examples:
   luotsi lab extend --serial emulator-5554 --ttl-sec 7200
   luotsi lab quarantine --device-query serial=emulator-5554 --reason "flaky touchscreen"
   luotsi lab quarantines
+  luotsi lab inventory set --serial emulator-5554 --pool smoke --capabilities camera,nfc
   luotsi lab doctor --fix
 
 Output:
@@ -205,9 +214,12 @@ Output:
   joins a persistent queue and waits fairly for the selected serial instead of
   failing immediately. Active leases and queued claims are honored by
   --device-query selection. Lab quarantine marks unhealthy devices unavailable
-  until they are explicitly unquarantined. Lab plan is a dry-run allocator that
-  explains which device would be selected or why selection is blocked, and
-  returns recommended_commands for the next operator or agent action.
+  until they are explicitly unquarantined. Lab inventory persists per-device
+  pool/capability metadata under the Luotsi workspace so lab selection and run
+  admission can require a registered pool or capabilities. Lab plan is a
+  dry-run allocator that explains which device would be selected or why
+  selection is blocked, and returns recommended_commands for the next operator
+  or agent action.
 """,
         ["ports"] = """
 Luotsi help: ports
@@ -367,12 +379,14 @@ Luotsi help: run
 
 Usage:
   luotsi run --file <scenario.json> [--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--claim-wait-sec 60]
+             [--device-pool <pool>] [--require-capabilities <csv>]
              [--ci-policy off|advisory|enforced] [--device-health-window-days 30]
              [--retry-budget 2] [--pass-threshold 2]
   luotsi run --path <scenario-file-or-directory-or-glob> [--dry-run|--validate-only]
              [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>]
              [--shard-count <n> --shard-index <zero-based>] [--shard-strategy index|hash]
              [--claim-device] [--owner <name>] [--ttl-sec 3600] [--claim-wait-sec 60]
+             [--device-pool <pool>] [--require-capabilities <csv>]
              [--ci-policy off|advisory|enforced] [--device-health-window-days 30]
              [--retry-budget 2] [--pass-threshold 2]
              [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>]
@@ -383,6 +397,7 @@ Examples:
   luotsi run --path scenarios --device emulator-5554 --report-junit junit.xml
   luotsi run --path scenarios --device-query model=Pixel_9 --claim-device --owner ci-job-1
   luotsi run --path scenarios --device-query model=Pixel_9 --claim-device --claim-wait-sec 60
+  luotsi run --path scenarios --claim-device --device-pool smoke --require-capabilities camera,nfc
   luotsi run --path scenarios --include-tag smoke --dry-run
   luotsi run --path scenarios --shard-count 4 --shard-index 0 --events-jsonl events.jsonl
 
@@ -568,10 +583,10 @@ Command groups:
 
   Device inventory and readiness
     devices
-    lab status [--device-query <query>]
-    lab doctor [--device-query <query>] [--fix]
-    lab plan [--device-query <query>]
-    lab claim [--device-query <query>] [--owner <name>] [--ttl-sec 3600] [--claim-wait-sec 60]
+    lab status [--device-query <query>] [--device-pool <pool>] [--require-capabilities <csv>]
+    lab doctor [--device-query <query>] [--fix] [--device-pool <pool>] [--require-capabilities <csv>]
+    lab plan [--device-query <query>] [--device-pool <pool>] [--require-capabilities <csv>]
+    lab claim [--device-query <query>] [--owner <name>] [--ttl-sec 3600] [--claim-wait-sec 60] [--device-pool <pool>] [--require-capabilities <csv>]
     lab leases
     lab queue
     lab release (--lease <lease-id> | --serial <adb serial>)
@@ -579,6 +594,9 @@ Command groups:
     lab quarantine [--device-query <query>] --reason <text> [--owner <name>]
     lab quarantines
     lab unquarantine --serial <adb serial>
+    lab inventory list
+    lab inventory set (--serial <adb serial> | --device-query <query>) [--pool <pool>] [--capabilities <csv>] [--owner <name>]
+    lab inventory clear --serial <adb serial>
     device-status [--device <adb serial> | --device-query <query>]
     wait-for-device [--timeout-sec 15]
     device-wait [--timeout-sec 15]
@@ -664,12 +682,14 @@ Command groups:
     scenario-list --path <scenario-file-or-directory-or-glob> [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>]
     scenario-validate (--file <scenario.json> | --path <scenario-file-or-directory-or-glob>) [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>]
     scenario-explain --file <scenario.json>
-    run --file <scenario.json> [--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--claim-wait-sec 60] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--ci-policy off|advisory|enforced] [--device-health-window-days 30] [--retry-budget 2] [--pass-threshold 2] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--progress auto|line|plain|quiet|jsonl] [--output-dir <directory>]
-    run --path <scenario-file-or-directory-or-glob> [--dry-run|--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--claim-wait-sec 60] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--ci-policy off|advisory|enforced] [--device-health-window-days 30] [--retry-budget 2] [--pass-threshold 2] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--progress auto|line|plain|quiet|jsonl] [--output-dir <directory>] [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>] [--shard-count <n> --shard-index <zero-based>] [--shard-strategy index|hash]
+    run --file <scenario.json> [--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--claim-wait-sec 60] [--device-pool <pool>] [--require-capabilities <csv>] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--ci-policy off|advisory|enforced] [--device-health-window-days 30] [--retry-budget 2] [--pass-threshold 2] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--progress auto|line|plain|quiet|jsonl] [--output-dir <directory>]
+    run --path <scenario-file-or-directory-or-glob> [--dry-run|--validate-only] [--claim-device] [--owner <name>] [--ttl-sec 3600] [--claim-wait-sec 60] [--device-pool <pool>] [--require-capabilities <csv>] [--no-require-device-ready] [--device-ready-timeout-sec 15] [--package <app.id>] [--ci-policy off|advisory|enforced] [--device-health-window-days 30] [--retry-budget 2] [--pass-threshold 2] [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>] [--capture-on failure|never] [--attach-artifacts never|on-failure|always] [--progress auto|line|plain|quiet|jsonl] [--output-dir <directory>] [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>] [--shard-count <n> --shard-index <zero-based>] [--shard-strategy index|hash]
 
 Common options:
   --device <adb serial>
   --device-query <query>       exact-match clauses: state=online,type=physical,model=Pixel_9
+  --device-pool <pool>         require a registered lab inventory pool for lab/run allocation
+  --require-capabilities <csv> require registered or inferred capabilities for lab/run allocation
   --adb <adb executable>
   --platform <android>
   --adb-timeout-sec <seconds>  default 120, 0 disables; env LUOTSI_ADB_TIMEOUT_SEC

@@ -14,7 +14,8 @@ internal sealed class AppCommandRouteBootstrapper(
     ViewProfileCoordinator profileCoordinator,
     DeviceHostLauncher deviceHostLauncher,
     LabLeaseStore labLeaseStore,
-    LabQuarantineStore labQuarantineStore)
+    LabQuarantineStore labQuarantineStore,
+    LabDeviceInventoryStore labDeviceInventoryStore)
 {
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
@@ -23,6 +24,7 @@ internal sealed class AppCommandRouteBootstrapper(
     private readonly DeviceHostLauncher _deviceHostLauncher = deviceHostLauncher ?? throw new ArgumentNullException(nameof(deviceHostLauncher));
     private readonly LabLeaseStore _labLeaseStore = labLeaseStore ?? throw new ArgumentNullException(nameof(labLeaseStore));
     private readonly LabQuarantineStore _labQuarantineStore = labQuarantineStore ?? throw new ArgumentNullException(nameof(labQuarantineStore));
+    private readonly LabDeviceInventoryStore _labDeviceInventoryStore = labDeviceInventoryStore ?? throw new ArgumentNullException(nameof(labDeviceInventoryStore));
 
     public async Task<AppCommandRouteSetup> PrepareAsync(AppExecutionContext context)
     {
@@ -52,7 +54,8 @@ internal sealed class AppCommandRouteBootstrapper(
             options.Command,
             _deviceHostLauncher,
             _labLeaseStore,
-            _labQuarantineStore).ConfigureAwait(false);
+            _labQuarantineStore,
+            _labDeviceInventoryStore).ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(deviceSelector) && string.IsNullOrWhiteSpace(options.Get("device")))
         {
             options.ApplyDefaults(new Dictionary<string, string?> { ["device"] = deviceSelector });

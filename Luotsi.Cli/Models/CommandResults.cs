@@ -12,13 +12,19 @@ public sealed record DeviceInventoryResult(IReadOnlyList<DeviceState> Devices);
 
 public sealed record DeviceStatusResult(DeviceState Device, PreflightResult Readiness);
 
+public sealed record DeviceAdmissionRequirements(
+    string? Pool = null,
+    IReadOnlyList<string>? Capabilities = null);
+
 public sealed record LabDeviceDecision(
     string? Serial,
     string Status,
     string Reason,
     bool Selected,
     IReadOnlyList<string>? Capabilities = null,
-    int QueueDepth = 0);
+    int QueueDepth = 0,
+    string? Pool = null,
+    bool InventoryRegistered = false);
 
 public sealed record LabStatusResult(
     int Total,
@@ -27,7 +33,8 @@ public sealed record LabStatusResult(
     IReadOnlyList<DeviceState> Devices,
     IReadOnlyList<LabDeviceDecision> Decisions,
     IReadOnlyList<LabDoctorProbe>? Probes = null,
-    int QueuedClaims = 0);
+    int QueuedClaims = 0,
+    DeviceAdmissionRequirements? Requirements = null);
 
 public sealed record LabDoctorResult(
     string Status,
@@ -55,7 +62,31 @@ public sealed record LabPlanResult(
     string? BlockedReason = null,
     DateTimeOffset? NextCapacityAt = null,
     int? SuggestedWaitSec = null,
-    int QueueDepth = 0);
+    int QueueDepth = 0,
+    DeviceAdmissionRequirements? Requirements = null);
+
+public sealed record LabInventoryDeviceResult(
+    string Serial,
+    bool Registered,
+    string? Pool = null,
+    IReadOnlyList<string>? Capabilities = null,
+    string? Owner = null,
+    DateTimeOffset? UpdatedAt = null,
+    string? InventoryFile = null,
+    bool Attached = false,
+    string? Availability = null,
+    string? Model = null);
+
+public sealed record LabInventoryResult(
+    int Count,
+    int RegisteredCount,
+    int AttachedCount,
+    IReadOnlyList<LabInventoryDeviceResult> Devices);
+
+public sealed record LabInventoryClearResult(
+    string Serial,
+    bool Cleared,
+    string? InventoryFile);
 
 public sealed record LabLeaseResult(
     string LeaseId,
@@ -135,7 +166,11 @@ public sealed record ScenarioDeviceAllocation(
     bool RequireReady,
     int WaitTimeoutSec,
     string? Package = null,
-    LabLeaseResult? Lease = null);
+    LabLeaseResult? Lease = null,
+    string? Pool = null,
+    IReadOnlyList<string>? Capabilities = null,
+    bool InventoryRegistered = false,
+    DeviceAdmissionRequirements? Requirements = null);
 
 // Preflight
 public sealed record PreflightResult(
