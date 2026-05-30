@@ -2772,6 +2772,34 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task LabPlan_Queued_Device_Without_Query_Uses_Device_Placeholder_In_RecommendedRunCommand()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var store = new LabLeaseStore(fileSystem, timeProvider);
+        await store.EnqueueAsync("usb-1", "ci-job-1", 60);
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("usb-1", "device", "product:p model:Pixel_9 device:komodo usb:1-1"));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            TimeProvider = timeProvider,
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var exitCode = await app.RunAsync(["lab", "plan"]);
+        using var envelope = JsonDocument.Parse(console.OutputLines[0]);
+
+        Assert.Equal(0, exitCode);
+        var plan = envelope.RootElement.GetProperty("data");
+        Assert.Equal("blocked", plan.GetProperty("status").GetString());
+        Assert.Equal("luotsi lab queue", plan.GetProperty("recommended_commands")[0].GetString());
+        Assert.Equal("luotsi run --path <scenarios> --claim-device --device <adb serial> --claim-wait-sec 60", plan.GetProperty("recommended_commands")[1].GetString());
+    }
+
+    [Fact]
     public async Task LabPlan_Explains_Selected_And_Blocked_Device()
     {
         var console = new FakeConsole();

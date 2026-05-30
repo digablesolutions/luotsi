@@ -30,15 +30,17 @@ public sealed class LabLeaseStoreTests
     {
         var fileSystem = new FakeFileSystem();
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-23T06:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
-        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>
-        {
-            ["LOCALAPPDATA"] = @"C:\Users\agent\AppData\Local"
-        });
+        var environment = OperatingSystem.IsWindows()
+            ? new FakeEnvironmentVariables(new Dictionary<string, string> { ["LOCALAPPDATA"] = @"C:\Users\agent\AppData\Local" })
+            : new FakeEnvironmentVariables(new Dictionary<string, string> { ["HOME"] = "/home/agent" });
         var store = new LabLeaseStore(fileSystem, timeProvider, environment);
 
         var lease = await store.ClaimAsync("usb-1", "ci-job-1", 60);
 
-        Assert.Equal(Path.Join(@"C:\Users\agent\AppData\Local", "Luotsi", "lab", "leases", "usb-1.json"), lease.LeaseFile);
+        var expectedRoot = OperatingSystem.IsWindows()
+            ? Path.Join(@"C:\Users\agent\AppData\Local", "Luotsi", "lab", "leases")
+            : Path.Join("/home/agent", ".local", "share", "luotsi", "lab", "leases");
+        Assert.Equal(Path.Join(expectedRoot, "usb-1.json"), lease.LeaseFile);
         Assert.True(fileSystem.FileExists(lease.LeaseFile));
     }
 
