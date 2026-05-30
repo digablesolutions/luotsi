@@ -93,6 +93,27 @@ public sealed class ScenarioGovernancePolicyTests
     }
 
     [Fact]
+    public async Task RecordAsync_Uses_Shared_Lab_State_Root_When_Configured()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-28T09:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>
+        {
+            [LabStateStoreFactory.SharedRootEnvironmentVariable] = @"C:\lab-state"
+        });
+        var registry = new ScenarioDeviceHealthRegistry(fileSystem, timeProvider, environment);
+
+        var snapshot = await registry.RecordAsync(
+            "usb-1",
+            "failed",
+            CreateLabInfrastructureFailure(),
+            CreateConfiguration(ScenarioCiPolicyMode.Advisory, retryBudget: 1, passThreshold: 2));
+
+        Assert.Equal(Path.Join(@"C:\lab-state", "device-health", "usb-1.json"), snapshot.RegistryFile);
+        Assert.True(fileSystem.FileExists(snapshot.RegistryFile!));
+    }
+
+    [Fact]
     public async Task JUnitScenarioRunReportWriter_Writes_DeviceHealth_And_CiPolicy_Properties()
     {
         var fileSystem = new FakeFileSystem();

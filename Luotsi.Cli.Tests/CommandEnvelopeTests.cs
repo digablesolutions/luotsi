@@ -2807,6 +2807,33 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task LabInventory_Set_Uses_Shared_Lab_State_Root_When_Configured()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("usb-1", "device", "product:p model:Pixel_9 device:komodo usb:1-1"));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            Environment = new FakeEnvironmentVariables(new Dictionary<string, string>
+            {
+                [LabStateStoreFactory.SharedRootEnvironmentVariable] = @"C:\lab-state"
+            }),
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var setExitCode = await app.RunAsync(["lab", "inventory", "set", "--serial", "usb-1", "--pool", "smoke", "--capabilities", "camera"]);
+        using var setEnvelope = JsonDocument.Parse(console.OutputLines[0]);
+
+        Assert.Equal(0, setExitCode);
+        var inventoryFile = setEnvelope.RootElement.GetProperty("data").GetProperty("inventory_file").GetString();
+        Assert.Equal(Path.Join(@"C:\lab-state", "inventory", "usb-1.json"), inventoryFile);
+        Assert.True(fileSystem.FileExists(inventoryFile!));
+    }
+
+    [Fact]
     public async Task LabPlan_Queued_Device_Reports_BlockedReason_And_QueueDepth()
     {
         var console = new FakeConsole();

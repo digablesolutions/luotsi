@@ -24,6 +24,7 @@ Both scripts read the same environment variables:
 | `LUOTSI_SCENARIO_PATH` | `examples/scenarios` | Scenario file or directory to validate and run. |
 | `LUOTSI_OWNER` | CI-derived owner, or `ci-local` | Lease owner shown by `luotsi lab leases`. |
 | `LUOTSI_TTL_SEC` | `1800` | Device claim lease lifetime. |
+| `LUOTSI_LAB_STATE_ROOT` | unset | Optional shared root for Luotsi lab leases, queue entries, quarantines, inventory, and device-health state. |
 | `LUOTSI_ARTIFACTS_DIR` | `artifacts/luotsi-lab` | Run artifact root to upload from CI. |
 | `LUOTSI_JUNIT_PATH` | `<artifacts>/junit.xml` | JUnit report path. |
 | `LUOTSI_BIN` | `luotsi` | Luotsi executable on the runner path. |
@@ -42,6 +43,10 @@ luotsi replay summarize --artifacts "$LUOTSI_ARTIFACTS_DIR"
 
 Dry runs execute `scenario-validate` and `run --dry-run`, then stop before lab
 selection or device claiming.
+
+When multiple runners or operators should share one authoritative Luotsi lab
+state, point `LUOTSI_LAB_STATE_ROOT` at a shared filesystem location that all
+participants can read and write.
 
 ## GitHub Actions adapter
 

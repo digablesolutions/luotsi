@@ -219,7 +219,8 @@ Output:
   admission can require a registered pool or capabilities. Lab plan is a
   dry-run allocator that explains which device would be selected or why
   selection is blocked, and returns recommended_commands for the next operator
-  or agent action.
+  or agent action. Set LUOTSI_LAB_STATE_ROOT to point leases, queue entries,
+  quarantines, inventory, and device-health state at one shared lab path.
 """,
         ["ports"] = """
 Luotsi help: ports

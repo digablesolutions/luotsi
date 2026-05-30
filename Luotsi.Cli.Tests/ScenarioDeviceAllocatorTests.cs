@@ -116,6 +116,31 @@ public sealed class ScenarioDeviceAllocatorTests
         Assert.Contains("model:Pixel_7", result.Capabilities!);
     }
 
+    [Fact]
+    public async Task AllocateAsync_Uses_Shared_Lab_State_Root_For_Inventory_Metadata()
+    {
+        var fileSystem = new FakeFileSystem();
+        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>
+        {
+            [LabStateStoreFactory.SharedRootEnvironmentVariable] = @"C:\lab-state"
+        });
+        var inventoryStore = new LabDeviceInventoryStore(fileSystem, TimeProvider.System, environment);
+        await inventoryStore.SetAsync("SER123", "smoke", "camera,nfc", "lab-admin");
+        var host = new FakeDeviceHost
+        {
+            PreflightTemplate = new PreflightResult("Pixel 7", "16", "36", "focus", null, null, "fingerprint", "arm64-v8a", "SER123")
+        };
+        host.ConnectedDevices.Add(new DeviceInfo("SER123", "device", "product:panther model:Pixel_7 device:panther"));
+        var allocator = new ScenarioDeviceAllocator(inventoryStore);
+
+        var result = await allocator.AllocateAsync(
+            host,
+            CreateConfiguration(new DeviceAdmissionRequirements("smoke", ["camera", "nfc"])));
+
+        Assert.True(fileSystem.FileExists(Path.Join(@"C:\lab-state", "inventory", "SER123.json")));
+        Assert.Equal("smoke", result.Pool);
+    }
+
     private static ScenarioRunConfiguration CreateConfiguration(
         DeviceAdmissionRequirements? requirements = null,
         bool requireDeviceReady = true) =>

@@ -57,12 +57,16 @@ internal sealed record ScenarioDeviceHealthRecord(
     int PassThreshold,
     IReadOnlyList<ScenarioDeviceHealthObservation> Observations);
 
-internal sealed class ScenarioDeviceHealthRegistry(IFileSystem fileSystem, TimeProvider timeProvider, IEnvironmentVariables environment)
+internal sealed class ScenarioDeviceHealthRegistry(
+    IFileSystem fileSystem,
+    TimeProvider timeProvider,
+    IEnvironmentVariables environment,
+    ILabStateStore? labStateStore = null)
 {
     private const string Schema = "luotsi-device-health.v1";
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
-    private readonly IEnvironmentVariables _environment = environment ?? throw new ArgumentNullException(nameof(environment));
+    private readonly ILabStateStore _labStateStore = labStateStore ?? LabStateStoreFactory.Create(fileSystem, environment ?? throw new ArgumentNullException(nameof(environment)));
 
     public async Task<ScenarioDeviceHealthSnapshot> RecordAsync(
         string serial,
@@ -173,7 +177,7 @@ internal sealed class ScenarioDeviceHealthRegistry(IFileSystem fileSystem, TimeP
     }
 
     private string GetRegistryRoot() =>
-        Path.Join(ArtifactWorkspacePaths.ResolveDefaultWorkspaceRoot(_fileSystem, _environment), "lab", "device-health");
+        _labStateStore.GetCollectionRoot("device-health");
 
     private string GetRecordPath(string serial) =>
         Path.Join(GetRegistryRoot(), Slugify(serial) + ".json");

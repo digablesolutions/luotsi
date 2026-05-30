@@ -45,6 +45,23 @@ public sealed class LabLeaseStoreTests
     }
 
     [Fact]
+    public async Task ClaimAsync_Uses_Shared_Lab_State_Root_When_Configured()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-23T06:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var environment = new FakeEnvironmentVariables(new Dictionary<string, string>
+        {
+            [LabStateStoreFactory.SharedRootEnvironmentVariable] = @"C:\lab-state"
+        });
+        var store = new LabLeaseStore(fileSystem, timeProvider, environment);
+
+        var lease = await store.ClaimAsync("usb-1", "ci-job-1", 60);
+
+        Assert.Equal(Path.Join(@"C:\lab-state", "leases", "usb-1.json"), lease.LeaseFile);
+        Assert.True(fileSystem.FileExists(lease.LeaseFile));
+    }
+
+    [Fact]
     public async Task ClaimAsync_Blocks_Direct_Claims_When_Queue_Is_Already_Active()
     {
         var fileSystem = new FakeFileSystem();

@@ -1,17 +1,20 @@
 using System.Text;
 using System.Text.Json;
-using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Infrastructure.Serialization;
 using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Cli.Routing;
 
-internal sealed class LabQuarantineStore(IFileSystem fileSystem, TimeProvider timeProvider, IEnvironmentVariables? environment = null)
+internal sealed class LabQuarantineStore(
+    IFileSystem fileSystem,
+    TimeProvider timeProvider,
+    IEnvironmentVariables? environment = null,
+    ILabStateStore? labStateStore = null)
 {
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
-    private readonly IEnvironmentVariables? _environment = environment;
+    private readonly ILabStateStore _labStateStore = labStateStore ?? LabStateStoreFactory.Create(fileSystem, environment);
 
     public async Task<LabQuarantineResult> QuarantineAsync(string serial, string reason, string? owner, string source = "manual")
     {
@@ -95,6 +98,10 @@ internal sealed class LabQuarantineStore(IFileSystem fileSystem, TimeProvider ti
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
             {
+                if (ex is JsonException)
+                {
+                    TryDeleteFile(file);
+                }
             }
         }
 
@@ -105,7 +112,19 @@ internal sealed class LabQuarantineStore(IFileSystem fileSystem, TimeProvider ti
         Path.Join(GetQuarantineRoot(), Slugify(serial) + ".json");
 
     private string GetQuarantineRoot() =>
-        Path.Join(ArtifactWorkspacePaths.ResolveDefaultWorkspaceRoot(_fileSystem, _environment), "lab", "quarantines");
+        _labStateStore.GetCollectionRoot("quarantines");
+
+    private void TryDeleteFile(string path)
+    {
+        try
+        {
+            _fileSystem.DeleteFile(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _ = ex;
+        }
+    }
 
     private static string Slugify(string value)
     {

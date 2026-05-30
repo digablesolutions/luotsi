@@ -1,20 +1,23 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Infrastructure.Serialization;
 using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Cli.Routing;
 
-internal sealed class LabLeaseStore(IFileSystem fileSystem, TimeProvider timeProvider, IEnvironmentVariables? environment = null)
+internal sealed class LabLeaseStore(
+    IFileSystem fileSystem,
+    TimeProvider timeProvider,
+    IEnvironmentVariables? environment = null,
+    ILabStateStore? labStateStore = null)
 {
     private const int DefaultLeaseTtlSeconds = 3600;
     private const int QueueHeartbeatTtlSeconds = 15;
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
-    private readonly IEnvironmentVariables? _environment = environment;
+    private readonly ILabStateStore _labStateStore = labStateStore ?? LabStateStoreFactory.Create(fileSystem, environment);
 
     internal DateTimeOffset CurrentTime => _timeProvider.GetUtcNow();
 
@@ -375,10 +378,10 @@ internal sealed class LabLeaseStore(IFileSystem fileSystem, TimeProvider timePro
         Path.Join(GetQueueRoot(), $"{Slugify(serial)}-{requestedAt.ToUnixTimeMilliseconds().ToString(System.Globalization.CultureInfo.InvariantCulture)}-{ShortHash(Guid.NewGuid().ToString("N"))}.json");
 
     private string GetLeaseRoot() =>
-        Path.Join(ArtifactWorkspacePaths.ResolveDefaultWorkspaceRoot(_fileSystem, _environment), "lab", "leases");
+        _labStateStore.GetCollectionRoot("leases");
 
     private string GetQueueRoot() =>
-        Path.Join(ArtifactWorkspacePaths.ResolveDefaultWorkspaceRoot(_fileSystem, _environment), "lab", "queue");
+        _labStateStore.GetCollectionRoot("queue");
 
     private async Task<LabLeaseExtendResult> ExtendLeaseAsync(LabLeaseResult lease, int? ttlSec)
     {
