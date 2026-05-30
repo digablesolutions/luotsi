@@ -1479,6 +1479,21 @@ internal static class ViewTestWaitHelpers
         throw new InvalidOperationException($"Timed out waiting for output containing '{contains}'.");
     }
 
+    public static async Task WaitForOutputLineCountAsync(FakeConsole console, string contains, int minimumCount)
+    {
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            if (console.OutputLines.Count(line => line.Contains(contains, StringComparison.Ordinal)) >= minimumCount)
+            {
+                return;
+            }
+
+            await Task.Delay(10);
+        }
+
+        throw new InvalidOperationException($"Timed out waiting for {minimumCount} output lines containing '{contains}'.");
+    }
+
     public static async Task WaitForShareObserverAsync(TcpViewShareServer shareServer, int minimumObservers)
     {
         for (var attempt = 0; attempt < 100; attempt++)

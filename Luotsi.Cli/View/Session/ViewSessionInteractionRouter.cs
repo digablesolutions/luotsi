@@ -63,6 +63,9 @@ internal sealed class ViewSessionInteractionRouter
     public async Task StopRecordingForReconnectAsync()
         => await _recording.StopRecordingForReconnectAsync().ConfigureAwait(false);
 
+    public async Task ResumeRecordingAfterReconnectIfNeededAsync()
+        => await _recording.ResumeRecordingAfterReconnectIfNeededAsync().ConfigureAwait(false);
+
     public async Task HandleAsync(ViewInteractionRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);

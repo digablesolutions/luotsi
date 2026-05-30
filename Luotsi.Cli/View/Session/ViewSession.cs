@@ -349,6 +349,7 @@ public sealed class ViewSession : IViewSession
                                 connection = negotiatedConnection
                             });
                             await interactionRouter.EmitDeviceShelfSnapshotIfNeededAsync().ConfigureAwait(false);
+                            await interactionRouter.ResumeRecordingAfterReconnectIfNeededAsync().ConfigureAwait(false);
                         }
 
                         var sourcePackets = GuardReconnectBudgetAsync(
@@ -904,4 +905,3 @@ internal sealed record ViewRuntimeDiagnostic(string Category, string Message, st
             ? $"luotsi view --device {options.DeviceSelector}"
             : $"luotsi view --join-share {options.JoinShareEndpoint}";
 }
-
