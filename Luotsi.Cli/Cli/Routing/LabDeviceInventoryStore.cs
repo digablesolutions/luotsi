@@ -27,11 +27,12 @@ internal sealed class LabDeviceInventoryStore(IFileSystem fileSystem, TimeProvid
             throw new UsageException("lab inventory set requires --pool and/or --capabilities.");
         }
 
+        var required = requirements!;
         var record = new LabDeviceInventoryRecord(
             Schema,
             serial.Trim(),
-            requirements.Pool,
-            requirements.Capabilities,
+            required.Pool,
+            required.Capabilities ?? [],
             string.IsNullOrWhiteSpace(owner) ? Environment.UserName : owner.Trim(),
             _timeProvider.GetUtcNow());
 

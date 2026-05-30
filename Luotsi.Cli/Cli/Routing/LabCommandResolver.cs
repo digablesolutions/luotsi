@@ -520,26 +520,28 @@ internal static class LabCommandResolver
             return null;
         }
 
-        if (!string.IsNullOrWhiteSpace(requirements.Pool))
+        var required = requirements!;
+        if (!string.IsNullOrWhiteSpace(required.Pool))
         {
             if (registered is null || !registered.Registered)
             {
-                return $"requires pool '{requirements.Pool}' but the device is not registered in lab inventory";
+                return $"requires pool '{required.Pool}' but the device is not registered in lab inventory";
             }
 
             if (string.IsNullOrWhiteSpace(registered.Pool))
             {
-                return $"requires pool '{requirements.Pool}' but the device has no registered pool";
+                return $"requires pool '{required.Pool}' but the device has no registered pool";
             }
 
-            if (!string.Equals(registered.Pool, requirements.Pool, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(registered.Pool, required.Pool, StringComparison.OrdinalIgnoreCase))
             {
-                return $"requires pool '{requirements.Pool}' but inventory pool is '{registered.Pool}'";
+                return $"requires pool '{required.Pool}' but inventory pool is '{registered.Pool}'";
             }
         }
 
         var capabilities = BuildCapabilities(device, registered);
-        var missingCapabilities = requirements.Capabilities
+        var requiredCapabilities = required.Capabilities ?? [];
+        var missingCapabilities = requiredCapabilities
             .Where(required => capabilities.Contains(required, StringComparer.OrdinalIgnoreCase) is false)
             .ToArray();
         if (missingCapabilities.Length == 0)

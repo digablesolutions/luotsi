@@ -109,11 +109,11 @@ public sealed class ScenarioDeviceAllocatorTests
 
         Assert.Equal("smoke", result.Pool);
         Assert.True(result.InventoryRegistered);
-        Assert.Equal(["camera", "nfc"], result.Requirements!.Capabilities);
+        Assert.Equal(["camera", "nfc"], result.Requirements!.Capabilities!.ToArray());
         Assert.Contains("adb", result.Capabilities!);
-        Assert.Contains("camera", result.Capabilities);
-        Assert.Contains("nfc", result.Capabilities);
-        Assert.Contains("model:Pixel_7", result.Capabilities);
+        Assert.Contains("camera", result.Capabilities!);
+        Assert.Contains("nfc", result.Capabilities!);
+        Assert.Contains("model:Pixel_7", result.Capabilities!);
     }
 
     private static ScenarioRunConfiguration CreateConfiguration(

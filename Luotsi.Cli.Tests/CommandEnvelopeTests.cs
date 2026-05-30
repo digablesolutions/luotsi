@@ -2925,7 +2925,7 @@ public sealed partial class AppTests
         Assert.Equal("blocked", plan.GetProperty("status").GetString());
         Assert.Equal("requirements", plan.GetProperty("blocked_reason").GetString());
         Assert.Equal("smoke", plan.GetProperty("requirements").GetProperty("pool").GetString());
-        Assert.Equal(["camera", "nfc"], plan.GetProperty("requirements").GetProperty("capabilities").EnumerateArray().Select(static value => value.GetString()).ToArray());
+        Assert.Equal(["camera", "nfc"], plan.GetProperty("requirements").GetProperty("capabilities").EnumerateArray().Select(static value => value.GetString()!).ToArray());
         Assert.Equal("luotsi lab inventory", plan.GetProperty("recommended_commands")[0].GetString());
         Assert.Equal("luotsi lab inventory set --serial \"<adb serial>\" --pool smoke --capabilities camera,nfc", plan.GetProperty("recommended_commands")[1].GetString());
         Assert.Contains("requires pool 'smoke'", plan.GetProperty("decisions")[0].GetProperty("reason").GetString(), StringComparison.Ordinal);
