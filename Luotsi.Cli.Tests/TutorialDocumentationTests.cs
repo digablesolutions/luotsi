@@ -91,6 +91,20 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public void Command_Reference_Documents_Lab_Inventory_Admission_Strings()
+    {
+        var markdown = File.ReadAllText(Path.Join(FindRepositoryRoot(), "docs", "commands.md"));
+        var helpText = Help.Text;
+
+        Assert.Contains("lab inventory list", markdown, StringComparison.Ordinal);
+        Assert.Contains("--device-pool <pool>", markdown, StringComparison.Ordinal);
+        Assert.Contains("--require-capabilities <csv>", markdown, StringComparison.Ordinal);
+        Assert.Contains("lab inventory list", helpText, StringComparison.Ordinal);
+        Assert.Contains("--device-pool <pool>", helpText, StringComparison.Ordinal);
+        Assert.Contains("--require-capabilities <csv>", helpText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Artifact_Package_Manifest_Fixture_Parses_And_Passes_Unpack_Validation()
     {
         var manifestPath = Path.Join(FindRepositoryRoot(), "Luotsi.Cli.Tests", "Fixtures", "artifacts", "package-manifest-v1.json");

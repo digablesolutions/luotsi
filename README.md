@@ -223,8 +223,10 @@ Quick reference. Start with the public [CLI command groups](https://digablesolut
 | Command | Description |
 |---|---|
 | `devices` | List adb-visible devices |
-| `lab status [--device-query <query>]` | Summarize attached-device availability and selection decisions |
-| `lab doctor [--device-query <query>] [--fix]` | Detect and repair safe lab-level issues such as offline transports and stale Luotsi port plumbing |
+| `lab status [--device-query <query>] [--device-pool <pool>] [--require-capabilities <csv>]` | Summarize attached-device availability, selection decisions, and admission requirements |
+| `lab doctor [--device-query <query>] [--fix] [--device-pool <pool>] [--require-capabilities <csv>]` | Detect and repair safe lab-level issues such as offline transports and stale Luotsi port plumbing |
+| `lab plan [--device-query <query>] [--device-pool <pool>] [--require-capabilities <csv>]` | Dry-run lab allocation and return recommended claim/run commands |
+| `lab inventory list|set|clear` | Persist durable per-device pool and capability metadata in the Luotsi workspace |
 | `device-status --device <serial>` | Read selected device readiness and inventory metadata |
 | `adb server-status` | Host ADB server status |
 | `adb version` | ADB binary version |
@@ -235,6 +237,8 @@ Quick reference. Start with the public [CLI command groups](https://digablesolut
 | `preflight --device <serial> --package <app.id>` | Device preflight check |
 | `doctor --device <serial> [--package <app.id>] [--fix]` | Unified onboarding report for adb, package preflight, and live-view prerequisites |
 | `screen-state --device <serial>` | Dump current screen state |
+
+`lab inventory` is the durable contract for lab admission. Register devices with `lab inventory set --serial <adb serial> --pool <pool> --capabilities <csv>`, then use `--device-pool` and `--require-capabilities` on `lab` and `run` commands to keep CI and human workflows selecting only approved hardware.
 
 ### View & Profiles
 
