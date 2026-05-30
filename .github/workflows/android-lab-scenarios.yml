@@ -1,0 +1,69 @@
+name: Android Lab Scenarios
+
+on:
+  workflow_dispatch:
+    inputs:
+      device_query:
+        description: "Luotsi device query for the physical lab target"
+        required: true
+        type: string
+        default: "state=online,type=physical,availability=available"
+      scenario_path:
+        description: "Scenario directory or file to validate and run"
+        required: true
+        type: string
+        default: "examples/scenarios"
+      ttl_sec:
+        description: "Device claim lease lifetime in seconds"
+        required: true
+        type: string
+        default: "1800"
+      dry_run:
+        description: "Validate scripts without claiming a device"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-lab-scenarios-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  lab-scenarios:
+    name: Run Android lab scenarios
+    runs-on: [self-hosted, luotsi-lab, android-device]
+    timeout-minutes: 60
+
+    env:
+      LUOTSI_DEVICE_QUERY: ${{ inputs.device_query }}
+      LUOTSI_SCENARIO_PATH: ${{ inputs.scenario_path }}
+      LUOTSI_OWNER: gh-actions-${{ github.run_id }}-${{ github.run_attempt }}
+      LUOTSI_TTL_SEC: ${{ inputs.ttl_sec }}
+      LUOTSI_ARTIFACTS_DIR: artifacts/luotsi-lab
+      LUOTSI_JUNIT_PATH: artifacts/luotsi-lab/junit.xml
+      LUOTSI_DRY_RUN: ${{ inputs.dry_run }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run lab scenarios on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./eng/ci/run-lab-scenarios.ps1
+
+      - name: Run lab scenarios on POSIX
+        if: runner.os != 'Windows'
+        shell: bash
+        run: bash ./eng/ci/run-lab-scenarios.sh
+
+      - name: Upload Luotsi lab artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: luotsi-lab-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/luotsi-lab
+          if-no-files-found: ignore

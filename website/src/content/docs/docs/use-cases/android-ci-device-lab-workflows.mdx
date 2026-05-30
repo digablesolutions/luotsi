@@ -23,6 +23,19 @@ luotsi replay summarize --artifacts ./artifacts/<run>
 
 When the workflow depends on a shared device pool, pair this with [Lab And Device Claims](../../reference/lab-and-device-claims/) and [Shared Lab Operations](../../reference/shared-lab-operations/).
 
+## Portable CI workflow pack
+
+For CI/CD, start from the [Portable Physical Lab CI](../../reference/portable-physical-lab-ci/) workflow pack. It keeps the device-lab contract in reusable Bash and PowerShell scripts, then layers a GitHub Actions workflow over those scripts.
+
+That means the same run path can work in:
+
+- GitHub Actions self-hosted runners
+- GitHub Actions-compatible CI systems
+- generic CI jobs that can run shell or PowerShell
+- Docker jobs that connect to host adb or adb-over-TCP devices
+
+The default Docker model is host ADB rather than privileged USB passthrough. The CI job owns the process, Luotsi owns the device claim, and replay artifacts remain the handoff point for humans and agents.
+
 ## Strong fit when
 
 - Your CI pipeline already has adb access to physical devices.

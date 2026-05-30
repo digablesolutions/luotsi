@@ -1,0 +1,102 @@
+---
+title: Portable Physical Lab CI
+description: Run Luotsi Android lab scenarios from GitHub Actions-compatible, generic, or Docker-based CI runners.
+---
+
+Use this workflow pack when a CI runner can reach real Android devices through adb and you want the same Luotsi command path in GitHub Actions, another Actions-compatible runner, or a generic CI job.
+
+The design has two layers:
+
+- portable scripts under `eng/ci/` that define the CI-neutral contract
+- a GitHub Actions workflow adapter that maps workflow inputs to those scripts
+
+## CI contract
+
+The reusable entry points are:
+
+```bash
+bash ./eng/ci/run-lab-scenarios.sh
+```
+
+```powershell
+.\eng\ci\run-lab-scenarios.ps1
+```
+
+Both scripts read the same environment variables.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `LUOTSI_DEVICE_QUERY` | `state=online,type=physical,availability=available` | Lab selector passed to `lab status`, `lab plan`, and `run`. |
+| `LUOTSI_SCENARIO_PATH` | `examples/scenarios` | Scenario file or directory. |
+| `LUOTSI_OWNER` | CI-derived owner, or `ci-local` | Device lease owner. |
+| `LUOTSI_TTL_SEC` | `1800` | Device claim lifetime. |
+| `LUOTSI_ARTIFACTS_DIR` | `artifacts/luotsi-lab` | Artifact root to upload from CI. |
+| `LUOTSI_JUNIT_PATH` | `<artifacts>/junit.xml` | JUnit report path. |
+| `LUOTSI_BIN` | `luotsi` | Luotsi executable. |
+| `LUOTSI_DRY_RUN` | `false` | Validate scripts and scenarios without claiming a device. |
+
+Normal execution validates scenarios, explains the selected lab target, claims one device for the run, writes JUnit plus Luotsi artifacts, and summarizes replay output.
+
+## GitHub Actions
+
+The GitHub adapter uses a self-hosted runner selected by labels:
+
+```yaml
+runs-on: [self-hosted, luotsi-lab, android-device]
+```
+
+The workflow is manual by default. It accepts `device_query`, `scenario_path`, `ttl_sec`, and `dry_run` inputs, then calls the Bash script on POSIX runners or the PowerShell script on Windows runners.
+
+Recommended first-run inputs:
+
+```text
+device_query: state=online,type=physical,availability=available
+scenario_path: examples/scenarios
+ttl_sec: 1800
+dry_run: true
+```
+
+Switch `dry_run` to `false` only after the runner host can run:
+
+```bash
+luotsi version
+luotsi devices
+luotsi lab status --device-query state=online,type=physical,availability=available
+```
+
+Use runner labels or runner groups to restrict access to trusted repositories. Avoid running physical-lab workflows from untrusted pull requests unless the runner is disposable and isolated.
+
+## Generic CI
+
+For CI systems that are not GitHub Actions, keep the same environment variables and upload `LUOTSI_ARTIFACTS_DIR` as the job artifact.
+
+```bash
+export LUOTSI_DEVICE_QUERY="state=online,type=physical,availability=available,model=Pixel_9"
+export LUOTSI_SCENARIO_PATH="examples/scenarios"
+export LUOTSI_OWNER="${CI_JOB_ID:-local-lab}"
+export LUOTSI_ARTIFACTS_DIR="artifacts/luotsi-lab"
+export LUOTSI_JUNIT_PATH="artifacts/luotsi-lab/junit.xml"
+bash ./eng/ci/run-lab-scenarios.sh
+```
+
+Run a device-free integration check with:
+
+```bash
+LUOTSI_DRY_RUN=true bash ./eng/ci/run-lab-scenarios.sh
+```
+
+## Docker
+
+The recommended Docker model is host ADB. Put Luotsi and the scripts inside the container, but connect to a host adb server or TCP-visible Android devices instead of relying on privileged USB passthrough.
+
+Mount the repository or scenario files, mount an artifact output directory, and pass the same `LUOTSI_*` variables. If the container uses the host adb server, configure the adb client for that topology, for example with `ADB_SERVER_SOCKET` or a host name such as `host.docker.internal`.
+
+Privileged USB passthrough is possible on some lab hosts, but it is an advanced fallback because it depends on host USB, udev, permissions, and container runtime behavior. Keep device ownership in Luotsi leases either way.
+
+## Related pages
+
+- [Android CI device lab workflows](../../use-cases/android-ci-device-lab-workflows/)
+- [Lab and device claims](../lab-and-device-claims/)
+- [Shared lab operations](../shared-lab-operations/)
+- [Scenario playbooks](../scenario-playbooks/)
+- [Replay and artifacts](../../core-workflows/replay-and-artifacts/)
