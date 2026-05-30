@@ -12,6 +12,10 @@ internal static class LuotsiScenarioServices
 
         services.AddSingleton<IScenarioTemplateResolver, ScenarioTemplateResolver>();
         services.AddSingleton<IScenarioMetricsCollector>(_ => CompositeScenarioMetricsCollector.CreateDefault());
+        services.AddSingleton<ILabStateStore>(serviceProvider =>
+            LabStateStoreFactory.Create(
+                serviceProvider.GetRequiredService<Luotsi.Cli.Infrastructure.Contracts.IFileSystem>(),
+                serviceProvider.GetRequiredService<Luotsi.Cli.Infrastructure.Contracts.IEnvironmentVariables>()));
         services.AddSingleton<ScenarioCatalog>();
         services.AddSingleton<ScenarioAuthoringService>();
         services.AddSingleton<ScenarioRunPlanner>();

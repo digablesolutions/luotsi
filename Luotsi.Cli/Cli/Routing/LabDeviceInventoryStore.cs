@@ -1,6 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Infrastructure.Devices;
@@ -9,13 +8,17 @@ using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Cli.Routing;
 
-internal sealed class LabDeviceInventoryStore(IFileSystem fileSystem, TimeProvider timeProvider, IEnvironmentVariables? environment = null)
+internal sealed class LabDeviceInventoryStore(
+    IFileSystem fileSystem,
+    TimeProvider timeProvider,
+    IEnvironmentVariables? environment = null,
+    ILabStateStore? labStateStore = null)
 {
     private const string Schema = "luotsi-device-inventory.v1";
 
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
-    private readonly IEnvironmentVariables? _environment = environment;
+    private readonly ILabStateStore _labStateStore = labStateStore ?? LabStateStoreFactory.Create(fileSystem, environment);
 
     public async Task<LabInventoryDeviceResult> SetAsync(string serial, string? pool, string? capabilitiesCsv, string? owner)
     {
@@ -196,7 +199,7 @@ internal sealed class LabDeviceInventoryStore(IFileSystem fileSystem, TimeProvid
         Path.Join(GetInventoryRoot(), Slugify(serial.Trim()) + ".json");
 
     private string GetInventoryRoot() =>
-        Path.Join(ArtifactWorkspacePaths.ResolveDefaultWorkspaceRoot(_fileSystem, _environment), "lab", "inventory");
+        _labStateStore.GetCollectionRoot("inventory");
 
     private void TryDeleteFile(string path)
     {

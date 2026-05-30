@@ -195,7 +195,9 @@ If you already have a device connected, start from the workflow that matches wha
   `luotsi.policy.*` properties.
   For shared labs, `--claim-device --claim-wait-sec <seconds>` joins Luotsi's
   durable lease queue instead of failing immediately when the selected serial is
-  already leased; inspect pending waiters with `luotsi lab queue`.
+  already leased; inspect pending waiters with `luotsi lab queue`. Set
+  `LUOTSI_LAB_STATE_ROOT` when multiple runners should share the same leases,
+  queue, quarantine, inventory, and device-health state.
 
 The CLI also exposes this directly via `luotsi help quickstart`.
 
@@ -238,7 +240,7 @@ Quick reference. Start with the public [CLI command groups](https://digablesolut
 | `doctor --device <serial> [--package <app.id>] [--fix]` | Unified onboarding report for adb, package preflight, and live-view prerequisites |
 | `screen-state --device <serial>` | Dump current screen state |
 
-`lab inventory` is the durable contract for lab admission. Register devices with `lab inventory set --serial <adb serial> --pool <pool> --capabilities <csv>`, then use `--device-pool` and `--require-capabilities` on `lab` and `run` commands to keep CI and human workflows selecting only approved hardware.
+`lab inventory` is the durable contract for lab admission. Register devices with `lab inventory set --serial <adb serial> --pool <pool> --capabilities <csv>`, then use `--device-pool` and `--require-capabilities` on `lab` and `run` commands to keep CI and human workflows selecting only approved hardware. By default this state lives in the local Luotsi workspace; set `LUOTSI_LAB_STATE_ROOT` to move leases, queue entries, quarantines, inventory, and device health to a shared lab path for multi-runner CI.
 
 ### View & Profiles
 
