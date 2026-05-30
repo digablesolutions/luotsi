@@ -1,3 +1,4 @@
+using System.Linq;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.View.Contracts;
@@ -178,17 +179,10 @@ public sealed class AndroidViewBootstrap(
     }
 
     private static string? ExtractMediaProjectionFocusLine(string output)
-    {
-        foreach (var rawLine in output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            if (rawLine.Contains(MediaProjectionPermissionActivity, StringComparison.OrdinalIgnoreCase))
-            {
-                return rawLine;
-            }
-        }
-
-        return null;
-    }
+        => output
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(line => line.Contains(MediaProjectionPermissionActivity, StringComparison.OrdinalIgnoreCase))
+            .FirstOrDefault();
 
     private static string NormalizeCaptureBackend(string? captureBackend)
     {

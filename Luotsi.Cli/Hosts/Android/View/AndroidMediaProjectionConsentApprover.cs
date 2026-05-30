@@ -160,7 +160,7 @@ internal sealed class AndroidMediaProjectionConsentApprover(IAdbClient adbClient
         {
             document = XDocument.Parse(uiXml);
         }
-        catch
+        catch (System.Xml.XmlException)
         {
             return TryFindApproveButtonCenterByText(uiXml, out x, out y);
         }
