@@ -31,10 +31,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
 
       - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
         with:
           global-json-file: global.json
           cache: true
@@ -42,6 +44,7 @@ jobs:
             **/*.csproj
             **/packages.lock.json
             global.json
+            NuGet.config
 
       - name: SDK diagnostics
         shell: pwsh
@@ -118,7 +121,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: test-results
           path: artifacts/test-results
@@ -126,7 +129,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: coverage-report
           path: artifacts/coverage-report
@@ -134,7 +137,7 @@ jobs:
 
       - name: Upload MSBuild binlogs
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: msbuild-binlogs
           path: artifacts/binlogs
@@ -147,10 +150,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 22
           cache: npm
@@ -168,10 +173,66 @@ jobs:
         working-directory: website
         run: npm run build
 
+  android-helper:
+    name: Build Android view helper
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Java
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Build Android helper APK
+        shell: pwsh
+        run: |
+          $wrapper = ".\Luotsi.ViewServer.Android\gradlew.bat"
+          $arguments = @("--no-daemon", "-p", "Luotsi.ViewServer.Android", ":app:assembleRelease")
+          $maxAttempts = 3
+          $exitCode = 0
+
+          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            & $wrapper @arguments
+            $exitCode = $LASTEXITCODE
+            if ($exitCode -eq 0) {
+              break
+            }
+
+            if ($attempt -eq $maxAttempts) {
+              exit $exitCode
+            }
+
+            $delaySeconds = 20 * $attempt
+            Write-Warning "Android helper build failed with exit code $exitCode. Retrying in $delaySeconds seconds ($attempt/$maxAttempts)."
+            Start-Sleep -Seconds $delaySeconds
+          }
+
+          $apk = "Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release.apk"
+          if (!(Test-Path -LiteralPath $apk)) {
+            throw "Android view helper release APK was not produced at $apk."
+          }
+
+      - name: Upload Android helper APK
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: android-helper-apk
+          path: Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+
   publish:
     name: Publish ${{ matrix.rid }}
     runs-on: windows-latest
-    needs: validate
+    needs:
+      - validate
+      - android-helper
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -192,10 +253,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
 
       - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
         with:
           global-json-file: global.json
           cache: true
@@ -203,25 +266,24 @@ jobs:
             **/*.csproj
             **/packages.lock.json
             global.json
-
-      - name: Setup Java
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "17"
-          cache: gradle
+            NuGet.config
 
       - name: Verify locked restore
         shell: pwsh
         run: dotnet restore $env:SOLUTION --locked-mode /bl:artifacts/binlogs/publish-restore-${{ matrix.rid }}.binlog
 
-      - name: Build Android view helper
+      - name: Download Android view helper
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: android-helper-apk
+          path: Luotsi.ViewServer.Android/app/build/outputs/apk/release
+
+      - name: Verify Android view helper
         shell: pwsh
         run: |
-          $wrapper = ".\Luotsi.ViewServer.Android\gradlew.bat"
-          & $wrapper -p Luotsi.ViewServer.Android :app:assembleRelease
-          if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
+          $helper = "Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release.apk"
+          if (!(Test-Path -LiteralPath $helper)) {
+            throw "Downloaded Android view helper APK is missing: $helper"
           }
 
       - name: Stage FFmpeg native libraries
@@ -269,7 +331,7 @@ jobs:
           }
 
       - name: Upload packaged CLI
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: luotsi-cli-${{ matrix.rid }}
           path: artifacts/packages/luotsi-cli-${{ matrix.rid }}.${{ matrix.archive_ext }}
@@ -278,7 +340,7 @@ jobs:
       - name: Upload publish binlog
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: publish-binlog-${{ matrix.rid }}
           path: |
@@ -292,14 +354,15 @@ jobs:
     needs:
       - validate
       - website
+      - android-helper
       - publish
     if: always()
     steps:
       - name: Check required jobs
         shell: bash
         run: |
-          if [[ "${{ needs.validate.result }}" != "success" || "${{ needs.website.result }}" != "success" || "${{ needs.publish.result }}" != "success" ]]; then
-            echo "CI failed: validate=${{ needs.validate.result }}, website=${{ needs.website.result }}, publish=${{ needs.publish.result }}"
+          if [[ "${{ needs.validate.result }}" != "success" || "${{ needs.website.result }}" != "success" || "${{ needs.android-helper.result }}" != "success" || "${{ needs.publish.result }}" != "success" ]]; then
+            echo "CI failed: validate=${{ needs.validate.result }}, website=${{ needs.website.result }}, android-helper=${{ needs.android-helper.result }}, publish=${{ needs.publish.result }}"
             exit 1
           fi
           echo "CI passed."
