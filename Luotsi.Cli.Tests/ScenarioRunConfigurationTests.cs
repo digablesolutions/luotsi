@@ -116,6 +116,18 @@ public sealed class ScenarioRunConfigurationTests
     }
 
     [Fact]
+    public void Create_Parses_DeviceAdmissionRequirements()
+    {
+        var options = CliOptions.Parse(["run", "--device-pool", "smoke", "--require-capabilities", "nfc,camera,nfc"]);
+
+        var configuration = ScenarioRunConfiguration.Create(options);
+
+        Assert.NotNull(configuration.DeviceRequirements);
+        Assert.Equal("smoke", configuration.DeviceRequirements!.Pool);
+        Assert.Equal(["camera", "nfc"], configuration.DeviceRequirements.Capabilities);
+    }
+
+    [Fact]
     public void Create_TooLarge_DeviceHealthWindowDays_Throws_UsageException()
     {
         var options = CliOptions.Parse(["run", "--device-health-window-days", "1000000000"]);

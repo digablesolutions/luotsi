@@ -18,6 +18,7 @@ internal sealed class AppCommandDispatcher(
     LabLeaseStore labLeaseStore,
     LabLeaseClaimCoordinator labLeaseClaimCoordinator,
     LabQuarantineStore labQuarantineStore,
+    LabDeviceInventoryStore labDeviceInventoryStore,
     ResiliencePipelineProvider<string> resiliencePipelines)
 {
     private readonly AdbSubcommandDispatcher _adbSubcommandDispatcher = adbSubcommandDispatcher ?? throw new ArgumentNullException(nameof(adbSubcommandDispatcher));
@@ -27,6 +28,7 @@ internal sealed class AppCommandDispatcher(
     private readonly LabLeaseStore _labLeaseStore = labLeaseStore ?? throw new ArgumentNullException(nameof(labLeaseStore));
     private readonly LabLeaseClaimCoordinator _labLeaseClaimCoordinator = labLeaseClaimCoordinator ?? throw new ArgumentNullException(nameof(labLeaseClaimCoordinator));
     private readonly LabQuarantineStore _labQuarantineStore = labQuarantineStore ?? throw new ArgumentNullException(nameof(labQuarantineStore));
+    private readonly LabDeviceInventoryStore _labDeviceInventoryStore = labDeviceInventoryStore ?? throw new ArgumentNullException(nameof(labDeviceInventoryStore));
     private readonly ResiliencePipelineProvider<string> _resiliencePipelines = resiliencePipelines ?? throw new ArgumentNullException(nameof(resiliencePipelines));
 
     public bool RequiresRunner(CliOptions options)
@@ -123,6 +125,11 @@ internal sealed class AppCommandDispatcher(
     private async Task<object> ExecuteLabAsync(CliOptions options, IDeviceHost runner)
     {
         var action = options.Arguments.FirstOrDefault() ?? "status";
+        var requirements = DeviceAdmissionRequirementsParser.Parse(
+            options.Get("device-pool"),
+            options.Get("require-capabilities"),
+            "--device-pool",
+            "--require-capabilities");
         return action.ToLowerInvariant() switch
         {
             "status" => await LabCommandResolver.ReadStatusAsync(
@@ -130,6 +137,8 @@ internal sealed class AppCommandDispatcher(
                 options.Get("device-query"),
                 _labLeaseStore,
                 _labQuarantineStore,
+                _labDeviceInventoryStore,
+                requirements,
                 _resiliencePipelines.GetPipeline(LuotsiResiliencePipelines.LabProbePipelineName),
                 includeProbes: true).ConfigureAwait(false),
             "doctor" => await LabCommandResolver.DiagnoseAsync(
@@ -138,8 +147,10 @@ internal sealed class AppCommandDispatcher(
                 options.HasFlag("fix"),
                 _labLeaseStore,
                 _labQuarantineStore,
+                _labDeviceInventoryStore,
+                requirements,
                 _resiliencePipelines.GetPipeline(LuotsiResiliencePipelines.LabProbePipelineName)).ConfigureAwait(false),
-            "plan" => await LabCommandResolver.PlanAsync(runner, options.Get("device-query"), _labLeaseStore, _labQuarantineStore).ConfigureAwait(false),
+            "plan" => await LabCommandResolver.PlanAsync(runner, options.Get("device-query"), _labLeaseStore, _labQuarantineStore, _labDeviceInventoryStore, requirements).ConfigureAwait(false),
             "claim" => await LabCommandResolver.ClaimAsync(
                 runner,
                 options.Get("device-query"),
@@ -148,7 +159,9 @@ internal sealed class AppCommandDispatcher(
                 ParseClaimWaitSeconds(options),
                 _labLeaseClaimCoordinator,
                 _labLeaseStore,
-                _labQuarantineStore).ConfigureAwait(false),
+                _labQuarantineStore,
+                _labDeviceInventoryStore,
+                requirements).ConfigureAwait(false),
             "release" => await ReleaseLabLeaseAsync(options).ConfigureAwait(false),
             "extend" => await ExtendLabLeaseAsync(options).ConfigureAwait(false),
             "leases" => await _labLeaseStore.ListAsync().ConfigureAwait(false),
@@ -156,8 +169,54 @@ internal sealed class AppCommandDispatcher(
             "quarantine" => await LabCommandResolver.QuarantineAsync(runner, options.Get("device-query"), options.Require("reason"), options.Get("owner"), _labQuarantineStore).ConfigureAwait(false),
             "unquarantine" => await _labQuarantineStore.ReleaseAsync(options.Require("serial")).ConfigureAwait(false),
             "quarantines" => await _labQuarantineStore.ListAsync().ConfigureAwait(false),
-            _ => throw new UsageException("lab requires subcommand status, doctor, plan, claim, release, extend, leases, queue, quarantine, unquarantine, or quarantines.")
+            "inventory" => await ExecuteLabInventoryAsync(options, runner).ConfigureAwait(false),
+            _ => throw new UsageException("lab requires subcommand status, doctor, plan, claim, release, extend, leases, queue, quarantine, unquarantine, quarantines, or inventory.")
         };
+    }
+
+    private async Task<object> ExecuteLabInventoryAsync(CliOptions options, IDeviceHost runner)
+    {
+        var inventoryAction = options.Arguments.Skip(1).FirstOrDefault() ?? "list";
+        return inventoryAction.ToLowerInvariant() switch
+        {
+            "list" => await _labDeviceInventoryStore.ListAsync(DeviceInventory.FromDeviceList(await runner.GetDevicesAsync().ConfigureAwait(false))).ConfigureAwait(false),
+            "set" => await _labDeviceInventoryStore.SetAsync(
+                await ResolveInventorySerialAsync(options, runner).ConfigureAwait(false),
+                options.Get("pool"),
+                options.Get("capabilities"),
+                options.Get("owner")).ConfigureAwait(false),
+            "clear" => await _labDeviceInventoryStore.ClearAsync(options.Require("serial")).ConfigureAwait(false),
+            _ => throw new UsageException("lab inventory requires subcommand list, set, or clear.")
+        };
+    }
+
+    private static async Task<string> ResolveInventorySerialAsync(CliOptions options, IDeviceHost runner)
+    {
+        var serial = options.Get("serial");
+        var query = options.Get("device-query");
+        if (!string.IsNullOrWhiteSpace(serial) && !string.IsNullOrWhiteSpace(query))
+        {
+            throw new UsageException("lab inventory set accepts either --serial or --device-query, not both.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(serial))
+        {
+            return serial;
+        }
+
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            throw new UsageException("lab inventory set requires --serial or --device-query.");
+        }
+
+        var inventory = DeviceInventory.FromDeviceList(await runner.GetDevicesAsync().ConfigureAwait(false));
+        var selected = DeviceQuerySelector.Select(inventory, query);
+        if (string.IsNullOrWhiteSpace(selected.Serial))
+        {
+            throw new UsageException($"--device-query '{query}' selected a device without a serial.");
+        }
+
+        return selected.Serial;
     }
 
     private async Task<LabLeaseReleaseResult> ReleaseLabLeaseAsync(CliOptions options)

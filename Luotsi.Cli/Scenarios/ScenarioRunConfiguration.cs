@@ -1,6 +1,7 @@
 using Luotsi.Cli.Cli;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.Infrastructure.Devices;
 using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Scenarios;
@@ -42,7 +43,8 @@ internal sealed record ScenarioRunConfiguration(
     ScenarioCiPolicyMode CiPolicyMode = ScenarioCiPolicyMode.Advisory,
     int DeviceHealthWindowDays = 30,
     int RetryBudget = 2,
-    int PassThreshold = 2)
+    int PassThreshold = 2,
+    DeviceAdmissionRequirements? DeviceRequirements = null)
 {
     private const int MaxDeviceHealthWindowDays = 365000;
 
@@ -64,7 +66,12 @@ internal sealed record ScenarioRunConfiguration(
             CiPolicyMode: ParseCiPolicyMode(options.Get("ci-policy")),
             DeviceHealthWindowDays: ParsePositiveInt(options.Get("device-health-window-days"), 30, "--device-health-window-days", MaxDeviceHealthWindowDays),
             RetryBudget: ParseNonNegativeInt(options.Get("retry-budget"), 2, "--retry-budget"),
-            PassThreshold: ParsePositiveInt(options.Get("pass-threshold"), 2, "--pass-threshold"));
+            PassThreshold: ParsePositiveInt(options.Get("pass-threshold"), 2, "--pass-threshold"),
+            DeviceRequirements: DeviceAdmissionRequirementsParser.Parse(
+                options.Get("device-pool"),
+                options.Get("require-capabilities"),
+                "--device-pool",
+                "--require-capabilities"));
     }
 
     private static string? NormalizePath(string? value) =>

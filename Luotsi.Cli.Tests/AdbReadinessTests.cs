@@ -443,6 +443,31 @@ public sealed class AdbReadinessTests
     }
 
     [Fact]
+    public async Task RunAsync_DeviceQuery_Does_Not_Select_Device_That_Fails_Admission_Requirements()
+    {
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("USB123", "device", "product:oriole model:Pixel_6 device:oriole"));
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            TimeProvider = DateTimeOffset.Parse("2026-05-15T12:00:00Z").ToTimeProvider(),
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var inventoryExitCode = await app.RunAsync(["lab", "inventory", "set", "--serial", "USB123", "--pool", "regression", "--capabilities", "camera"]);
+        var preflightExitCode = await app.RunAsync(["preflight", "--device-query", "model=Pixel_6", "--device-pool", "smoke", "--require-capabilities", "camera,nfc"]);
+        using var output = JsonDocument.Parse(console.OutputLines[1]);
+
+        Assert.Equal(0, inventoryExitCode);
+        Assert.Equal(2, preflightExitCode);
+        Assert.Contains("matched only devices that failed the requested admission requirements", output.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("luotsi lab inventory", output.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_DeviceQuery_Can_Select_MultiWord_State()
     {
         var host = new FakeDeviceHost();

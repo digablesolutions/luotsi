@@ -59,6 +59,22 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_Help_Command_Writes_Lab_Inventory_And_Admission_Flags()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["help", "lab"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(console.OutputLines);
+        Assert.Single(console.ErrorLines);
+        Assert.Contains("luotsi lab inventory list", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("--device-pool <pool>", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("--require-capabilities <csv>", console.ErrorLines[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_Help_Command_Writes_Quickstart_Topic()
     {
         var console = new FakeConsole();
@@ -2742,6 +2758,55 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task LabInventory_Set_List_And_Clear_RoundTrip()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("usb-1", "device", "product:p model:Pixel_9 device:komodo usb:1-1"));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var setExitCode = await app.RunAsync(["lab", "inventory", "set", "--device-query", "model=Pixel_9", "--pool", "smoke", "--capabilities", "camera,nfc", "--owner", "lab-admin"]);
+        using var setEnvelope = JsonDocument.Parse(console.OutputLines[0]);
+
+        Assert.Equal(0, setExitCode);
+        var setData = setEnvelope.RootElement.GetProperty("data");
+        Assert.Equal("usb-1", setData.GetProperty("serial").GetString());
+        Assert.Equal("smoke", setData.GetProperty("pool").GetString());
+        Assert.Equal("lab-admin", setData.GetProperty("owner").GetString());
+        Assert.True(fileSystem.FileExists(setData.GetProperty("inventory_file").GetString()!));
+
+        var listExitCode = await app.RunAsync(["lab", "inventory", "list"]);
+        using var listEnvelope = JsonDocument.Parse(console.OutputLines[1]);
+
+        Assert.Equal(0, listExitCode);
+        var listData = listEnvelope.RootElement.GetProperty("data");
+        Assert.Equal(1, listData.GetProperty("count").GetInt32());
+        Assert.Equal(1, listData.GetProperty("registered_count").GetInt32());
+        Assert.Equal(1, listData.GetProperty("attached_count").GetInt32());
+        var listed = listData.GetProperty("devices")[0];
+        Assert.True(listed.GetProperty("registered").GetBoolean());
+        Assert.True(listed.GetProperty("attached").GetBoolean());
+        var capabilities = listed.GetProperty("capabilities").EnumerateArray().Select(static value => value.GetString()).ToArray();
+        Assert.Contains("adb", capabilities);
+        Assert.Contains("camera", capabilities);
+        Assert.Contains("model:Pixel_9", capabilities);
+        Assert.Contains("nfc", capabilities);
+
+        var clearExitCode = await app.RunAsync(["lab", "inventory", "clear", "--serial", "usb-1"]);
+        using var clearEnvelope = JsonDocument.Parse(console.OutputLines[2]);
+
+        Assert.Equal(0, clearExitCode);
+        Assert.True(clearEnvelope.RootElement.GetProperty("data").GetProperty("cleared").GetBoolean());
+        Assert.False(fileSystem.FileExists(setData.GetProperty("inventory_file").GetString()!));
+    }
+
+    [Fact]
     public async Task LabPlan_Queued_Device_Reports_BlockedReason_And_QueueDepth()
     {
         var console = new FakeConsole();
@@ -2836,6 +2901,111 @@ public sealed partial class AppTests
         Assert.Contains("leased by ci-job-1", blockedPlan.GetRawText(), StringComparison.Ordinal);
         Assert.Equal("luotsi lab leases", blockedPlan.GetProperty("recommended_commands")[0].GetString());
         Assert.Equal("luotsi lab release --serial <serial>", blockedPlan.GetProperty("recommended_commands")[1].GetString());
+    }
+
+    [Fact]
+    public async Task LabPlan_RequirementMismatch_Returns_Inventory_Registration_Commands()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("usb-1", "device", "product:p model:Pixel_9 device:komodo usb:1-1"));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var exitCode = await app.RunAsync(["lab", "plan", "--device-query", "model=Pixel_9", "--device-pool", "smoke", "--require-capabilities", "camera,nfc"]);
+        using var envelope = JsonDocument.Parse(console.OutputLines[0]);
+
+        Assert.Equal(0, exitCode);
+        var plan = envelope.RootElement.GetProperty("data");
+        Assert.Equal("blocked", plan.GetProperty("status").GetString());
+        Assert.Equal("requirements", plan.GetProperty("blocked_reason").GetString());
+        Assert.Equal("smoke", plan.GetProperty("requirements").GetProperty("pool").GetString());
+        Assert.Equal(["camera", "nfc"], plan.GetProperty("requirements").GetProperty("capabilities").EnumerateArray().Select(static value => value.GetString()!).ToArray());
+        Assert.Equal("luotsi lab inventory", plan.GetProperty("recommended_commands")[0].GetString());
+        Assert.Equal("luotsi lab inventory set --serial \"<adb serial>\" --pool smoke --capabilities camera,nfc", plan.GetProperty("recommended_commands")[1].GetString());
+        Assert.Contains("requires pool 'smoke'", plan.GetProperty("decisions")[0].GetProperty("reason").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LabPlan_RequirementAware_Ready_Command_Preserves_Admission_Flags()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("usb-1", "device", "product:p model:Pixel_9 device:komodo usb:1-1"));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var registerExitCode = await app.RunAsync(["lab", "inventory", "set", "--serial", "usb-1", "--pool", "smoke", "--capabilities", "camera,nfc"]);
+        var planExitCode = await app.RunAsync(["lab", "plan", "--device-query", "model=Pixel_9", "--device-pool", "smoke", "--require-capabilities", "nfc,camera"]);
+        using var planEnvelope = JsonDocument.Parse(console.OutputLines[1]);
+
+        Assert.Equal(0, registerExitCode);
+        Assert.Equal(0, planExitCode);
+        var plan = planEnvelope.RootElement.GetProperty("data");
+        Assert.Equal("ready", plan.GetProperty("status").GetString());
+        Assert.Equal("luotsi lab claim --device-query model=Pixel_9 --device-pool smoke --require-capabilities camera,nfc", plan.GetProperty("recommended_commands")[0].GetString());
+        Assert.Equal("luotsi run --path <scenarios> --claim-device --device-query model=Pixel_9 --device-pool smoke --require-capabilities camera,nfc", plan.GetProperty("recommended_commands")[1].GetString());
+    }
+
+    [Fact]
+    public async Task LabPlan_Ambiguous_Recommendations_Preserve_Query_And_Admission_Flags()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("usb-1", "device", "product:p model:Pixel_9 device:komodo usb:1-1"));
+        host.ConnectedDevices.Add(new DeviceInfo("usb-2", "device", "product:p model:Pixel_9_Pro device:caiman usb:1-2"));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var registerOneExitCode = await app.RunAsync(["lab", "inventory", "set", "--serial", "usb-1", "--pool", "smoke", "--capabilities", "camera,nfc"]);
+        var registerTwoExitCode = await app.RunAsync(["lab", "inventory", "set", "--serial", "usb-2", "--pool", "smoke", "--capabilities", "camera,nfc"]);
+        var planExitCode = await app.RunAsync(["lab", "plan", "--device-query", "type=physical", "--device-pool", "smoke", "--require-capabilities", "nfc,camera"]);
+        using var planEnvelope = JsonDocument.Parse(console.OutputLines[2]);
+
+        Assert.Equal(0, registerOneExitCode);
+        Assert.Equal(0, registerTwoExitCode);
+        Assert.Equal(0, planExitCode);
+        var plan = planEnvelope.RootElement.GetProperty("data");
+        Assert.Equal("ambiguous", plan.GetProperty("status").GetString());
+        Assert.Equal("luotsi lab status --device-query type=physical --device-pool smoke --require-capabilities camera,nfc", plan.GetProperty("recommended_commands")[0].GetString());
+        Assert.Equal("luotsi lab plan --device-query type=physical,model=<model> --device-pool smoke --require-capabilities camera,nfc", plan.GetProperty("recommended_commands")[1].GetString());
+    }
+
+    [Fact]
+    public async Task LabPlan_Blocked_Fallback_Status_Preserves_Query_And_Admission_Flags()
+    {
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("usb-1", "device", "product:p model:Pixel_9 device:komodo usb:1-1"));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = new FakeFileSystem(),
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var exitCode = await app.RunAsync(["lab", "plan", "--device-query", "model=Missing", "--device-pool", "smoke", "--require-capabilities", "camera"]);
+        using var envelope = JsonDocument.Parse(console.OutputLines[0]);
+
+        Assert.Equal(0, exitCode);
+        var plan = envelope.RootElement.GetProperty("data");
+        Assert.Equal("blocked", plan.GetProperty("status").GetString());
+        Assert.Equal("luotsi lab status --device-query model=Missing --device-pool smoke --require-capabilities camera", plan.GetProperty("recommended_commands")[0].GetString());
     }
 
 
