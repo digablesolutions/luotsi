@@ -1,3 +1,4 @@
+using System.Linq;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.View.Contracts;
@@ -14,6 +15,8 @@ public sealed class AndroidViewBootstrap(
     IAndroidViewHelperPackageLocator packageLocator,
     IUniqueIdGenerator idGenerator) : IViewTransportBootstrap
 {
+    private const string MediaProjectionPermissionActivity = "MediaProjectionPermissionActivity";
+
     private readonly IAdbClientFactory _adbClientFactory = adbClientFactory ?? throw new ArgumentNullException(nameof(adbClientFactory));
     private readonly IProcessRunner _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
     private readonly IAndroidViewHelperPackageLocator _packageLocator = packageLocator ?? throw new ArgumentNullException(nameof(packageLocator));
@@ -76,6 +79,7 @@ public sealed class AndroidViewBootstrap(
             if (string.Equals(activeBackend, ViewCaptureBackends.MediaProjection, StringComparison.Ordinal))
             {
                 var consentApprover = new AndroidMediaProjectionConsentApprover(adbClient);
+                await DismissStaleMediaProjectionPromptAsync(adbClient, reportPhase, cancellationToken).ConfigureAwait(false);
                 Report(reportPhase, "mediaprojection_activity", ViewStartupPhaseStatus.Started, "Starting Android MediaProjection consent activity.", package.ConsentActivity);
                 var start = await adbClient.RunAsync([
                     "shell",
@@ -142,6 +146,43 @@ public sealed class AndroidViewBootstrap(
 
     private static void Report(Action<ViewStartupPhase>? reportPhase, string phase, string status, string summary, string? detail = null, string? recommendation = null) =>
         reportPhase?.Invoke(new ViewStartupPhase(phase, status, summary, string.IsNullOrWhiteSpace(detail) ? null : detail, recommendation));
+
+    private static async Task DismissStaleMediaProjectionPromptAsync(
+        IAdbClient adbClient,
+        Action<ViewStartupPhase>? reportPhase,
+        CancellationToken cancellationToken)
+    {
+        var focus = await adbClient.RunAsync([
+            "shell",
+            "dumpsys",
+            "window"
+        ], cancellationToken).ConfigureAwait(false);
+        if (focus.ExitCode != 0 ||
+            !focus.Stdout.Contains(MediaProjectionPermissionActivity, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var detail = ExtractMediaProjectionFocusLine(focus.Stdout);
+        Report(reportPhase, "mediaprojection_stale_consent", ViewStartupPhaseStatus.Started, "Dismissing stale Android MediaProjection consent prompt.", detail);
+        var back = await adbClient.ShellAsync("input keyevent BACK", cancellationToken).ConfigureAwait(false);
+        Report(
+            reportPhase,
+            "mediaprojection_stale_consent",
+            back.ExitCode == 0 ? ViewStartupPhaseStatus.Succeeded : ViewStartupPhaseStatus.Failed,
+            back.ExitCode == 0
+                ? "Stale Android MediaProjection consent prompt dismissed."
+                : "Stale Android MediaProjection consent prompt could not be dismissed.",
+            back.ExitCode == 0 ? null : (string.IsNullOrWhiteSpace(back.Stderr) ? back.Stdout : back.Stderr),
+            back.ExitCode == 0 ? null : "Dismiss the Android screen-capture prompt manually, then retry luotsi view.");
+        await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken).ConfigureAwait(false);
+    }
+
+    private static string? ExtractMediaProjectionFocusLine(string output)
+        => output
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(line => line.Contains(MediaProjectionPermissionActivity, StringComparison.OrdinalIgnoreCase))
+            .FirstOrDefault();
 
     private static string NormalizeCaptureBackend(string? captureBackend)
     {
@@ -253,10 +294,10 @@ public sealed class AndroidViewBootstrap(
             Report(
                 reportPhase,
                 "mediaprojection_appops",
-                ViewStartupPhaseStatus.Failed,
-                "MediaProjection app-op is currently denied for the helper package.",
+                ViewStartupPhaseStatus.Skipped,
+                "MediaProjection app-op is currently denied before consent.",
                 output,
-                $"Run `adb shell cmd appops set {packageName} PROJECT_MEDIA allow`, approve the Android consent prompt, or use --capture-backend screenrecord.");
+                $"Approve the Android screen-capture prompt, or run `adb shell cmd appops set {packageName} PROJECT_MEDIA allow`.");
             return;
         }
 

@@ -90,10 +90,10 @@ internal sealed class ViewConsoleEventWriter
                 _console.WriteLine($"--  Share client disconnected: {GetString(root, "remote_endpoint") ?? "unknown client"}.");
                 break;
             case SessionEventTypes.View.RecordingStarted:
-                _console.WriteLine($"OK  Recording started: {GetString(root, "path") ?? GetString(root, "output") ?? "recording output"}.");
+                _console.WriteLine($"OK  Recording started: {GetRecordingPath(root) ?? "recording output"}.");
                 break;
             case SessionEventTypes.View.RecordingStopped:
-                _console.WriteLine($"OK  Recording stopped: {GetString(root, "path") ?? GetString(root, "output") ?? "recording output"}.");
+                _console.WriteLine($"OK  Recording stopped: {GetRecordingPath(root) ?? "recording output"}.");
                 break;
             case SessionEventTypes.View.ScreenshotCaptured:
                 _console.WriteLine($"OK  Screenshot captured: {GetString(root, "path") ?? "screenshot output"}.");
@@ -192,6 +192,9 @@ internal sealed class ViewConsoleEventWriter
 
         return string.IsNullOrWhiteSpace(codec) ? $"{width}x{height}" : $"{width}x{height} {codec}";
     }
+
+    private static string? GetRecordingPath(JsonElement root)
+        => GetString(root, "record_path") ?? GetString(root, "path") ?? GetString(root, "output");
 
     private void WriteIndented(string label, string? value)
     {

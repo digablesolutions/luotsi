@@ -15,6 +15,7 @@ internal sealed class ViewSessionRecordingCoordinator
     private readonly Func<Task> _publishChromeAsync;
 
     private bool _initialRecordingStarted;
+    private bool _resumeRecordingAfterReconnect;
     private int _recordingSequence;
 
     public ViewSessionRecordingCoordinator(ViewSessionRecordingContext context, Func<Task> publishChromeAsync)
@@ -61,7 +62,29 @@ internal sealed class ViewSessionRecordingCoordinator
             return;
         }
 
+        _resumeRecordingAfterReconnect = true;
         await StopRecordingAsync("reconnect").ConfigureAwait(false);
+    }
+
+    public async Task ResumeRecordingAfterReconnectIfNeededAsync()
+    {
+        if (!_resumeRecordingAfterReconnect)
+        {
+            return;
+        }
+
+        _resumeRecordingAfterReconnect = false;
+        var nextPath = BuildNextRecordingPath();
+        await _recorder.StartAsync(nextPath).ConfigureAwait(false);
+        await _publishChromeAsync().ConfigureAwait(false);
+        WriteEvent(new
+        {
+            type = SessionEventTypes.View.RecordingStarted,
+            session_id = _sessionId,
+            occurred_at = _timeProvider.GetUtcNow(),
+            record_path = nextPath,
+            source = "reconnect"
+        });
     }
 
     public async Task ToggleRecordingAsync()

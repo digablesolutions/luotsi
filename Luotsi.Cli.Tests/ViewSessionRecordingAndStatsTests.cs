@@ -343,6 +343,7 @@ public sealed partial class AppTests
         await interactionHandler(new ViewWindowCommandRequest(ViewWindowCommand.Reconnect));
         await ViewTestWaitHelpers.WaitForStartCallsAsync(bootstrap, 2);
         await ViewTestWaitHelpers.WaitForOutputLineAsync(console, SessionEventTypes.View.RecordingStopped);
+        await ViewTestWaitHelpers.WaitForOutputLineCountAsync(console, SessionEventTypes.View.RecordingStarted, 2);
         renderer.Close();
         var exitCode = await runTask;
 
@@ -354,7 +355,19 @@ public sealed partial class AppTests
         using var stopped = JsonDocument.Parse(stoppedLine);
         Assert.Equal("reconnect", stopped.RootElement.GetProperty("reason").GetString());
         Assert.Equal("capture.h264", stopped.RootElement.GetProperty("record_path").GetString());
-        Assert.Single(console.OutputLines, line => line.Contains(SessionEventTypes.View.RecordingStarted, StringComparison.Ordinal));
+
+        var startedLines = console.OutputLines
+            .Where(line => line.Contains(SessionEventTypes.View.RecordingStarted, StringComparison.Ordinal))
+            .ToArray();
+        Assert.Equal(2, startedLines.Length);
+
+        using var initialStarted = JsonDocument.Parse(startedLines[0]);
+        Assert.Equal("startup", initialStarted.RootElement.GetProperty("source").GetString());
+        Assert.Equal("capture.h264", initialStarted.RootElement.GetProperty("record_path").GetString());
+
+        using var resumedStarted = JsonDocument.Parse(startedLines[1]);
+        Assert.Equal("reconnect", resumedStarted.RootElement.GetProperty("source").GetString());
+        Assert.Equal("capture-001.h264", Path.GetFileName(resumedStarted.RootElement.GetProperty("record_path").GetString()));
     }
 
 

@@ -213,6 +213,7 @@ public sealed class ViewSession : IViewSession
                 interactionRouter.AttachStreamPauseUpdater(sessionRenderer.SetPaused);
                 interactionRouter.AttachChromeUpdater(chrome => sessionRenderer.UpdateChromeAsync(chrome, cancellationToken));
                 var firstConnection = true;
+                var activeCaptureBackend = options.CaptureBackend;
 
                 while (true)
                 {
@@ -222,7 +223,7 @@ public sealed class ViewSession : IViewSession
                     await interactionRouter.PublishChromeAsync().ConfigureAwait(false);
                     var streamStart = usesSharedTransport
                         ? await ConnectAndReadHeaderAsync(BuildSharedConnectionInfo(options.JoinShareEndpoint!), cancellationToken).ConfigureAwait(false)
-                        : await StartTransportAndReadHeaderAsync(options, activeDeviceSelector, sessionId, cancellationToken).ConfigureAwait(false);
+                        : await StartTransportAndReadHeaderAsync(options, activeDeviceSelector, activeCaptureBackend, sessionId, cancellationToken).ConfigureAwait(false);
                     var connectionInfo = streamStart.ConnectionInfo;
                     var streamConnection = streamStart.Connection;
                     try
@@ -253,6 +254,12 @@ public sealed class ViewSession : IViewSession
                             Width = header.Width,
                             Height = header.Height
                         };
+                        if (!usesSharedTransport &&
+                            string.Equals(options.CaptureBackend, ViewCaptureBackends.Auto, StringComparison.OrdinalIgnoreCase) &&
+                            string.Equals(negotiatedConnection.CaptureBackend, ViewCaptureBackends.Screenrecord, StringComparison.OrdinalIgnoreCase))
+                        {
+                            activeCaptureBackend = ViewCaptureBackends.Screenrecord;
+                        }
 
                         if (!string.IsNullOrWhiteSpace(options.ShareBindEndpoint))
                         {
@@ -342,6 +349,7 @@ public sealed class ViewSession : IViewSession
                                 connection = negotiatedConnection
                             });
                             await interactionRouter.EmitDeviceShelfSnapshotIfNeededAsync().ConfigureAwait(false);
+                            await interactionRouter.ResumeRecordingAfterReconnectIfNeededAsync().ConfigureAwait(false);
                         }
 
                         var sourcePackets = GuardReconnectBudgetAsync(
@@ -704,18 +712,19 @@ public sealed class ViewSession : IViewSession
     private async Task<(ViewConnectionInfo ConnectionInfo, IViewStreamConnection Connection, ViewStreamHeader Header)> StartTransportAndReadHeaderAsync(
         ViewOptions options,
         string activeDeviceSelector,
+        string captureBackend,
         string sessionId,
         CancellationToken cancellationToken)
     {
         try
         {
-            return await StartTransportWithBackendAndReadHeaderAsync(options, activeDeviceSelector, options.CaptureBackend, sessionId, cancellationToken).ConfigureAwait(false);
+            return await StartTransportWithBackendAndReadHeaderAsync(options, activeDeviceSelector, captureBackend, sessionId, cancellationToken).ConfigureAwait(false);
         }
-        catch (MediaProjectionConsentException ex) when (IsExplicitMediaProjectionRequest(options))
+        catch (MediaProjectionConsentException ex) when (IsExplicitMediaProjectionRequest(captureBackend))
         {
             throw new UsageException($"{ex.Message} Use --capture-backend auto or --capture-backend screenrecord.");
         }
-        catch (Exception ex) when (ShouldFallbackToScreenrecord(options, ex))
+        catch (Exception ex) when (ShouldFallbackToScreenrecord(options, captureBackend, ex))
         {
             await _transportBootstrap.StopAsync(CancellationToken.None).ConfigureAwait(false);
             WriteJsonLine(new
@@ -733,11 +742,12 @@ public sealed class ViewSession : IViewSession
         }
     }
 
-    private static bool IsExplicitMediaProjectionRequest(ViewOptions options) =>
-        string.Equals(options.CaptureBackend, ViewCaptureBackends.MediaProjection, StringComparison.OrdinalIgnoreCase);
+    private static bool IsExplicitMediaProjectionRequest(string captureBackend) =>
+        string.Equals(captureBackend, ViewCaptureBackends.MediaProjection, StringComparison.OrdinalIgnoreCase);
 
-    private static bool ShouldFallbackToScreenrecord(ViewOptions options, Exception exception) =>
+    private static bool ShouldFallbackToScreenrecord(ViewOptions options, string captureBackend, Exception exception) =>
         string.Equals(options.CaptureBackend, ViewCaptureBackends.Auto, StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(captureBackend, ViewCaptureBackends.Auto, StringComparison.OrdinalIgnoreCase) &&
         exception is not UsageException &&
         !IsMissingViewHelperPackage(exception.Message);
 
@@ -895,5 +905,3 @@ internal sealed record ViewRuntimeDiagnostic(string Category, string Message, st
             ? $"luotsi view --device {options.DeviceSelector}"
             : $"luotsi view --join-share {options.JoinShareEndpoint}";
 }
-
-
