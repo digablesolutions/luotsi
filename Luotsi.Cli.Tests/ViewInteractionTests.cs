@@ -281,6 +281,7 @@ public sealed partial class AppTests
 
         Assert.Equal(0, exitCode);
         Assert.True(bootstrap.StartCallCount >= 2);
+        Assert.Equal([ViewCaptureBackends.Auto, ViewCaptureBackends.Screenrecord], bootstrap.StartRequests.Select(static request => request.CaptureBackend).ToArray());
         var reconnectRequestedLine = Assert.Single(console.OutputLines, line => line.Contains(SessionEventTypes.View.ReconnectRequested, StringComparison.Ordinal));
         using var reconnectRequested = JsonDocument.Parse(reconnectRequestedLine);
         Assert.Equal("stream_duration_guard", reconnectRequested.RootElement.GetProperty("source").GetString());
