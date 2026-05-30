@@ -190,7 +190,10 @@ internal static class LabCommandResolver
                 BuildLabCommand("claim", query, requirements),
                 BuildRunCommand(query, selected.FirstOrDefault()?.Serial, requirements)
             ],
-            "ambiguous" => ["luotsi lab status", "luotsi lab plan --device-query state=online,type=physical,model=<model>"],
+            "ambiguous" => [
+                BuildLabCommand("status", query, requirements),
+                BuildRefinedPlanCommand(query, requirements)
+            ],
             "blocked" when string.Equals(context.BlockedReason, "queued", StringComparison.OrdinalIgnoreCase) =>
                 ["luotsi lab queue", BuildQueuedRunCommand(query, selected.FirstOrDefault()?.Serial, requirements)],
             "blocked" when string.Equals(context.BlockedReason, "leased", StringComparison.OrdinalIgnoreCase) && context.QueueDepth > 0 =>
@@ -201,7 +204,7 @@ internal static class LabCommandResolver
                 ["luotsi lab quarantines", "luotsi lab unquarantine --serial <serial>"],
             "blocked" when string.Equals(context.BlockedReason, "requirements", StringComparison.OrdinalIgnoreCase) =>
                 ["luotsi lab inventory", BuildInventoryCommand(selected.FirstOrDefault()?.Serial, requirements)],
-            _ => ["luotsi lab status"]
+            _ => [BuildLabCommand("status", query, requirements)]
         };
     }
 
@@ -214,6 +217,14 @@ internal static class LabCommandResolver
         }
 
         return command + BuildRequirementOptions(requirements);
+    }
+
+    private static string BuildRefinedPlanCommand(string? query, DeviceAdmissionRequirements? requirements)
+    {
+        var refinedQuery = string.IsNullOrWhiteSpace(query)
+            ? "state=online,type=physical,model=<model>"
+            : query.Trim() + ",model=<model>";
+        return BuildLabCommand("plan", refinedQuery, requirements);
     }
 
     private static string BuildRunCommand(string? query, string? serial, DeviceAdmissionRequirements? requirements)
@@ -509,7 +520,7 @@ internal static class LabCommandResolver
             return null;
         }
 
-        if (!string.IsNullOrWhiteSpace(requirements?.Pool))
+        if (!string.IsNullOrWhiteSpace(requirements.Pool))
         {
             if (registered is null || !registered.Registered)
             {
@@ -528,7 +539,7 @@ internal static class LabCommandResolver
         }
 
         var capabilities = BuildCapabilities(device, registered);
-        var missingCapabilities = (requirements?.Capabilities ?? [])
+        var missingCapabilities = requirements.Capabilities
             .Where(required => capabilities.Contains(required, StringComparer.OrdinalIgnoreCase) is false)
             .ToArray();
         if (missingCapabilities.Length == 0)

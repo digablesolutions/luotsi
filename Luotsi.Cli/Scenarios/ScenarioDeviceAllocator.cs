@@ -41,6 +41,13 @@ internal sealed class ScenarioDeviceAllocator(LabDeviceInventoryStore? inventory
         var registered = string.IsNullOrWhiteSpace(serial) ? null : _inventoryStore?.TryGetBySerial(serial);
         var capabilities = BuildCapabilities(device, registered);
         var requirements = configuration.DeviceRequirements;
+        if (DeviceAdmissionRequirementsParser.HasRequirements(requirements) && string.IsNullOrWhiteSpace(serial))
+        {
+            throw new UsageException(
+                "Device admission requirements require a single selected device. " +
+                "Use --device, --device-query, or attach only one device before retrying.");
+        }
+
         var requirementMismatch = GetRequirementMismatchReason(requirements, device, registered, capabilities);
         if (requirementMismatch is not null)
         {
@@ -127,7 +134,7 @@ internal sealed class ScenarioDeviceAllocator(LabDeviceInventoryStore? inventory
             return null;
         }
 
-        if (!string.IsNullOrWhiteSpace(requirements?.Pool))
+        if (!string.IsNullOrWhiteSpace(requirements.Pool))
         {
             if (registered is null || !registered.Registered)
             {
@@ -145,7 +152,7 @@ internal sealed class ScenarioDeviceAllocator(LabDeviceInventoryStore? inventory
             }
         }
 
-        var requiredCapabilities = requirements?.Capabilities ?? [];
+        var requiredCapabilities = requirements.Capabilities ?? [];
         var missingCapabilities = requiredCapabilities
             .Where(required => capabilities.Contains(required, StringComparer.OrdinalIgnoreCase) is false)
             .ToArray();

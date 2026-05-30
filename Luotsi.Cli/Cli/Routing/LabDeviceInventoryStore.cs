@@ -30,8 +30,8 @@ internal sealed class LabDeviceInventoryStore(IFileSystem fileSystem, TimeProvid
         var record = new LabDeviceInventoryRecord(
             Schema,
             serial.Trim(),
-            requirements?.Pool,
-            requirements?.Capabilities ?? [],
+            requirements.Pool,
+            requirements.Capabilities,
             string.IsNullOrWhiteSpace(owner) ? Environment.UserName : owner.Trim(),
             _timeProvider.GetUtcNow());
 
@@ -205,6 +205,7 @@ internal sealed class LabDeviceInventoryStore(IFileSystem fileSystem, TimeProvid
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            System.Diagnostics.Trace.WriteLine($"Failed to delete invalid lab inventory file '{path}': {ex.Message}");
         }
     }
 
