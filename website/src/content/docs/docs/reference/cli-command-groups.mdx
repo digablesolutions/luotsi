@@ -12,15 +12,18 @@ Use these commands to discover devices, validate readiness, and inspect the host
 ```bash
 luotsi devices
 luotsi device-status --device <serial>
+luotsi lab inventory list
 luotsi adb version
 luotsi doctor --device <serial>
 ```
 
 Also in this family:
 
-- `lab status`, `lab doctor`, `lab plan`, `lab claim`, `lab leases`, `lab release`, `lab extend`, `lab quarantine`, `lab quarantines`, `lab unquarantine`
+- `lab status`, `lab doctor`, `lab plan`, `lab claim`, `lab leases`, `lab queue`, `lab release`, `lab extend`, `lab quarantine`, `lab quarantines`, `lab unquarantine`, `lab inventory list`, `lab inventory set`, `lab inventory clear`
 - `adb server-status`, `adb features`, `adb mdns check`, `adb reconnect offline`, `adb wait-for-device`
 - `wait-for-device`, `device-wait`, `preflight`, `screen-state`
+
+When the lab uses durable inventory, add `--device-pool <pool>` and `--require-capabilities <csv>` to `lab status`, `lab plan`, `lab claim`, or `run` so allocation cannot drift onto the wrong hardware class.
 
 ## View and profiles
 
@@ -106,11 +109,12 @@ Use scenario files when you want a repeatable run, and replay commands when you 
 ```bash
 luotsi scenario-list --path scenarios
 luotsi scenario-explain --file scenarios/smoke.json
-luotsi run --path scenarios --dry-run --include-tag smoke
+luotsi run --path scenarios --output-dir ./artifacts/my-run --dry-run --include-tag smoke
 luotsi run --path scenarios --device <serial> --report-junit junit.xml
 luotsi artifacts list --artifacts ./artifacts
 luotsi artifacts info ./artifacts/my-run
 luotsi artifacts open ./artifacts/my-run
+luotsi artifacts open --last --artifacts ./artifacts
 luotsi artifacts pack ./artifacts/my-run --output my-run.zip --dry-run
 luotsi artifacts pack ./artifacts/my-run --output my-run.zip
 luotsi artifacts unpack my-run.zip --output ./artifacts/my-run
@@ -122,9 +126,10 @@ luotsi replay cluster --artifacts ./artifacts/ci-runs --write-markdown
 luotsi replay search --artifacts ./artifacts/my-run --contains timeout
 luotsi replay scenario-draft --artifacts ./artifacts/my-run --output scenarios/recovered.json --write-markdown
 luotsi replay open --artifacts ./artifacts/my-run
+luotsi replay open --last --artifacts ./artifacts
 ```
 
-Use `scenario-validate`, `scenario-explain`, or `run --dry-run` before you execute device work. Use `artifacts list` when you need to rediscover a recent run id, `artifacts info` when you want a non-mutating summary of one bundle, `artifacts open` when you want the generic artifact browser, and `replay open` when you want the replay-specific front door with next actions. Reach for `replay capsule` when one artifact root failed, `replay graph` when you need selector/action/telemetry context, and `replay cluster` when the same failure pattern is repeating across runs.
+Use `scenario-validate`, `scenario-explain`, or `run --dry-run` before you execute device work. Use `artifacts list` when you need to rediscover a recent run id, `artifacts info` when you want a non-mutating summary of one bundle, `artifacts open` or `artifacts open --last` when you want the generic artifact browser, and `replay open` or `replay open --last` when you want the replay-specific front door with next actions. Reach for `replay capsule` when one artifact root failed, `replay graph` when you need selector/action/telemetry context, and `replay cluster` when the same failure pattern is repeating across runs.
 
 ## Related pages
 

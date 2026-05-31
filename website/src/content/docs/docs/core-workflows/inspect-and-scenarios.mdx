@@ -28,8 +28,11 @@ Typical emitted events include:
 Scenario files are plain JSON playbooks with optional `setup`, required `steps`, and optional `teardown` phases.
 
 ```bash
+luotsi scenario-list --path scenarios
 luotsi scenario-init --file scenarios/smoke.json --name "smoke"
 luotsi scenario-validate --path scenarios
+luotsi scenario-explain --file scenarios/smoke.json
+luotsi run --path scenarios --output-dir ./artifacts/smoke-run --dry-run --include-tag smoke
 luotsi run --file scenarios/smoke.json --device <serial>
 ```
 
@@ -39,8 +42,19 @@ Use them when you want a checked-in flow with validation, timing, artifacts, and
 
 - Root variables and lightweight template substitution
 - App, device, and layout metadata for calibrated runs
-- Direct interaction steps, waits, assertions, app lifecycle, and artifact capture
+- Direct interaction steps, waits, assertions, app lifecycle, and artifact capture, including screenshot-first fallback steps for weaker hierarchy output
 - Failure bundles and replay metadata when something breaks
+- `continueOnError: true` on runtime-failure steps when the flow should continue after a bounded failure
+
+## Runner modes that matter
+
+- `scenario-list` and `run --path` share discovery filters such as `--include-tag`, `--exclude-tag`, `--name`, and `--action`.
+- `run --path --dry-run` returns the selected plan after filtering and sharding without validating or touching a device host.
+- `--validate-only` validates the selected files and still writes reports, but does not create a device host or execute device work.
+- `--dry-run` and `--validate-only` are intentionally mutually exclusive.
+- Use `--artifacts <directory>` or `--output-dir <directory>` when you want a stable run-artifact root instead of Luotsi's default user-local run home.
+- `--events-jsonl`, `--report-json`, and `--report-junit` are the main machine-readable outputs for CI and artifact review.
+- `--claim-device`, `--owner`, and `--ttl-sec` let a run hold a lab lease while it executes.
 
 ## A practical split
 
@@ -48,7 +62,7 @@ Use `inspect` first when the flow is still changing. Once you know the sequence 
 
 ## Where replay fits
 
-Scenario runs and long-lived sessions write artifact roots on purpose. Once a flow has been codified, use `luotsi replay summarize`, `replay timeline`, or `replay open` to debug the run after the device session ends instead of reconnecting blindly.
+Scenario runs and long-lived sessions write artifact roots on purpose. Once a flow has been codified, use `luotsi artifacts list` to rediscover recent runs, `artifacts open` for the generic browser, or `replay summarize`, `replay timeline`, and `replay open` when you want replay-specific triage after the device session ends.
 
 ## Next steps
 

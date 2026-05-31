@@ -5,6 +5,8 @@ description: Use Luotsi's artifact roots and replay commands to triage failures 
 
 Artifacts are part of the Luotsi contract. Commands, scenario runs, inspect sessions, and live view all write into an artifact root so the result can be explained after the fact.
 
+Use `artifacts list` when you need to rediscover a recent run id or temp-root artifact directory before you choose between the generic artifact browser and the replay-specific front door.
+
 ## What typically lands in an artifact root
 
 - Screenshots and recordings
@@ -16,6 +18,12 @@ Artifacts are part of the Luotsi contract. Commands, scenario runs, inspect sess
 ## Core replay commands
 
 ```bash
+luotsi artifacts list --artifacts ./artifacts
+luotsi artifacts info ./artifacts/my-run
+luotsi artifacts open ./artifacts/my-run
+luotsi artifacts open --last --artifacts ./artifacts
+luotsi artifacts pack ./artifacts/my-run --output my-run.zip --dry-run
+luotsi artifacts pack ./artifacts/my-run --output my-run.zip
 luotsi replay summarize --artifacts ./artifacts/my-run
 luotsi replay capsule --artifacts ./artifacts/my-run --write-readme --write-json
 luotsi replay timeline --artifacts ./artifacts/my-run --failures
@@ -23,10 +31,15 @@ luotsi replay timeline --artifacts ./artifacts/my-run --source-path session-time
 luotsi replay scrub --artifacts ./artifacts/my-run --failures --context 3 --write-markdown
 luotsi replay search --artifacts ./artifacts/my-run --contains "timeout"
 luotsi replay open --artifacts ./artifacts/my-run
+luotsi replay open --last --artifacts ./artifacts
 ```
 
 ## What each command is for
 
+- `artifacts list`: recent artifact-root discovery when you only have a temp root or run id
+- `artifacts info`: non-mutating summary of one bundle before you open, pack, or share it
+- `artifacts open`: generic artifact browser and index refresh when you do not need replay-specific recommendations yet
+- `artifacts pack`: zip an artifact root for sharing, upload, or CI handoff
 - `replay summarize`: condensed session-level overview with commands into capsule, open, scrub, graph, and clustering
 - `replay timeline`: ordered timeline events with type, timestamps, detail text, filters, and follow-up commands when failures are selected
 - `replay scrub`: local previous/focused/next event view with exact commands to move through replay evidence, open the capsule, search, or graph the focused failure
@@ -34,6 +47,8 @@ luotsi replay open --artifacts ./artifacts/my-run
 - `replay open`: regenerate and open the artifact browser locally
 - `replay capsule`: compact manifest with primary failure reopen command, failure timeline with exact reopen commands, existing scenario draft artifacts and summary counts, artifact manifest, and suggested next commands
 - `replay scenario-draft`: turn inspect or replay actions into a conservative starter scenario
+
+`artifacts pack` writes `luotsi-artifact-package.json` into the zip with the run id, created timestamp, category counts, and recommended reopen commands. `artifacts unpack` requires that manifest, reports it back in the result, and both pack and unpack support `--dry-run` when you want to validate the handoff without writing files yet.
 
 ## Newer semantic triage helpers
 
@@ -50,7 +65,7 @@ The public distinction that matters is:
 - `replay graph` is the agent- and debugger-facing node/edge model for that same root
 - `replay cluster` is the cross-run grouping view when the same failure shape keeps returning in CI
 
-`replay graph` returns a queryable graph for one artifact root with `query`, `agent_summary`, `taxonomy`, `total_node_count`, `matched_node_count`, `node_kinds`, `edge_kinds`, `insights`, `actions`, `evidence`, `facts`, `causal_chains`, `hypotheses`, optional artifact paths, and the returned `nodes` and `edges` arrays. The promoted node kinds that matter most in practice are `failure`, `action`, `selector`, `screen_state`, `telemetry_signal`, `scenario_draft`, and `generated_step`. Use `--failed`, `--node-kind`, `--edge-kind`, `--action`, `--selector`, `--contains`, `--insight`, `--severity`, `--evidence`, `--fact`, or `--node <id> --depth <n>` to narrow the view. Graph actions start with `replay capsule` so semantic context can route back to the bundle front door.
+`replay graph` returns a queryable graph for one artifact root with `query`, `agent_summary`, `taxonomy`, `total_node_count`, `matched_node_count`, `node_kinds`, `edge_kinds`, `insights`, `actions`, `evidence`, `facts`, `causal_chains`, `hypotheses`, optional artifact paths, and the returned `nodes` and `edges` arrays. The promoted node kinds that matter most in practice are `failure`, `action`, `selector`, `screen_state`, `telemetry_signal`, `scenario_draft`, and `generated_step`. Use `--failed`, `--node-kind`, `--edge-kind`, `--action`, `--selector`, `--contains`, `--insight`, `--severity`, `--evidence`, `--fact`, or `--node <id> --depth <n>` to narrow the view. Graph actions start with `replay open` so semantic context can route back to the canonical replay front door.
 
 `replay cluster` works one level up. Point it at a directory of replayable artifact roots when you need Luotsi to group failed sessions by normalized failure shape and return triage hints plus the next replay/search commands for the best representative bundle.
 
@@ -78,10 +93,10 @@ When you persist draft review artifacts, Luotsi currently writes:
 ## Practical workflow
 
 1. Run the command or scenario with an explicit artifact root if you want a stable location.
-2. Use `replay summarize` to confirm what happened at the session level.
-3. Move to `replay timeline` or `replay search` to narrow the failure window.
-4. Use `replay graph` when you need promoted selectors/actions/telemetry, facts, causal chains, or hypotheses; use `replay cluster` when the question is whether the same failure shape is repeating across runs.
-5. Open the local browser index when you want screenshots, logs, replay markdown, and draft review artifacts in one place.
+2. Use `artifacts list` if you need to rediscover the run id or exact artifact root, then use `artifacts info` for a non-mutating summary, `artifacts open --last` for the latest generic browser, or `replay open --last` for the latest replay-specific next actions.
+3. Use `replay summarize` to confirm what happened at the session level.
+4. Move to `replay timeline` or `replay search` to narrow the failure window.
+5. Use `replay graph` when you need promoted selectors/actions/telemetry, facts, causal chains, or hypotheses; use `replay cluster` when the question is whether the same failure shape is repeating across runs.
 
 ## MVP contract
 
