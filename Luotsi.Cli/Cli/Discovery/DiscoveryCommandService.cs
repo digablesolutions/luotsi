@@ -103,14 +103,24 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
             {
                 currentScreen = screens.Observe(await runner.GetScreenStateAsync().ConfigureAwait(false));
             }
-            catch (Exception ex)
+            catch (JsonException ex)
             {
-                stopReason = "screen_state_failed";
-                events.Add("screen_state_failed", new Dictionary<string, object?>
-                {
-                    ["error_type"] = ex.GetType().FullName ?? ex.GetType().Name,
-                    ["message"] = ex.Message
-                });
+                stopReason = AddScreenStateFailure(events, ex);
+                break;
+            }
+            catch (InvalidOperationException ex)
+            {
+                stopReason = AddScreenStateFailure(events, ex);
+                break;
+            }
+            catch (TimeoutException ex)
+            {
+                stopReason = AddScreenStateFailure(events, ex);
+                break;
+            }
+            catch (IOException ex)
+            {
+                stopReason = AddScreenStateFailure(events, ex);
                 break;
             }
 
@@ -159,22 +169,24 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
                     ["result"] = actionResult
                 });
             }
-            catch (Exception ex)
+            catch (UsageException ex)
             {
-                stopReason = "action_failed";
-                events.Add("action_result", new Dictionary<string, object?>
-                {
-                    ["screen_id"] = currentScreen.Screen.Id,
-                    ["action_id"] = action.Id,
-                    ["selected_event_id"] = actionSelected.EventId,
-                    ["label"] = action.Label,
-                    ["x"] = action.X,
-                    ["y"] = action.Y,
-                    ["post_tap_delay_ms"] = postTapDelayMs,
-                    ["status"] = "failed",
-                    ["error_type"] = ex.GetType().FullName ?? ex.GetType().Name,
-                    ["message"] = ex.Message
-                });
+                stopReason = AddActionFailure(events, currentScreen, action, actionSelected, postTapDelayMs, ex);
+                break;
+            }
+            catch (InvalidOperationException ex)
+            {
+                stopReason = AddActionFailure(events, currentScreen, action, actionSelected, postTapDelayMs, ex);
+                break;
+            }
+            catch (TimeoutException ex)
+            {
+                stopReason = AddActionFailure(events, currentScreen, action, actionSelected, postTapDelayMs, ex);
+                break;
+            }
+            catch (IOException ex)
+            {
+                stopReason = AddActionFailure(events, currentScreen, action, actionSelected, postTapDelayMs, ex);
                 break;
             }
 
@@ -183,15 +195,24 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
             {
                 nextScreen = screens.Observe(await runner.GetScreenStateAsync().ConfigureAwait(false));
             }
-            catch (Exception ex)
+            catch (JsonException ex)
             {
-                stopReason = "screen_state_failed";
-                events.Add("screen_state_failed", new Dictionary<string, object?>
-                {
-                    ["after_action_id"] = action.Id,
-                    ["error_type"] = ex.GetType().FullName ?? ex.GetType().Name,
-                    ["message"] = ex.Message
-                });
+                stopReason = AddScreenStateFailure(events, ex, action.Id);
+                break;
+            }
+            catch (InvalidOperationException ex)
+            {
+                stopReason = AddScreenStateFailure(events, ex, action.Id);
+                break;
+            }
+            catch (TimeoutException ex)
+            {
+                stopReason = AddScreenStateFailure(events, ex, action.Id);
+                break;
+            }
+            catch (IOException ex)
+            {
+                stopReason = AddScreenStateFailure(events, ex, action.Id);
                 break;
             }
 
@@ -227,17 +248,24 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
                         ["result"] = back
                     });
                 }
-                catch (Exception ex)
+                catch (UsageException ex)
                 {
-                    stopReason = "backtrack_failed";
-                    events.Add("backtrack_result", new Dictionary<string, object?>
-                    {
-                        ["from_screen_id"] = nextScreen.Screen.Id,
-                        ["to_screen_id"] = currentScreen.Screen.Id,
-                        ["status"] = "failed",
-                        ["error_type"] = ex.GetType().FullName ?? ex.GetType().Name,
-                        ["message"] = ex.Message
-                    });
+                    stopReason = AddBacktrackFailure(events, currentScreen, nextScreen, ex);
+                    break;
+                }
+                catch (InvalidOperationException ex)
+                {
+                    stopReason = AddBacktrackFailure(events, currentScreen, nextScreen, ex);
+                    break;
+                }
+                catch (TimeoutException ex)
+                {
+                    stopReason = AddBacktrackFailure(events, currentScreen, nextScreen, ex);
+                    break;
+                }
+                catch (IOException ex)
+                {
+                    stopReason = AddBacktrackFailure(events, currentScreen, nextScreen, ex);
                     break;
                 }
             }
@@ -362,10 +390,6 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
         var scenario = new ScenarioFile(
             $"discovery candidate for {packageName}",
             steps,
-            Variables: new Dictionary<string, string>
-            {
-                ["targetPackage"] = packageName
-            },
             Tags: ["generated", "discovery", "review-required"],
             Setup:
             [
@@ -375,7 +399,7 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
                     null,
                     null,
                     null,
-                    Package: "${var:targetPackage}",
+                    Package: packageName,
                     Activity: activity,
                     Wait: activity is not null)
             ],
@@ -396,6 +420,63 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
 
         await WriteJsonFileAsync(scenarioPath, scenario).ConfigureAwait(false);
         return relativePath;
+    }
+
+    private static string AddScreenStateFailure(DiscoveryEventLog events, Exception exception, string? afterActionId = null)
+    {
+        var data = new Dictionary<string, object?>
+        {
+            ["error_type"] = exception.GetType().FullName ?? exception.GetType().Name,
+            ["message"] = exception.Message
+        };
+        if (afterActionId is not null)
+        {
+            data["after_action_id"] = afterActionId;
+        }
+
+        events.Add("screen_state_failed", data);
+        return "screen_state_failed";
+    }
+
+    private static string AddActionFailure(
+        DiscoveryEventLog events,
+        DiscoveryScreenObservation currentScreen,
+        DiscoveryMapAction action,
+        DiscoveryEvent actionSelected,
+        int postTapDelayMs,
+        Exception exception)
+    {
+        events.Add("action_result", new Dictionary<string, object?>
+        {
+            ["screen_id"] = currentScreen.Screen.Id,
+            ["action_id"] = action.Id,
+            ["selected_event_id"] = actionSelected.EventId,
+            ["label"] = action.Label,
+            ["x"] = action.X,
+            ["y"] = action.Y,
+            ["post_tap_delay_ms"] = postTapDelayMs,
+            ["status"] = "failed",
+            ["error_type"] = exception.GetType().FullName ?? exception.GetType().Name,
+            ["message"] = exception.Message
+        });
+        return "action_failed";
+    }
+
+    private static string AddBacktrackFailure(
+        DiscoveryEventLog events,
+        DiscoveryScreenObservation currentScreen,
+        DiscoveryScreenObservation nextScreen,
+        Exception exception)
+    {
+        events.Add("backtrack_result", new Dictionary<string, object?>
+        {
+            ["from_screen_id"] = nextScreen.Screen.Id,
+            ["to_screen_id"] = currentScreen.Screen.Id,
+            ["status"] = "failed",
+            ["error_type"] = exception.GetType().FullName ?? exception.GetType().Name,
+            ["message"] = exception.Message
+        });
+        return "backtrack_failed";
     }
 
     private async Task WriteJsonFileAsync(string path, object value)

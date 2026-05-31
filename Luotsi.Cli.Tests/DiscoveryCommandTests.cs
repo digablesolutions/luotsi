@@ -108,8 +108,16 @@ public sealed class DiscoveryCommandTests
         Assert.Equal(2, map.RootElement.GetProperty("screens").GetArrayLength());
         Assert.Equal(1, map.RootElement.GetProperty("transitions").GetArrayLength());
 
-        using var scenario = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(scenarioPath));
+        var scenarioJson = await fileSystem.ReadAllTextAsync(scenarioPath);
+        using var scenario = JsonDocument.Parse(scenarioJson);
         Assert.Equal(750, scenario.RootElement.GetProperty("steps")[1].GetProperty("postTapDelayMs").GetInt32());
+        Assert.DoesNotContain("${var:targetPackage}", scenarioJson, StringComparison.Ordinal);
+        Assert.Equal("dev.luotsi.app", scenario.RootElement.GetProperty("setup")[0].GetProperty("package").GetString());
+        Assert.Equal(".MainActivity", scenario.RootElement.GetProperty("setup")[0].GetProperty("activity").GetString());
+        if (scenario.RootElement.TryGetProperty("variables", out var variables) && variables.ValueKind == JsonValueKind.Object)
+        {
+            Assert.DoesNotContain(variables.EnumerateObject(), property => property.NameEquals("targetPackage"));
+        }
 
         var events = (await fileSystem.ReadAllTextAsync(Path.Join(artifactRoot, "discovery-events.jsonl")))
             .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
