@@ -211,7 +211,8 @@ For labels and user-facing naming:
 
 ## Examples
 
-The repo ships two generic Android smoke scenarios under `examples/scenarios/` that avoid app-specific selectors:
+The repo ships two generic Android smoke scenarios plus one walkthrough-specific tutorial scenario under `examples/scenarios/`:
 
 - [`android-home-smoke.json`](../examples/scenarios/android-home-smoke.json)
 - [`android-navigation-smoke.json`](../examples/scenarios/android-navigation-smoke.json)
+- [`buggy-controller-live-demo.json`](../examples/scenarios/buggy-controller-live-demo.json)

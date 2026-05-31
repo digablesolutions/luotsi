@@ -37,6 +37,19 @@ The supported public query keys are:
 
 Use `lab status` when you want Luotsi to explain why each visible transport matched or was rejected. Use `lab plan` when you want the dry-run allocator view for one query. Use `lab doctor` when selection is ambiguous or stale and you want recommended repair commands, with `--fix` when safe host-side recovery is appropriate.
 
+## Durable inventory and admission filters
+
+Use durable inventory when shared-lab policy depends on more than the live adb snapshot.
+
+```bash
+luotsi lab inventory list
+luotsi lab inventory set --serial emulator-5554 --pool checkout --capabilities camera,nfc
+luotsi lab status --device-query state=online,type=physical --device-pool checkout --require-capabilities camera,nfc
+luotsi lab claim --device-query state=online,type=physical --device-pool checkout --require-capabilities camera,nfc --owner ci-job-1
+```
+
+`lab inventory list` shows the registry-backed pool and capability map merged with attached devices. `--device-pool <pool>` and `--require-capabilities <csv>` are admission filters on top of `--device-query`: the query still selects from live adb and device metadata, while the inventory filters require a matching durable registration before Luotsi allocates hardware.
+
 ## The core lease workflow
 
 Claiming is the point where a candidate device becomes reserved for one operator, job, or automation loop.
@@ -77,13 +90,14 @@ Use quarantine when the device is known-bad and should stay out of rotation unti
 If scenarios run against shared hardware, claim the device at run time instead of treating allocation as an out-of-band human promise.
 
 ```bash
-luotsi run --path scenarios --device-query model=Pixel_9 --claim-device --owner ci-job-1 --ttl-sec 1800
+luotsi run --path scenarios --device-query model=Pixel_9 --claim-device --device-pool checkout --require-capabilities camera,nfc --owner ci-job-1 --ttl-sec 1800
 luotsi run --file scenarios/smoke.json --device emulator-5554 --claim-device --owner local-debug
 ```
 
 Important behavior:
 
 - `run --claim-device` requires `--device` or `--device-query` so Luotsi can claim exactly one serial
+- `--device-pool` and `--require-capabilities` apply the same durable inventory admission rules that `lab status`, `lab plan`, and `lab claim` use
 - the lease is created before the device work begins and released in the run's cleanup path
 - the default run owner is `luotsi-run` unless you pass `--owner`, so CI should usually set its own job or pipeline label
 

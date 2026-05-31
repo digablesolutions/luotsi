@@ -3,15 +3,17 @@ title: Replay Graph And Clusters
 description: Use replay graph for semantic triage within one artifact root and replay cluster for repeated failure shapes across runs.
 ---
 
-`replay graph` and `replay cluster` are the replay commands you reach for after `replay summarize`, `replay timeline`, or `replay capsule` stop being enough.
+`replay graph` and `replay cluster` are the replay commands you reach for after `replay open`, `replay summarize`, or `replay timeline` stop being enough.
 
-- Use `replay capsule` when one artifact root failed and you want the shortest operator path to the primary failure.
+- Use `replay open` when one artifact root failed and you want the canonical front door with the primary failure, best next action, and the longer follow-up command set.
+- Use `replay capsule` when you want the compact failure manifest and shareable summary for that same bundle.
 - Use `replay graph` when you need a stable semantic model over one artifact root: failures, actions, selectors, telemetry, artifacts, and generated scenario-draft provenance.
 - Use `replay cluster` when the question is no longer "what failed here" but "is this the same failure pattern as the last runs?"
 
 ## Commands
 
 ```bash
+luotsi replay open --artifacts ./artifacts/my-run
 luotsi replay graph --artifacts ./artifacts/my-run
 luotsi replay graph --artifacts ./artifacts/my-run --write-json --write-markdown
 luotsi replay cluster --artifacts ./artifacts/ci-runs --write-json --write-markdown
@@ -31,13 +33,13 @@ The top-level fields that matter most are:
 | `node_count`, `edge_count` | Returned graph size after filters |
 | `total_node_count`, `total_edge_count` | Full graph size before filters |
 | `matched_node_count`, `matched_edge_count` | Query match size before `--limit` is applied |
-| `agent_summary` | Compact "what failed", "what changed", and "what can I run next" summary; commands start with `replay capsule` |
+| `agent_summary` | Compact "what failed", "what changed", and "what can I run next" summary; commands start with `replay open` |
 | `node_kinds`, `edge_kinds` | Counts by node kind and edge kind for quick triage |
 | `insights`, `actions`, `evidence`, `facts`, `causal_chains`, `hypotheses` | Promoted semantic summaries for agents and reviewers |
 | `json_path`, `markdown_path` | Paths written only when `--write-json` or `--write-markdown` is requested |
 | `nodes`, `edges` | Returned graph payload |
 
-Use graph filters when you already know what you need: `--failed`, `--node-kind`, `--edge-kind`, `--action`, `--selector`, `--contains`, `--insight`, `--severity`, `--evidence`, `--fact`, or `--node <id> --depth <n>`. The default action list starts with `replay capsule`, then routes to artifact browsing, scrub, streaming JSONL, and narrower graph queries.
+Use graph filters when you already know what you need: `--failed`, `--node-kind`, `--edge-kind`, `--action`, `--selector`, `--contains`, `--insight`, `--severity`, `--evidence`, `--fact`, or `--node <id> --depth <n>`. The default action list starts with `replay open`, then routes to capsule, artifact browsing, scrub, streaming JSONL, and narrower graph queries.
 
 ## Node kinds
 
@@ -85,7 +87,8 @@ Edges describe how those promoted nodes relate to one another:
 
 These commands usually answer the next question fastest:
 
-- `replay capsule` when you want the shortest path to the primary failure and the suggested next commands
+- `replay open` when you want the canonical front door, primary failure, and suggested next commands
+- `replay capsule` when you want the compact bundle summary once you already know this is the run you need to share or reopen in detail
 - `replay timeline --failures` when you need the exact failure-relevant event window
 - `replay scrub --failures --context 3` when you want the local before/focus/after view around one failure
 - `replay search --contains <text>` when you are hunting a selector, message, or other text evidence across the artifact root
@@ -101,15 +104,16 @@ That makes it the right command when:
 - you need grouped failure shapes instead of one-run detail
 - you want the best representative bundle plus the next replay/search commands for that cluster
 
-Use it as a triage reducer, not as a replacement for `replay capsule` or `replay graph`. In practice the flow is:
+Use it as a triage reducer, not as a replacement for `replay open`, `replay capsule`, or `replay graph`. In practice the flow is:
 
 1. Run `replay cluster` on a directory of replayable artifact roots.
 2. Pick the cluster that matches the failure class you care about.
-3. Follow the suggested replay commands into `replay capsule`, `replay graph`, `replay scrub`, or `replay search` for the best representative bundle.
+3. Follow the suggested replay commands into `replay open`, `replay capsule`, `replay graph`, `replay scrub`, or `replay search` for the best representative bundle.
 
 ## Practical triage loop
 
 ```bash
+luotsi replay open --artifacts ./artifacts/failing-run --write-markdown
 luotsi replay capsule --artifacts ./artifacts/failing-run --write-readme --write-json
 luotsi replay timeline --artifacts ./artifacts/failing-run --failures --context 3 --write-markdown
 luotsi replay graph --artifacts ./artifacts/failing-run --write-markdown

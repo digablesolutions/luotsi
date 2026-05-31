@@ -51,10 +51,12 @@ This matters most for coordinate-heavy steps where the wrong device or orientati
 
 ## Action families
 
-- Interaction: `waitVisible`, `waitNotVisible`, `tapText`, `tapPoint`, `typeText`, `typePin`, `keyevent`
-- Waits and assertions: `waitLog`, `waitStep`, `waitActionReady`, `assertEvent`, `assertScreenshot`, `assertTextInputReady`, `assertBelow`, `assertAligned`, `assertAppVersion`
-- App and package: `startApp`, `startUri`, `forceStop`, `clear`, `waitForActivity`, `waitForNotActivity`, `grantPermission`, `revokePermission`
+- Interaction: `waitVisible`, `waitNotVisible`, `tapText`, `tapPoint`, `doubleTapHeaderLogo`, `doubleTap`, `typeText`, `typePin`, `keyevent`
+- Waits and assertions: `waitLog`, `waitStep`, `waitActionReady`, `resetLog`, `assertEvent`, `assertScreenshot`, `assertTextInputReady`, `assertBelow`, `assertAligned`, `assertAppVersion`
+- App and package: `startApp`, `startUri`, `forceStop`, `clear`, `clearApp`, `waitForActivity`, `waitForNotActivity`, `isAppInstalled`, `listInstalledPackages`, `grantPermission`, `revokePermission`
 - Artifacts and utility: `takeScreenshot`, `captureArtifacts`, `screenState`, `sleep`
+
+`doubleTap` is currently a compatibility alias for the header-logo interaction only. If `headerLogo: true` is omitted, scenario validation rejects the step.
 
 ## Defaults and validation
 
@@ -67,6 +69,8 @@ Validation rejects unsupported shapes such as:
 - `typePin` with non-digits
 - `startApp` with `wait: true` but no activity
 - screenshot region hash checks without a full region definition
+
+Use `continueOnError: true` on a step when the run should continue after a non-usage runtime failure. Luotsi records that step as `continued_on_error` and keeps the error payload attached for later triage.
 
 ## When screenshot-first scenarios are the right call
 
@@ -108,6 +112,12 @@ When a scenario set grows beyond one device or one developer loop, the key runne
 - `--owner <name>` and `--ttl-sec <seconds>` to label that lease and keep its expiry explicit
 
 These controls matter when the same scenario catalog is being validated in CI, distributed across a device pool, or guarded from two operators grabbing the same hardware at once.
+
+## Example files
+
+- `examples/scenarios/android-home-smoke.json`
+- `examples/scenarios/android-navigation-smoke.json`
+- `examples/scenarios/buggy-controller-live-demo.json`
 
 ## Read more
 

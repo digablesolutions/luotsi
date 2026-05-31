@@ -61,6 +61,7 @@ Every `view` session is both a local operator loop and a replayable artifact sou
 - `session-timeline.jsonl` mirrors the session event stream into the artifact root
 - `session-replay.json` gives replay-oriented metadata for later `replay summarize`, `replay capsule`, `replay timeline`, or `replay open` commands
 - Screenshot, recording, share, and file-transfer actions emit their own JSONL events so CI or agents can track behavior without scraping terminal text
+- `artifacts open` and `replay open` both work against that same root after the session ends, depending on whether you want the generic artifact browser or the replay-specific front door
 
 The higher-signal event families to watch are:
 
@@ -81,7 +82,11 @@ luotsi view --join-share 192.168.0.10:9000
 
 Joined share sessions are forced into read-only observer mode. The stream renders, but input is blocked intentionally.
 
+Observer-only windows also block screenshot and recording controls with `view_input_blocked` because the source session owns those device-facing capture operations.
+
 Source sessions emit `view_share_started` when the relay is bound and `view_share_client_connected` when an observer joins. The shared transport also replays the cached bootstrap packets plus the latest keyframe to late observers so they do not connect into an undecodable stream.
+
+The relay is intended for trusted lab or dev networks. It is raw TCP today, with no TLS and no authentication.
 
 ## When to use something else
 

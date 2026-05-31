@@ -45,7 +45,9 @@ The GitHub adapter uses a self-hosted runner selected by labels:
 runs-on: [self-hosted, luotsi-lab, android-device]
 ```
 
-The workflow is manual by default. It accepts `device_query`, `scenario_path`, `ttl_sec`, and `dry_run` inputs, then calls the Bash script on POSIX runners or the PowerShell script on Windows runners.
+The checked-in GitHub Actions adapter is `.github/workflows/android-lab-scenarios.yml`.
+
+It is manual by default. It accepts `device_query`, `scenario_path`, `ttl_sec`, and `dry_run` inputs, then calls the Bash script on POSIX runners or the PowerShell script on Windows runners.
 
 Recommended first-run inputs:
 
@@ -66,6 +68,24 @@ luotsi lab status --device-query state=online,type=physical,availability=availab
 
 Use runner labels or runner groups to restrict access to trusted repositories. Avoid running physical-lab workflows from untrusted pull requests unless the runner is disposable and isolated.
 
+The workflow also fixes `LUOTSI_ARTIFACTS_DIR` to `artifacts/luotsi-lab`, fixes `LUOTSI_JUNIT_PATH` to `artifacts/luotsi-lab/junit.xml`, and uploads that directory as `luotsi-lab-<run_id>-<run_attempt>` after the job completes.
+
+## Current limits of the reusable pack
+
+The portable scripts and `.github/workflows/android-lab-scenarios.yml` intentionally keep a narrow contract today: they surface `device_query`, `scenario_path`, `ttl_sec`, and `dry_run`, but do not yet surface `--claim-wait-sec`, `--device-pool`, or `--require-capabilities`.
+
+That means the reusable pack is a good fit when live adb state plus `--device-query` is enough to select hardware. If you need the durable scheduler queue or durable inventory admission, call Luotsi directly in the CI job instead of the helper script.
+
+For example:
+
+```bash
+luotsi lab plan --device-query "state=online,type=physical,availability=available,model=Pixel_9" --device-pool checkout --require-capabilities camera,nfc
+luotsi run --path examples/scenarios --device-query "state=online,type=physical,availability=available,model=Pixel_9" --claim-device --claim-wait-sec 300 --device-pool checkout --require-capabilities camera,nfc --owner "gh-actions-${GITHUB_RUN_ID:-local}" --ttl-sec 1800 --report-junit artifacts/luotsi-lab/junit.xml --artifacts artifacts/luotsi-lab
+luotsi replay open --artifacts artifacts/luotsi-lab --dry-run
+```
+
+Use that explicit form when the job must wait fairly for a leased device or when allocation has to respect durable pool and capability registration.
+
 ## Generic CI
 
 For CI systems that are not GitHub Actions, keep the same environment variables and upload `LUOTSI_ARTIFACTS_DIR` as the job artifact.
@@ -84,6 +104,8 @@ Run a device-free integration check with:
 ```bash
 LUOTSI_DRY_RUN=true bash ./eng/ci/run-lab-scenarios.sh
 ```
+
+When the generic CI job needs `--claim-wait-sec`, `--device-pool`, or `--require-capabilities`, bypass the helper script and call `luotsi lab plan`, `luotsi run`, and `luotsi replay open` directly so the job contract stays explicit.
 
 ## Docker
 

@@ -105,6 +105,67 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public void Website_Documentation_Documents_Artifact_Package_And_Last_Reopen_Surfaces()
+    {
+        var markdown = ReadWebsiteDocumentationPages(
+            "core-workflows/inspect-and-scenarios.mdx",
+            "core-workflows/replay-and-artifacts.mdx",
+            "reference/cli-command-groups.mdx");
+
+        Assert.Contains("--output-dir <directory>", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi-artifact-package.json", markdown, StringComparison.Ordinal);
+        Assert.Contains("artifacts info", markdown, StringComparison.Ordinal);
+        Assert.Contains("artifacts open --last", markdown, StringComparison.Ordinal);
+        Assert.Contains("replay open --last", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Website_Documentation_Documents_Lab_Inventory_Admission_Surfaces()
+    {
+        var markdown = ReadWebsiteDocumentationPages(
+            "reference/cli-command-groups.mdx",
+            "reference/lab-and-device-claims.mdx",
+            "reference/shared-lab-operations.mdx");
+
+        Assert.Contains("lab inventory list", markdown, StringComparison.Ordinal);
+        Assert.Contains("--device-pool <pool>", markdown, StringComparison.Ordinal);
+        Assert.Contains("--require-capabilities <csv>", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Website_Documentation_Documents_Replay_Graph_Open_Front_Door()
+    {
+        var markdown = ReadWebsiteDocumentationPages("reference/replay-graph-and-clusters.mdx");
+
+        Assert.Contains("The default action list starts with `replay open`", markdown, StringComparison.Ordinal);
+        Assert.Contains("`replay open` when you want the canonical front door", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("commands start with `replay capsule`", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("The default action list starts with `replay capsule`", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Website_Documentation_Documents_Portable_Ci_Workflow_Contract()
+    {
+        var markdown = ReadWebsiteDocumentationPages("reference/portable-physical-lab-ci.mdx");
+        var workflow = File.ReadAllText(Path.Join(FindRepositoryRoot(), ".github", "workflows", "android-lab-scenarios.yml"));
+
+        Assert.Contains("android-lab-scenarios.yml", markdown, StringComparison.Ordinal);
+        Assert.Contains("`device_query`", markdown, StringComparison.Ordinal);
+        Assert.Contains("`scenario_path`", markdown, StringComparison.Ordinal);
+        Assert.Contains("`ttl_sec`", markdown, StringComparison.Ordinal);
+        Assert.Contains("`dry_run`", markdown, StringComparison.Ordinal);
+        Assert.Contains("do not yet surface `--claim-wait-sec`, `--device-pool`, or `--require-capabilities`", markdown, StringComparison.Ordinal);
+
+        Assert.Contains("device_query:", workflow, StringComparison.Ordinal);
+        Assert.Contains("scenario_path:", workflow, StringComparison.Ordinal);
+        Assert.Contains("ttl_sec:", workflow, StringComparison.Ordinal);
+        Assert.Contains("dry_run:", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("claim_wait_sec:", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("device_pool:", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("require_capabilities:", workflow, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Artifact_Package_Manifest_Fixture_Parses_And_Passes_Unpack_Validation()
     {
         var manifestPath = Path.Join(FindRepositoryRoot(), "Luotsi.Cli.Tests", "Fixtures", "artifacts", "package-manifest-v1.json");
@@ -298,6 +359,15 @@ public sealed partial class AppTests
         var value = field.GetValue(null);
         var topicTexts = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(value);
         return topicTexts;
+    }
+
+    private static string ReadWebsiteDocumentationPages(params string[] relativePaths)
+    {
+        var websiteDocsRoot = Path.Join(FindRepositoryRoot(), "website", "src", "content", "docs", "docs");
+
+        return string.Join(
+            Environment.NewLine,
+            relativePaths.Select(relativePath => File.ReadAllText(Path.Join(websiteDocsRoot, relativePath.Replace('/', Path.DirectorySeparatorChar)))));
     }
 
     private static IEnumerable<string> ExtractCommandPathsFromText(string text, bool requireKnownLeadToken)

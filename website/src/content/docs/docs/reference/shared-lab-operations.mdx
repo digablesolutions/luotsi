@@ -38,6 +38,18 @@ Two fields are especially useful in shared labs:
 
 If you want raw inventory, use `luotsi devices`. If you want selection semantics, use `lab status` or `lab plan`. `devices` intentionally does not accept `--device-query`.
 
+## Inventory-backed admission
+
+When the shared lab keeps durable pool or capability metadata, treat that as a second admission layer instead of trying to encode everything into the query itself.
+
+```bash
+luotsi lab inventory list
+luotsi lab status --device-query state=online,type=physical --device-pool checkout --require-capabilities camera,nfc
+luotsi lab plan --device-query state=online,type=physical --device-pool checkout --require-capabilities camera,nfc
+```
+
+`--device-pool <pool>` and `--require-capabilities <csv>` sit beside `--device-query`: the query still filters live adb and device fields, while the inventory admission filters require a matching durable registration before Luotsi selects or claims hardware.
+
 ## Example query patterns
 
 | Goal | Query |
@@ -84,8 +96,8 @@ Use `device-status --device-query ...` once the query is narrow enough to select
 This is the default pool-safe automation pattern.
 
 ```bash
-luotsi lab plan --device-query state=online,type=physical,availability=available,model=Pixel_9
-luotsi run --path scenarios --device-query state=online,type=physical,availability=available,model=Pixel_9 --claim-device --owner gh-actions-4821 --ttl-sec 1800 --report-junit junit.xml
+luotsi lab plan --device-query state=online,type=physical,availability=available,model=Pixel_9 --device-pool checkout --require-capabilities camera,nfc
+luotsi run --path scenarios --device-query state=online,type=physical,availability=available,model=Pixel_9 --claim-device --device-pool checkout --require-capabilities camera,nfc --owner gh-actions-4821 --ttl-sec 1800 --report-junit junit.xml
 ```
 
 Why this pattern works:
