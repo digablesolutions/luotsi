@@ -960,20 +960,16 @@ internal sealed class DiscoveryPlanner
 
     private static bool TryMatch(IReadOnlyList<string> patterns, string? value, out string? matchedPattern)
     {
-        if (!string.IsNullOrWhiteSpace(value))
+        if (string.IsNullOrWhiteSpace(value))
         {
-            foreach (var pattern in patterns)
-            {
-                if (value.Contains(pattern, StringComparison.OrdinalIgnoreCase))
-                {
-                    matchedPattern = pattern;
-                    return true;
-                }
-            }
+            matchedPattern = null;
+            return false;
         }
 
-        matchedPattern = null;
-        return false;
+        matchedPattern = patterns
+            .Where(static pattern => !string.IsNullOrWhiteSpace(pattern))
+            .FirstOrDefault(pattern => value.Contains(pattern, StringComparison.OrdinalIgnoreCase));
+        return matchedPattern is not null;
     }
 
     private static string BuildSearchText(params string?[] values) =>
