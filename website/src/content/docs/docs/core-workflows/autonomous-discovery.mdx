@@ -13,7 +13,7 @@ luotsi discover --device <serial> --package <app.id> --budget 5m
 
 Discovery writes into the normal Luotsi artifact root:
 
-- `discovery-map.json` with observed screens, safe action candidates, transitions, stop reason, and scenario-candidate provenance
+- `discovery-map.json` with observed screens, active tap policy, safe action candidates, policy-skipped candidates, transitions, stop reason, and scenario-candidate provenance
 - `discovery-events.jsonl` with line-oriented `luotsi-discovery-event.v1` records for agents and CI
 - `session-timeline.jsonl` and `session-replay.json` so `replay open`, `replay timeline`, `replay graph`, and `replay scenario-draft` can inspect the discovery run through the normal replay surface
 - `scenario-candidates/discovery-candidate.json` as a review-required starter scenario
@@ -23,13 +23,21 @@ The scenario candidate is intentionally not a finished test. Review coordinates,
 
 ## How it explores
 
-Discovery starts the target package unless `--no-start` is supplied, reads screen state, ranks visible clickable elements deterministically, skips obvious destructive labels, taps one safe action at a time, records the resulting transition, and follows changed screens up to `--max-depth`. When a branch is exhausted, reaches the depth limit, cycles to an already-active screen, or the run ends, discovery backtracks with `KEYCODE_BACK` and records that backtrack in the event log and generated scenario candidate.
+Discovery starts the target package unless `--no-start` is supplied, reads screen state, applies built-in and configured tap policy, ranks visible clickable elements deterministically, skips obvious destructive labels, taps one safe action at a time, records the resulting transition, and follows changed screens up to `--max-depth`. When a branch is exhausted, reaches the depth limit, cycles to an already-active screen, or the run ends, discovery backtracks with `KEYCODE_BACK` and records that backtrack in the event log and generated scenario candidate.
 
 Useful bounds:
 
 ```bash
 luotsi discover --device <serial> --package <app.id> --activity .MainActivity --budget 10m --max-actions 40 --max-depth 2 --output-dir artifacts
 ```
+
+Useful policy guardrails:
+
+```bash
+luotsi discover --device <serial> --package <app.id> --budget 5m --allow-text "Home,Search,Settings" --deny-text "Sign out,Delete" --deny-resource-id destructive --deny-class android.widget.Switch
+```
+
+Policy patterns are comma- or semicolon-separated substring matches. `--allow-text` limits tapping to candidates whose label, text, or content description matches at least one pattern. `--deny-text`, `--deny-resource-id`, and `--deny-class` remove matching candidates before ranking. Skips are preserved as `action_skipped` events and as skipped candidates on each screen in `discovery-map.json`.
 
 Stop reasons include `no_new_actions`, `budget_expired`, `action_limit_reached`, `depth_limit_reached`, `action_failed`, `screen_state_failed`, and `backtrack_failed`.
 

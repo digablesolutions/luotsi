@@ -119,18 +119,23 @@ Luotsi help: discover
 Usage:
   luotsi discover --device <adb serial> --package <app.id> [--activity <activity>]
                   [--budget 5m] [--max-actions 25] [--max-depth 2]
+                  [--allow-text <patterns>] [--deny-text <patterns>]
+                  [--deny-resource-id <patterns>] [--deny-class <patterns>]
                   [--output-dir <directory>] [--no-start]
 
 Examples:
   luotsi discover --device emulator-5554 --package com.example.app --budget 5m
   luotsi discover --device emulator-5554 --package com.example.app --activity .MainActivity --budget 10m --output-dir artifacts
+  luotsi discover --device emulator-5554 --package com.example.app --deny-text "Sign out,Delete" --deny-resource-id destructive
 
 Output:
   Discover opens the target app unless --no-start is supplied, reads real
-  screen state, chooses conservative visible tap targets, follows changed
-  screens up to --max-depth, records transitions and backtracks, and writes
+  screen state, applies built-in and configured tap policy, chooses
+  conservative visible tap targets, follows changed screens up to
+  --max-depth, records transitions and backtracks, and writes
   discovery-map.json, discovery-events.jsonl, session-timeline.jsonl, and
-  session-replay.json into the artifact root. It also writes
+  session-replay.json into the artifact root. Policy-skipped candidates are
+  written as action_skipped events. It also writes
   scenario-candidates/discovery-candidate.json as a review-required starter
   scenario that follows the observed traversal order.
 
@@ -138,6 +143,7 @@ Notes:
   Discovery is heuristic and deterministic; it does not require an LLM. It
   skips obvious destructive labels, bounds traversal by time, action count, and
   depth, and keeps JSON scenarios as the stable artifact to review before CI.
+  Policy pattern lists are comma- or semicolon-separated substring matches.
 """,
         ["quickstart"] = """
 Luotsi help: quickstart
@@ -672,7 +678,7 @@ Command groups:
   Inspect, interact, and capture
     screen-state
     inspect
-    discover --package <app.id> [--activity <activity>] [--budget 5m] [--max-actions 25] [--max-depth 2]
+    discover --package <app.id> [--activity <activity>] [--budget 5m] [--max-actions 25] [--max-depth 2] [--allow-text <patterns>] [--deny-text <patterns>]
     telemetry-tail [--tail 200]
     telemetry-watch [--timeout-sec 15]
     wait-step --step <STEP_NAME> [--timeout-sec 15]

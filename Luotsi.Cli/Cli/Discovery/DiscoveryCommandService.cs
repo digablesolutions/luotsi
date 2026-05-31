@@ -42,6 +42,7 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
         var maxActions = options.Int("max-actions", DefaultMaxActions);
         var maxDepth = options.Int("max-depth", DefaultMaxDepth);
         var postTapDelayMs = options.Int("post-tap-delay-ms", DefaultPostTapDelayMs);
+        var policy = DiscoveryPolicy.FromOptions(options);
         if (maxActions <= 0)
         {
             throw new UsageException("Option --max-actions must be greater than zero.");
@@ -61,7 +62,7 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
         var deadline = startedAt.Add(budget);
         var replay = new DiscoveryReplayRecorder(artifacts, packageName, startedAt);
         var events = new DiscoveryEventLog(_timeProvider, replay.Record);
-        var screens = new DiscoveryScreenRegistry(_planner);
+        var screens = new DiscoveryScreenRegistry(_planner, policy);
         var transitions = new List<DiscoveryMapTransition>();
         var successfulActions = new List<DiscoveryExecutedAction>();
         var scenarioOperations = new List<DiscoveryScenarioOperation>();
@@ -79,6 +80,7 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
             ["budget_ms"] = (long)budget.TotalMilliseconds,
             ["max_actions"] = maxActions,
             ["max_depth"] = maxDepth,
+            ["policy"] = policy.ToEventData(),
             ["artifact_root"] = artifacts.Root
         });
 
@@ -199,6 +201,7 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
                 }
 
                 AddScreenObserved(events, currentScreen);
+                AddSkippedActions(events, currentScreen);
             }
 
             if (currentDepth >= maxDepth)
@@ -319,6 +322,7 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
                 ["changed"] = changed
             });
             AddScreenObserved(events, nextScreen);
+            AddSkippedActions(events, nextScreen);
 
             if (!changed)
             {
@@ -408,6 +412,7 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
             (long)budget.TotalMilliseconds,
             maxActions,
             maxDepth,
+            policy,
             stopReason,
             readiness,
             screens.Screens,
@@ -528,8 +533,36 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
             ["signature"] = screen.Screen.Signature,
             ["element_count"] = screen.Screen.ElementCount,
             ["actionable_count"] = screen.Screen.ActionableCount,
+            ["skipped_actionable_count"] = screen.Screen.SkippedActionableCount,
             ["new_screen"] = screen.IsNew
         });
+
+    private static void AddSkippedActions(DiscoveryEventLog events, DiscoveryScreenObservation screen)
+    {
+        if (!screen.IsNew)
+        {
+            return;
+        }
+
+        foreach (var skipped in screen.Screen.SkippedActions)
+        {
+            events.Add("action_skipped", new Dictionary<string, object?>
+            {
+                ["screen_id"] = screen.Screen.Id,
+                ["candidate_id"] = skipped.CandidateId,
+                ["label"] = skipped.Label,
+                ["source"] = skipped.Source,
+                ["reason"] = skipped.Reason,
+                ["matched_pattern"] = skipped.MatchedPattern,
+                ["text"] = skipped.Text,
+                ["content_description"] = skipped.ContentDescription,
+                ["resource_id"] = skipped.ResourceId,
+                ["class_name"] = skipped.ClassName,
+                ["x"] = skipped.X,
+                ["y"] = skipped.Y
+            });
+        }
+    }
 
     private static bool ShouldBacktrackAfterStop(string stopReason) =>
         stopReason is "action_limit_reached" or "budget_expired" or "no_new_actions" or "depth_limit_reached";
@@ -691,9 +724,60 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
             : value;
 }
 
+internal sealed record DiscoveryPolicy(
+    IReadOnlyList<string> AllowText,
+    IReadOnlyList<string> DenyText,
+    IReadOnlyList<string> DenyResourceId,
+    IReadOnlyList<string> DenyClass,
+    IReadOnlyList<string> BuiltInDenyText)
+{
+    public static DiscoveryPolicy Default { get; } = new([], [], [], [], DiscoveryPlanner.DefaultDenyTextTerms);
+
+    [JsonIgnore]
+    public bool HasUserRules =>
+        AllowText.Count > 0 || DenyText.Count > 0 || DenyResourceId.Count > 0 || DenyClass.Count > 0;
+
+    public static DiscoveryPolicy FromOptions(CliOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return new DiscoveryPolicy(
+            ParsePatterns(options.Get("allow-text"), "--allow-text"),
+            ParsePatterns(options.Get("deny-text"), "--deny-text"),
+            ParsePatterns(options.Get("deny-resource-id"), "--deny-resource-id"),
+            ParsePatterns(options.Get("deny-class"), "--deny-class"),
+            DiscoveryPlanner.DefaultDenyTextTerms);
+    }
+
+    public IReadOnlyDictionary<string, object?> ToEventData() =>
+        new Dictionary<string, object?>
+        {
+            ["allow_text"] = AllowText,
+            ["deny_text"] = DenyText,
+            ["deny_resource_id"] = DenyResourceId,
+            ["deny_class"] = DenyClass,
+            ["built_in_deny_text"] = BuiltInDenyText
+        };
+
+    private static IReadOnlyList<string> ParsePatterns(string? value, string optionName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return [];
+        }
+
+        var patterns = value
+            .Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return patterns.Length == 0
+            ? throw new UsageException($"Option {optionName} must include at least one non-empty pattern.")
+            : patterns;
+    }
+}
+
 internal sealed class DiscoveryPlanner
 {
-    private static readonly string[] RiskTerms =
+    private static readonly string[] BuiltInDenyTextTerms =
     [
         "delete",
         "remove",
@@ -718,19 +802,36 @@ internal sealed class DiscoveryPlanner
     public DiscoveryMapAction? SelectNextAction(DiscoveryMapScreen screen, IReadOnlySet<string> attemptedActionKeys) =>
         screen.Actions.FirstOrDefault(action => !attemptedActionKeys.Contains(action.Key));
 
-    public IReadOnlyList<DiscoveryMapAction> BuildActions(string screenId, ScreenState state)
+    public DiscoveryActionBuildResult BuildActions(string screenId, ScreenState state, DiscoveryPolicy? policy = null)
     {
-        var ordered = state.Elements
+        policy ??= DiscoveryPolicy.Default;
+        var accepted = new List<CandidateElement>();
+        var skipped = new List<DiscoverySkippedAction>();
+        var candidates = state.Elements
             .Where(IsCandidateElement)
             .Select(ToCandidateElement)
-            .Where(static candidate => !IsRisky(candidate.Label))
+            .ToArray();
+
+        for (var i = 0; i < candidates.Length; i++)
+        {
+            var candidate = candidates[i];
+            if (TryGetPolicySkip(candidate, policy, out var reason, out var matchedPattern))
+            {
+                skipped.Add(ToSkippedAction(screenId, i, candidate, reason, matchedPattern));
+                continue;
+            }
+
+            accepted.Add(candidate);
+        }
+
+        var ordered = accepted
             .OrderByDescending(static candidate => candidate.Text is not null)
             .ThenBy(static candidate => candidate.Top)
             .ThenBy(static candidate => candidate.Left)
             .ThenBy(static candidate => candidate.Label, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        return ordered.Select((candidate, index) => new DiscoveryMapAction(
+        var actions = ordered.Select((candidate, index) => new DiscoveryMapAction(
             $"{screenId}:action-{index + 1:D3}",
             $"{screenId}|{candidate.StableKey}",
             candidate.Label,
@@ -746,7 +847,10 @@ internal sealed class DiscoveryPlanner
             candidate.Right,
             candidate.Bottom,
             candidate.Text is not null || candidate.ContentDescription is not null ? "medium" : "low")).ToArray();
+        return new DiscoveryActionBuildResult(actions, skipped);
     }
+
+    public static IReadOnlyList<string> DefaultDenyTextTerms => BuiltInDenyTextTerms;
 
     private static bool IsCandidateElement(ScreenElement element) =>
         element.Enabled &&
@@ -792,8 +896,88 @@ internal sealed class DiscoveryPlanner
             stableKey);
     }
 
-    private static bool IsRisky(string label) =>
-        RiskTerms.Any(term => label.Contains(term, StringComparison.OrdinalIgnoreCase));
+    private static bool TryGetPolicySkip(CandidateElement candidate, DiscoveryPolicy policy, out string reason, out string? matchedPattern)
+    {
+        var labelText = BuildSearchText(candidate.Label, candidate.Text, candidate.ContentDescription);
+        if (TryMatch(BuiltInDenyTextTerms, labelText, out matchedPattern))
+        {
+            reason = "built_in_risky_text";
+            return true;
+        }
+
+        if (TryMatch(policy.DenyText, labelText, out matchedPattern))
+        {
+            reason = "text_denied";
+            return true;
+        }
+
+        if (TryMatch(policy.DenyResourceId, candidate.ResourceId, out matchedPattern))
+        {
+            reason = "resource_id_denied";
+            return true;
+        }
+
+        if (TryMatch(policy.DenyClass, candidate.ClassName, out matchedPattern))
+        {
+            reason = "class_denied";
+            return true;
+        }
+
+        if (policy.AllowText.Count > 0 && !TryMatch(policy.AllowText, labelText, out matchedPattern))
+        {
+            reason = "text_not_allowed";
+            matchedPattern = null;
+            return true;
+        }
+
+        reason = string.Empty;
+        matchedPattern = null;
+        return false;
+    }
+
+    private static DiscoverySkippedAction ToSkippedAction(
+        string screenId,
+        int index,
+        CandidateElement candidate,
+        string reason,
+        string? matchedPattern) =>
+        new(
+            $"{screenId}:candidate-{index + 1:D3}",
+            candidate.Label,
+            candidate.Source,
+            candidate.Text,
+            candidate.ContentDescription,
+            candidate.ResourceId,
+            candidate.ClassName,
+            candidate.X,
+            candidate.Y,
+            candidate.Left,
+            candidate.Top,
+            candidate.Right,
+            candidate.Bottom,
+            reason,
+            matchedPattern);
+
+    private static bool TryMatch(IReadOnlyList<string> patterns, string? value, out string? matchedPattern)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            foreach (var pattern in patterns)
+            {
+                if (value.Contains(pattern, StringComparison.OrdinalIgnoreCase))
+                {
+                    matchedPattern = pattern;
+                    return true;
+                }
+            }
+        }
+
+        matchedPattern = null;
+        return false;
+    }
+
+    private static string BuildSearchText(params string?[] values) =>
+        string.Join("\n", values.Where(static value => !string.IsNullOrWhiteSpace(value)).Select(static value => value!.Trim()));
 
     private static string? LastResourceSegment(string? value)
     {
@@ -831,9 +1015,10 @@ internal sealed class DiscoveryPlanner
         string StableKey);
 }
 
-internal sealed class DiscoveryScreenRegistry(DiscoveryPlanner planner)
+internal sealed class DiscoveryScreenRegistry(DiscoveryPlanner planner, DiscoveryPolicy policy)
 {
     private readonly DiscoveryPlanner _planner = planner ?? throw new ArgumentNullException(nameof(planner));
+    private readonly DiscoveryPolicy _policy = policy ?? throw new ArgumentNullException(nameof(policy));
     private readonly Dictionary<string, DiscoveryMapScreen> _screensBySignature = new(StringComparer.Ordinal);
     private readonly List<DiscoveryMapScreen> _screens = [];
 
@@ -848,14 +1033,16 @@ internal sealed class DiscoveryScreenRegistry(DiscoveryPlanner planner)
         }
 
         var screenId = $"screen-{_screens.Count + 1:D3}";
-        var actions = _planner.BuildActions(screenId, state);
+        var actionBuild = _planner.BuildActions(screenId, state, _policy);
         var screen = new DiscoveryMapScreen(
             screenId,
             signature,
             state.CapturedAt,
             state.ElementCount,
-            actions.Count,
-            actions);
+            actionBuild.Actions.Count,
+            actionBuild.SkippedActions.Count,
+            actionBuild.Actions,
+            actionBuild.SkippedActions);
         _screensBySignature.Add(signature, screen);
         _screens.Add(screen);
         return new DiscoveryScreenObservation(screen, true);
@@ -981,6 +1168,7 @@ internal sealed class DiscoveryReplayRecorder
             "app_started" => "startApp",
             "device_ready" => "preflight",
             "screen_observed" => "screen_state",
+            "action_skipped" => "policy_skip",
             "action_selected" => "tapPoint",
             "action_result" => "tapPoint",
             "transition_observed" => "screen_delta",
@@ -1040,6 +1228,10 @@ internal sealed record DiscoveryReplayTimelineEvent(
 
 internal sealed record DiscoveryScreenObservation(DiscoveryMapScreen Screen, bool IsNew);
 
+internal sealed record DiscoveryActionBuildResult(
+    IReadOnlyList<DiscoveryMapAction> Actions,
+    IReadOnlyList<DiscoverySkippedAction> SkippedActions);
+
 internal sealed record DiscoveryExecutedAction(
     DiscoveryMapAction Action,
     string FromScreenId,
@@ -1065,6 +1257,7 @@ internal sealed record DiscoveryMap(
     long BudgetMs,
     int MaxActions,
     int MaxDepth,
+    DiscoveryPolicy Policy,
     string StopReason,
     PreflightResult? Device,
     IReadOnlyList<DiscoveryMapScreen> Screens,
@@ -1077,7 +1270,9 @@ internal sealed record DiscoveryMapScreen(
     DateTimeOffset ObservedAt,
     int ElementCount,
     int ActionableCount,
-    IReadOnlyList<DiscoveryMapAction> Actions);
+    int SkippedActionableCount,
+    IReadOnlyList<DiscoveryMapAction> Actions,
+    IReadOnlyList<DiscoverySkippedAction> SkippedActions);
 
 internal sealed record DiscoveryMapAction(
     string Id,
@@ -1095,6 +1290,23 @@ internal sealed record DiscoveryMapAction(
     int Right,
     int Bottom,
     string Confidence);
+
+internal sealed record DiscoverySkippedAction(
+    string CandidateId,
+    string Label,
+    string Source,
+    string? Text,
+    string? ContentDescription,
+    string? ResourceId,
+    string? ClassName,
+    int X,
+    int Y,
+    int Left,
+    int Top,
+    int Right,
+    int Bottom,
+    string Reason,
+    string? MatchedPattern);
 
 internal sealed record DiscoveryMapTransition(
     string Id,
