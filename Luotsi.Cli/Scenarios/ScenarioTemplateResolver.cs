@@ -32,23 +32,46 @@ internal sealed class ScenarioTemplateResolver(TimeProvider timeProvider, IEnvir
         {
             Name = ResolveValue(scenario.Name, scenario.Variables, resolvedVariables) ?? scenario.Name,
             Tags = scenario.Tags?.Select(value => ResolveValue(value, scenario.Variables, resolvedVariables) ?? value).ToArray(),
-            Steps = scenario.Steps.Select(step => step with
-            {
-                Name = ResolveValue(step.Name, scenario.Variables, resolvedVariables),
-                Action = ResolveValue(step.Action, scenario.Variables, resolvedVariables) ?? step.Action,
-                Text = ResolveValue(step.Text, scenario.Variables, resolvedVariables),
-                Code = ResolveValue(step.Code, scenario.Variables, resolvedVariables),
-                Step = ResolveValue(step.Step, scenario.Variables, resolvedVariables),
-                Label = ResolveValue(step.Label, scenario.Variables, resolvedVariables),
-                Event = ResolveValue(step.Event, scenario.Variables, resolvedVariables),
-                Contains = step.Contains?.Select(value => ResolveValue(value, scenario.Variables, resolvedVariables) ?? value).ToArray(),
-                DetailsPattern = ResolveValue(step.DetailsPattern, scenario.Variables, resolvedVariables),
-                Below = ResolveValue(step.Below, scenario.Variables, resolvedVariables),
-                With = ResolveValue(step.With, scenario.Variables, resolvedVariables),
-                Package = ResolveValue(step.Package, scenario.Variables, resolvedVariables)
-            }).ToArray()
+            Setup = ResolveSteps(scenario.Setup, scenario.Variables, resolvedVariables),
+            Steps = ResolveSteps(scenario.Steps, scenario.Variables, resolvedVariables)!,
+            Teardown = ResolveSteps(scenario.Teardown, scenario.Variables, resolvedVariables)
         };
     }
+
+    private ScenarioStep[]? ResolveSteps(
+        IReadOnlyList<ScenarioStep>? steps,
+        IReadOnlyDictionary<string, string>? variables,
+        IDictionary<string, string> resolvedVariables) =>
+        steps?.Select(step => ResolveStep(step, variables, resolvedVariables)).ToArray();
+
+    private ScenarioStep ResolveStep(
+        ScenarioStep step,
+        IReadOnlyDictionary<string, string>? variables,
+        IDictionary<string, string> resolvedVariables) =>
+        step with
+        {
+            Name = ResolveValue(step.Name, variables, resolvedVariables),
+            Action = ResolveValue(step.Action, variables, resolvedVariables) ?? step.Action,
+            Text = ResolveValue(step.Text, variables, resolvedVariables),
+            Code = ResolveValue(step.Code, variables, resolvedVariables),
+            Step = ResolveValue(step.Step, variables, resolvedVariables),
+            Label = ResolveValue(step.Label, variables, resolvedVariables),
+            Event = ResolveValue(step.Event, variables, resolvedVariables),
+            Contains = step.Contains?.Select(value => ResolveValue(value, variables, resolvedVariables) ?? value).ToArray(),
+            DetailsPattern = ResolveValue(step.DetailsPattern, variables, resolvedVariables),
+            Below = ResolveValue(step.Below, variables, resolvedVariables),
+            With = ResolveValue(step.With, variables, resolvedVariables),
+            Package = ResolveValue(step.Package, variables, resolvedVariables),
+            Activity = ResolveValue(step.Activity, variables, resolvedVariables),
+            Uri = ResolveValue(step.Uri, variables, resolvedVariables),
+            Permission = ResolveValue(step.Permission, variables, resolvedVariables),
+            IntentAction = ResolveValue(step.IntentAction, variables, resolvedVariables),
+            ExpectedSha256 = ResolveValue(step.ExpectedSha256, variables, resolvedVariables),
+            ExpectedSha256File = ResolveValue(step.ExpectedSha256File, variables, resolvedVariables),
+            BaselineFile = ResolveValue(step.BaselineFile, variables, resolvedVariables),
+            ExpectedRegionSha256 = ResolveValue(step.ExpectedRegionSha256, variables, resolvedVariables),
+            ExpectedRegionSha256File = ResolveValue(step.ExpectedRegionSha256File, variables, resolvedVariables)
+        };
 
     private string ResolveVariable(
         string name,

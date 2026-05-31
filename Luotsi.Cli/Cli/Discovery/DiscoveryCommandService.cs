@@ -1,0 +1,1327 @@
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Luotsi.Cli.Artifacts;
+using Luotsi.Cli.Errors;
+using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.Infrastructure.Serialization;
+using Luotsi.Cli.Models;
+
+namespace Luotsi.Cli.Cli.Discovery;
+
+internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvider timeProvider)
+{
+    private const string MapFileName = "discovery-map.json";
+    private const string EventsFileName = "discovery-events.jsonl";
+    private const string ScenarioCandidateDirectory = "scenario-candidates";
+    private const string ScenarioCandidateFileName = "discovery-candidate.json";
+    private const int DefaultBudgetSeconds = 300;
+    private const int DefaultMaxActions = 25;
+    private const int DefaultMaxDepth = 2;
+    private const int DefaultPostTapDelayMs = 300;
+    private static readonly JsonSerializerOptions EventJsonOptions = new(AppJson.Options)
+    {
+        WriteIndented = false
+    };
+
+    private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+    private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+    private readonly DiscoveryPlanner _planner = new();
+
+    public async Task<DiscoveryRunResult> RunAsync(CliOptions options, IDeviceHost runner, ArtifactSession artifacts)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(runner);
+        ArgumentNullException.ThrowIfNull(artifacts);
+
+        var packageName = options.Require("package").Trim();
+        var activity = NormalizeOptional(options.Get("activity"));
+        var budget = ParseBudget(options.Get("budget"));
+        var maxActions = options.Int("max-actions", DefaultMaxActions);
+        var maxDepth = options.Int("max-depth", DefaultMaxDepth);
+        var postTapDelayMs = options.Int("post-tap-delay-ms", DefaultPostTapDelayMs);
+        var policy = DiscoveryPolicy.FromOptions(options);
+        if (maxActions <= 0)
+        {
+            throw new UsageException("Option --max-actions must be greater than zero.");
+        }
+
+        if (maxDepth < 0)
+        {
+            throw new UsageException("Option --max-depth must be zero or greater.");
+        }
+
+        if (postTapDelayMs < 0)
+        {
+            throw new UsageException("Option --post-tap-delay-ms must be zero or greater.");
+        }
+
+        var startedAt = _timeProvider.GetUtcNow();
+        var deadline = startedAt.Add(budget);
+        var replay = new DiscoveryReplayRecorder(artifacts, packageName, startedAt);
+        var events = new DiscoveryEventLog(_timeProvider, replay.Record);
+        var screens = new DiscoveryScreenRegistry(_planner, policy);
+        var transitions = new List<DiscoveryMapTransition>();
+        var successfulActions = new List<DiscoveryExecutedAction>();
+        var scenarioOperations = new List<DiscoveryScenarioOperation>();
+        var attemptedActionKeys = new HashSet<string>(StringComparer.Ordinal);
+        var activePath = new List<string>();
+        var currentDepth = 0;
+        DiscoveryScreenObservation? currentScreen = null;
+        var stopReason = "completed";
+        PreflightResult? readiness = null;
+
+        events.Add("discovery_started", new Dictionary<string, object?>
+        {
+            ["package"] = packageName,
+            ["activity"] = activity,
+            ["budget_ms"] = (long)budget.TotalMilliseconds,
+            ["max_actions"] = maxActions,
+            ["max_depth"] = maxDepth,
+            ["policy"] = policy.ToEventData(),
+            ["artifact_root"] = artifacts.Root
+        });
+
+        if (!options.HasFlag("no-start"))
+        {
+            var start = await runner.StartAppAsync(packageName, activity, wait: activity is not null && options.HasFlag("wait")).ConfigureAwait(false);
+            events.Add("app_started", new Dictionary<string, object?>
+            {
+                ["package"] = start.Package,
+                ["activity"] = start.Activity,
+                ["component"] = start.Component,
+                ["wait"] = start.Wait
+            });
+        }
+
+        readiness = await runner.PreflightAsync(packageName).ConfigureAwait(false);
+        events.Add("device_ready", new Dictionary<string, object?>
+        {
+            ["serial"] = readiness.Serial,
+            ["model"] = readiness.Model,
+            ["android_release"] = readiness.AndroidRelease,
+            ["sdk"] = readiness.Sdk,
+            ["current_focus"] = readiness.CurrentFocus,
+            ["foreground_package"] = readiness.ForegroundPackage,
+            ["display_width"] = readiness.DisplayWidth,
+            ["display_height"] = readiness.DisplayHeight,
+            ["display_orientation"] = readiness.DisplayOrientation
+        });
+
+        async Task<DiscoveryScreenObservation?> TryReadScreenAsync(string? afterActionId = null)
+        {
+            try
+            {
+                return screens.Observe(await runner.GetScreenStateAsync().ConfigureAwait(false));
+            }
+            catch (JsonException ex)
+            {
+                stopReason = AddScreenStateFailure(events, ex, afterActionId);
+                return null;
+            }
+            catch (InvalidOperationException ex)
+            {
+                stopReason = AddScreenStateFailure(events, ex, afterActionId);
+                return null;
+            }
+            catch (TimeoutException ex)
+            {
+                stopReason = AddScreenStateFailure(events, ex, afterActionId);
+                return null;
+            }
+            catch (IOException ex)
+            {
+                stopReason = AddScreenStateFailure(events, ex, afterActionId);
+                return null;
+            }
+        }
+
+        async Task<bool> TryBacktrackAsync(string fromScreenId, string toScreenId, string reason)
+        {
+            try
+            {
+                var back = await runner.KeyEventAsync("KEYCODE_BACK").ConfigureAwait(false);
+                var backtrackEvent = AddBacktrackPassed(events, fromScreenId, toScreenId, back, reason);
+                scenarioOperations.Add(new DiscoveryScenarioBacktrackOperation(fromScreenId, toScreenId, backtrackEvent.EventId));
+                return true;
+            }
+            catch (UsageException ex)
+            {
+                stopReason = AddBacktrackFailure(events, fromScreenId, toScreenId, ex, reason);
+                return false;
+            }
+            catch (InvalidOperationException ex)
+            {
+                stopReason = AddBacktrackFailure(events, fromScreenId, toScreenId, ex, reason);
+                return false;
+            }
+            catch (TimeoutException ex)
+            {
+                stopReason = AddBacktrackFailure(events, fromScreenId, toScreenId, ex, reason);
+                return false;
+            }
+            catch (IOException ex)
+            {
+                stopReason = AddBacktrackFailure(events, fromScreenId, toScreenId, ex, reason);
+                return false;
+            }
+        }
+
+        while (true)
+        {
+            if (attemptedActionKeys.Count >= maxActions)
+            {
+                stopReason = "action_limit_reached";
+                break;
+            }
+
+            if (_timeProvider.GetUtcNow() >= deadline)
+            {
+                stopReason = "budget_expired";
+                break;
+            }
+
+            if (currentScreen is null)
+            {
+                currentScreen = await TryReadScreenAsync().ConfigureAwait(false);
+                if (currentScreen is null)
+                {
+                    break;
+                }
+
+                if (activePath.Count == 0)
+                {
+                    activePath.Add(currentScreen.Screen.Id);
+                }
+                else
+                {
+                    activePath[^1] = currentScreen.Screen.Id;
+                }
+
+                AddScreenObserved(events, currentScreen);
+                AddSkippedActions(events, currentScreen);
+            }
+
+            if (currentDepth >= maxDepth)
+            {
+                if (currentDepth == 0)
+                {
+                    stopReason = "depth_limit_reached";
+                    break;
+                }
+
+                var fromScreenId = activePath[^1];
+                var toScreenId = activePath[^2];
+                if (!await TryBacktrackAsync(fromScreenId, toScreenId, "depth_limit_reached").ConfigureAwait(false))
+                {
+                    break;
+                }
+
+                currentDepth--;
+                activePath.RemoveAt(activePath.Count - 1);
+                currentScreen = null;
+                continue;
+            }
+
+            var action = _planner.SelectNextAction(currentScreen.Screen, attemptedActionKeys);
+            if (action is null)
+            {
+                if (currentDepth > 0)
+                {
+                    var fromScreenId = activePath[^1];
+                    var toScreenId = activePath[^2];
+                    if (!await TryBacktrackAsync(fromScreenId, toScreenId, "screen_exhausted").ConfigureAwait(false))
+                    {
+                        break;
+                    }
+
+                    currentDepth--;
+                    activePath.RemoveAt(activePath.Count - 1);
+                    currentScreen = null;
+                    continue;
+                }
+
+                stopReason = "no_new_actions";
+                break;
+            }
+
+            attemptedActionKeys.Add(action.Key);
+            var actionSelected = events.Add("action_selected", new Dictionary<string, object?>
+            {
+                ["screen_id"] = currentScreen.Screen.Id,
+                ["action_id"] = action.Id,
+                ["label"] = action.Label,
+                ["source"] = action.Source,
+                ["x"] = action.X,
+                ["y"] = action.Y,
+                ["confidence"] = action.Confidence
+            });
+
+            try
+            {
+                var actionResult = await runner.TapPointAsync(action.Label, action.X, action.Y, null, null, postTapDelayMs).ConfigureAwait(false);
+                events.Add("action_result", new Dictionary<string, object?>
+                {
+                    ["screen_id"] = currentScreen.Screen.Id,
+                    ["action_id"] = action.Id,
+                    ["selected_event_id"] = actionSelected.EventId,
+                    ["label"] = action.Label,
+                    ["x"] = action.X,
+                    ["y"] = action.Y,
+                    ["post_tap_delay_ms"] = postTapDelayMs,
+                    ["status"] = "passed",
+                    ["result"] = actionResult
+                });
+            }
+            catch (UsageException ex)
+            {
+                stopReason = AddActionFailure(events, currentScreen, action, actionSelected, postTapDelayMs, ex);
+                break;
+            }
+            catch (InvalidOperationException ex)
+            {
+                stopReason = AddActionFailure(events, currentScreen, action, actionSelected, postTapDelayMs, ex);
+                break;
+            }
+            catch (TimeoutException ex)
+            {
+                stopReason = AddActionFailure(events, currentScreen, action, actionSelected, postTapDelayMs, ex);
+                break;
+            }
+            catch (IOException ex)
+            {
+                stopReason = AddActionFailure(events, currentScreen, action, actionSelected, postTapDelayMs, ex);
+                break;
+            }
+
+            var nextScreen = await TryReadScreenAsync(action.Id).ConfigureAwait(false);
+            if (nextScreen is null)
+            {
+                break;
+            }
+
+            var transitionId = $"transition-{transitions.Count + 1:D3}";
+            var changed = !string.Equals(currentScreen.Screen.Id, nextScreen.Screen.Id, StringComparison.Ordinal);
+            transitions.Add(new DiscoveryMapTransition(
+                transitionId,
+                currentScreen.Screen.Id,
+                nextScreen.Screen.Id,
+                action.Id,
+                changed,
+                actionSelected.EventId));
+            successfulActions.Add(new DiscoveryExecutedAction(action, currentScreen.Screen.Id, nextScreen.Screen.Id, changed, actionSelected.EventId));
+            scenarioOperations.Add(new DiscoveryScenarioTapOperation(action, actionSelected.EventId));
+            events.Add("transition_observed", new Dictionary<string, object?>
+            {
+                ["transition_id"] = transitionId,
+                ["from_screen_id"] = currentScreen.Screen.Id,
+                ["to_screen_id"] = nextScreen.Screen.Id,
+                ["action_id"] = action.Id,
+                ["changed"] = changed
+            });
+            AddScreenObserved(events, nextScreen);
+            AddSkippedActions(events, nextScreen);
+
+            if (!changed)
+            {
+                currentScreen = nextScreen;
+                continue;
+            }
+
+            if (!activePath.Contains(nextScreen.Screen.Id, StringComparer.Ordinal))
+            {
+                currentDepth++;
+                activePath.Add(nextScreen.Screen.Id);
+                currentScreen = nextScreen;
+                continue;
+            }
+
+            if (!await TryBacktrackAsync(nextScreen.Screen.Id, currentScreen.Screen.Id, "cycle_detected").ConfigureAwait(false))
+            {
+                break;
+            }
+
+            currentScreen = null;
+        }
+
+        while (currentDepth > 0 && ShouldBacktrackAfterStop(stopReason))
+        {
+            var fromScreenId = activePath[^1];
+            var toScreenId = activePath[^2];
+            if (!await TryBacktrackAsync(fromScreenId, toScreenId, "run_ended").ConfigureAwait(false))
+            {
+                break;
+            }
+
+            currentDepth--;
+            activePath.RemoveAt(activePath.Count - 1);
+        }
+
+        if (string.Equals(stopReason, "completed", StringComparison.Ordinal))
+        {
+            if (_timeProvider.GetUtcNow() >= deadline)
+            {
+                stopReason = "budget_expired";
+            }
+            else if (attemptedActionKeys.Count >= maxActions)
+            {
+                stopReason = "action_limit_reached";
+            }
+            else
+            {
+                stopReason = "completed";
+            }
+        }
+
+        var scenarioCandidatePath = await WriteScenarioCandidateAsync(packageName, activity, readiness, artifacts, scenarioOperations, postTapDelayMs).ConfigureAwait(false);
+        var scenarioCandidates = new[]
+        {
+            new DiscoveryScenarioCandidateRecord(
+                scenarioCandidatePath,
+                successfulActions.Count,
+                "review_required",
+                successfulActions.Select(static action => action.SourceEventId).ToArray())
+        };
+        events.Add("scenario_candidate_generated", new Dictionary<string, object?>
+        {
+            ["path"] = scenarioCandidatePath,
+            ["step_source_count"] = scenarioOperations.Count,
+            ["source_action_count"] = successfulActions.Count,
+            ["review_status"] = "review_required"
+        });
+
+        var endedAt = _timeProvider.GetUtcNow();
+        events.Add("discovery_ended", new Dictionary<string, object?>
+        {
+            ["stop_reason"] = stopReason,
+            ["visited_screen_count"] = screens.Screens.Count,
+            ["attempted_action_count"] = attemptedActionKeys.Count,
+            ["duration_ms"] = (long)(endedAt - startedAt).TotalMilliseconds
+        });
+        await replay.PersistAsync(endedAt, stopReason, 0).ConfigureAwait(false);
+
+        var map = new DiscoveryMap(
+            ResultSchemas.DiscoveryMap,
+            packageName,
+            activity,
+            startedAt,
+            endedAt,
+            (long)(endedAt - startedAt).TotalMilliseconds,
+            (long)budget.TotalMilliseconds,
+            maxActions,
+            maxDepth,
+            policy,
+            stopReason,
+            readiness,
+            screens.Screens,
+            transitions,
+            scenarioCandidates);
+
+        await WriteJsonFileAsync(Path.Join(artifacts.Root, MapFileName), map).ConfigureAwait(false);
+        await WriteEventsAsync(Path.Join(artifacts.Root, EventsFileName), events.Events).ConfigureAwait(false);
+        await artifacts.RefreshIndexAsync().ConfigureAwait(false);
+
+        var nextCommands = BuildNextCommands(artifacts.Root, scenarioCandidatePath);
+        return new DiscoveryRunResult(
+            ResultSchemas.DiscoveryResult,
+            artifacts.Root,
+            MapFileName,
+            EventsFileName,
+            [scenarioCandidatePath],
+            screens.Screens.Count,
+            attemptedActionKeys.Count,
+            maxDepth,
+            stopReason,
+            nextCommands);
+    }
+
+    private async Task<string> WriteScenarioCandidateAsync(
+        string packageName,
+        string? activity,
+        PreflightResult? readiness,
+        ArtifactSession artifacts,
+        IReadOnlyList<DiscoveryScenarioOperation> scenarioOperations,
+        int postTapDelayMs)
+    {
+        var candidateDirectory = Path.Join(artifacts.Root, ScenarioCandidateDirectory);
+        _fileSystem.CreateDirectory(candidateDirectory);
+        var scenarioPath = Path.Join(candidateDirectory, ScenarioCandidateFileName);
+        var relativePath = Path.Join(ScenarioCandidateDirectory, ScenarioCandidateFileName);
+        var steps = new List<ScenarioStep>
+        {
+            new("capture discovered start", "takeScreenshot", null, null, null, Label: "discovery-start")
+        };
+
+        var tapStepNumber = 0;
+        foreach (var operation in scenarioOperations)
+        {
+            switch (operation)
+            {
+                case DiscoveryScenarioTapOperation tap:
+                    tapStepNumber++;
+                    steps.Add(new ScenarioStep(
+                        $"tap discovered action {tapStepNumber}: {tap.Action.Label}",
+                        "tapPoint",
+                        null,
+                        null,
+                        null,
+                        Label: SanitizeLabel(tap.Action.Label),
+                        X: tap.Action.X,
+                        Y: tap.Action.Y,
+                        PostTapDelayMs: postTapDelayMs));
+                    steps.Add(new ScenarioStep(
+                        $"capture after discovered action {tapStepNumber}",
+                        "takeScreenshot",
+                        null,
+                        null,
+                        null,
+                        Label: $"discovery-action-{tapStepNumber:D2}"));
+                    break;
+
+                case DiscoveryScenarioBacktrackOperation backtrack:
+                    steps.Add(new ScenarioStep(
+                        $"backtrack from {backtrack.FromScreenId} to {backtrack.ToScreenId}",
+                        "keyevent",
+                        null,
+                        "KEYCODE_BACK",
+                        null));
+                    break;
+            }
+        }
+
+        var scenario = new ScenarioFile(
+            $"discovery candidate for {packageName}",
+            steps,
+            Tags: ["generated", "discovery", "review-required"],
+            Setup:
+            [
+                new ScenarioStep(
+                    "start app",
+                    "startApp",
+                    null,
+                    null,
+                    null,
+                    Package: packageName,
+                    Activity: activity,
+                    Wait: activity is not null)
+            ],
+            Teardown:
+            [
+                new ScenarioStep("collect discovery artifacts", "captureArtifacts", null, null, null, Label: "discovery-teardown")
+            ],
+            Metadata: new ScenarioMetadata(
+                packageName,
+                activity,
+                "Generated by `luotsi discover`. Review coordinates, waits, assertions, and safety before using in CI.",
+                readiness is null
+                    ? null
+                    : new ScenarioDeviceMetadata(readiness.Serial, readiness.Model, readiness.AndroidRelease, readiness.Sdk),
+                readiness is null
+                    ? null
+                    : new ScenarioLayoutMetadata(readiness.DisplayWidth, readiness.DisplayHeight, readiness.DisplayOrientation)));
+
+        await WriteJsonFileAsync(scenarioPath, scenario).ConfigureAwait(false);
+        return relativePath;
+    }
+
+    private static DiscoveryEvent AddScreenObserved(DiscoveryEventLog events, DiscoveryScreenObservation screen) =>
+        events.Add("screen_observed", new Dictionary<string, object?>
+        {
+            ["screen_id"] = screen.Screen.Id,
+            ["signature"] = screen.Screen.Signature,
+            ["element_count"] = screen.Screen.ElementCount,
+            ["actionable_count"] = screen.Screen.ActionableCount,
+            ["skipped_actionable_count"] = screen.Screen.SkippedActionableCount,
+            ["new_screen"] = screen.IsNew
+        });
+
+    private static void AddSkippedActions(DiscoveryEventLog events, DiscoveryScreenObservation screen)
+    {
+        if (!screen.IsNew)
+        {
+            return;
+        }
+
+        foreach (var skipped in screen.Screen.SkippedActions)
+        {
+            events.Add("action_skipped", new Dictionary<string, object?>
+            {
+                ["screen_id"] = screen.Screen.Id,
+                ["candidate_id"] = skipped.CandidateId,
+                ["label"] = skipped.Label,
+                ["source"] = skipped.Source,
+                ["reason"] = skipped.Reason,
+                ["matched_pattern"] = skipped.MatchedPattern,
+                ["text"] = skipped.Text,
+                ["content_description"] = skipped.ContentDescription,
+                ["resource_id"] = skipped.ResourceId,
+                ["class_name"] = skipped.ClassName,
+                ["x"] = skipped.X,
+                ["y"] = skipped.Y
+            });
+        }
+    }
+
+    private static bool ShouldBacktrackAfterStop(string stopReason) =>
+        stopReason is "action_limit_reached" or "budget_expired" or "no_new_actions" or "depth_limit_reached";
+
+    private static string AddScreenStateFailure(DiscoveryEventLog events, Exception exception, string? afterActionId = null)
+    {
+        var data = new Dictionary<string, object?>
+        {
+            ["error_type"] = exception.GetType().FullName ?? exception.GetType().Name,
+            ["message"] = exception.Message
+        };
+        if (afterActionId is not null)
+        {
+            data["after_action_id"] = afterActionId;
+        }
+
+        events.Add("screen_state_failed", data);
+        return "screen_state_failed";
+    }
+
+    private static string AddActionFailure(
+        DiscoveryEventLog events,
+        DiscoveryScreenObservation currentScreen,
+        DiscoveryMapAction action,
+        DiscoveryEvent actionSelected,
+        int postTapDelayMs,
+        Exception exception)
+    {
+        events.Add("action_result", new Dictionary<string, object?>
+        {
+            ["screen_id"] = currentScreen.Screen.Id,
+            ["action_id"] = action.Id,
+            ["selected_event_id"] = actionSelected.EventId,
+            ["label"] = action.Label,
+            ["x"] = action.X,
+            ["y"] = action.Y,
+            ["post_tap_delay_ms"] = postTapDelayMs,
+            ["status"] = "failed",
+            ["error_type"] = exception.GetType().FullName ?? exception.GetType().Name,
+            ["message"] = exception.Message
+        });
+        return "action_failed";
+    }
+
+    private static DiscoveryEvent AddBacktrackPassed(
+        DiscoveryEventLog events,
+        string fromScreenId,
+        string toScreenId,
+        object result,
+        string reason) =>
+        events.Add("backtrack_result", new Dictionary<string, object?>
+        {
+            ["from_screen_id"] = fromScreenId,
+            ["to_screen_id"] = toScreenId,
+            ["reason"] = reason,
+            ["status"] = "passed",
+            ["result"] = result
+        });
+
+    private static string AddBacktrackFailure(
+        DiscoveryEventLog events,
+        string fromScreenId,
+        string toScreenId,
+        Exception exception,
+        string reason)
+    {
+        events.Add("backtrack_result", new Dictionary<string, object?>
+        {
+            ["from_screen_id"] = fromScreenId,
+            ["to_screen_id"] = toScreenId,
+            ["reason"] = reason,
+            ["status"] = "failed",
+            ["error_type"] = exception.GetType().FullName ?? exception.GetType().Name,
+            ["message"] = exception.Message
+        });
+        return "backtrack_failed";
+    }
+
+    private async Task WriteJsonFileAsync(string path, object value)
+    {
+        await using var stream = _fileSystem.OpenWrite(path);
+        await JsonSerializer.SerializeAsync(stream, value, value.GetType(), AppJson.Options).ConfigureAwait(false);
+        await stream.WriteAsync(Encoding.UTF8.GetBytes(Environment.NewLine)).ConfigureAwait(false);
+    }
+
+    private async Task WriteEventsAsync(string path, IReadOnlyList<DiscoveryEvent> events)
+    {
+        var builder = new StringBuilder();
+        foreach (var discoveryEvent in events)
+        {
+            builder.Append(JsonSerializer.Serialize(discoveryEvent, EventJsonOptions));
+            builder.AppendLine();
+        }
+
+        await _fileSystem.WriteAllTextAsync(path, builder.ToString(), new UTF8Encoding(false)).ConfigureAwait(false);
+    }
+
+    private static IReadOnlyList<string> BuildNextCommands(string artifactRoot, string scenarioCandidatePath)
+    {
+        var scenarioPath = Path.Join(artifactRoot, scenarioCandidatePath);
+        return
+        [
+            $"luotsi artifacts open {Quote(artifactRoot)}",
+            $"luotsi scenario-validate --file {Quote(scenarioPath)}",
+            $"luotsi run --file {Quote(scenarioPath)} --device <adb serial>",
+            $"luotsi replay open --artifacts {Quote(artifactRoot)} --dry-run"
+        ];
+    }
+
+    private static TimeSpan ParseBudget(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return TimeSpan.FromSeconds(DefaultBudgetSeconds);
+        }
+
+        var trimmed = value.Trim();
+        var suffix = char.ToLowerInvariant(trimmed[^1]);
+        if (char.IsLetter(suffix))
+        {
+            var numberText = trimmed[..^1];
+            if (!double.TryParse(numberText, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var number) || number <= 0)
+            {
+                throw new UsageException("Option --budget must be a positive duration such as 30s, 5m, or 1h.");
+            }
+
+            return suffix switch
+            {
+                's' => TimeSpan.FromSeconds(number),
+                'm' => TimeSpan.FromMinutes(number),
+                'h' => TimeSpan.FromHours(number),
+                _ => throw new UsageException("Option --budget supports s, m, or h suffixes.")
+            };
+        }
+
+        return int.TryParse(trimmed, NumberStyles.None, CultureInfo.InvariantCulture, out var seconds) && seconds > 0
+            ? TimeSpan.FromSeconds(seconds)
+            : throw new UsageException("Option --budget must be a positive duration such as 30s, 5m, or 1h.");
+    }
+
+    private static string SanitizeLabel(string value)
+    {
+        var builder = new StringBuilder(value.Length);
+        foreach (var ch in value)
+        {
+            builder.Append(char.IsLetterOrDigit(ch) || ch is '-' or '_' ? ch : '-');
+        }
+
+        var label = builder.ToString().Trim('-');
+        return string.IsNullOrWhiteSpace(label) ? "discovered-action" : label;
+    }
+
+    private static string? NormalizeOptional(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string Quote(string value) =>
+        value.Any(static ch => char.IsWhiteSpace(ch) || ch == '"')
+            ? $"\"{value.Replace("\"", "\\\"", StringComparison.Ordinal)}\""
+            : value;
+}
+
+internal sealed record DiscoveryPolicy(
+    IReadOnlyList<string> AllowText,
+    IReadOnlyList<string> DenyText,
+    IReadOnlyList<string> DenyResourceId,
+    IReadOnlyList<string> DenyClass,
+    IReadOnlyList<string> BuiltInDenyText)
+{
+    public static DiscoveryPolicy Default { get; } = new([], [], [], [], DiscoveryPlanner.DefaultDenyTextTerms);
+
+    [JsonIgnore]
+    public bool HasUserRules =>
+        AllowText.Count > 0 || DenyText.Count > 0 || DenyResourceId.Count > 0 || DenyClass.Count > 0;
+
+    public static DiscoveryPolicy FromOptions(CliOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return new DiscoveryPolicy(
+            ParsePatterns(options.Get("allow-text"), "--allow-text"),
+            ParsePatterns(options.Get("deny-text"), "--deny-text"),
+            ParsePatterns(options.Get("deny-resource-id"), "--deny-resource-id"),
+            ParsePatterns(options.Get("deny-class"), "--deny-class"),
+            DiscoveryPlanner.DefaultDenyTextTerms);
+    }
+
+    public IReadOnlyDictionary<string, object?> ToEventData() =>
+        new Dictionary<string, object?>
+        {
+            ["allow_text"] = AllowText,
+            ["deny_text"] = DenyText,
+            ["deny_resource_id"] = DenyResourceId,
+            ["deny_class"] = DenyClass,
+            ["built_in_deny_text"] = BuiltInDenyText
+        };
+
+    private static IReadOnlyList<string> ParsePatterns(string? value, string optionName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return [];
+        }
+
+        var patterns = value
+            .Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return patterns.Length == 0
+            ? throw new UsageException($"Option {optionName} must include at least one non-empty pattern.")
+            : patterns;
+    }
+}
+
+internal sealed class DiscoveryPlanner
+{
+    private static readonly string[] BuiltInDenyTextTerms =
+    [
+        "delete",
+        "remove",
+        "sign out",
+        "log out",
+        "logout",
+        "clear",
+        "reset",
+        "purchase",
+        "buy",
+        "pay",
+        "send",
+        "submit",
+        "confirm",
+        "allow",
+        "deny",
+        "uninstall",
+        "discard",
+        "erase"
+    ];
+
+    public DiscoveryMapAction? SelectNextAction(DiscoveryMapScreen screen, IReadOnlySet<string> attemptedActionKeys) =>
+        screen.Actions.FirstOrDefault(action => !attemptedActionKeys.Contains(action.Key));
+
+    public DiscoveryActionBuildResult BuildActions(string screenId, ScreenState state, DiscoveryPolicy? policy = null)
+    {
+        policy ??= DiscoveryPolicy.Default;
+        var accepted = new List<CandidateElement>();
+        var skipped = new List<DiscoverySkippedAction>();
+        var candidates = state.Elements
+            .Where(IsCandidateElement)
+            .Select(ToCandidateElement)
+            .ToArray();
+
+        for (var i = 0; i < candidates.Length; i++)
+        {
+            var candidate = candidates[i];
+            if (TryGetPolicySkip(candidate, policy, out var reason, out var matchedPattern))
+            {
+                skipped.Add(ToSkippedAction(screenId, i, candidate, reason, matchedPattern));
+                continue;
+            }
+
+            accepted.Add(candidate);
+        }
+
+        var ordered = accepted
+            .OrderByDescending(static candidate => candidate.Text is not null)
+            .ThenBy(static candidate => candidate.Top)
+            .ThenBy(static candidate => candidate.Left)
+            .ThenBy(static candidate => candidate.Label, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var actions = ordered.Select((candidate, index) => new DiscoveryMapAction(
+            $"{screenId}:action-{index + 1:D3}",
+            $"{screenId}|{candidate.StableKey}",
+            candidate.Label,
+            candidate.Source,
+            candidate.Text,
+            candidate.ContentDescription,
+            candidate.ResourceId,
+            candidate.ClassName,
+            candidate.X,
+            candidate.Y,
+            candidate.Left,
+            candidate.Top,
+            candidate.Right,
+            candidate.Bottom,
+            candidate.Text is not null || candidate.ContentDescription is not null ? "medium" : "low")).ToArray();
+        return new DiscoveryActionBuildResult(actions, skipped);
+    }
+
+    public static IReadOnlyList<string> DefaultDenyTextTerms => BuiltInDenyTextTerms;
+
+    private static bool IsCandidateElement(ScreenElement element) =>
+        element.Enabled &&
+        element.Clickable &&
+        element.Right > element.Left &&
+        element.Bottom > element.Top &&
+        (element.IsUseful || !string.IsNullOrWhiteSpace(element.ResourceId));
+
+    private static CandidateElement ToCandidateElement(ScreenElement element)
+    {
+        var label = FirstNonBlank(element.Text, element.ContentDescription, LastResourceSegment(element.ResourceId), element.ClassName) ?? "unnamed";
+        var source = !string.IsNullOrWhiteSpace(element.Text)
+            ? "text"
+            : !string.IsNullOrWhiteSpace(element.ContentDescription)
+                ? "content_description"
+                : !string.IsNullOrWhiteSpace(element.ResourceId)
+                    ? "resource_id"
+                    : "class_name";
+        var stableKey = string.Join("|", new[]
+        {
+            NormalizeKey(element.Text),
+            NormalizeKey(element.ContentDescription),
+            NormalizeKey(element.ResourceId),
+            NormalizeKey(element.ClassName),
+            element.Left.ToString(CultureInfo.InvariantCulture),
+            element.Top.ToString(CultureInfo.InvariantCulture),
+            element.Right.ToString(CultureInfo.InvariantCulture),
+            element.Bottom.ToString(CultureInfo.InvariantCulture)
+        });
+        return new CandidateElement(
+            label,
+            source,
+            NormalizeOptional(element.Text),
+            NormalizeOptional(element.ContentDescription),
+            NormalizeOptional(element.ResourceId),
+            NormalizeOptional(element.ClassName),
+            element.CenterX,
+            element.CenterY,
+            element.Left,
+            element.Top,
+            element.Right,
+            element.Bottom,
+            stableKey);
+    }
+
+    private static bool TryGetPolicySkip(CandidateElement candidate, DiscoveryPolicy policy, out string reason, out string? matchedPattern)
+    {
+        var labelText = BuildSearchText(candidate.Label, candidate.Text, candidate.ContentDescription);
+        if (TryMatch(BuiltInDenyTextTerms, labelText, out matchedPattern))
+        {
+            reason = "built_in_risky_text";
+            return true;
+        }
+
+        if (TryMatch(policy.DenyText, labelText, out matchedPattern))
+        {
+            reason = "text_denied";
+            return true;
+        }
+
+        if (TryMatch(policy.DenyResourceId, candidate.ResourceId, out matchedPattern))
+        {
+            reason = "resource_id_denied";
+            return true;
+        }
+
+        if (TryMatch(policy.DenyClass, candidate.ClassName, out matchedPattern))
+        {
+            reason = "class_denied";
+            return true;
+        }
+
+        if (policy.AllowText.Count > 0 && !TryMatch(policy.AllowText, labelText, out matchedPattern))
+        {
+            reason = "text_not_allowed";
+            matchedPattern = null;
+            return true;
+        }
+
+        reason = string.Empty;
+        matchedPattern = null;
+        return false;
+    }
+
+    private static DiscoverySkippedAction ToSkippedAction(
+        string screenId,
+        int index,
+        CandidateElement candidate,
+        string reason,
+        string? matchedPattern) =>
+        new(
+            $"{screenId}:candidate-{index + 1:D3}",
+            candidate.Label,
+            candidate.Source,
+            candidate.Text,
+            candidate.ContentDescription,
+            candidate.ResourceId,
+            candidate.ClassName,
+            candidate.X,
+            candidate.Y,
+            candidate.Left,
+            candidate.Top,
+            candidate.Right,
+            candidate.Bottom,
+            reason,
+            matchedPattern);
+
+    private static bool TryMatch(IReadOnlyList<string> patterns, string? value, out string? matchedPattern)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            matchedPattern = null;
+            return false;
+        }
+
+        matchedPattern = patterns
+            .Where(static pattern => !string.IsNullOrWhiteSpace(pattern))
+            .FirstOrDefault(pattern => value.Contains(pattern, StringComparison.OrdinalIgnoreCase));
+        return matchedPattern is not null;
+    }
+
+    private static string BuildSearchText(params string?[] values) =>
+        string.Join("\n", values.Where(static value => !string.IsNullOrWhiteSpace(value)).Select(static value => value!.Trim()));
+
+    private static string? LastResourceSegment(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var slash = value.LastIndexOf('/');
+        return slash >= 0 && slash + 1 < value.Length ? value[(slash + 1)..] : value;
+    }
+
+    private static string NormalizeKey(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim().ToLowerInvariant();
+
+    private static string? NormalizeOptional(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string? FirstNonBlank(params string?[] values) =>
+        values.FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value))?.Trim();
+
+    private sealed record CandidateElement(
+        string Label,
+        string Source,
+        string? Text,
+        string? ContentDescription,
+        string? ResourceId,
+        string? ClassName,
+        int X,
+        int Y,
+        int Left,
+        int Top,
+        int Right,
+        int Bottom,
+        string StableKey);
+}
+
+internal sealed class DiscoveryScreenRegistry(DiscoveryPlanner planner, DiscoveryPolicy policy)
+{
+    private readonly DiscoveryPlanner _planner = planner ?? throw new ArgumentNullException(nameof(planner));
+    private readonly DiscoveryPolicy _policy = policy ?? throw new ArgumentNullException(nameof(policy));
+    private readonly Dictionary<string, DiscoveryMapScreen> _screensBySignature = new(StringComparer.Ordinal);
+    private readonly List<DiscoveryMapScreen> _screens = [];
+
+    public IReadOnlyList<DiscoveryMapScreen> Screens => _screens;
+
+    public DiscoveryScreenObservation Observe(ScreenState state)
+    {
+        var signature = CreateSignature(state);
+        if (_screensBySignature.TryGetValue(signature, out var existing))
+        {
+            return new DiscoveryScreenObservation(existing, false);
+        }
+
+        var screenId = $"screen-{_screens.Count + 1:D3}";
+        var actionBuild = _planner.BuildActions(screenId, state, _policy);
+        var screen = new DiscoveryMapScreen(
+            screenId,
+            signature,
+            state.CapturedAt,
+            state.ElementCount,
+            actionBuild.Actions.Count,
+            actionBuild.SkippedActions.Count,
+            actionBuild.Actions,
+            actionBuild.SkippedActions);
+        _screensBySignature.Add(signature, screen);
+        _screens.Add(screen);
+        return new DiscoveryScreenObservation(screen, true);
+    }
+
+    private static string CreateSignature(ScreenState state)
+    {
+        var normalized = string.Join(
+            "\n",
+            state.Elements
+                .Select(static element => string.Join("|", [
+                    Normalize(element.Text),
+                    Normalize(element.ContentDescription),
+                    Normalize(element.ResourceId),
+                    Normalize(element.ClassName),
+                    element.Enabled.ToString(),
+                    element.Clickable.ToString(),
+                    element.Left.ToString(CultureInfo.InvariantCulture),
+                    element.Top.ToString(CultureInfo.InvariantCulture),
+                    element.Right.ToString(CultureInfo.InvariantCulture),
+                    element.Bottom.ToString(CultureInfo.InvariantCulture)
+                ]))
+                .Order(StringComparer.Ordinal));
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(normalized));
+        return Convert.ToHexString(hash)[..16].ToLowerInvariant();
+    }
+
+    private static string Normalize(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim().ToLowerInvariant();
+}
+
+internal sealed class DiscoveryEventLog(TimeProvider timeProvider)
+{
+    private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+    private readonly Action<DiscoveryEvent>? _eventSink;
+    private readonly List<DiscoveryEvent> _events = [];
+
+    public DiscoveryEventLog(TimeProvider timeProvider, Action<DiscoveryEvent>? eventSink)
+        : this(timeProvider)
+    {
+        _eventSink = eventSink;
+    }
+
+    public IReadOnlyList<DiscoveryEvent> Events => _events;
+
+    public DiscoveryEvent Add(string type, IReadOnlyDictionary<string, object?> data)
+    {
+        var discoveryEvent = new DiscoveryEvent(
+            ResultSchemas.DiscoveryEvent,
+            $"event-{_events.Count + 1:D4}",
+            _events.Count + 1,
+            _timeProvider.GetUtcNow(),
+            type,
+            data);
+        _events.Add(discoveryEvent);
+        _eventSink?.Invoke(discoveryEvent);
+        return discoveryEvent;
+    }
+}
+
+internal sealed class DiscoveryReplayRecorder
+{
+    private static readonly JsonSerializerOptions ReplayJsonOptions = new()
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        WriteIndented = false
+    };
+
+    private readonly SessionReplayArtifacts _replayArtifacts;
+
+    public DiscoveryReplayRecorder(ArtifactSession artifacts, string packageName, DateTimeOffset startedAt)
+    {
+        _replayArtifacts = new SessionReplayArtifacts(artifacts, "discover", $"discover-{startedAt:yyyyMMddHHmmssfff}", startedAt);
+        _replayArtifacts.SetTarget(packageName);
+    }
+
+    public void Record(DiscoveryEvent discoveryEvent)
+    {
+        _replayArtifacts.RecordSerializedEvent(JsonSerializer.Serialize(ToReplayEvent(discoveryEvent), ReplayJsonOptions));
+    }
+
+    public Task PersistAsync(DateTimeOffset endedAt, string reason, int exitCode) =>
+        _replayArtifacts.PersistAsync(endedAt, reason, exitCode);
+
+    private static DiscoveryReplayTimelineEvent ToReplayEvent(DiscoveryEvent discoveryEvent)
+    {
+        var status = GetString(discoveryEvent.Data, "status");
+        var label = GetString(discoveryEvent.Data, "label");
+        var message = GetString(discoveryEvent.Data, "message") ?? GetString(discoveryEvent.Data, "stop_reason");
+        var command = GetReplayCommand(discoveryEvent.Type);
+        return new DiscoveryReplayTimelineEvent(
+            GetReplayType(discoveryEvent.Type),
+            discoveryEvent.Timestamp,
+            status,
+            GetReplayAction(discoveryEvent.Type),
+            command,
+            label,
+            message,
+            ToOk(status),
+            BuildReplayData(discoveryEvent, command));
+    }
+
+    private static string GetReplayType(string type) =>
+        type switch
+        {
+            "action_result" or "backtrack_result" => "command_result",
+            _ => type
+        };
+
+    private static string? GetReplayCommand(string type) =>
+        type switch
+        {
+            "action_result" => "tap_point",
+            "backtrack_result" => "keyevent",
+            _ => null
+        };
+
+    private static string? GetReplayAction(string type) =>
+        type switch
+        {
+            "discovery_started" => "discover",
+            "app_started" => "startApp",
+            "device_ready" => "preflight",
+            "screen_observed" => "screen_state",
+            "action_skipped" => "policy_skip",
+            "action_selected" => "tapPoint",
+            "action_result" => "tapPoint",
+            "transition_observed" => "screen_delta",
+            "backtrack_result" => "keyevent",
+            "scenario_candidate_generated" => "scenarioDraft",
+            _ => null
+        };
+
+    private static IReadOnlyDictionary<string, object?> BuildReplayData(DiscoveryEvent discoveryEvent, string? command)
+    {
+        var data = new Dictionary<string, object?>(discoveryEvent.Data, StringComparer.Ordinal);
+        if (string.Equals(command, "keyevent", StringComparison.Ordinal) && !data.ContainsKey("code"))
+        {
+            data["code"] = "KEYCODE_BACK";
+        }
+
+        if (string.Equals(command, "tap_point", StringComparison.Ordinal))
+        {
+            CopyIfMissing(data, "x", discoveryEvent.Data);
+            CopyIfMissing(data, "y", discoveryEvent.Data);
+            CopyIfMissing(data, "label", discoveryEvent.Data);
+        }
+
+        return data;
+    }
+
+    private static void CopyIfMissing(Dictionary<string, object?> data, string key, IReadOnlyDictionary<string, object?> source)
+    {
+        if (!data.ContainsKey(key) && source.TryGetValue(key, out var value))
+        {
+            data[key] = value;
+        }
+    }
+
+    private static bool? ToOk(string? status) =>
+        status switch
+        {
+            "passed" => true,
+            "failed" => false,
+            _ => null
+        };
+
+    private static string? GetString(IReadOnlyDictionary<string, object?> data, string key) =>
+        data.TryGetValue(key, out var value) ? value?.ToString() : null;
+}
+
+internal sealed record DiscoveryReplayTimelineEvent(
+    string Type,
+    DateTimeOffset OccurredAt,
+    string? Status,
+    string? Action,
+    string? Command,
+    string? Label,
+    string? Message,
+    bool? Ok,
+    IReadOnlyDictionary<string, object?> Data);
+
+internal sealed record DiscoveryScreenObservation(DiscoveryMapScreen Screen, bool IsNew);
+
+internal sealed record DiscoveryActionBuildResult(
+    IReadOnlyList<DiscoveryMapAction> Actions,
+    IReadOnlyList<DiscoverySkippedAction> SkippedActions);
+
+internal sealed record DiscoveryExecutedAction(
+    DiscoveryMapAction Action,
+    string FromScreenId,
+    string ToScreenId,
+    bool ChangedScreen,
+    string SourceEventId);
+
+internal abstract record DiscoveryScenarioOperation(string SourceEventId);
+
+internal sealed record DiscoveryScenarioTapOperation(DiscoveryMapAction Action, string SourceEventId)
+    : DiscoveryScenarioOperation(SourceEventId);
+
+internal sealed record DiscoveryScenarioBacktrackOperation(string FromScreenId, string ToScreenId, string SourceEventId)
+    : DiscoveryScenarioOperation(SourceEventId);
+
+internal sealed record DiscoveryMap(
+    string Schema,
+    string Package,
+    string? Activity,
+    DateTimeOffset StartedAt,
+    DateTimeOffset EndedAt,
+    long DurationMs,
+    long BudgetMs,
+    int MaxActions,
+    int MaxDepth,
+    DiscoveryPolicy Policy,
+    string StopReason,
+    PreflightResult? Device,
+    IReadOnlyList<DiscoveryMapScreen> Screens,
+    IReadOnlyList<DiscoveryMapTransition> Transitions,
+    IReadOnlyList<DiscoveryScenarioCandidateRecord> ScenarioCandidates);
+
+internal sealed record DiscoveryMapScreen(
+    string Id,
+    string Signature,
+    DateTimeOffset ObservedAt,
+    int ElementCount,
+    int ActionableCount,
+    int SkippedActionableCount,
+    IReadOnlyList<DiscoveryMapAction> Actions,
+    IReadOnlyList<DiscoverySkippedAction> SkippedActions);
+
+internal sealed record DiscoveryMapAction(
+    string Id,
+    string Key,
+    string Label,
+    string Source,
+    string? Text,
+    string? ContentDescription,
+    string? ResourceId,
+    string? ClassName,
+    int X,
+    int Y,
+    int Left,
+    int Top,
+    int Right,
+    int Bottom,
+    string Confidence);
+
+internal sealed record DiscoverySkippedAction(
+    string CandidateId,
+    string Label,
+    string Source,
+    string? Text,
+    string? ContentDescription,
+    string? ResourceId,
+    string? ClassName,
+    int X,
+    int Y,
+    int Left,
+    int Top,
+    int Right,
+    int Bottom,
+    string Reason,
+    string? MatchedPattern);
+
+internal sealed record DiscoveryMapTransition(
+    string Id,
+    string FromScreenId,
+    string ToScreenId,
+    string ActionId,
+    bool Changed,
+    string SourceEventId);
+
+internal sealed record DiscoveryScenarioCandidateRecord(
+    string Path,
+    int SourceActionCount,
+    string ReviewStatus,
+    IReadOnlyList<string> SourceEventIds);
+
+internal sealed record DiscoveryEvent(
+    string Schema,
+    string EventId,
+    int Sequence,
+    DateTimeOffset Timestamp,
+    string Type,
+    IReadOnlyDictionary<string, object?> Data);

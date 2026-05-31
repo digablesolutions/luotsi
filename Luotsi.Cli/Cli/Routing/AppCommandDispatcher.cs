@@ -1,4 +1,5 @@
 using Luotsi.Cli.Artifacts;
+using Luotsi.Cli.Cli.Discovery;
 using Luotsi.Cli.Cli.View;
 using Luotsi.Cli.Cli.Update;
 using Luotsi.Cli.Errors;
@@ -13,6 +14,7 @@ namespace Luotsi.Cli.Cli.Routing;
 internal sealed class AppCommandDispatcher(
     AdbSubcommandDispatcher adbSubcommandDispatcher,
     ScenarioCommandDispatcher scenarioCommandDispatcher,
+    DiscoveryCommandService discoveryCommandService,
     ISelfUpdateService selfUpdateService,
     ViewProfileCoordinator profileCoordinator,
     LabLeaseStore labLeaseStore,
@@ -23,6 +25,7 @@ internal sealed class AppCommandDispatcher(
 {
     private readonly AdbSubcommandDispatcher _adbSubcommandDispatcher = adbSubcommandDispatcher ?? throw new ArgumentNullException(nameof(adbSubcommandDispatcher));
     private readonly ScenarioCommandDispatcher _scenarioCommandDispatcher = scenarioCommandDispatcher ?? throw new ArgumentNullException(nameof(scenarioCommandDispatcher));
+    private readonly DiscoveryCommandService _discoveryCommandService = discoveryCommandService ?? throw new ArgumentNullException(nameof(discoveryCommandService));
     private readonly ISelfUpdateService _selfUpdateService = selfUpdateService ?? throw new ArgumentNullException(nameof(selfUpdateService));
     private readonly ViewProfileCoordinator _profileCoordinator = profileCoordinator ?? throw new ArgumentNullException(nameof(profileCoordinator));
     private readonly LabLeaseStore _labLeaseStore = labLeaseStore ?? throw new ArgumentNullException(nameof(labLeaseStore));
@@ -88,6 +91,7 @@ internal sealed class AppCommandDispatcher(
             "scenario-init" => await _scenarioCommandDispatcher.InitAsync(options).ConfigureAwait(false),
             "scenario-validate" => await _scenarioCommandDispatcher.ValidateAsync(options, artifacts).ConfigureAwait(false),
             "scenario-explain" => await _scenarioCommandDispatcher.ExplainAsync(options).ConfigureAwait(false),
+            "discover" => await _discoveryCommandService.RunAsync(options, RequireRunner(runner, command), artifacts).ConfigureAwait(false),
             "screen-state" => await RequireRunner(runner, command).GetScreenStateAsync().ConfigureAwait(false),
             "telemetry-tail" => await RequireRunner(runner, command).TelemetryTailAsync(options.Int("tail", CliDefaults.DefaultLogTail)).ConfigureAwait(false),
             "telemetry-watch" => await RequireRunner(runner, command).TelemetryWatchAsync(options.Int("timeout-sec", CliDefaults.DefaultTimeoutSeconds)).ConfigureAwait(false),

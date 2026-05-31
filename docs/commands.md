@@ -31,6 +31,7 @@ For the same summary inside the CLI, run `luotsi help quickstart` or jump direct
 | Open a live mirror | `luotsi view --device <serial>` |
 | Snapshot current UI state | `luotsi screen-state --device <serial>` |
 | Start an agent-driven inspection session | `luotsi inspect --device <serial>` |
+| Map an app and generate scenario candidates | `luotsi discover --device <serial> --package <app.id> --budget 5m` |
 | Generate a starter scenario | `luotsi scenario-init --file scenarios/smoke.json --name "smoke"` |
 | Validate scenarios without using a device | `luotsi scenario-validate --path scenarios` |
 | Run scenarios with CI output | `luotsi run --path scenarios --device <serial> --report-junit junit.xml` |
@@ -242,11 +243,14 @@ Luotsi reads the `LUOTSI_DEVICE_TELEMETRY` logcat marker to parse structured sem
 | `scenario-list --path <scenario-file-or-directory-or-glob> [filters]` | Discover scenario files and report matched names, tags, and actions without executing them |
 | `scenario-validate (--file <path> | --path <path>)` | Validate one or many scenarios without creating a device host |
 | `scenario-explain --file <path>` | Summarize scenario metadata, lifecycle step counts, actions, docs, and suggested commands |
+| `discover --device <serial> --package <app.id> [--activity <activity>] [--budget 5m] [--max-actions 25] [--max-depth 2] [--allow-text <patterns>] [--deny-text <patterns>]` | Explore visible real-device UI state, write discovery and replay artifacts, and emit a review-required JSON scenario candidate |
 | `run --device <serial> --file <path>` | Execute one JSON scenario playbook; also supports `--validate-only`, `--progress`, `--events-jsonl`, `--report-json`, `--report-junit`, `--capture-on`, and `--attach-artifacts` |
 | `run --device <serial> --path <scenario-file-or-directory-or-glob>` | Execute one or many scenario files discovered from a file, directory, or glob; supports filtering, `--dry-run`, `--validate-only`, progress, reporting, artifact-policy flags, and sharding |
 | `inspect --device <serial>` | Open an agent-driven JSONL inspection session |
 
 See [scenarios.md](scenarios.md) for the playbook format and full action reference.
+
+`discover` is the conservative autonomous layer over inspect, run, and replay. It starts the package unless `--no-start` is supplied, reads screen-state snapshots, applies built-in and configured tap policy, taps safe visible clickable elements, follows changed screens up to `--max-depth`, and backtracks when a branch is exhausted, the depth limit is reached, or the run ends. Use comma- or semicolon-separated policy patterns with `--allow-text`, `--deny-text`, `--deny-resource-id`, and `--deny-class` to constrain what discovery may tap; skipped candidates are emitted as `action_skipped` events and the active policy is persisted in `discovery-map.json`. Discovery stops on budget expiry, action limit, no new actions, or a recorded command failure. It writes `discovery-map.json`, `discovery-events.jsonl`, `session-timeline.jsonl`, and `session-replay.json` so the run can be reopened through replay. Generated scenario candidates follow the observed traversal/backtrack order and remain starter artifacts with provenance in the discovery map; review them before using them as CI coverage.
 
 ### Inspect mode protocol
 

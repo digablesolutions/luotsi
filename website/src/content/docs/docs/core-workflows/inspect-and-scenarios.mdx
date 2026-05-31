@@ -38,6 +38,16 @@ luotsi run --file scenarios/smoke.json --device <serial>
 
 Use them when you want a checked-in flow with validation, timing, artifacts, and CI-friendly reports.
 
+## Discovery: for unknown app surfaces
+
+`discover` is the bounded autonomous layer between open-ended inspection and repeatable scenarios.
+
+```bash
+luotsi discover --device <serial> --package <app.id> --budget 5m
+```
+
+It writes a discovery map, JSONL event trace, and review-required scenario candidate into the artifact root. Discovery follows changed screens up to `--max-depth`, records the backtracks needed to return through the explored branch, and supports `--allow-text`, `--deny-text`, `--deny-resource-id`, and `--deny-class` guardrails for excluding unsafe or irrelevant tap targets before ranking. Treat the generated scenario as a starting point: validate and edit it before using it as CI coverage.
+
 ## What scenario files support
 
 - Root variables and lightweight template substitution
@@ -58,7 +68,7 @@ Use them when you want a checked-in flow with validation, timing, artifacts, and
 
 ## A practical split
 
-Use `inspect` first when the flow is still changing. Once you know the sequence and the assertions you care about, move that behavior into a scenario JSON file and run it under `luotsi run`.
+Use `inspect` first when the flow is still changing and needs step-by-step agent control. Use `discover` when the app surface is broad or unknown and you want a state map plus candidate scenarios. Once you know the sequence and the assertions you care about, move that behavior into a scenario JSON file and run it under `luotsi run`.
 
 ## Where replay fits
 
@@ -68,4 +78,5 @@ Scenario runs and long-lived sessions write artifact roots on purpose. Once a fl
 
 - Read [CLI command groups](../../reference/cli-command-groups/)
 - Read [Scenario playbooks](../../reference/scenario-playbooks/)
+- Read [Autonomous discovery](../autonomous-discovery/)
 - Read [Replay and artifacts](../replay-and-artifacts/)

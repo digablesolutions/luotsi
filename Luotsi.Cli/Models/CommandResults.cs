@@ -267,6 +267,18 @@ public sealed record InstalledPackageListResult(IReadOnlyList<string> Packages, 
 
 public sealed record PermissionCommandResult(string Package, string Permission);
 
+public sealed record DiscoveryRunResult(
+    string Schema,
+    string ArtifactRoot,
+    string MapPath,
+    string EventsPath,
+    IReadOnlyList<string> ScenarioCandidatePaths,
+    int VisitedScreenCount,
+    int AttemptedActionCount,
+    int MaxDepth,
+    string StopReason,
+    IReadOnlyList<string> NextCommands);
+
 // Enable adb-over-TCP and connect to the target endpoint.
 public sealed record WirelessConnectResult(string Host, int Port, string Endpoint);
 

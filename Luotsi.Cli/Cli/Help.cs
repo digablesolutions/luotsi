@@ -113,6 +113,38 @@ Failure modes:
   commands useful where possible; screen-state includes attempted strategies
   and raw output in artifacts when hierarchy capture fails.
 """,
+        ["discover"] = """
+Luotsi help: discover
+
+Usage:
+  luotsi discover --device <adb serial> --package <app.id> [--activity <activity>]
+                  [--budget 5m] [--max-actions 25] [--max-depth 2]
+                  [--allow-text <patterns>] [--deny-text <patterns>]
+                  [--deny-resource-id <patterns>] [--deny-class <patterns>]
+                  [--output-dir <directory>] [--no-start]
+
+Examples:
+  luotsi discover --device emulator-5554 --package com.example.app --budget 5m
+  luotsi discover --device emulator-5554 --package com.example.app --activity .MainActivity --budget 10m --output-dir artifacts
+  luotsi discover --device emulator-5554 --package com.example.app --deny-text "Sign out,Delete" --deny-resource-id destructive
+
+Output:
+  Discover opens the target app unless --no-start is supplied, reads real
+  screen state, applies built-in and configured tap policy, chooses
+  conservative visible tap targets, follows changed screens up to
+  --max-depth, records transitions and backtracks, and writes
+  discovery-map.json, discovery-events.jsonl, session-timeline.jsonl, and
+  session-replay.json into the artifact root. Policy-skipped candidates are
+  written as action_skipped events. It also writes
+  scenario-candidates/discovery-candidate.json as a review-required starter
+  scenario that follows the observed traversal order.
+
+Notes:
+  Discovery is heuristic and deterministic; it does not require an LLM. It
+  skips obvious destructive labels, bounds traversal by time, action count, and
+  depth, and keeps JSON scenarios as the stable artifact to review before CI.
+  Policy pattern lists are comma- or semicolon-separated substring matches.
+""",
         ["quickstart"] = """
 Luotsi help: quickstart
 
@@ -135,6 +167,9 @@ Common workflows:
   Inspect a screen and gather artifacts
     luotsi screen-state --device <adb serial>
     luotsi inspect --device <adb serial>
+
+  Map an app and generate reviewed scenario candidates
+    luotsi discover --device <adb serial> --package <app.id> --budget 5m
 
   Resume the latest local triage bundle
     luotsi artifacts open --last --artifacts artifacts
@@ -572,8 +607,8 @@ Workflow index:
     luotsi help run
 
 Help topics:
-  quickstart | lab | view | inspect | scenario | run | artifacts | replay | adb
-  wireless | ports | app | update
+  quickstart | lab | view | inspect | discover | scenario | run | artifacts
+  replay | adb | wireless | ports | app | update
 
 From source:
   .\scripts\luotsi.ps1 <command> [options]
@@ -643,6 +678,7 @@ Command groups:
   Inspect, interact, and capture
     screen-state
     inspect
+    discover --package <app.id> [--activity <activity>] [--budget 5m] [--max-actions 25] [--max-depth 2] [--allow-text <patterns>] [--deny-text <patterns>]
     telemetry-tail [--tail 200]
     telemetry-watch [--timeout-sec 15]
     wait-step --step <STEP_NAME> [--timeout-sec 15]
@@ -738,7 +774,7 @@ Design:
     {
         normalized = topic.ToLowerInvariant() switch
         {
-          "workflow" or "workflows" or "start" or "getting-started" or "gettingstarted" => "quickstart",
+            "workflow" or "workflows" or "start" or "getting-started" or "gettingstarted" => "quickstart",
             "replay-summarize" => "replay",
             "version" => "update",
             "view-setup" or "view-doctor" or "reconnect" or "profile-list" or "profile-delete" => "view",
@@ -746,6 +782,7 @@ Design:
             "wireless-scan" or "wireless-pair" or "wireless-connect" => "wireless",
             "forward" or "forward-list" or "forward-remove" or "reverse" or "reverse-list" or "reverse-remove" => "ports",
             "start-app" or "start-uri" or "force-stop" or "clear" or "clear-app" or "is-app-installed" or "list-installed-packages" or "grant-permission" or "revoke-permission" => "app",
+            "discover" or "discovery" => "discover",
             "screen-state" or "telemetry-tail" or "telemetry-watch" or "wait-step" or "wait-action-ready" or "wait-visible" or "wait-for-activity" or "wait-for-not-activity" or "tap" or "tap-text" or "type-text" or "keyevent" or "logcat" or "wait-log" or "record" => "inspect",
             "devices" or "device-status" or "wait-for-device" or "device-wait" or "preflight" or "doctor" => "lab",
             _ => string.Empty
@@ -754,10 +791,10 @@ Design:
         return normalized.Length > 0;
     }
 
-  private static IReadOnlyList<string> BuildSuggestedTopics()
-  {
-    var topics = Topics.Where(static topic => !string.Equals(topic, "quickstart", StringComparison.OrdinalIgnoreCase)).ToList();
-    topics.Insert(0, "quickstart");
-    return topics;
-  }
+    private static IReadOnlyList<string> BuildSuggestedTopics()
+    {
+        var topics = Topics.Where(static topic => !string.Equals(topic, "quickstart", StringComparison.OrdinalIgnoreCase)).ToList();
+        topics.Insert(0, "quickstart");
+        return topics;
+    }
 }

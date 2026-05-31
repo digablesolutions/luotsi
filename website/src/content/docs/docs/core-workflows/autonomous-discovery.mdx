@@ -1,0 +1,62 @@
+---
+title: Autonomous Discovery
+description: Use luotsi discover to map visible Android app states, preserve evidence, and generate review-required JSON scenario candidates.
+---
+
+`luotsi discover` is the first autonomous layer over Luotsi's existing `inspect`, `run`, and `replay` surfaces. It explores a real Android app through the same host-side device runtime, writes an auditable discovery trace, and keeps JSON scenarios as the stable artifact to review before CI.
+
+```bash
+luotsi discover --device <serial> --package <app.id> --budget 5m
+```
+
+## What it writes
+
+Discovery writes into the normal Luotsi artifact root:
+
+- `discovery-map.json` with observed screens, active tap policy, safe action candidates, policy-skipped candidates, transitions, stop reason, and scenario-candidate provenance
+- `discovery-events.jsonl` with line-oriented `luotsi-discovery-event.v1` records for agents and CI
+- `session-timeline.jsonl` and `session-replay.json` so `replay open`, `replay timeline`, `replay graph`, and `replay scenario-draft` can inspect the discovery run through the normal replay surface
+- `scenario-candidates/discovery-candidate.json` as a review-required starter scenario
+- the normal `index.md` and `index.html` artifact browser entries
+
+The scenario candidate is intentionally not a finished test. Review coordinates, waits, assertions, and safety before checking it in.
+
+## How it explores
+
+Discovery starts the target package unless `--no-start` is supplied, reads screen state, applies built-in and configured tap policy, ranks visible clickable elements deterministically, skips obvious destructive labels, taps one safe action at a time, records the resulting transition, and follows changed screens up to `--max-depth`. When a branch is exhausted, reaches the depth limit, cycles to an already-active screen, or the run ends, discovery backtracks with `KEYCODE_BACK` and records that backtrack in the event log and generated scenario candidate.
+
+Useful bounds:
+
+```bash
+luotsi discover --device <serial> --package <app.id> --activity .MainActivity --budget 10m --max-actions 40 --max-depth 2 --output-dir artifacts
+```
+
+Useful policy guardrails:
+
+```bash
+luotsi discover --device <serial> --package <app.id> --budget 5m --allow-text "Home,Search,Settings" --deny-text "Sign out,Delete" --deny-resource-id destructive --deny-class android.widget.Switch
+```
+
+Policy patterns are comma- or semicolon-separated substring matches. `--allow-text` limits tapping to candidates whose label, text, or content description matches at least one pattern. `--deny-text`, `--deny-resource-id`, and `--deny-class` remove matching candidates before ranking. Skips are preserved as `action_skipped` events and as skipped candidates on each screen in `discovery-map.json`.
+
+Stop reasons include `no_new_actions`, `budget_expired`, `action_limit_reached`, `depth_limit_reached`, `action_failed`, `screen_state_failed`, and `backtrack_failed`.
+
+## Promotion flow
+
+Use discovery to find and explain behavior, then promote only reviewed behavior into deterministic scenarios:
+
+```bash
+luotsi discover --device <serial> --package <app.id> --budget 5m --output-dir artifacts
+luotsi artifacts open --last --artifacts artifacts
+luotsi scenario-validate --file artifacts/<run>/scenario-candidates/discovery-candidate.json
+luotsi run --file artifacts/<run>/scenario-candidates/discovery-candidate.json --device <serial>
+luotsi replay timeline --artifacts artifacts/<run> --type command_result
+luotsi replay open --artifacts artifacts/<run>
+```
+
+## Related pages
+
+- [AI Agent Workflows](../ai-agent-workflows/)
+- [Inspect And Scenarios](../inspect-and-scenarios/)
+- [Replay And Artifacts](../replay-and-artifacts/)
+- [Scenario Playbooks](../../reference/scenario-playbooks/)
