@@ -572,6 +572,8 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public Exception? ScreenStateException { get; set; }
 
+    public Exception? TapPointException { get; set; }
+
     public Exception? ForceStopException { get; set; }
 
     public FailureArtifactBundle? FailureArtifacts { get; set; }
@@ -679,6 +681,11 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
     public Task<TapPointResult> TapPointAsync(string? label, int? x, int? y, double? xRatio, double? yRatio, int postTapDelayMs)
     {
         TapPointRequests.Add((label, xRatio, yRatio, postTapDelayMs));
+        if (TapPointException is not null)
+        {
+            throw TapPointException;
+        }
+
         return Task.FromResult(new TapPointResult(label, x ?? 0, y ?? 0, xRatio, yRatio, postTapDelayMs));
     }
 

@@ -107,6 +107,7 @@ This family is strongest when the app under test emits structured `LUOTSI_DEVICE
 Use scenario files when you want a repeatable run, and replay commands when you need to triage artifacts after the fact.
 
 ```bash
+luotsi discover --device <serial> --package <app.id> --budget 5m
 luotsi scenario-list --path scenarios
 luotsi scenario-explain --file scenarios/smoke.json
 luotsi run --path scenarios --output-dir ./artifacts/my-run --dry-run --include-tag smoke
@@ -129,7 +130,7 @@ luotsi replay open --artifacts ./artifacts/my-run
 luotsi replay open --last --artifacts ./artifacts
 ```
 
-Use `scenario-validate`, `scenario-explain`, or `run --dry-run` before you execute device work. Use `artifacts list` when you need to rediscover a recent run id, `artifacts info` when you want a non-mutating summary of one bundle, `artifacts open` or `artifacts open --last` when you want the generic artifact browser, and `replay open` or `replay open --last` when you want the replay-specific front door with next actions. Reach for `replay capsule` when one artifact root failed, `replay graph` when you need selector/action/telemetry context, and `replay cluster` when the same failure pattern is repeating across runs.
+Use `discover` when the app surface is not fully known yet and you want a real-device state map plus review-required JSON scenario candidates. Use `scenario-validate`, `scenario-explain`, or `run --dry-run` before you execute device work. Use `artifacts list` when you need to rediscover a recent run id, `artifacts info` when you want a non-mutating summary of one bundle, `artifacts open` or `artifacts open --last` when you want the generic artifact browser, and `replay open` or `replay open --last` when you want the replay-specific front door with next actions. Reach for `replay capsule` when one artifact root failed, `replay graph` when you need selector/action/telemetry context, and `replay cluster` when the same failure pattern is repeating across runs.
 
 ## Related pages
 
@@ -139,6 +140,7 @@ Pair this overview with the focused docs that explain the workflows behind each 
 - [Device readiness](../../getting-started/device-readiness/)
 - [Lab and device claims](../lab-and-device-claims/)
 - [Live view](../../core-workflows/live-view/)
+- [Autonomous discovery](../../core-workflows/autonomous-discovery/)
 - [Scenario playbooks](../scenario-playbooks/)
 - [Wireless and port forwarding](../wireless-and-port-forwarding/)
 - [Output envelopes](../output-envelopes/)

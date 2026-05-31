@@ -28,4 +28,7 @@ public static class ResultSchemas
     public const string ReplayScrub = "luotsi-replay-scrub.v1";
     public const string ReplayGraph = "luotsi-replay-graph.v1";
     public const string ReplayClusters = "luotsi-replay-clusters.v1";
+    public const string DiscoveryResult = "luotsi-discovery-result.v1";
+    public const string DiscoveryMap = "luotsi-discovery-map.v1";
+    public const string DiscoveryEvent = "luotsi-discovery-event.v1";
 }
