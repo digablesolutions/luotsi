@@ -98,6 +98,8 @@ public sealed class DiscoveryCommandTests
         Assert.Contains("KEYCODE_BACK", host.KeyEventRequests);
         Assert.True(fileSystem.FileExists(Path.Join(artifactRoot, "discovery-map.json")));
         Assert.True(fileSystem.FileExists(Path.Join(artifactRoot, "discovery-events.jsonl")));
+        Assert.True(fileSystem.FileExists(Path.Join(artifactRoot, "session-replay.json")));
+        Assert.True(fileSystem.FileExists(Path.Join(artifactRoot, "session-timeline.jsonl")));
         Assert.True(fileSystem.FileExists(scenarioPath));
 
         using var map = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(Path.Join(artifactRoot, "discovery-map.json")));
@@ -120,6 +122,39 @@ public sealed class DiscoveryCommandTests
 
         Assert.Equal(0, validateExitCode);
         Assert.Equal("validated", validateEnvelope.RootElement.GetProperty("data").GetProperty("status").GetString());
+
+        console.OutputLines.Clear();
+        var timelineExitCode = await app.RunAsync([
+            "replay",
+            "timeline",
+            "--artifacts",
+            artifactRoot,
+            "--type",
+            "command_result"
+        ]);
+        using var timelineEnvelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, timelineExitCode);
+        Assert.Equal(ResultSchemas.ReplayTimeline, timelineEnvelope.RootElement.GetProperty("data").GetProperty("schema").GetString());
+        Assert.Equal(2, timelineEnvelope.RootElement.GetProperty("data").GetProperty("event_count").GetInt32());
+
+        console.OutputLines.Clear();
+        var replayDraftPath = Path.Join(artifactRoot, "scenario-candidates", "replay-draft.json");
+        var replayDraftExitCode = await app.RunAsync([
+            "replay",
+            "scenario-draft",
+            "--artifacts",
+            artifactRoot,
+            "--output",
+            replayDraftPath
+        ]);
+        using var replayDraftEnvelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, replayDraftExitCode);
+        Assert.True(fileSystem.FileExists(replayDraftPath));
+        Assert.Contains(
+            replayDraftEnvelope.RootElement.GetProperty("data").GetProperty("suggestions").EnumerateArray(),
+            suggestion => suggestion.GetProperty("kind").GetString() == "coordinate");
     }
 
     [Fact]

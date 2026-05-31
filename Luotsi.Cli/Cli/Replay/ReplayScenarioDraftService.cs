@@ -569,6 +569,7 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
         var step = command switch
         {
             "tap_text" => CreateTextStep(data, "tapText", "tap text"),
+            "tap_point" => CreateTapPointStep(data),
             "wait_visible" => CreateTextStep(data, "waitVisible", "wait visible"),
             "type_text" => CreateTextStep(data, "typeText", "type text"),
             "keyevent" => TryGetString(data, "code", out var code)
@@ -579,6 +580,26 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
         };
 
         return step is null ? [] : [new DraftStep(step, "inspect_command", "command_result", command, command, "medium")];
+    }
+
+    private static ScenarioStep? CreateTapPointStep(JsonElement data)
+    {
+        if (!TryGetInt32(data, "x", out var x) || !TryGetInt32(data, "y", out var y))
+        {
+            return null;
+        }
+
+        var label = TryGetOptionalString(data, "label") ?? "replay-tap-point";
+        return new ScenarioStep(
+            "tap point " + label,
+            "tapPoint",
+            null,
+            null,
+            null,
+            Label: label,
+            X: x,
+            Y: y,
+            PostTapDelayMs: TryGetOptionalInt32(data, "post_tap_delay_ms") ?? TryGetOptionalInt32(data, "postTapDelayMs"));
     }
 
     private static IReadOnlyList<DraftStep> CreateTelemetrySteps(JsonElement data)
@@ -818,6 +839,18 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
 
     private static string? TryGetOptionalString(JsonElement root, string name) =>
         TryGetString(root, name, out var value) ? value : null;
+
+    private static int? TryGetOptionalInt32(JsonElement root, string name) =>
+        TryGetInt32(root, name, out var value) ? value : null;
+
+    private static bool TryGetInt32(JsonElement root, string name, out int value)
+    {
+        value = 0;
+        return root.ValueKind == JsonValueKind.Object &&
+            root.TryGetProperty(name, out var property) &&
+            property.ValueKind == JsonValueKind.Number &&
+            property.TryGetInt32(out value);
+    }
 
     private static bool? TryGetBool(JsonElement root, string name)
     {

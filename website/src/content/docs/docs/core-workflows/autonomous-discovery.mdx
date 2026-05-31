@@ -15,6 +15,7 @@ Discovery writes into the normal Luotsi artifact root:
 
 - `discovery-map.json` with observed screens, safe action candidates, transitions, stop reason, and scenario-candidate provenance
 - `discovery-events.jsonl` with line-oriented `luotsi-discovery-event.v1` records for agents and CI
+- `session-timeline.jsonl` and `session-replay.json` so `replay open`, `replay timeline`, `replay graph`, and `replay scenario-draft` can inspect the discovery run through the normal replay surface
 - `scenario-candidates/discovery-candidate.json` as a review-required starter scenario
 - the normal `index.md` and `index.html` artifact browser entries
 
@@ -41,6 +42,7 @@ luotsi discover --device <serial> --package <app.id> --budget 5m --output-dir ar
 luotsi artifacts open --last --artifacts artifacts
 luotsi scenario-validate --file artifacts/<run>/scenario-candidates/discovery-candidate.json
 luotsi run --file artifacts/<run>/scenario-candidates/discovery-candidate.json --device <serial>
+luotsi replay timeline --artifacts artifacts/<run> --type command_result
 luotsi replay open --artifacts artifacts/<run>
 ```
 

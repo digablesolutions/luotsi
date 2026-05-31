@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
@@ -51,7 +52,8 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
 
         var startedAt = _timeProvider.GetUtcNow();
         var deadline = startedAt.Add(budget);
-        var events = new DiscoveryEventLog(_timeProvider);
+        var replay = new DiscoveryReplayRecorder(artifacts, packageName, startedAt);
+        var events = new DiscoveryEventLog(_timeProvider, replay.Record);
         var screens = new DiscoveryScreenRegistry(_planner);
         var transitions = new List<DiscoveryMapTransition>();
         var successfulActions = new List<DiscoveryExecutedAction>();
@@ -149,6 +151,10 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
                     ["screen_id"] = currentScreen.Screen.Id,
                     ["action_id"] = action.Id,
                     ["selected_event_id"] = actionSelected.EventId,
+                    ["label"] = action.Label,
+                    ["x"] = action.X,
+                    ["y"] = action.Y,
+                    ["post_tap_delay_ms"] = postTapDelayMs,
                     ["status"] = "passed",
                     ["result"] = actionResult
                 });
@@ -161,6 +167,10 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
                     ["screen_id"] = currentScreen.Screen.Id,
                     ["action_id"] = action.Id,
                     ["selected_event_id"] = actionSelected.EventId,
+                    ["label"] = action.Label,
+                    ["x"] = action.X,
+                    ["y"] = action.Y,
+                    ["post_tap_delay_ms"] = postTapDelayMs,
                     ["status"] = "failed",
                     ["error_type"] = ex.GetType().FullName ?? ex.GetType().Name,
                     ["message"] = ex.Message
@@ -266,6 +276,7 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
             ["attempted_action_count"] = attemptedActionKeys.Count,
             ["duration_ms"] = (long)(endedAt - startedAt).TotalMilliseconds
         });
+        await replay.PersistAsync(endedAt, stopReason, 0).ConfigureAwait(false);
 
         var map = new DiscoveryMap(
             ResultSchemas.DiscoveryMap,
@@ -669,7 +680,14 @@ internal sealed class DiscoveryScreenRegistry(DiscoveryPlanner planner)
 internal sealed class DiscoveryEventLog(TimeProvider timeProvider)
 {
     private readonly TimeProvider _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+    private readonly Action<DiscoveryEvent>? _eventSink;
     private readonly List<DiscoveryEvent> _events = [];
+
+    public DiscoveryEventLog(TimeProvider timeProvider, Action<DiscoveryEvent>? eventSink)
+        : this(timeProvider)
+    {
+        _eventSink = eventSink;
+    }
 
     public IReadOnlyList<DiscoveryEvent> Events => _events;
 
@@ -683,9 +701,132 @@ internal sealed class DiscoveryEventLog(TimeProvider timeProvider)
             type,
             data);
         _events.Add(discoveryEvent);
+        _eventSink?.Invoke(discoveryEvent);
         return discoveryEvent;
     }
 }
+
+internal sealed class DiscoveryReplayRecorder
+{
+    private static readonly JsonSerializerOptions ReplayJsonOptions = new()
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        WriteIndented = false
+    };
+
+    private readonly SessionReplayArtifacts _replayArtifacts;
+
+    public DiscoveryReplayRecorder(ArtifactSession artifacts, string packageName, DateTimeOffset startedAt)
+    {
+        _replayArtifacts = new SessionReplayArtifacts(artifacts, "discover", $"discover-{startedAt:yyyyMMddHHmmssfff}", startedAt);
+        _replayArtifacts.SetTarget(packageName);
+    }
+
+    public void Record(DiscoveryEvent discoveryEvent)
+    {
+        _replayArtifacts.RecordSerializedEvent(JsonSerializer.Serialize(ToReplayEvent(discoveryEvent), ReplayJsonOptions));
+    }
+
+    public Task PersistAsync(DateTimeOffset endedAt, string reason, int exitCode) =>
+        _replayArtifacts.PersistAsync(endedAt, reason, exitCode);
+
+    private static DiscoveryReplayTimelineEvent ToReplayEvent(DiscoveryEvent discoveryEvent)
+    {
+        var status = GetString(discoveryEvent.Data, "status");
+        var label = GetString(discoveryEvent.Data, "label");
+        var message = GetString(discoveryEvent.Data, "message") ?? GetString(discoveryEvent.Data, "stop_reason");
+        var command = GetReplayCommand(discoveryEvent.Type);
+        return new DiscoveryReplayTimelineEvent(
+            GetReplayType(discoveryEvent.Type),
+            discoveryEvent.Timestamp,
+            status,
+            GetReplayAction(discoveryEvent.Type),
+            command,
+            label,
+            message,
+            ToOk(status),
+            BuildReplayData(discoveryEvent, command));
+    }
+
+    private static string GetReplayType(string type) =>
+        type switch
+        {
+            "action_result" or "backtrack_result" => "command_result",
+            _ => type
+        };
+
+    private static string? GetReplayCommand(string type) =>
+        type switch
+        {
+            "action_result" => "tap_point",
+            "backtrack_result" => "keyevent",
+            _ => null
+        };
+
+    private static string? GetReplayAction(string type) =>
+        type switch
+        {
+            "discovery_started" => "discover",
+            "app_started" => "startApp",
+            "device_ready" => "preflight",
+            "screen_observed" => "screen_state",
+            "action_selected" => "tapPoint",
+            "action_result" => "tapPoint",
+            "transition_observed" => "screen_delta",
+            "backtrack_result" => "keyevent",
+            "scenario_candidate_generated" => "scenarioDraft",
+            _ => null
+        };
+
+    private static IReadOnlyDictionary<string, object?> BuildReplayData(DiscoveryEvent discoveryEvent, string? command)
+    {
+        var data = new Dictionary<string, object?>(discoveryEvent.Data, StringComparer.Ordinal);
+        if (string.Equals(command, "keyevent", StringComparison.Ordinal) && !data.ContainsKey("code"))
+        {
+            data["code"] = "KEYCODE_BACK";
+        }
+
+        if (string.Equals(command, "tap_point", StringComparison.Ordinal))
+        {
+            CopyIfMissing(data, "x", discoveryEvent.Data);
+            CopyIfMissing(data, "y", discoveryEvent.Data);
+            CopyIfMissing(data, "label", discoveryEvent.Data);
+        }
+
+        return data;
+    }
+
+    private static void CopyIfMissing(Dictionary<string, object?> data, string key, IReadOnlyDictionary<string, object?> source)
+    {
+        if (!data.ContainsKey(key) && source.TryGetValue(key, out var value))
+        {
+            data[key] = value;
+        }
+    }
+
+    private static bool? ToOk(string? status) =>
+        status switch
+        {
+            "passed" => true,
+            "failed" => false,
+            _ => null
+        };
+
+    private static string? GetString(IReadOnlyDictionary<string, object?> data, string key) =>
+        data.TryGetValue(key, out var value) ? value?.ToString() : null;
+}
+
+internal sealed record DiscoveryReplayTimelineEvent(
+    string Type,
+    DateTimeOffset OccurredAt,
+    string? Status,
+    string? Action,
+    string? Command,
+    string? Label,
+    string? Message,
+    bool? Ok,
+    IReadOnlyDictionary<string, object?> Data);
 
 internal sealed record DiscoveryScreenObservation(DiscoveryMapScreen Screen, bool IsNew);
 

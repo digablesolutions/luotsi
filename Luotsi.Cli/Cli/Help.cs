@@ -128,9 +128,10 @@ Examples:
 Output:
   Discover opens the target app unless --no-start is supplied, reads real
   screen state, chooses conservative visible tap targets, records transitions,
-  and writes discovery-map.json plus discovery-events.jsonl into the artifact
-  root. It also writes scenario-candidates/discovery-candidate.json as a
-  review-required starter scenario.
+  and writes discovery-map.json, discovery-events.jsonl, session-timeline.jsonl,
+  and session-replay.json into the artifact root. It also writes
+  scenario-candidates/discovery-candidate.json as a review-required starter
+  scenario.
 
 Notes:
   Discovery is heuristic and deterministic; it does not require an LLM. It
