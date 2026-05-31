@@ -353,7 +353,6 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
 
             currentDepth--;
             activePath.RemoveAt(activePath.Count - 1);
-            currentScreen = null;
         }
 
         if (string.Equals(stopReason, "completed", StringComparison.Ordinal))
