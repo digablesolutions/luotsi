@@ -13,13 +13,14 @@ const docsHref = `${base}docs/`;
 const docsUrl = new URL(docsHref, siteUrl).toString();
 const installHref = `${base}docs/getting-started/installation/`;
 const quickstartHref = `${base}docs/getting-started/quickstart/`;
+const agentLoopHref = `${base}docs/core-workflows/agent-loop-example/`;
 const githubHref = 'https://github.com/digablesolutions/luotsi';
 const releasesHref = `${githubHref}/releases`;
 const engineeringLeadHref = `${base}docs/use-cases/android-automation-for-engineering-leads/`;
 
-const pageTitle = 'Luotsi | Host-Driven Android Automation For AI Agents, Engineers, And CI';
-const pageDescription = 'Luotsi is a host-driven Android automation CLI for AI agents, mobile engineers, and CI systems. Inspect over JSONL, mirror live view, run scenarios, and replay failures with durable artifacts.';
-const keywordsContent = 'android automation cli, ai agent android automation, adb automation, android ui inspection, mobile qa tooling, device lab automation, replay triage';
+const pageTitle = 'Luotsi | Android Device Automation And Replay For Agents And CI';
+const pageDescription = 'Luotsi is a host-driven Android device automation and replay CLI for AI agents and CI. Inspect real devices over JSONL, run lab-coordinated scenarios, and debug from replay artifacts after the session ends.';
+const keywordsContent = 'android automation cli, ai agent android automation, adb automation, android device replay, mobile test artifacts, android ci device lab, jsonl inspect session';
 
 const softwareSchema = {
 	'@context': 'https://schema.org',
@@ -43,11 +44,11 @@ const softwareSchema = {
 		name: 'Digable Solutions',
 	},
 	featureList: [
-		'ADB-first Android device automation',
-		'JSONL inspect sessions for agent workflows',
+		'ADB-first Android real-device automation',
+		'JSONL inspect sessions for agent loops',
+		'Lab-safe scenario execution with device claims',
+		'Replay-ready failure artifacts for CI and agents',
 		'Live mirrored device view with host-side controls',
-		'Scenario playbooks with artifact capture',
-		'Replay-driven failure triage and artifact browsing',
 	],
 	sameAs: [githubHref, docsUrl],
 };
@@ -69,25 +70,49 @@ luotsi doctor --device <serial> --fix`,
 
 const workflowRoutes = [
 	{
-		href: `${base}docs/core-workflows/live-view/`,
-		title: 'Operate the device',
-		summary: 'Open live view when you need the SDL window, hotkeys, screenshots, or a shareable observer session.',
-		cta: 'Use live view',
-		command: 'luotsi view --device <serial>',
-	},
-	{
-		href: `${base}docs/core-workflows/inspect-and-scenarios/`,
-		title: 'Explore the UI',
-		summary: 'Use inspect when an engineer or agent needs structured JSONL snapshots and command results instead of a window.',
+		href: `${base}docs/core-workflows/ai-agent-workflows/`,
+		title: 'Give an agent device state',
+		summary: 'Use inspect when an agent needs JSONL snapshots, command results, and screen deltas from a real Android device.',
 		cta: 'Use inspect',
 		command: 'luotsi inspect --device <serial>',
 	},
 	{
-		href: `${base}docs/core-workflows/replay-and-artifacts/`,
-		title: 'Replay the failure',
-		summary: 'Use scenarios plus replay when the flow needs durable artifacts, reports, and a post-run triage trail.',
-		cta: 'Use replay',
+		href: `${base}docs/use-cases/android-ci-device-lab-workflows/`,
+		title: 'Run CI on real devices',
+		summary: 'Use run when the flow belongs in a checked-in scenario with reports, claims, and a durable artifact root.',
+		cta: 'Use run',
 		command: 'luotsi run --path scenarios --device <serial>',
+	},
+	{
+		href: `${base}docs/core-workflows/replay-and-artifacts/`,
+		title: 'Debug after the session',
+		summary: 'Use replay when the device is gone but the artifacts still need to explain what happened.',
+		cta: 'Use replay',
+		command: 'luotsi replay open --artifacts ./artifacts/<run-id>',
+	},
+];
+
+const positioningQuestions = [
+	{
+		question: 'Can my agent inspect and act on a real Android device?',
+		answer: 'Yes. Start an inspect session, read JSONL screen snapshots and deltas, then send JSON commands such as wait_visible, tap_text, type_text, screenshot, and exit over stdin.',
+		href: agentLoopHref,
+		cta: 'Open the agent loop example',
+		command: 'luotsi inspect --device <serial>',
+	},
+	{
+		question: 'Can CI run this and leave useful evidence?',
+		answer: 'Yes. Run scenario playbooks from the host, claim lab devices when needed, and keep JSON reports, JUnit, screenshots, hierarchy captures, logcat, telemetry, and governance signals under one artifact root.',
+		href: `${base}docs/use-cases/android-ci-device-lab-workflows/`,
+		cta: 'Open CI device lab workflows',
+		command: 'luotsi run --path scenarios --device <serial> --report-junit junit.xml',
+	},
+	{
+		question: 'Can I debug the failure after the device is gone?',
+		answer: 'Yes. Replay commands read saved artifacts, summarize the run, build capsules, scrub timelines, query semantic graphs, cluster repeated failures, and draft follow-up scenarios.',
+		href: `${base}docs/core-workflows/replay-and-artifacts/`,
+		cta: 'Open replay and artifacts',
+		command: 'luotsi replay open --artifacts ./artifacts/<run-id>',
 	},
 ];
 
@@ -109,6 +134,7 @@ const docsBuckets = [
 			{ label: 'Live View', href: `${base}docs/core-workflows/live-view/` },
 			{ label: 'Inspect and Scenarios', href: `${base}docs/core-workflows/inspect-and-scenarios/` },
 			{ label: 'AI Agent Workflows', href: `${base}docs/core-workflows/ai-agent-workflows/` },
+			{ label: 'Agent Loop Example', href: agentLoopHref },
 			{ label: 'Scenario Playbooks', href: `${base}docs/reference/scenario-playbooks/` },
 			{ label: 'Wireless and Port Forwarding', href: `${base}docs/reference/wireless-and-port-forwarding/` },
 		],
@@ -147,6 +173,7 @@ const proofStatus = [
 const utilityLinks = [
 	{ label: 'For Engineering Leads', href: engineeringLeadHref },
 	{ label: 'AI Agent Workflows', href: `${base}docs/core-workflows/ai-agent-workflows/` },
+	{ label: 'Agent Loop Example', href: agentLoopHref },
 	{ label: 'Architecture', href: `${base}docs/concepts/architecture/` },
 	{ label: 'Subsystems', href: `${base}docs/concepts/subsystems/` },
 	{ label: 'Contribution Guide', href: `${base}docs/contributing/guide/` },
@@ -161,9 +188,9 @@ const proofBadges = [
 ];
 
 const inspectSnippet = [
-	'{"type":"screen_snapshot","activity":"fi.systam.visit.MainActivity"}',
-	'{"id":"2","command":"tap_text","text":"Sign in"}',
-	'{"type":"command_result","ok":true,"artifact":"after-tap.png"}',
+	'{"type":"session_started","session_id":"...","started_at":"..."}',
+	'{"type":"screen_snapshot","session_id":"...","state":{"captured_at":"...","element_count":18,"elements":[...]}}',
+	'{"type":"command_result","id":"2","command":"tap_text","ok":true}',
 ];
 
 const replaySnippet = [
@@ -206,12 +233,13 @@ const replaySnippet = [
 						<img src={`${base}luotsi-mark.svg`} alt="Luotsi" />
 						<span class="brand__text">
 							Luotsi
-							<span class="brand__subtext">Host-driven Android automation</span>
+							<span class="brand__subtext">Android automation and replay</span>
 						</span>
 					</a>
 					<nav class="nav-links" aria-label="Primary navigation">
 						<a href={docsHref}>Docs</a>
 						<a href={quickstartHref}>Quickstart</a>
+						<a href={agentLoopHref}>Agent loop</a>
 						<a href={releasesHref}>Releases</a>
 						<a href={githubHref}>GitHub</a>
 					</nav>
@@ -219,23 +247,23 @@ const replaySnippet = [
 
 				<section class="hero">
 					<div class="hero-copy">
-						<div class="eyebrow">Android automation CLI for AI agents, engineers, and CI</div>
-						<h1 class="display">Mirror the device. Inspect the UI. Replay the failure.</h1>
+						<div class="eyebrow">Android device automation and replay for agents and CI</div>
+						<h1 class="display">Inspect the device. Run the scenario. Replay the failure.</h1>
 						<p class="lede">
-							Luotsi keeps orchestration, policy, and diagnostics on the engineer or CI machine while the Android helper stays thin. Use it when you need a real-device Android workflow that both engineers and AI agents can drive, with operator control up front and durable artifacts at the end.
+							Luotsi keeps orchestration, policy, and diagnostics on the host while the Android helper stays thin. Use it when an agent, engineer, or CI runner needs real-device Android state, lab-coordinated execution, and post-run evidence instead of a browser mock or a heavyweight device farm.
 						</p>
 						<div class="hero-actions">
 							<a class="button-link button-link--primary" href={installHref}>Install Luotsi</a>
-							<a class="button-link button-link--secondary" href={quickstartHref}>Read the quickstart</a>
+							<a class="button-link button-link--secondary" href={agentLoopHref}>See the agent loop</a>
 						</div>
 						<div class="hero-support">
 							<div class="support-card">
-								<strong>One tool</strong>
-								<span>Live view, inspect, scenarios, and replay all stay in the same host-side runtime.</span>
+								<strong>Not a scrcpy clone</strong>
+								<span>Live view is one surface in a workflow that also emits state, reports, and replay artifacts.</span>
 							</div>
 							<div class="support-card">
-								<strong>One first command</strong>
-								<span><code>luotsi doctor --device &lt;serial&gt; --fix</code> is the fastest way to prove the device path is ready.</span>
+								<strong>Not an Appium replacement</strong>
+								<span>Luotsi is the host-side evidence and control layer around real Android device runs.</span>
 							</div>
 						</div>
 					</div>
@@ -274,6 +302,28 @@ const replaySnippet = [
 								</div>
 							))}
 						</div>
+					</div>
+				</section>
+
+				<section class="section">
+					<div class="section-header">
+						<div>
+							<div class="section-kicker">Positioning</div>
+							<h2 class="section-title">Three questions the tool has to answer.</h2>
+						</div>
+						<p class="section-copy">
+							Luotsi is useful when the answer needs to be a machine-readable device session and a durable artifact trail, not just a live screen or a pass/fail bit.
+						</p>
+					</div>
+					<div class="question-grid">
+						{positioningQuestions.map((item) => (
+							<article class="question-card">
+								<h3>{item.question}</h3>
+								<p>{item.answer}</p>
+								<code>{item.command}</code>
+								<a class="inline-link" href={item.href}>{item.cta} -&gt;</a>
+							</article>
+						))}
 					</div>
 				</section>
 

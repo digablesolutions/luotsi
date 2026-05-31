@@ -415,7 +415,7 @@ public sealed partial class AppTests
     {
         var console = new FakeConsole();
         var fileSystem = new FakeFileSystem();
-                var replayRoot = SeedReplaySummaryArtifacts(fileSystem);
+        var replayRoot = SeedReplaySummaryArtifacts(fileSystem);
         var app = new App(new AppDependencies
         {
             Console = console,
@@ -934,6 +934,42 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayScenarioDraft_Uses_Inspect_Selector_Metadata_When_Result_Data_Has_No_Text()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = "/tmp/inspect-selector-replay-root";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), """
+        {"type":"session_started","session_id":"inspect-session","started_at":"2026-05-18T10:00:00Z"}
+        {"type":"command_result","session_id":"inspect-session","id":"1","command":"tap_text","ok":true,"started_at":"2026-05-18T10:00:01Z","ended_at":"2026-05-18T10:00:02Z","selector":{"text":"Files","text_match":"exact","resource_id":"com.elotouch.home:id/tvAppName","resource_id_match":"exact","class_name":"android.widget.TextView","class_name_match":"exact"},"data":{"x":814,"y":315}}
+        {"type":"session_ended","session_id":"inspect-session","ended_at":"2026-05-18T10:00:09Z","reason":"client_exit"}
+        """);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "scenario-draft", "--artifacts", replayRoot, "--output", "/tmp/selector-draft.json", "--write-markdown"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        var step = data.GetProperty("scenario").GetProperty("steps")[0];
+        Assert.Equal("tapText", step.GetProperty("action").GetString());
+        Assert.Equal("Files", step.GetProperty("text").GetString());
+        var origin = data.GetProperty("step_origins")[0];
+        Assert.Contains("resource_id:exact=com.elotouch.home:id/tvAppName", origin.GetProperty("detail").GetString(), StringComparison.Ordinal);
+        var reviewItems = data.GetProperty("review_items").EnumerateArray().ToArray();
+        Assert.Contains(reviewItems, item =>
+            item.GetProperty("category").GetString() == "selector" &&
+            item.GetProperty("message").GetString()!.Contains("selector metadata", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("resource_id:exact=com.elotouch.home:id/tvAppName", await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "scenario-draft.md")), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayScenarioDraft_Promotes_ScreenDelta_Text_Into_Waits()
     {
         var console = new FakeConsole();
@@ -1412,6 +1448,36 @@ public sealed partial class AppTests
         Assert.Equal("scenario_step_failed", evt.GetProperty("type").GetString());
         Assert.True(evt.GetProperty("failure_relevant").GetBoolean());
         Assert.Contains("error_message=not visible", evt.GetProperty("detail").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayTimeline_Exposes_Inspect_Selector_Metadata()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = "/tmp/inspect-selector-timeline-root";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), """
+        {"type":"command_result","session_id":"inspect-session","id":"1","command":"tap_text","ok":true,"started_at":"2026-05-18T10:00:01Z","ended_at":"2026-05-18T10:00:02Z","selector":{"text":"Files","text_match":"exact","resource_id":"com.elotouch.home:id/tvAppName","resource_id_match":"exact","class_name":"android.widget.TextView","class_name_match":"exact","region":{"left":0,"top":0,"right":1000,"bottom":600}},"data":{"x":814,"y":315}}
+        """);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "timeline", "--artifacts", replayRoot, "--type", "command_result", "--contains", "tvAppName"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var evt = Assert.Single(envelope.RootElement.GetProperty("data").GetProperty("events").EnumerateArray());
+        Assert.Contains("resource_id:exact=com.elotouch.home:id/tvAppName", evt.GetProperty("detail").GetString(), StringComparison.Ordinal);
+        var properties = evt.GetProperty("properties");
+        Assert.Equal("Files", properties.GetProperty("selector.text").GetString());
+        Assert.Equal("exact", properties.GetProperty("selector.text_match").GetString());
+        Assert.Equal("com.elotouch.home:id/tvAppName", properties.GetProperty("selector.resource_id").GetString());
+        Assert.Equal("0", properties.GetProperty("selector.region.left").GetString());
     }
 
     [Fact]
@@ -3040,16 +3106,26 @@ public sealed partial class AppTests
     public async Task RunAsync_Missing_Scenario_File_Returns_Usage_Error_Envelope()
     {
         var console = new FakeConsole();
-        var app = new App(new AppDependencies { Console = console });
-        var file = Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}.json");
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            TimeProvider = timeProvider
+        });
+        var file = "/tmp/missing.json";
 
-        var exitCode = await app.RunAsync(["run", "--file", file]);
+        var exitCode = await app.RunAsync(["run", "--file", file, "--artifacts", "/tmp/test-artifacts"]);
         using var envelope = console.ParseSingleOutputAsJson();
 
         Assert.Equal(2, exitCode);
         Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
         Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
         Assert.Contains("does not exist", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        var artifactRoot = envelope.RootElement.GetProperty("artifacts").GetProperty("artifact_root").GetString();
+        Assert.Equal(Path.Join("/tmp/test-artifacts", "20260515-120000-run"), artifactRoot);
+        Assert.True(fileSystem.DirectoryExists(artifactRoot!));
     }
 
 
@@ -3382,6 +3458,115 @@ public sealed partial class AppTests
         Assert.Contains(SessionEventTypes.Inspect.CommandResult, timeline, StringComparison.Ordinal);
         Assert.Contains(SessionEventTypes.Inspect.ScreenDelta, timeline, StringComparison.Ordinal);
         Assert.Contains(SessionEventTypes.Inspect.SessionEnded, timeline, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_Inspect_Accepts_Rich_Element_Selectors()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        console.EnqueueInput(
+            "{\"id\":\"1\",\"command\":\"wait_visible\",\"text\":\"Files\",\"text_match\":\"exact\",\"resource_id\":\"com.elotouch.home:id/tvAppName\",\"class_name\":\"android.widget.TextView\",\"region\":{\"left\":0,\"top\":0,\"right\":1000,\"bottom\":600},\"timeout_sec\":5}",
+            "{\"id\":\"2\",\"command\":\"tap_text\",\"text\":\"Files\",\"text_match\":\"exact\",\"resource_id\":\"com.elotouch.home:id/tvAppName\",\"class_name\":\"android.widget.TextView\",\"timeout_sec\":5}",
+            "{\"id\":\"3\",\"command\":\"exit\"}");
+        var state = new ScreenState(
+            timeProvider.GetUtcNow(),
+            2,
+            [
+                new ScreenElement("Large files", null, null, "android.widget.CompoundButton", true, true, 420, 168, 594, 240),
+                new ScreenElement("Files", null, "com.elotouch.home:id/tvAppName", "android.widget.TextView", true, false, 697, 296, 931, 335)
+            ]);
+        var host = new FakeDeviceHost(state, state, state, state, state);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            TimeProvider = timeProvider,
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var exitCode = await app.RunAsync(["inspect", "--artifacts", "/tmp/test-artifacts"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(2, host.SelectorWaitRequests.Count);
+        Assert.Single(host.SelectorTapRequests);
+        Assert.All(host.SelectorWaitRequests, selector =>
+        {
+            Assert.Equal("Files", selector.Text);
+            Assert.Equal(ScreenElementMatchModes.Exact, selector.TextMatch);
+            Assert.Equal("com.elotouch.home:id/tvAppName", selector.ResourceId);
+            Assert.Equal("android.widget.TextView", selector.ClassName);
+        });
+        using var waitResult = JsonDocument.Parse(console.OutputLines[2]);
+        Assert.True(waitResult.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("Files", waitResult.RootElement.GetProperty("data").GetProperty("text").GetString());
+        var selector = waitResult.RootElement.GetProperty("selector");
+        Assert.Equal("Files", selector.GetProperty("text").GetString());
+        Assert.Equal("exact", selector.GetProperty("text_match").GetString());
+        Assert.Equal("com.elotouch.home:id/tvAppName", selector.GetProperty("resource_id").GetString());
+        Assert.False(selector.TryGetProperty("has_criteria", out _));
+    }
+
+    [Fact]
+    public async Task RunAsync_Inspect_Rejects_Partial_Flat_Region_Without_Legacy_Fallback()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        console.EnqueueInput(
+            "{\"id\":\"1\",\"command\":\"tap_text\",\"text\":\"Files\",\"left\":0,\"top\":0,\"timeout_sec\":5}",
+            "{\"id\":\"2\",\"command\":\"exit\"}");
+        var state = new ScreenState(
+            timeProvider.GetUtcNow(),
+            1,
+            [new ScreenElement("Files", null, "com.elotouch.home:id/tvAppName", "android.widget.TextView", true, false, 697, 296, 931, 335)]);
+        var host = new FakeDeviceHost(state);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            TimeProvider = timeProvider,
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var exitCode = await app.RunAsync(["inspect"]);
+
+        Assert.Equal(0, exitCode);
+        using var commandResult = JsonDocument.Parse(console.OutputLines[2]);
+        Assert.False(commandResult.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("usage_error", commandResult.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("left, top, right, and bottom", commandResult.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Empty(host.TapTextRequests);
+        Assert.Empty(host.SelectorTapRequests);
+    }
+
+    [Fact]
+    public async Task RunAsync_Inspect_Rejects_Invalid_Selector_Match_Mode()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        console.EnqueueInput(
+            "{\"id\":\"1\",\"command\":\"wait_visible\",\"text\":\"Files\",\"text_match\":\"regex\",\"timeout_sec\":5}",
+            "{\"id\":\"2\",\"command\":\"exit\"}");
+        var state = new ScreenState(
+            timeProvider.GetUtcNow(),
+            1,
+            [new ScreenElement("Files", null, "com.elotouch.home:id/tvAppName", "android.widget.TextView", true, false, 697, 296, 931, 335)]);
+        var host = new FakeDeviceHost(state);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            TimeProvider = timeProvider,
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var exitCode = await app.RunAsync(["inspect"]);
+
+        Assert.Equal(0, exitCode);
+        using var commandResult = JsonDocument.Parse(console.OutputLines[2]);
+        Assert.False(commandResult.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("usage_error", commandResult.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("text_match", commandResult.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Empty(host.SelectorWaitRequests);
     }
 
     [Fact]

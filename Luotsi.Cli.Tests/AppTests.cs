@@ -41,8 +41,8 @@ public sealed partial class AppTests
 
     private static string CreateUiDumpWithNodes(params string[] nodes) => $"<hierarchy>{string.Join(string.Empty, nodes)}</hierarchy>";
 
-    private static string CreateUiNode(string text, string contentDescription, string className, bool clickable, int left, int top, int right, int bottom) =>
-        $"<node text=\"{text}\" content-desc=\"{contentDescription}\" resource-id=\"\" class=\"{className}\" enabled=\"true\" clickable=\"{clickable.ToString().ToLowerInvariant()}\" bounds=\"[{left},{top}][{right},{bottom}]\" />";
+    private static string CreateUiNode(string text, string contentDescription, string className, bool clickable, int left, int top, int right, int bottom, string resourceId = "") =>
+        $"<node text=\"{text}\" content-desc=\"{contentDescription}\" resource-id=\"{resourceId}\" class=\"{className}\" enabled=\"true\" clickable=\"{clickable.ToString().ToLowerInvariant()}\" bounds=\"[{left},{top}][{right},{bottom}]\" />";
 
     private static ScreenState CreateScreenState(DateTimeOffset capturedAt, string text) =>
         new(capturedAt, 1, [new ScreenElement(text, null, $"id/{text}", "android.widget.TextView", true, true, 0, 0, 100, 100)]);

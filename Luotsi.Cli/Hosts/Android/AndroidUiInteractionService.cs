@@ -65,6 +65,55 @@ internal sealed class AndroidUiInteractionService(
         return await TapAsync(element.CenterX.ToString(), element.CenterY.ToString()).ConfigureAwait(false);
     }
 
+    public async Task<ScreenElement> WaitVisibleAsync(ScreenElementSelector selector, int timeoutSec)
+    {
+        var validatedSelector = ScreenElementSelectorValidator.Validate(selector, "waitVisible");
+        var validatedTimeoutSec = RequirePositive(timeoutSec, "waitVisible requires timeoutSec greater than zero.");
+        var deadline = _timeProvider.GetUtcNow().AddSeconds(validatedTimeoutSec);
+        IReadOnlyList<ScreenElement> lastCandidates = [];
+        var attempt = 0;
+
+        while (_timeProvider.GetUtcNow() < deadline)
+        {
+            attempt++;
+            var snapshotPrefix = $"wait-visible-{attempt:000}";
+            ScreenCapture capture;
+
+            try
+            {
+                capture = await _screenStateReadModel.CapturePollingScreenStateAsync(snapshotPrefix).ConfigureAwait(false);
+            }
+            catch (InvalidOperationException ex) when (AndroidScreenCaptureService.IsRetryableHierarchyDumpFailure(ex))
+            {
+                await _delay.DelayAsync(AndroidRuntimeDefaults.UiPollDelayMs).ConfigureAwait(false);
+                continue;
+            }
+
+            var candidates = FindSelectorCandidates(capture.State, validatedSelector);
+            lastCandidates = candidates.Select(static candidate => candidate.Element).ToArray();
+            if (TrySelectCandidate(validatedSelector, candidates, out var match))
+            {
+                await _screenStateReadModel.PersistPollingArtifactsAsync(capture, snapshotPrefix).ConfigureAwait(false);
+                return match;
+            }
+
+            if (lastCandidates.Count > 1 && !validatedSelector.AllowAmbiguous)
+            {
+                throw CreateAmbiguousSelectorException(validatedSelector, lastCandidates);
+            }
+
+            await _delay.DelayAsync(AndroidRuntimeDefaults.UiPollDelayMs).ConfigureAwait(false);
+        }
+
+        throw new TimeoutException($"Timed out after {validatedTimeoutSec}s waiting for selector {validatedSelector.Describe()}. Last matches: {DescribeCandidates(lastCandidates)}");
+    }
+
+    public async Task<TapResult> TapElementAsync(ScreenElementSelector selector, int timeoutSec)
+    {
+        var element = await WaitVisibleAsync(selector, timeoutSec).ConfigureAwait(false);
+        return await TapAsync(element.CenterX.ToString(), element.CenterY.ToString()).ConfigureAwait(false);
+    }
+
     public async Task<TapResult> TapAsync(string x, string y)
     {
         if (!int.TryParse(x, out var parsedX))
@@ -396,6 +445,40 @@ internal sealed class AndroidUiInteractionService(
         return candidates.Length > 1 ? throw new InvalidOperationException($"Multiple visible elements matched '{text}' for {role}.") : candidates[0];
     }
 
+    private static IReadOnlyList<SelectorCandidate> FindSelectorCandidates(ScreenState state, ScreenElementSelector selector) =>
+        state.Elements
+            .Select(element => new SelectorCandidate(element, element.GetSelectorMatchScore(selector)))
+            .Where(static candidate => candidate.Score > 0)
+            .OrderByDescending(static candidate => candidate.Score)
+            .ThenBy(static candidate => candidate.Element.Top)
+            .ThenBy(static candidate => candidate.Element.Left)
+            .ToArray();
+
+    private static bool TrySelectCandidate(ScreenElementSelector selector, IReadOnlyList<SelectorCandidate> candidates, out ScreenElement match)
+    {
+        match = null!;
+        if (candidates.Count == 0)
+        {
+            return false;
+        }
+
+        if (candidates.Count == 1 || selector.AllowAmbiguous)
+        {
+            match = candidates[0].Element;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static UsageException CreateAmbiguousSelectorException(ScreenElementSelector selector, IReadOnlyList<ScreenElement> candidates) =>
+        new($"Selector {selector.Describe()} matched {candidates.Count} elements. Refine with resource_id, class_name, content_description, or region; or set allow_ambiguous=true. Candidates: {DescribeCandidates(candidates)}");
+
+    private static string DescribeCandidates(IReadOnlyList<ScreenElement> candidates) =>
+        candidates.Count == 0
+            ? "none"
+            : string.Join("; ", candidates.Take(5).Select(static element => $"{element.StableId} [{element.Left},{element.Top},{element.Right},{element.Bottom}]"));
+
     private static string RequireNonBlank(string value, string message) => string.IsNullOrWhiteSpace(value) ? throw new UsageException(message) : value;
 
     private static int RequirePositive(int value, string message) => value <= 0 ? throw new UsageException(message) : value;
@@ -403,4 +486,6 @@ internal sealed class AndroidUiInteractionService(
     private static int RequireNonNegative(int value, string message) => value < 0 ? throw new UsageException(message) : value;
 
     private static string ShellQuote(string value) => "'" + value.Replace("'", "'\\''", StringComparison.Ordinal) + "'";
+
+    private sealed record SelectorCandidate(ScreenElement Element, int Score);
 }

@@ -9,7 +9,7 @@ export default defineConfig({
 	integrations: [
 		starlight({
 			title: 'Luotsi',
-			description: 'Host-driven Android device automation, inspection, and live view.',
+			description: 'Host-driven Android device automation and replay for agents and CI.',
 			disable404Route: true,
 			logo: {
 				src: './src/assets/luotsi-mark.svg',
@@ -34,6 +34,7 @@ export default defineConfig({
 						{ label: 'Live View', slug: 'docs/core-workflows/live-view' },
 						{ label: 'Inspect And Scenarios', slug: 'docs/core-workflows/inspect-and-scenarios' },
 						{ label: 'AI Agent Workflows', slug: 'docs/core-workflows/ai-agent-workflows' },
+						{ label: 'Agent Loop Example', slug: 'docs/core-workflows/agent-loop-example' },
 						{ label: 'Autonomous Discovery', slug: 'docs/core-workflows/autonomous-discovery' },
 						{ label: 'Replay And Artifacts', slug: 'docs/core-workflows/replay-and-artifacts' },
 					],

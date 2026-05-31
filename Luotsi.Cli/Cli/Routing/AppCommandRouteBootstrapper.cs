@@ -38,6 +38,7 @@ internal sealed class AppCommandRouteBootstrapper(
             ?? CliDefaults.DefaultAdbExecutable;
         var artifacts = CreateArtifacts(options);
         context.Artifacts = artifacts;
+        ValidateHostedCommandPrerequisites(options);
 
         return new AppCommandRouteSetup(adbExecutable, artifacts);
     }

@@ -5,6 +5,8 @@ description: Build agent loops on top of Luotsi's JSONL sessions, scenario runs,
 
 Luotsi is useful for agent builders because it exposes the same real-device runtime through machine-readable JSON and JSONL that engineers already use interactively. The control loop stays on the host machine, the Android helper stays thin, and you can move from exploration to repeatable runs without swapping stacks.
 
+If you want the smallest working integration first, start with [Agent Loop Example](../agent-loop-example/). It shows a host process reading `inspect` JSONL from stdout and writing JSON commands to stdin.
+
 ## Pick the right surface
 
 | Surface | Use it when | Primary output |
@@ -34,6 +36,18 @@ luotsi inspect --device <serial>
 ```
 
 `inspect` emits structured JSONL events such as `session_started`, `screen_snapshot`, `command_result`, `screen_delta`, and `session_ended`. That makes it the best default surface when an agent needs to reason step by step instead of jumping straight into a scenario file.
+
+The input side is also line-oriented JSON:
+
+```json
+{"id":"1","command":"wait_visible","text":"Sign in","text_match":"exact","timeout_sec":15}
+{"id":"2","command":"tap_text","text":"Sign in","text_match":"exact","timeout_sec":5}
+{"id":"2b","command":"tap_element","text":"Files","text_match":"exact","resource_id":"com.elotouch.home:id/tvAppName","class_name":"android.widget.TextView","timeout_sec":5}
+{"id":"3","command":"screenshot","label":"after-sign-in"}
+{"id":"4","command":"exit"}
+```
+
+Use `text_match: "exact"` when a short label could otherwise match a longer string. Add `resource_id`, `content_description`, `class_name`, or `region` to disambiguate repeated labels; Luotsi reports ambiguous selectors unless you explicitly set `allow_ambiguous: true`.
 
 ### 3. Promote stable behavior into a scenario
 
@@ -73,6 +87,7 @@ The public references that matter most are:
 
 - [Output Envelopes](../../reference/output-envelopes/)
 - [CLI Command Groups](../../reference/cli-command-groups/)
+- [Agent Loop Example](../agent-loop-example/)
 - [Replay and Artifacts](../replay-and-artifacts/)
 - [Inspect and Scenarios](../inspect-and-scenarios/)
 - [Autonomous Discovery](../autonomous-discovery/)

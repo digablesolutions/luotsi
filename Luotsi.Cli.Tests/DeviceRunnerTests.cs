@@ -144,6 +144,73 @@ public sealed partial class AppTests
         Assert.Equal(453, element.Top);
     }
 
+    [Fact]
+    public async Task WaitVisibleAsync_Selector_Exact_Text_Does_Not_Match_Containing_Text()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.EnqueueShellResult(new ProcessResult(
+            0,
+            CreateUiDumpWithNodes(
+                CreateUiNode(text: "Large files", contentDescription: string.Empty, className: "android.widget.CompoundButton", clickable: true, left: 420, top: 168, right: 594, bottom: 240),
+                CreateUiNode(text: "Files", contentDescription: string.Empty, className: "android.widget.TextView", clickable: false, left: 697, top: 296, right: 931, bottom: 335)),
+            string.Empty));
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["wait-visible"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
+
+        var element = await runner.WaitVisibleAsync(new ScreenElementSelector(Text: "Files", TextMatch: ScreenElementMatchModes.Exact), 1);
+
+        Assert.Equal("Files", element.Text);
+        Assert.Equal(697, element.Left);
+    }
+
+    [Fact]
+    public async Task WaitVisibleAsync_Selector_Reports_Ambiguous_Matches()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.EnqueueShellResult(new ProcessResult(
+            0,
+            CreateUiDumpWithNodes(
+                CreateUiNode(text: "Downloads", contentDescription: string.Empty, className: "android.widget.TextView", clickable: false, left: 36, top: 27, right: 185, bottom: 68),
+                CreateUiNode(text: "Downloads", contentDescription: string.Empty, className: "android.widget.TextView", clickable: false, left: 96, top: 555, right: 372, bottom: 584)),
+            string.Empty));
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["wait-visible"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
+
+        var error = await Assert.ThrowsAsync<UsageException>(() =>
+            runner.WaitVisibleAsync(new ScreenElementSelector(Text: "Downloads", TextMatch: ScreenElementMatchModes.Exact), 1));
+
+        Assert.Contains("matched 2 elements", error.Message, StringComparison.Ordinal);
+        Assert.Contains("allow_ambiguous=true", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TapElementAsync_Uses_Resource_Id_And_Region_Selector()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var adb = new FakeAdbClient();
+        adb.EnqueueShellResult(new ProcessResult(
+            0,
+            CreateUiDumpWithNodes(
+                CreateUiNode(text: "Files", contentDescription: string.Empty, resourceId: "com.elotouch.home:id/tvAppName", className: "android.widget.TextView", clickable: false, left: 50, top: 100, right: 250, bottom: 140),
+                CreateUiNode(text: "Files", contentDescription: string.Empty, resourceId: "android:id/title", className: "android.widget.TextView", clickable: false, left: 96, top: 555, right: 372, bottom: 584)),
+            string.Empty));
+        adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
+        var runner = new DeviceRunner(adb, ArtifactSession.Create(CliOptions.Parse(["wait-visible"]), fileSystem, timeProvider), timeProvider, new FakeDelay(timeProvider), fileSystem);
+
+        var tap = await runner.TapElementAsync(new ScreenElementSelector(
+            Text: "Files",
+            TextMatch: ScreenElementMatchModes.Exact,
+            ResourceId: "com.elotouch.home:id/tvAppName",
+            ClassName: "android.widget.TextView",
+            Region: new Bounds(0, 0, 400, 300)), 1);
+
+        Assert.Equal(150, tap.X);
+        Assert.Equal(120, tap.Y);
+    }
+
 
     [Fact]
     public async Task WaitVisibleAsync_Prefers_Result_Row_Over_EditText_Query_Echo()
@@ -371,14 +438,14 @@ public sealed partial class AppTests
             "I/flutter (17495): Log.PRINTING_SUCCESSFUL: [Main Isolate] Printing successful");
         var artifacts = ArtifactSession.Create(CliOptions.Parse(["assert-event"]), fileSystem, timeProvider);
         var runner = new DeviceRunner(adb, artifacts, timeProvider, new FakeDelay(timeProvider), fileSystem);
-                var observedSince = timeProvider.GetUtcNow().AddSeconds(-2);
+        var observedSince = timeProvider.GetUtcNow().AddSeconds(-2);
 
-                var result = await runner.AssertEventAsync("PRINTING_SUCCESSFUL", [], null, 5, observedSince);
+        var result = await runner.AssertEventAsync("PRINTING_SUCCESSFUL", [], null, 5, observedSince);
 
         Assert.Equal("I/flutter (17495): Log.PRINTING_SUCCESSFUL: [Main Isolate] Printing successful", result.MatchedLine);
         Assert.Empty(adb.RunCommands);
         Assert.Single(adb.StreamingLogRequests);
-                Assert.Equal(observedSince, adb.StreamingLogRequests[0].Since);
+        Assert.Equal(observedSince, adb.StreamingLogRequests[0].Since);
         Assert.True(adb.StreamingLogRequests[0].HasStopCondition);
         Assert.False(adb.StreamingLogRequests[0].HasLineObserver);
         Assert.True(fileSystem.FileExists(Path.Combine(artifacts.Root, "assert-event.txt")));

@@ -124,6 +124,12 @@ public sealed class DeviceRunner(
     public async Task<TapResult> TapTextAsync(string text, int timeoutSec)
         => await UiInteractions.TapTextAsync(text, timeoutSec).ConfigureAwait(false);
 
+    public async Task<ScreenElement> WaitVisibleAsync(ScreenElementSelector selector, int timeoutSec)
+        => await UiInteractions.WaitVisibleAsync(selector, timeoutSec).ConfigureAwait(false);
+
+    public async Task<TapResult> TapElementAsync(ScreenElementSelector selector, int timeoutSec)
+        => await UiInteractions.TapElementAsync(selector, timeoutSec).ConfigureAwait(false);
+
     /// <summary>
     /// Sends a tap at absolute coordinates.
     /// </summary>
