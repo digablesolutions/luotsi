@@ -19,6 +19,7 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
     private const string ScenarioCandidateFileName = "discovery-candidate.json";
     private const int DefaultBudgetSeconds = 300;
     private const int DefaultMaxActions = 25;
+    private const int DefaultMaxDepth = 2;
     private const int DefaultPostTapDelayMs = 300;
     private static readonly JsonSerializerOptions EventJsonOptions = new(AppJson.Options)
     {
@@ -39,10 +40,16 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
         var activity = NormalizeOptional(options.Get("activity"));
         var budget = ParseBudget(options.Get("budget"));
         var maxActions = options.Int("max-actions", DefaultMaxActions);
+        var maxDepth = options.Int("max-depth", DefaultMaxDepth);
         var postTapDelayMs = options.Int("post-tap-delay-ms", DefaultPostTapDelayMs);
         if (maxActions <= 0)
         {
             throw new UsageException("Option --max-actions must be greater than zero.");
+        }
+
+        if (maxDepth < 0)
+        {
+            throw new UsageException("Option --max-depth must be zero or greater.");
         }
 
         if (postTapDelayMs < 0)
@@ -57,7 +64,11 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
         var screens = new DiscoveryScreenRegistry(_planner);
         var transitions = new List<DiscoveryMapTransition>();
         var successfulActions = new List<DiscoveryExecutedAction>();
+        var scenarioOperations = new List<DiscoveryScenarioOperation>();
         var attemptedActionKeys = new HashSet<string>(StringComparer.Ordinal);
+        var activePath = new List<string>();
+        var currentDepth = 0;
+        DiscoveryScreenObservation? currentScreen = null;
         var stopReason = "completed";
         PreflightResult? readiness = null;
 
@@ -67,6 +78,7 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
             ["activity"] = activity,
             ["budget_ms"] = (long)budget.TotalMilliseconds,
             ["max_actions"] = maxActions,
+            ["max_depth"] = maxDepth,
             ["artifact_root"] = artifacts.Root
         });
 
@@ -96,46 +108,138 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
             ["display_orientation"] = readiness.DisplayOrientation
         });
 
-        while (attemptedActionKeys.Count < maxActions && _timeProvider.GetUtcNow() < deadline)
+        async Task<DiscoveryScreenObservation?> TryReadScreenAsync(string? afterActionId = null)
         {
-            DiscoveryScreenObservation currentScreen;
             try
             {
-                currentScreen = screens.Observe(await runner.GetScreenStateAsync().ConfigureAwait(false));
+                return screens.Observe(await runner.GetScreenStateAsync().ConfigureAwait(false));
             }
             catch (JsonException ex)
             {
-                stopReason = AddScreenStateFailure(events, ex);
-                break;
+                stopReason = AddScreenStateFailure(events, ex, afterActionId);
+                return null;
             }
             catch (InvalidOperationException ex)
             {
-                stopReason = AddScreenStateFailure(events, ex);
-                break;
+                stopReason = AddScreenStateFailure(events, ex, afterActionId);
+                return null;
             }
             catch (TimeoutException ex)
             {
-                stopReason = AddScreenStateFailure(events, ex);
-                break;
+                stopReason = AddScreenStateFailure(events, ex, afterActionId);
+                return null;
             }
             catch (IOException ex)
             {
-                stopReason = AddScreenStateFailure(events, ex);
+                stopReason = AddScreenStateFailure(events, ex, afterActionId);
+                return null;
+            }
+        }
+
+        async Task<bool> TryBacktrackAsync(string fromScreenId, string toScreenId, string reason)
+        {
+            try
+            {
+                var back = await runner.KeyEventAsync("KEYCODE_BACK").ConfigureAwait(false);
+                var backtrackEvent = AddBacktrackPassed(events, fromScreenId, toScreenId, back, reason);
+                scenarioOperations.Add(new DiscoveryScenarioBacktrackOperation(fromScreenId, toScreenId, backtrackEvent.EventId));
+                return true;
+            }
+            catch (UsageException ex)
+            {
+                stopReason = AddBacktrackFailure(events, fromScreenId, toScreenId, ex, reason);
+                return false;
+            }
+            catch (InvalidOperationException ex)
+            {
+                stopReason = AddBacktrackFailure(events, fromScreenId, toScreenId, ex, reason);
+                return false;
+            }
+            catch (TimeoutException ex)
+            {
+                stopReason = AddBacktrackFailure(events, fromScreenId, toScreenId, ex, reason);
+                return false;
+            }
+            catch (IOException ex)
+            {
+                stopReason = AddBacktrackFailure(events, fromScreenId, toScreenId, ex, reason);
+                return false;
+            }
+        }
+
+        while (true)
+        {
+            if (attemptedActionKeys.Count >= maxActions)
+            {
+                stopReason = "action_limit_reached";
                 break;
             }
 
-            events.Add("screen_observed", new Dictionary<string, object?>
+            if (_timeProvider.GetUtcNow() >= deadline)
             {
-                ["screen_id"] = currentScreen.Screen.Id,
-                ["signature"] = currentScreen.Screen.Signature,
-                ["element_count"] = currentScreen.Screen.ElementCount,
-                ["actionable_count"] = currentScreen.Screen.ActionableCount,
-                ["new_screen"] = currentScreen.IsNew
-            });
+                stopReason = "budget_expired";
+                break;
+            }
+
+            if (currentScreen is null)
+            {
+                currentScreen = await TryReadScreenAsync().ConfigureAwait(false);
+                if (currentScreen is null)
+                {
+                    break;
+                }
+
+                if (activePath.Count == 0)
+                {
+                    activePath.Add(currentScreen.Screen.Id);
+                }
+                else
+                {
+                    activePath[^1] = currentScreen.Screen.Id;
+                }
+
+                AddScreenObserved(events, currentScreen);
+            }
+
+            if (currentDepth >= maxDepth)
+            {
+                if (currentDepth == 0)
+                {
+                    stopReason = "depth_limit_reached";
+                    break;
+                }
+
+                var fromScreenId = activePath[^1];
+                var toScreenId = activePath[^2];
+                if (!await TryBacktrackAsync(fromScreenId, toScreenId, "depth_limit_reached").ConfigureAwait(false))
+                {
+                    break;
+                }
+
+                currentDepth--;
+                activePath.RemoveAt(activePath.Count - 1);
+                currentScreen = null;
+                continue;
+            }
 
             var action = _planner.SelectNextAction(currentScreen.Screen, attemptedActionKeys);
             if (action is null)
             {
+                if (currentDepth > 0)
+                {
+                    var fromScreenId = activePath[^1];
+                    var toScreenId = activePath[^2];
+                    if (!await TryBacktrackAsync(fromScreenId, toScreenId, "screen_exhausted").ConfigureAwait(false))
+                    {
+                        break;
+                    }
+
+                    currentDepth--;
+                    activePath.RemoveAt(activePath.Count - 1);
+                    currentScreen = null;
+                    continue;
+                }
+
                 stopReason = "no_new_actions";
                 break;
             }
@@ -152,10 +256,9 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
                 ["confidence"] = action.Confidence
             });
 
-            object? actionResult = null;
             try
             {
-                actionResult = await runner.TapPointAsync(action.Label, action.X, action.Y, null, null, postTapDelayMs).ConfigureAwait(false);
+                var actionResult = await runner.TapPointAsync(action.Label, action.X, action.Y, null, null, postTapDelayMs).ConfigureAwait(false);
                 events.Add("action_result", new Dictionary<string, object?>
                 {
                     ["screen_id"] = currentScreen.Screen.Id,
@@ -190,29 +293,9 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
                 break;
             }
 
-            DiscoveryScreenObservation nextScreen;
-            try
+            var nextScreen = await TryReadScreenAsync(action.Id).ConfigureAwait(false);
+            if (nextScreen is null)
             {
-                nextScreen = screens.Observe(await runner.GetScreenStateAsync().ConfigureAwait(false));
-            }
-            catch (JsonException ex)
-            {
-                stopReason = AddScreenStateFailure(events, ex, action.Id);
-                break;
-            }
-            catch (InvalidOperationException ex)
-            {
-                stopReason = AddScreenStateFailure(events, ex, action.Id);
-                break;
-            }
-            catch (TimeoutException ex)
-            {
-                stopReason = AddScreenStateFailure(events, ex, action.Id);
-                break;
-            }
-            catch (IOException ex)
-            {
-                stopReason = AddScreenStateFailure(events, ex, action.Id);
                 break;
             }
 
@@ -226,6 +309,7 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
                 changed,
                 actionSelected.EventId));
             successfulActions.Add(new DiscoveryExecutedAction(action, currentScreen.Screen.Id, nextScreen.Screen.Id, changed, actionSelected.EventId));
+            scenarioOperations.Add(new DiscoveryScenarioTapOperation(action, actionSelected.EventId));
             events.Add("transition_observed", new Dictionary<string, object?>
             {
                 ["transition_id"] = transitionId,
@@ -234,53 +318,61 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
                 ["action_id"] = action.Id,
                 ["changed"] = changed
             });
+            AddScreenObserved(events, nextScreen);
 
-            if (changed)
+            if (!changed)
             {
-                try
-                {
-                    var back = await runner.KeyEventAsync("KEYCODE_BACK").ConfigureAwait(false);
-                    events.Add("backtrack_result", new Dictionary<string, object?>
-                    {
-                        ["from_screen_id"] = nextScreen.Screen.Id,
-                        ["to_screen_id"] = currentScreen.Screen.Id,
-                        ["status"] = "passed",
-                        ["result"] = back
-                    });
-                }
-                catch (UsageException ex)
-                {
-                    stopReason = AddBacktrackFailure(events, currentScreen, nextScreen, ex);
-                    break;
-                }
-                catch (InvalidOperationException ex)
-                {
-                    stopReason = AddBacktrackFailure(events, currentScreen, nextScreen, ex);
-                    break;
-                }
-                catch (TimeoutException ex)
-                {
-                    stopReason = AddBacktrackFailure(events, currentScreen, nextScreen, ex);
-                    break;
-                }
-                catch (IOException ex)
-                {
-                    stopReason = AddBacktrackFailure(events, currentScreen, nextScreen, ex);
-                    break;
-                }
+                currentScreen = nextScreen;
+                continue;
+            }
+
+            if (!activePath.Contains(nextScreen.Screen.Id, StringComparer.Ordinal))
+            {
+                currentDepth++;
+                activePath.Add(nextScreen.Screen.Id);
+                currentScreen = nextScreen;
+                continue;
+            }
+
+            if (!await TryBacktrackAsync(nextScreen.Screen.Id, currentScreen.Screen.Id, "cycle_detected").ConfigureAwait(false))
+            {
+                break;
+            }
+
+            currentScreen = null;
+        }
+
+        while (currentDepth > 0 && ShouldBacktrackAfterStop(stopReason))
+        {
+            var fromScreenId = activePath[^1];
+            var toScreenId = activePath[^2];
+            if (!await TryBacktrackAsync(fromScreenId, toScreenId, "run_ended").ConfigureAwait(false))
+            {
+                break;
+            }
+
+            currentDepth--;
+            activePath.RemoveAt(activePath.Count - 1);
+            currentScreen = null;
+        }
+
+        if (string.Equals(stopReason, "completed", StringComparison.Ordinal))
+        {
+            if (_timeProvider.GetUtcNow() >= deadline)
+            {
+                stopReason = "budget_expired";
+            }
+            else if (attemptedActionKeys.Count >= maxActions)
+            {
+                stopReason = "action_limit_reached";
+            }
+            else
+            {
+                stopReason = "completed";
             }
         }
 
-        if (string.Equals(stopReason, "completed", StringComparison.Ordinal) && _timeProvider.GetUtcNow() >= deadline)
-        {
-            stopReason = "budget_expired";
-        }
-        else if (string.Equals(stopReason, "completed", StringComparison.Ordinal) && attemptedActionKeys.Count >= maxActions)
-        {
-            stopReason = "action_limit_reached";
-        }
-
-        var scenarioCandidatePath = await WriteScenarioCandidateAsync(packageName, activity, readiness, artifacts, successfulActions, postTapDelayMs).ConfigureAwait(false);
+        var scenarioCandidatePath = await WriteScenarioCandidateAsync(packageName, activity, readiness, artifacts, scenarioOperations, postTapDelayMs).ConfigureAwait(false);
         var scenarioCandidates = new[]
         {
             new DiscoveryScenarioCandidateRecord(
@@ -292,7 +384,8 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
         events.Add("scenario_candidate_generated", new Dictionary<string, object?>
         {
             ["path"] = scenarioCandidatePath,
-            ["step_source_count"] = successfulActions.Count,
+            ["step_source_count"] = scenarioOperations.Count,
+            ["source_action_count"] = successfulActions.Count,
             ["review_status"] = "review_required"
         });
 
@@ -315,6 +408,7 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
             (long)(endedAt - startedAt).TotalMilliseconds,
             (long)budget.TotalMilliseconds,
             maxActions,
+            maxDepth,
             stopReason,
             readiness,
             screens.Screens,
@@ -334,6 +428,7 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
             [scenarioCandidatePath],
             screens.Screens.Count,
             attemptedActionKeys.Count,
+            maxDepth,
             stopReason,
             nextCommands);
     }
@@ -343,7 +438,7 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
         string? activity,
         PreflightResult? readiness,
         ArtifactSession artifacts,
-        IReadOnlyList<DiscoveryExecutedAction> successfulActions,
+        IReadOnlyList<DiscoveryScenarioOperation> scenarioOperations,
         int postTapDelayMs)
     {
         var candidateDirectory = Path.Join(artifacts.Root, ScenarioCandidateDirectory);
@@ -355,35 +450,40 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
             new("capture discovered start", "takeScreenshot", null, null, null, Label: "discovery-start")
         };
 
-        for (var i = 0; i < successfulActions.Count; i++)
+        var tapStepNumber = 0;
+        foreach (var operation in scenarioOperations)
         {
-            var executed = successfulActions[i];
-            var stepNumber = i + 1;
-            steps.Add(new ScenarioStep(
-                $"tap discovered action {stepNumber}: {executed.Action.Label}",
-                "tapPoint",
-                null,
-                null,
-                null,
-                Label: SanitizeLabel(executed.Action.Label),
-                X: executed.Action.X,
-                Y: executed.Action.Y,
-                PostTapDelayMs: postTapDelayMs));
-            steps.Add(new ScenarioStep(
-                $"capture after discovered action {stepNumber}",
-                "takeScreenshot",
-                null,
-                null,
-                null,
-                Label: $"discovery-action-{stepNumber:D2}"));
-            if (executed.ChangedScreen)
+            switch (operation)
             {
-                steps.Add(new ScenarioStep(
-                    $"backtrack after discovered action {stepNumber}",
-                    "keyevent",
-                    null,
-                    "KEYCODE_BACK",
-                    null));
+                case DiscoveryScenarioTapOperation tap:
+                    tapStepNumber++;
+                    steps.Add(new ScenarioStep(
+                        $"tap discovered action {tapStepNumber}: {tap.Action.Label}",
+                        "tapPoint",
+                        null,
+                        null,
+                        null,
+                        Label: SanitizeLabel(tap.Action.Label),
+                        X: tap.Action.X,
+                        Y: tap.Action.Y,
+                        PostTapDelayMs: postTapDelayMs));
+                    steps.Add(new ScenarioStep(
+                        $"capture after discovered action {tapStepNumber}",
+                        "takeScreenshot",
+                        null,
+                        null,
+                        null,
+                        Label: $"discovery-action-{tapStepNumber:D2}"));
+                    break;
+
+                case DiscoveryScenarioBacktrackOperation backtrack:
+                    steps.Add(new ScenarioStep(
+                        $"backtrack from {backtrack.FromScreenId} to {backtrack.ToScreenId}",
+                        "keyevent",
+                        null,
+                        "KEYCODE_BACK",
+                        null));
+                    break;
             }
         }
 
@@ -421,6 +521,19 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
         await WriteJsonFileAsync(scenarioPath, scenario).ConfigureAwait(false);
         return relativePath;
     }
+
+    private static DiscoveryEvent AddScreenObserved(DiscoveryEventLog events, DiscoveryScreenObservation screen) =>
+        events.Add("screen_observed", new Dictionary<string, object?>
+        {
+            ["screen_id"] = screen.Screen.Id,
+            ["signature"] = screen.Screen.Signature,
+            ["element_count"] = screen.Screen.ElementCount,
+            ["actionable_count"] = screen.Screen.ActionableCount,
+            ["new_screen"] = screen.IsNew
+        });
+
+    private static bool ShouldBacktrackAfterStop(string stopReason) =>
+        stopReason is "action_limit_reached" or "budget_expired" or "no_new_actions" or "depth_limit_reached";
 
     private static string AddScreenStateFailure(DiscoveryEventLog events, Exception exception, string? afterActionId = null)
     {
@@ -462,16 +575,33 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
         return "action_failed";
     }
 
+    private static DiscoveryEvent AddBacktrackPassed(
+        DiscoveryEventLog events,
+        string fromScreenId,
+        string toScreenId,
+        object result,
+        string reason) =>
+        events.Add("backtrack_result", new Dictionary<string, object?>
+        {
+            ["from_screen_id"] = fromScreenId,
+            ["to_screen_id"] = toScreenId,
+            ["reason"] = reason,
+            ["status"] = "passed",
+            ["result"] = result
+        });
+
     private static string AddBacktrackFailure(
         DiscoveryEventLog events,
-        DiscoveryScreenObservation currentScreen,
-        DiscoveryScreenObservation nextScreen,
-        Exception exception)
+        string fromScreenId,
+        string toScreenId,
+        Exception exception,
+        string reason)
     {
         events.Add("backtrack_result", new Dictionary<string, object?>
         {
-            ["from_screen_id"] = nextScreen.Screen.Id,
-            ["to_screen_id"] = currentScreen.Screen.Id,
+            ["from_screen_id"] = fromScreenId,
+            ["to_screen_id"] = toScreenId,
+            ["reason"] = reason,
             ["status"] = "failed",
             ["error_type"] = exception.GetType().FullName ?? exception.GetType().Name,
             ["message"] = exception.Message
@@ -918,6 +1048,14 @@ internal sealed record DiscoveryExecutedAction(
     bool ChangedScreen,
     string SourceEventId);
 
+internal abstract record DiscoveryScenarioOperation(string SourceEventId);
+
+internal sealed record DiscoveryScenarioTapOperation(DiscoveryMapAction Action, string SourceEventId)
+    : DiscoveryScenarioOperation(SourceEventId);
+
+internal sealed record DiscoveryScenarioBacktrackOperation(string FromScreenId, string ToScreenId, string SourceEventId)
+    : DiscoveryScenarioOperation(SourceEventId);
+
 internal sealed record DiscoveryMap(
     string Schema,
     string Package,
@@ -927,6 +1065,7 @@ internal sealed record DiscoveryMap(
     long DurationMs,
     long BudgetMs,
     int MaxActions,
+    int MaxDepth,
     string StopReason,
     PreflightResult? Device,
     IReadOnlyList<DiscoveryMapScreen> Screens,

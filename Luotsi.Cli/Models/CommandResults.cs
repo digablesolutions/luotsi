@@ -275,6 +275,7 @@ public sealed record DiscoveryRunResult(
     IReadOnlyList<string> ScenarioCandidatePaths,
     int VisitedScreenCount,
     int AttemptedActionCount,
+    int MaxDepth,
     string StopReason,
     IReadOnlyList<string> NextCommands);
 

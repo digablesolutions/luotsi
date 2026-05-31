@@ -46,7 +46,7 @@ Use them when you want a checked-in flow with validation, timing, artifacts, and
 luotsi discover --device <serial> --package <app.id> --budget 5m
 ```
 
-It writes a discovery map, JSONL event trace, and review-required scenario candidate into the artifact root. Treat the generated scenario as a starting point: validate and edit it before using it as CI coverage.
+It writes a discovery map, JSONL event trace, and review-required scenario candidate into the artifact root. Discovery follows changed screens up to `--max-depth` and records the backtracks needed to return through the explored branch. Treat the generated scenario as a starting point: validate and edit it before using it as CI coverage.
 
 ## What scenario files support
 

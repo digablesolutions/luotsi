@@ -118,8 +118,8 @@ Luotsi help: discover
 
 Usage:
   luotsi discover --device <adb serial> --package <app.id> [--activity <activity>]
-                  [--budget 5m] [--max-actions 25] [--output-dir <directory>]
-                  [--no-start]
+                  [--budget 5m] [--max-actions 25] [--max-depth 2]
+                  [--output-dir <directory>] [--no-start]
 
 Examples:
   luotsi discover --device emulator-5554 --package com.example.app --budget 5m
@@ -127,16 +127,17 @@ Examples:
 
 Output:
   Discover opens the target app unless --no-start is supplied, reads real
-  screen state, chooses conservative visible tap targets, records transitions,
-  and writes discovery-map.json, discovery-events.jsonl, session-timeline.jsonl,
-  and session-replay.json into the artifact root. It also writes
+  screen state, chooses conservative visible tap targets, follows changed
+  screens up to --max-depth, records transitions and backtracks, and writes
+  discovery-map.json, discovery-events.jsonl, session-timeline.jsonl, and
+  session-replay.json into the artifact root. It also writes
   scenario-candidates/discovery-candidate.json as a review-required starter
-  scenario.
+  scenario that follows the observed traversal order.
 
 Notes:
   Discovery is heuristic and deterministic; it does not require an LLM. It
-  skips obvious destructive labels, backtracks after changed screens, and keeps
-  JSON scenarios as the stable artifact to review before CI.
+  skips obvious destructive labels, bounds traversal by time, action count, and
+  depth, and keeps JSON scenarios as the stable artifact to review before CI.
 """,
         ["quickstart"] = """
 Luotsi help: quickstart
@@ -671,7 +672,7 @@ Command groups:
   Inspect, interact, and capture
     screen-state
     inspect
-    discover --package <app.id> [--activity <activity>] [--budget 5m] [--max-actions 25]
+    discover --package <app.id> [--activity <activity>] [--budget 5m] [--max-actions 25] [--max-depth 2]
     telemetry-tail [--tail 200]
     telemetry-watch [--timeout-sec 15]
     wait-step --step <STEP_NAME> [--timeout-sec 15]

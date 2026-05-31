@@ -23,15 +23,15 @@ The scenario candidate is intentionally not a finished test. Review coordinates,
 
 ## How it explores
 
-Discovery starts the target package unless `--no-start` is supplied, reads screen state, ranks visible clickable elements deterministically, skips obvious destructive labels, taps one safe action at a time, records the resulting transition, and backtracks when the screen changes.
+Discovery starts the target package unless `--no-start` is supplied, reads screen state, ranks visible clickable elements deterministically, skips obvious destructive labels, taps one safe action at a time, records the resulting transition, and follows changed screens up to `--max-depth`. When a branch is exhausted, reaches the depth limit, cycles to an already-active screen, or the run ends, discovery backtracks with `KEYCODE_BACK` and records that backtrack in the event log and generated scenario candidate.
 
 Useful bounds:
 
 ```bash
-luotsi discover --device <serial> --package <app.id> --activity .MainActivity --budget 10m --max-actions 40 --output-dir artifacts
+luotsi discover --device <serial> --package <app.id> --activity .MainActivity --budget 10m --max-actions 40 --max-depth 2 --output-dir artifacts
 ```
 
-Stop reasons include `no_new_actions`, `budget_expired`, `action_limit_reached`, `action_failed`, `screen_state_failed`, and `backtrack_failed`.
+Stop reasons include `no_new_actions`, `budget_expired`, `action_limit_reached`, `depth_limit_reached`, `action_failed`, `screen_state_failed`, and `backtrack_failed`.
 
 ## Promotion flow
 

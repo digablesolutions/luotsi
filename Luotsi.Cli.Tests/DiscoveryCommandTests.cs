@@ -11,12 +11,13 @@ public sealed class DiscoveryCommandTests
     [Fact]
     public void Parse_Recognizes_Discover_Command()
     {
-        var options = CliOptions.Parse(["discover", "--device", "SER", "--package", "dev.luotsi.app", "--budget", "30s"]);
+        var options = CliOptions.Parse(["discover", "--device", "SER", "--package", "dev.luotsi.app", "--budget", "30s", "--max-depth", "2"]);
 
         Assert.Equal("discover", options.Command);
         Assert.Equal("SER", options.Get("device"));
         Assert.Equal("dev.luotsi.app", options.Get("package"));
         Assert.Equal("30s", options.Get("budget"));
+        Assert.Equal(2, options.Int("max-depth", 0));
     }
 
     [Fact]
@@ -94,6 +95,7 @@ public sealed class DiscoveryCommandTests
         Assert.Equal("action_limit_reached", data.GetProperty("stop_reason").GetString());
         Assert.Equal(2, data.GetProperty("visited_screen_count").GetInt32());
         Assert.Equal(1, data.GetProperty("attempted_action_count").GetInt32());
+        Assert.Equal(2, data.GetProperty("max_depth").GetInt32());
         Assert.Single(host.TapPointRequests);
         Assert.Contains("KEYCODE_BACK", host.KeyEventRequests);
         Assert.True(fileSystem.FileExists(Path.Join(artifactRoot, "discovery-map.json")));
@@ -163,6 +165,71 @@ public sealed class DiscoveryCommandTests
         Assert.Contains(
             replayDraftEnvelope.RootElement.GetProperty("data").GetProperty("suggestions").EnumerateArray(),
             suggestion => suggestion.GetProperty("kind").GetString() == "coordinate");
+    }
+
+    [Fact]
+    public async Task Discover_Traverses_Frontier_Until_MaxDepth()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-31T08:00:00Z"));
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(
+            Screen("Home", Element("Open details", 10, 10, 210, 110)),
+            Screen("Details", Element("Open child", 10, 120, 210, 220)),
+            Screen("Child", Element("Child title", 10, 10, 210, 110, clickable: false)));
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            Console = console,
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            Delay = new FakeDelay(timeProvider)
+        });
+
+        var exitCode = await app.RunAsync([
+            "discover",
+            "--device",
+            "SER",
+            "--package",
+            "dev.luotsi.app",
+            "--artifacts",
+            "/tmp/discovery",
+            "--budget",
+            "30s",
+            "--max-actions",
+            "2",
+            "--max-depth",
+            "2"
+        ]);
+        using var envelope = console.ParseSingleOutputAsJson();
+        var data = envelope.RootElement.GetProperty("data");
+        var artifactRoot = data.GetProperty("artifact_root").GetString()!;
+        var scenarioPath = Path.Join(artifactRoot, data.GetProperty("scenario_candidate_paths")[0].GetString()!);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("action_limit_reached", data.GetProperty("stop_reason").GetString());
+        Assert.Equal(3, data.GetProperty("visited_screen_count").GetInt32());
+        Assert.Equal(2, data.GetProperty("attempted_action_count").GetInt32());
+        Assert.Equal(["Open details", "Open child"], host.TapPointRequests.Select(static request => request.Label ?? string.Empty).ToArray());
+        Assert.Equal(["KEYCODE_BACK", "KEYCODE_BACK"], host.KeyEventRequests);
+
+        using var map = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(Path.Join(artifactRoot, "discovery-map.json")));
+        Assert.Equal(2, map.RootElement.GetProperty("maxDepth").GetInt32());
+        Assert.Equal(3, map.RootElement.GetProperty("screens").GetArrayLength());
+        Assert.Equal(2, map.RootElement.GetProperty("transitions").GetArrayLength());
+
+        using var scenario = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(scenarioPath));
+        var scenarioActions = scenario.RootElement.GetProperty("steps")
+            .EnumerateArray()
+            .Select(static step => step.GetProperty("action").GetString()!)
+            .ToArray();
+        Assert.Equal(
+            ["takeScreenshot", "tapPoint", "takeScreenshot", "tapPoint", "takeScreenshot", "keyevent", "keyevent"],
+            scenarioActions);
+
+        var events = (await fileSystem.ReadAllTextAsync(Path.Join(artifactRoot, "discovery-events.jsonl")))
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(2, events.Count(static line => line.Contains("\"type\":\"backtrack_result\"", StringComparison.Ordinal)));
     }
 
     [Fact]
