@@ -694,7 +694,7 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
         if (matches.Length > 1 && !validatedSelector.AllowAmbiguous)
         {
-            throw new InvalidOperationException($"Fake selector {validatedSelector.Describe()} matched {matches.Length} elements.");
+            throw new Luotsi.Cli.Errors.UsageException($"Fake selector {validatedSelector.Describe()} matched {matches.Length} elements.");
         }
 
         return matches[0].Element;
