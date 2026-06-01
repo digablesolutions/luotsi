@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Linq;
 using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Cli.Inspect;
@@ -141,12 +142,9 @@ internal sealed record InspectScreenStateDelta(
             yield return key;
         }
 
-        foreach (var key in previousGroups.OrderedBaseKeys)
+        foreach (var key in previousGroups.OrderedBaseKeys.Where(seen.Add))
         {
-            if (seen.Add(key))
-            {
-                yield return key;
-            }
+            yield return key;
         }
     }
 
