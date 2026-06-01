@@ -11,7 +11,9 @@
 
 # Luotsi
 
-Luotsi is a host-driven CLI for Android device automation, inspection, live view, and replay. It runs on the engineer or CI machine, talks to real devices over ADB, and returns structured JSON, optional JSONL session streams, and artifacts. It is aimed at AI agent builders, mobile engineers, and device-lab or CI workflows that need machine-readable state instead of browser-only mocks. Orchestration, policy, and diagnostics stay on the host; the on-device helper stays thin and purpose-built.
+Luotsi is a host-driven Android device automation and replay CLI for AI agents and CI. It runs on the engineer, agent, or runner machine, talks to real Android devices over ADB, and returns structured JSON, JSONL session streams, and replayable artifacts. Use it when a workflow needs real-device state, lab-coordinated execution, and post-run evidence instead of a browser mock or a heavyweight device-farm control plane.
+
+Orchestration, policy, and diagnostics stay on the host. The Android helper stays thin and purpose-built.
 
 Docs site: [https://digablesolutions.github.io/luotsi/](https://digablesolutions.github.io/luotsi/)
 
@@ -20,18 +22,33 @@ Start here:
 - Installation: [docs/getting-started/installation](https://digablesolutions.github.io/luotsi/docs/getting-started/installation/)
 - Quickstart: [docs/getting-started/quickstart](https://digablesolutions.github.io/luotsi/docs/getting-started/quickstart/)
 - AI agent workflows: [docs/core-workflows/ai-agent-workflows](https://digablesolutions.github.io/luotsi/docs/core-workflows/ai-agent-workflows/)
+- Agent loop example: [docs/core-workflows/agent-loop-example](https://digablesolutions.github.io/luotsi/docs/core-workflows/agent-loop-example/)
 - Engineering lead evaluation: [docs/use-cases/android-automation-for-engineering-leads](https://digablesolutions.github.io/luotsi/docs/use-cases/android-automation-for-engineering-leads/)
 - Live view: [docs/core-workflows/live-view](https://digablesolutions.github.io/luotsi/docs/core-workflows/live-view/)
 - Inspect and scenarios: [docs/core-workflows/inspect-and-scenarios](https://digablesolutions.github.io/luotsi/docs/core-workflows/inspect-and-scenarios/)
 - Replay and artifacts: [docs/core-workflows/replay-and-artifacts](https://digablesolutions.github.io/luotsi/docs/core-workflows/replay-and-artifacts/)
 
+## The three questions Luotsi should answer
+
+### Can my agent inspect and act on a real Android device?
+
+Yes. `inspect` opens a long-lived JSONL session, emits screen snapshots and deltas, accepts JSON commands such as `wait_visible`, `tap_text`, `type_text`, `screenshot`, and `exit`, and writes the same event stream into replay artifacts.
+
+### Can CI run this and leave useful evidence?
+
+Yes. `run` executes JSON scenario playbooks from the host, can claim a lab device, writes JSON/JUnit reports, and keeps screenshots, hierarchy captures, logcat, telemetry, timelines, and governance signals under an artifact root.
+
+### Can I debug the failure after the device is gone?
+
+Yes. `replay open`, `replay summarize`, `replay capsule`, `replay timeline`, `replay graph`, `replay cluster`, `replay search`, and `replay scenario-draft` work from saved artifacts instead of requiring another live device session.
+
 ## Why Luotsi
 
-- Agent-readable sessions. `inspect` emits structured JSONL directly, and `view -o jsonl` / `view --json` exposes the same raw event stream while every view session writes a JSONL timeline artifact.
-- Agent-builder guidance. The public docs now include a dedicated AI workflow guide that maps `inspect`, `view`, `run`, and `replay` to the job each surface is meant to solve.
-- Real-device focus. Luotsi operates over ADB against physical Android devices instead of browser-only surrogates.
-- Replayable failures. Scenario runs leave screenshots, hierarchy captures, logcat, telemetry, and replay bundles for later triage.
-- Host-driven control. The CLI, policy, and diagnostics stay on the operator or CI machine while the Android helper remains thin.
+- Real device, structured contract. Commands return JSON envelopes; `inspect` and `view --json` expose JSONL sessions for agents and host-side tooling.
+- Replay-first failure triage. Scenario runs leave screenshots, hierarchy captures, logcat, telemetry, timelines, reports, and replay bundles for later investigation.
+- CI and lab discipline. Device readiness, claims, queues, quarantine, device health, JUnit, and governance signals share the same CLI surface.
+- Host-driven by design. The CLI, policy, and diagnostics stay on the operator, agent, or CI machine while the Android helper remains thin.
+- Bridge, not replacement. Luotsi is not a scrcpy clone, an Appium replacement, or a hosted device farm. It is the host-side evidence and control layer around real Android device workflows.
 
 ## Use-case entry pages
 
@@ -45,12 +62,14 @@ Start here:
 
 ## How it works
 
-1. **Run a command** — commands return one JSON envelope with `schema`, `ok`, `command`, `started_at`, `ended_at`, `data`, `artifacts`, `provenance`, and `error` by default. `run --progress auto|line|plain|quiet|jsonl` keeps scenario progress on stderr while stdout remains parseable, and `run` now writes into Luotsi's default user-local artifact home unless you override it with `--artifacts` or `--output-dir`. `artifacts list` discovers local run ids, `artifacts info <root-or-run-id>` summarizes one bundle without changing it, `artifacts open <root-or-run-id>` opens or regenerates a local artifact index, and both `artifacts info` and `artifacts open` also support `--last` to jump straight to the latest local bundle under that default run-artifact home or `--artifacts <directory>`. `artifacts pack <root-or-run-id>` creates a zip for sharing or CI upload, and `artifacts unpack <artifact.zip>` restores a shared bundle locally; pack/unpack also report SHA-256 and support `--dry-run` for safe handoff previews. `replay open` is the replay front door: it refreshes the local artifact browser and returns the recommended next action plus commands into capsule, timeline, scrub, graph, search, scenario draft, and clustering, and `replay open --last` reopens the latest local triage bundle without re-copying its path. `replay summarize --format json|jsonl` can emit raw machine-readable replay summaries for CI without the envelope wrapper, `replay capsule` writes a replay bundle summary, `replay graph` emits an agent-focused semantic graph with filters, insights, and next actions, `replay search` finds text across replay timelines and artifacts, `replay scenario-draft` turns inspect action history into a starter scenario, and failed scenario runs now carry an embedded `failure_capsule` summary so replay consumers do not need a second artifact read just to discover linked reports and failure artifacts. No third-party device server required.
-2. **Run a scenario** — drive multi-step device flows from a small JSON playbook. Steps are validated, templated, and timed; failures produce artifact bundles automatically.
-3. **Inspect mode** — open a JSONL session for agent-driven exploration. Luotsi emits structured JSONL events (`session_started`, `screen_snapshot`, `screen_delta`, `command_result`, `session_ended`, `protocol_error`, `session_error`) so an agent can reason about the UI and act without a scenario file.
-4. **Live view** — stream a mirrored device display to a local SDL window with an operator control layer, hotkeys, human startup progress, and JSONL events for agents consuming stream state.
-5. **Telemetry** — parse structured `LUOTSI_DEVICE_TELEMETRY` events from logcat for semantic waits and assertions.
-6. **CI-friendly** — same binary for engineers, CI pipelines, and agent-driven flows, with default envelopes plus optional raw replay summary output for CI consumers.
+1. **Run a command** - commands return one JSON envelope with `schema`, `ok`, `command`, `started_at`, `ended_at`, `data`, `artifacts`, `provenance`, and `error` by default. Scenario progress stays on stderr while stdout remains parseable.
+2. **Run a scenario** - drive multi-step device flows from a small JSON playbook. Steps are validated, templated, and timed; failures produce artifact bundles automatically.
+3. **Inspect mode** - open a JSONL session for agent-driven exploration. Luotsi emits structured events (`session_started`, `screen_snapshot`, `screen_delta`, `command_result`, `session_ended`, `protocol_error`, `session_error`) so an agent can reason about the UI and act without a scenario file.
+4. **Preserve artifacts** - `run` writes into the user-local artifact home by default; `inspect` and one-shot commands write into a temp artifact root unless you override them with `--artifacts` or `--output-dir`. `artifacts list`, `info`, `open`, `pack`, and `unpack` make bundles discoverable and shareable.
+5. **Replay failures** - `replay open`, `summarize`, `capsule`, `timeline`, `scrub`, `graph`, `search`, `scenario-draft`, and clustering work from saved artifacts so triage does not require another live device session.
+6. **Live view** - stream a mirrored device display to a local SDL window with an operator control layer, hotkeys, human startup progress, and JSONL events for agents consuming stream state.
+7. **Telemetry** - parse structured `LUOTSI_DEVICE_TELEMETRY` events from logcat for semantic waits and assertions.
+8. **CI-friendly** - same binary for engineers, CI pipelines, and agent-driven flows, with default envelopes plus optional raw replay summary output for CI consumers.
 
 ## Install
 
@@ -344,12 +363,15 @@ Send one JSON command per line:
 
 ```json
 {"id":"1","command":"refresh"}
-{"id":"2","command":"tap_text","text":"Sign in","timeout_sec":10}
+{"id":"2","command":"tap_text","text":"Sign in","text_match":"exact","timeout_sec":10}
+{"id":"2b","command":"tap_element","text":"Files","text_match":"exact","resource_id":"com.elotouch.home:id/tvAppName","class_name":"android.widget.TextView","timeout_sec":10}
 {"id":"3","command":"telemetry_tail","tail":200}
 {"id":"4","command":"exit"}
 ```
 
-Available inspect commands: `refresh`, `screen_state`, `snapshot`, `tap`, `tap_text`, `wait_visible`, `type_text`, `keyevent`, `logcat`, `telemetry_tail`, `telemetry_watch`, `screenshot`, `take_screenshot`, `capture_artifacts`, `record`, `exit`.
+`wait_visible`, `tap_text`, and `tap_element` accept selector fields: `text`, `text_match` (`exact` or `contains`), `content_description`, `content_description_match`, `resource_id`, `resource_id_match`, `class_name`, `class_name_match`, nested `region` (`left`, `top`, `right`, `bottom`), top-level `left`/`top`/`right`/`bottom`, and `allow_ambiguous`.
+
+Available inspect commands: `refresh`, `screen_state`, `snapshot`, `tap`, `tap_text`, `tap_element`, `tap_selector`, `wait_visible`, `wait_element`, `wait_selector`, `type_text`, `keyevent`, `logcat`, `telemetry_tail`, `telemetry_watch`, `screenshot`, `take_screenshot`, `capture_artifacts`, `record`, `exit`.
 
 ## Scenarios
 

@@ -1,0 +1,102 @@
+---
+title: Agent Loop Example
+description: Drive a real Android device from a small host-side agent loop by reading Luotsi inspect JSONL and writing JSON commands.
+---
+
+Luotsi does not require an agent framework to prove the device path. The smallest useful loop is a host process that starts `luotsi inspect`, reads JSONL events from stdout, and writes JSON commands to stdin.
+
+Use this when the question is: can an agent inspect and act on a real Android device through a stable contract?
+
+The protocol is language-agnostic. The first example uses Node because many agent adapters and MCP experiments start in JavaScript or TypeScript, and the same `.mjs` script can also run under Bun. There is also a standard-library Python 3.8+ version for smoke tests and CI glue. A maintained Go or Rust client should be a separate, tested package rather than a copy-paste variant of this minimal process loop.
+
+## What the example proves
+
+- The device session is real Android over adb, not a browser surrogate.
+- State flows out as JSONL: `session_started`, `screen_snapshot`, `screen_delta`, `command_result`, and `session_ended`.
+- Actions flow in as JSON command objects: `wait_visible`, `tap_text`, `tap_element`, `screenshot`, `capture_artifacts`, and `exit`.
+- Selectors can be exact or contains matches and can include `resource_id`, `content_description`, `class_name`, nested `region`, or top-level `left`/`top`/`right`/`bottom` fields.
+- The same session writes `session-timeline.jsonl` and `session-replay.json` under a timestamped artifact run directory for later `replay` commands.
+
+## Run it
+
+From the repository root:
+
+```bash
+node examples/agents/inspect-agent-loop.mjs --device <serial> --text "Sign in" --text-match exact --artifacts artifacts/agent-loop
+```
+
+The script starts:
+
+```bash
+luotsi inspect --device <serial> --artifacts artifacts/agent-loop
+```
+
+When commands succeed, it waits for the target text, taps it if visible, captures a screenshot, and exits cleanly. If Luotsi reports a protocol, session, wait, tap, screenshot, post-action state, or inspect-process failure, the script exits non-zero and leaves the artifact directory behind for replay.
+
+The `--artifacts` value is a base directory. The example creates it if needed, and Luotsi writes the live session into a timestamped child run directory.
+
+Use additional selector fields when text is broad:
+
+```bash
+node examples/agents/inspect-agent-loop.mjs --device <serial> --text "Files" --text-match exact --resource-id "com.elotouch.home:id/tvAppName" --class-name "android.widget.TextView" --artifacts artifacts/agent-loop
+```
+
+For a non-mutating smoke test, add `--no-tap`. The loop still waits for text, writes a screenshot command, and exits with artifacts.
+
+The same `.mjs` file can run under Bun if that is the host runtime:
+
+```bash
+bun examples/agents/inspect-agent-loop.mjs --device <serial> --text "Sign in" --text-match exact --artifacts artifacts/agent-loop
+```
+
+The Python variant follows the same protocol:
+
+```bash
+python examples/agents/inspect-agent-loop.py --device <serial> --text "Sign in" --text-match exact --artifacts artifacts/agent-loop
+```
+
+## Protocol shape
+
+Input command objects are one JSON object per line:
+
+```json
+{"id":"1","command":"wait_visible","text":"Sign in","text_match":"exact","timeout_sec":15}
+{"id":"2","command":"tap_text","text":"Sign in","text_match":"exact","timeout_sec":5}
+{"id":"2b","command":"tap_element","text":"Files","text_match":"exact","resource_id":"com.elotouch.home:id/tvAppName","class_name":"android.widget.TextView","timeout_sec":5}
+{"id":"3","command":"screenshot","label":"after-sign-in"}
+{"id":"4","command":"exit"}
+```
+
+If a selector matches multiple elements, Luotsi reports the ambiguity instead of silently picking one. Add `resource_id`, `content_description`, `class_name`, `region`, or the corresponding `*_match` fields, or send `allow_ambiguous: true` when picking the highest-ranked match is acceptable.
+
+Output events are one JSON object per line:
+
+```json
+{"type":"session_started","session_id":"...","started_at":"..."}
+{"type":"screen_snapshot","session_id":"...","state":{"captured_at":"...","element_count":12,"elements":[...]}}
+{"type":"command_result","id":"1","command":"wait_visible","ok":true}
+{"type":"screen_delta","id":"2","delta":{"added_count":1,"removed_count":0},"state":{...}}
+{"type":"session_ended","id":"4","reason":"client_exit"}
+```
+
+## Replay after the loop
+
+After the process exits, inspect the artifact base directory instead of reconnecting to the device. Luotsi writes each session under a concrete child run directory such as `artifacts/agent-loop/<timestamp>-inspect`.
+
+```bash
+luotsi artifacts list --artifacts artifacts/agent-loop
+luotsi replay open --last --artifacts artifacts/agent-loop --dry-run
+luotsi replay timeline --artifacts artifacts/agent-loop/<run-id> --type command_result
+luotsi replay scenario-draft --artifacts artifacts/agent-loop/<run-id> --output scenarios/from-agent-loop.json --write-markdown
+```
+
+## Boundaries
+
+This example is a host-side adapter, not an autonomous product by itself. It does not choose a model, store credentials, hide device failures, or bypass Luotsi safety checks. Keep policy on the host, keep generated scenarios review-required, and use replay artifacts as the handoff from live control to triage.
+
+## Related pages
+
+- [AI Agent Workflows](../ai-agent-workflows/)
+- [Inspect And Scenarios](../inspect-and-scenarios/)
+- [Output Envelopes](../../reference/output-envelopes/)
+- [Replay And Artifacts](../replay-and-artifacts/)

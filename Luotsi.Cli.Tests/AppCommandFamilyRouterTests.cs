@@ -194,6 +194,8 @@ public sealed class AppCommandFamilyRouterTests : IDisposable
         var exception = await Assert.ThrowsAsync<UsageException>(() => router.DispatchAsync(context));
 
         Assert.Null(context.Runner);
+        Assert.NotNull(context.Artifacts);
+        Assert.Equal(Path.Join("/tmp", "luotsi", "artifacts", "20260519-100000-run"), context.Artifacts.Root);
         Assert.Equal(0, deviceHostFactory.CreateCallCount);
         Assert.Contains("does not exist", exception.Message, StringComparison.Ordinal);
     }

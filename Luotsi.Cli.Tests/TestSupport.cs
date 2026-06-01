@@ -480,6 +480,10 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
 
     public List<string> TapTextRequests { get; } = [];
 
+    public List<ScreenElementSelector> SelectorWaitRequests { get; } = [];
+
+    public List<ScreenElementSelector> SelectorTapRequests { get; } = [];
+
     public List<(string? Label, double? XRatio, double? YRatio, int PostTapDelayMs)> TapPointRequests { get; } = [];
 
     public List<string> TakeScreenshotRequests { get; } = [];
@@ -671,6 +675,38 @@ internal sealed class FakeDeviceHost(params ScreenState[] screenStates) : IDevic
     }
 
     public Task<TapResult> TapAsync(string x, string y) => Task.FromResult(new TapResult(int.Parse(x), int.Parse(y)));
+
+    public async Task<ScreenElement> WaitVisibleAsync(ScreenElementSelector selector, int timeoutSec)
+    {
+        var validatedSelector = ScreenElementSelectorValidator.Validate(selector, "waitVisible");
+        SelectorWaitRequests.Add(validatedSelector);
+        var state = await GetScreenStateAsync().ConfigureAwait(false);
+        var matches = state.Elements
+            .Select(element => new { Element = element, Score = element.GetSelectorMatchScore(validatedSelector) })
+            .Where(candidate => candidate.Score > 0)
+            .OrderByDescending(candidate => candidate.Score)
+            .ToArray();
+
+        if (matches.Length == 0)
+        {
+            throw new TimeoutException($"No fake element matched selector {validatedSelector.Describe()}.");
+        }
+
+        if (matches.Length > 1 && !validatedSelector.AllowAmbiguous)
+        {
+            throw new Luotsi.Cli.Errors.UsageException($"Fake selector {validatedSelector.Describe()} matched {matches.Length} elements.");
+        }
+
+        return matches[0].Element;
+    }
+
+    public async Task<TapResult> TapElementAsync(ScreenElementSelector selector, int timeoutSec)
+    {
+        var validatedSelector = ScreenElementSelectorValidator.Validate(selector, "tapElement");
+        SelectorTapRequests.Add(validatedSelector);
+        var element = await WaitVisibleAsync(validatedSelector, timeoutSec).ConfigureAwait(false);
+        return await TapAsync(element.CenterX.ToString(), element.CenterY.ToString()).ConfigureAwait(false);
+    }
 
     public Task<TelemetryResult> TelemetryTailAsync(int tail) => Task.FromResult(new TelemetryResult(0, 0, 0, 0, [], []));
 

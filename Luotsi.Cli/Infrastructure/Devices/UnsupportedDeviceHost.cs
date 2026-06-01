@@ -62,9 +62,13 @@ internal sealed class UnsupportedDeviceHost : IDeviceHost
 
     public Task<ScreenElement> WaitVisibleAsync(string text, int timeoutSec) => Unsupported<ScreenElement>();
 
+    public Task<ScreenElement> WaitVisibleAsync(ScreenElementSelector selector, int timeoutSec) => Unsupported<ScreenElement>();
+
     public Task<WaitNotVisibleResult> WaitNotVisibleAsync(string text, int timeoutSec) => Unsupported<WaitNotVisibleResult>();
 
     public Task<TapResult> TapTextAsync(string text, int timeoutSec) => Unsupported<TapResult>();
+
+    public Task<TapResult> TapElementAsync(ScreenElementSelector selector, int timeoutSec) => Unsupported<TapResult>();
 
     public Task<TapPointResult> TapPointAsync(string? label, int? x, int? y, double? xRatio, double? yRatio, int postTapDelayMs) => Unsupported<TapPointResult>();
 

@@ -91,7 +91,15 @@ internal sealed class InspectSession
                 try
                 {
                     var data = await _commandDispatcher.ExecuteAsync(request, normalizedCommand).ConfigureAwait(false);
-                    _protocol.WriteCommandResult(sessionId, request.Id, normalizedCommand, true, startedAt, _timeProvider.GetUtcNow(), data);
+                    _protocol.WriteCommandResult(
+                        sessionId,
+                        request.Id,
+                        normalizedCommand,
+                        true,
+                        startedAt,
+                        _timeProvider.GetUtcNow(),
+                        data,
+                        selector: InspectSessionCommandDispatcher.TryCreateResultSelector(request, normalizedCommand));
 
                     if (InspectSessionCommandDispatcher.ShouldCaptureScreenState(normalizedCommand))
                     {
@@ -122,7 +130,15 @@ internal sealed class InspectSession
                         : ex is ICommandFailureDetails failure
                             ? failure.CategoryOverride
                             : ErrorInfo.Classify(ex.Message);
-                    _protocol.WriteCommandResult(sessionId, request.Id, normalizedCommand, false, startedAt, _timeProvider.GetUtcNow(), error: ErrorInfo.From(ex, category));
+                    _protocol.WriteCommandResult(
+                        sessionId,
+                        request.Id,
+                        normalizedCommand,
+                        false,
+                        startedAt,
+                        _timeProvider.GetUtcNow(),
+                        error: ErrorInfo.From(ex, category),
+                        selector: InspectSessionCommandDispatcher.TryCreateResultSelector(request, normalizedCommand));
                 }
             }
         }

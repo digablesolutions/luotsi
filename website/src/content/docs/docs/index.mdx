@@ -3,7 +3,7 @@ title: Luotsi Docs
 description: Install Luotsi, connect a device, and choose the workflow that matches your debugging or automation loop.
 template: splash
 hero:
-  tagline: Host-driven Android device automation, inspection, and live view.
+  tagline: Host-driven Android device automation and replay for agents and CI.
   actions:
     - text: Installation
       link: getting-started/installation/
@@ -19,7 +19,27 @@ hero:
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-Luotsi keeps the device automation runtime on the host machine. Use it to inspect real Android devices over adb, open a live mirror, run JSON scenario playbooks, and preserve artifacts that explain failures without forcing another control plane into the stack.
+Luotsi keeps the device automation runtime on the host machine. Use it when an agent, engineer, or CI runner needs real Android device state, lab-coordinated execution, and replay artifacts without forcing another control plane into the stack.
+
+## The three core questions
+
+<CardGrid>
+	<Card title="Can my agent inspect and act on a real Android device?">
+		Yes. `inspect` emits JSONL screen state and accepts JSON command objects over stdin.
+
+		[Open the agent loop example](./core-workflows/agent-loop-example/)
+	</Card>
+	<Card title="Can CI run this and leave useful evidence?">
+		Yes. `run` executes scenario playbooks, can claim lab devices, and writes JSON/JUnit reports plus replay artifacts.
+
+		[Open Android CI device lab workflows](./use-cases/android-ci-device-lab-workflows/)
+	</Card>
+	<Card title="Can I debug after the device is gone?">
+		Yes. `replay` reads saved artifacts for summaries, capsules, timelines, graphs, clusters, search, and scenario drafts.
+
+		[Open replay and artifacts](./core-workflows/replay-and-artifacts/)
+	</Card>
+</CardGrid>
 
 ## Start here
 
@@ -53,6 +73,11 @@ Luotsi keeps the device automation runtime on the host machine. Use it to inspec
 		Use the host-side JSON, JSONL, and replay surfaces Luotsi already exposes when you are building agent loops on top of real Android devices.
 
 		[Open the agent workflow guide](./core-workflows/ai-agent-workflows/)
+	</Card>
+	<Card title="Agent loop example">
+		Start a minimal host-side adapter that reads `inspect` JSONL events and writes JSON commands to a real Android device session.
+
+		[Open the example](./core-workflows/agent-loop-example/)
 	</Card>
 	<Card title="Autonomous discovery">
 		Map visible app states from a real device, preserve agent-readable evidence, and generate review-required scenario candidates.

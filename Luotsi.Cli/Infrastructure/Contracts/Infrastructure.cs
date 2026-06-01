@@ -101,6 +101,24 @@ public interface IDeviceHost : IScenarioActionHost, IScenarioScreenshotAssertion
     Task<TapResult> TapAsync(string x, string y);
 
     /// <summary>
+    /// Waits for an element matching a structured selector.
+    /// </summary>
+    /// <param name="selector">Element selector.</param>
+    /// <param name="timeoutSec">Timeout in seconds.</param>
+    /// <returns>Matched element.</returns>
+    Task<ScreenElement> WaitVisibleAsync(ScreenElementSelector selector, int timeoutSec) =>
+        throw new NotSupportedException("Structured element selectors are not supported by this device host.");
+
+    /// <summary>
+    /// Taps the center of an element matching a structured selector.
+    /// </summary>
+    /// <param name="selector">Element selector.</param>
+    /// <param name="timeoutSec">Timeout in seconds.</param>
+    /// <returns>Tap metadata.</returns>
+    Task<TapResult> TapElementAsync(ScreenElementSelector selector, int timeoutSec) =>
+        throw new NotSupportedException("Structured element selectors are not supported by this device host.");
+
+    /// <summary>
     /// Reads logcat lines from the active device.
     /// </summary>
     /// <param name="tail">Maximum lines to return.</param>

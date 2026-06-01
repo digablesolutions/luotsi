@@ -439,6 +439,7 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
         AddString(parts, root, "category");
         AddString(parts, root, "message");
         AddBool(parts, root, "ok", includeWhenTrue: false);
+        AddSelector(parts, root);
         AddError(parts, root);
         return string.Join(" | ", parts);
     }
@@ -468,6 +469,11 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
             }
         }
 
+        if (root.TryGetProperty("selector", out var selector) && selector.ValueKind == JsonValueKind.Object)
+        {
+            AddObjectScalarProperties(properties, "selector", selector);
+        }
+
         if (root.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.Object)
         {
             AddScalarProperty(properties, error, "category", "error.category");
@@ -483,6 +489,21 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
         }
 
         return properties;
+    }
+
+    private static void AddObjectScalarProperties(Dictionary<string, string?> properties, string prefix, JsonElement root)
+    {
+        foreach (var property in root.EnumerateObject())
+        {
+            var name = prefix + "." + property.Name;
+            if (property.Value.ValueKind == JsonValueKind.Object)
+            {
+                AddObjectScalarProperties(properties, name, property.Value);
+                continue;
+            }
+
+            AddScalarProperty(properties, name, property.Value);
+        }
     }
 
     private static void AddScalarProperty(Dictionary<string, string?> properties, JsonElement root, string name, string? targetName = null)
@@ -534,6 +555,45 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
         }
     }
 
+    private static void AddSelector(List<string> parts, JsonElement root)
+    {
+        if (!root.TryGetProperty("selector", out var selector) || selector.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        var selectorParts = new List<string>();
+        AddSelectorPart(selectorParts, selector, "text", "text_match", ScreenElementMatchModes.Contains);
+        AddSelectorPart(selectorParts, selector, "content_description", "content_description_match", ScreenElementMatchModes.Exact);
+        AddSelectorPart(selectorParts, selector, "resource_id", "resource_id_match", ScreenElementMatchModes.Exact);
+        AddSelectorPart(selectorParts, selector, "class_name", "class_name_match", ScreenElementMatchModes.Exact);
+        if (selector.TryGetProperty("region", out var region) &&
+            region.ValueKind == JsonValueKind.Object &&
+            TryGetInt32(region, "left", out var left) &&
+            TryGetInt32(region, "top", out var top) &&
+            TryGetInt32(region, "right", out var right) &&
+            TryGetInt32(region, "bottom", out var bottom))
+        {
+            selectorParts.Add($"region={left},{top},{right},{bottom}");
+        }
+
+        if (selectorParts.Count > 0)
+        {
+            parts.Add("selector=" + string.Join(", ", selectorParts));
+        }
+    }
+
+    private static void AddSelectorPart(List<string> parts, JsonElement selector, string valueName, string matchName, string defaultMatch)
+    {
+        if (!TryGetString(selector, valueName, out var value))
+        {
+            return;
+        }
+
+        var match = TryGetString(selector, matchName, out var matchValue) ? matchValue : defaultMatch;
+        parts.Add($"{valueName}:{match}={value}");
+    }
+
     private static void AddError(List<string> parts, JsonElement root)
     {
         if (!root.TryGetProperty("error", out var error) || error.ValueKind != JsonValueKind.Object)
@@ -564,6 +624,14 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
 
         value = property.GetString()!;
         return true;
+    }
+
+    private static bool TryGetInt32(JsonElement root, string name, out int value)
+    {
+        value = 0;
+        return root.TryGetProperty(name, out var property) &&
+            property.ValueKind == JsonValueKind.Number &&
+            property.TryGetInt32(out value);
     }
 
     private static string EscapeMarkdown(string value) =>

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Json.Serialization;
 using System.Xml.Linq;
 
 namespace Luotsi.Cli.Models;
@@ -167,6 +168,85 @@ public sealed record ScreenElement(
         return score;
     }
 
+    public int GetSelectorMatchScore(ScreenElementSelector selector)
+    {
+        ArgumentNullException.ThrowIfNull(selector);
+        if (!selector.HasCriteria)
+        {
+            return 0;
+        }
+
+        var score = 0;
+
+        if (!string.IsNullOrWhiteSpace(selector.Text))
+        {
+            var textScore = Math.Max(
+                GetTextFieldMatchScore(Text, selector.Text, selector.TextMatch, exactScore: 400, containsScore: 200),
+                GetTextFieldMatchScore(ContentDescription, selector.Text, selector.TextMatch, exactScore: 380, containsScore: 180));
+            if (textScore == 0)
+            {
+                return 0;
+            }
+
+            score += textScore;
+        }
+
+        if (!string.IsNullOrWhiteSpace(selector.ContentDescription))
+        {
+            var contentDescriptionScore = GetTextFieldMatchScore(ContentDescription, selector.ContentDescription, selector.ContentDescriptionMatch, exactScore: 360, containsScore: 160);
+            if (contentDescriptionScore == 0)
+            {
+                return 0;
+            }
+
+            score += contentDescriptionScore;
+        }
+
+        if (!string.IsNullOrWhiteSpace(selector.ResourceId))
+        {
+            var resourceIdScore = GetOrdinalFieldMatchScore(ResourceId, selector.ResourceId, selector.ResourceIdMatch, exactScore: 320, containsScore: 150);
+            if (resourceIdScore == 0)
+            {
+                return 0;
+            }
+
+            score += resourceIdScore;
+        }
+
+        if (!string.IsNullOrWhiteSpace(selector.ClassName))
+        {
+            var classNameScore = GetOrdinalFieldMatchScore(ClassName, selector.ClassName, selector.ClassNameMatch, exactScore: 220, containsScore: 100);
+            if (classNameScore == 0)
+            {
+                return 0;
+            }
+
+            score += classNameScore;
+        }
+
+        if (selector.Region is not null)
+        {
+            if (!CenterInside(selector.Region))
+            {
+                return 0;
+            }
+
+            score += 25;
+        }
+
+        if (Clickable)
+        {
+            score += 10;
+        }
+
+        if (Enabled)
+        {
+            score += 5;
+        }
+
+        return score;
+    }
+
     private static Bounds ParseBounds(string value)
     {
         var numbers = value.Split(['[', ']', ','], StringSplitOptions.RemoveEmptyEntries)
@@ -194,6 +274,50 @@ public sealed record ScreenElement(
 
         return TextCompareInfo.IndexOf(NormalizeForComparison(source), NormalizeForComparison(value), TextCompareOptions) >= 0;
     }
+
+    private bool CenterInside(Bounds region) =>
+        CenterX >= region.Left &&
+        CenterX <= region.Right &&
+        CenterY >= region.Top &&
+        CenterY <= region.Bottom;
+
+    private static int GetTextFieldMatchScore(string? source, string value, string? matchMode, int exactScore, int containsScore)
+    {
+        if (TextEquals(source, value))
+        {
+            return exactScore;
+        }
+
+        if (IsContainsMode(matchMode) && TextContains(source, value))
+        {
+            return containsScore;
+        }
+
+        return 0;
+    }
+
+    private static int GetOrdinalFieldMatchScore(string? source, string value, string? matchMode, int exactScore, int containsScore)
+    {
+        if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(value))
+        {
+            return 0;
+        }
+
+        if (string.Equals(source, value, StringComparison.Ordinal))
+        {
+            return exactScore;
+        }
+
+        if (IsContainsMode(matchMode) && source.Contains(value, StringComparison.Ordinal))
+        {
+            return containsScore;
+        }
+
+        return 0;
+    }
+
+    private static bool IsContainsMode(string? matchMode) =>
+        string.Equals(matchMode, ScreenElementMatchModes.Contains, StringComparison.OrdinalIgnoreCase);
 
     private static string NormalizeForComparison(string value)
     {
@@ -237,6 +361,56 @@ public sealed record ScreenElement(
         catch (ArgumentException)
         {
             return null;
+        }
+    }
+}
+
+public static class ScreenElementMatchModes
+{
+    public const string Exact = "exact";
+    public const string Contains = "contains";
+}
+
+public sealed record ScreenElementSelector(
+    string? Text = null,
+    string TextMatch = ScreenElementMatchModes.Contains,
+    string? ContentDescription = null,
+    string ContentDescriptionMatch = ScreenElementMatchModes.Exact,
+    string? ResourceId = null,
+    string ResourceIdMatch = ScreenElementMatchModes.Exact,
+    string? ClassName = null,
+    string ClassNameMatch = ScreenElementMatchModes.Exact,
+    Bounds? Region = null,
+    bool AllowAmbiguous = false)
+{
+    [JsonIgnore]
+    public bool HasCriteria =>
+        !string.IsNullOrWhiteSpace(Text) ||
+        !string.IsNullOrWhiteSpace(ContentDescription) ||
+        !string.IsNullOrWhiteSpace(ResourceId) ||
+        !string.IsNullOrWhiteSpace(ClassName) ||
+        Region is not null;
+
+    public string Describe()
+    {
+        var parts = new List<string>();
+        AddPart(parts, "text", Text, TextMatch);
+        AddPart(parts, "content_description", ContentDescription, ContentDescriptionMatch);
+        AddPart(parts, "resource_id", ResourceId, ResourceIdMatch);
+        AddPart(parts, "class_name", ClassName, ClassNameMatch);
+        if (Region is not null)
+        {
+            parts.Add($"region={Region.Left},{Region.Top},{Region.Right},{Region.Bottom}");
+        }
+
+        return parts.Count == 0 ? "<empty selector>" : string.Join(", ", parts);
+    }
+
+    private static void AddPart(List<string> parts, string name, string? value, string matchMode)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            parts.Add($"{name}:{matchMode}={value}");
         }
     }
 }

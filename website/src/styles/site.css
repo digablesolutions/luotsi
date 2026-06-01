@@ -231,6 +231,7 @@ html .sl-markdown-content :is(p, li, td, th) code {
 	.landing-page .hero-support,
 	.landing-page .proof-grid,
 	.landing-page .proof-badges,
+	.landing-page .question-grid,
 	.landing-page .launch-grid,
 	.landing-page .route-grid,
 	.landing-page .bucket-grid {
@@ -246,6 +247,7 @@ html .sl-markdown-content :is(p, li, td, th) code {
 	.landing-page .support-card,
 	.landing-page .proof-card,
 	.landing-page .proof-badge,
+	.landing-page .question-card,
 	.landing-page .launch-card,
 	.landing-page .route-card,
 	.landing-page .bucket-card {
@@ -466,6 +468,41 @@ html .sl-markdown-content :is(p, li, td, th) code {
 		line-height: 1.7;
 	}
 
+	.landing-page .question-grid {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+
+	.landing-page .question-card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.9rem;
+		padding: 1.25rem;
+		background: rgba(248, 250, 252, 0.88);
+	}
+
+	.landing-page .question-card h3 {
+		margin: 0;
+		color: var(--luotsi-navy);
+		font-size: 1.08rem;
+		line-height: 1.25;
+	}
+
+	.landing-page .question-card p {
+		margin: 0;
+		color: rgba(15, 23, 42, 0.72);
+		line-height: 1.65;
+	}
+
+	.landing-page .question-card code {
+		display: block;
+		margin-top: auto;
+		padding: 0.75rem 0.85rem;
+		border-radius: 0.9rem;
+		background: rgba(15, 23, 42, 0.08);
+		color: #0f172a;
+		overflow-wrap: anywhere;
+	}
+
 	.landing-page .launch-grid {
 		grid-template-columns: repeat(3, minmax(0, 1fr));
 	}
@@ -622,6 +659,7 @@ html .sl-markdown-content :is(p, li, td, th) code {
 
 @media (max-width: 960px) {
 	.landing-page .hero,
+	.landing-page .question-grid,
 	.landing-page .launch-grid,
 	.landing-page .route-grid,
 	.landing-page .bucket-grid {

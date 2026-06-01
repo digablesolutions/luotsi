@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
 using Luotsi.Cli.Scenarios;
@@ -71,7 +72,7 @@ internal sealed class InspectSessionProtocol(IConsoleIo console, Action<string>?
             raw_line = rawLine
         });
 
-    public void WriteCommandResult(string sessionId, string? requestId, string command, bool ok, DateTimeOffset startedAt, DateTimeOffset endedAt, object? data = null, ErrorInfo? error = null) =>
+    public void WriteCommandResult(string sessionId, string? requestId, string command, bool ok, DateTimeOffset startedAt, DateTimeOffset endedAt, object? data = null, ErrorInfo? error = null, ScreenElementSelector? selector = null) =>
         WriteJsonLine(new
         {
             type = SessionEventTypes.Inspect.CommandResult,
@@ -81,6 +82,7 @@ internal sealed class InspectSessionProtocol(IConsoleIo console, Action<string>?
             ok,
             started_at = startedAt,
             ended_at = endedAt,
+            selector,
             data,
             error
         });
@@ -124,6 +126,19 @@ internal sealed record InspectCommandRequest(
     string? Id,
     string? Command,
     string? Text,
+    string? TextMatch,
+    string? ContentDescription,
+    string? ContentDescriptionMatch,
+    string? ResourceId,
+    string? ResourceIdMatch,
+    string? ClassName,
+    string? ClassNameMatch,
+    Bounds? Region,
+    int? Left,
+    int? Top,
+    int? Right,
+    int? Bottom,
+    bool? AllowAmbiguous,
     string? Label,
     string? Code,
     string? Output,
@@ -131,7 +146,68 @@ internal sealed record InspectCommandRequest(
     int? TimeLimitSec,
     int? Tail,
     int? X,
-    int? Y);
+    int? Y)
+{
+    public bool HasSelectorOptions =>
+        !string.IsNullOrWhiteSpace(TextMatch) ||
+        !string.IsNullOrWhiteSpace(ContentDescription) ||
+        !string.IsNullOrWhiteSpace(ContentDescriptionMatch) ||
+        !string.IsNullOrWhiteSpace(ResourceId) ||
+        !string.IsNullOrWhiteSpace(ResourceIdMatch) ||
+        !string.IsNullOrWhiteSpace(ClassName) ||
+        !string.IsNullOrWhiteSpace(ClassNameMatch) ||
+        Region is not null ||
+        HasFlatRegionInput ||
+        AllowAmbiguous is not null;
+
+    public ScreenElementSelector ToSelector()
+    {
+        var flatRegion = CreateFlatRegion();
+        if (Region is not null && flatRegion is not null)
+        {
+            throw new UsageException("Selector region must use either region or left/top/right/bottom, not both.");
+        }
+
+        return new ScreenElementSelector(
+            Text,
+            TextMatch ?? ScreenElementMatchModes.Contains,
+            ContentDescription,
+            ContentDescriptionMatch ?? ScreenElementMatchModes.Exact,
+            ResourceId,
+            ResourceIdMatch ?? ScreenElementMatchModes.Exact,
+            ClassName,
+            ClassNameMatch ?? ScreenElementMatchModes.Exact,
+            Region ?? flatRegion,
+            AllowAmbiguous ?? false);
+    }
+
+    private bool HasFlatRegionInput =>
+        Left is not null ||
+        Top is not null ||
+        Right is not null ||
+        Bottom is not null;
+
+    private bool HasCompleteFlatRegion =>
+        Left is not null &&
+        Top is not null &&
+        Right is not null &&
+        Bottom is not null;
+
+    private Bounds? CreateFlatRegion()
+    {
+        if (!HasFlatRegionInput)
+        {
+            return null;
+        }
+
+        if (!HasCompleteFlatRegion)
+        {
+            throw new UsageException("Selector region requires all flat fields: left, top, right, and bottom.");
+        }
+
+        return new Bounds(Left!.Value, Top!.Value, Right!.Value, Bottom!.Value);
+    }
+}
 
 internal sealed record ParseInspectCommandResult(InspectCommandRequest? Request, string? ErrorMessage, string? RawLine)
 {

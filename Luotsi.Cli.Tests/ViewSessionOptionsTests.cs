@@ -90,7 +90,8 @@ public sealed partial class AppTests
             Console = console,
             TimeProvider = timeProvider,
             DeviceHostFactory = new FakeDeviceHostFactory(host),
-            ViewSessionFactory = new FakeViewSessionFactory(session)
+            ViewSessionFactory = new FakeViewSessionFactory(session),
+            ViewProfileStore = new FakeViewProfileStore()
         });
 
         var exitCode = await app.RunAsync([
@@ -115,7 +116,8 @@ public sealed partial class AppTests
             Console = console,
             TimeProvider = timeProvider,
             DeviceHostFactory = new FakeDeviceHostFactory(host),
-            ViewSessionFactory = new FakeViewSessionFactory(session)
+            ViewSessionFactory = new FakeViewSessionFactory(session),
+            ViewProfileStore = new FakeViewProfileStore()
         });
 
         var exitCode = await app.RunAsync([
@@ -140,7 +142,8 @@ public sealed partial class AppTests
             Console = console,
             TimeProvider = timeProvider,
             DeviceHostFactory = new FakeDeviceHostFactory(host),
-            ViewSessionFactory = new FakeViewSessionFactory(session)
+            ViewSessionFactory = new FakeViewSessionFactory(session),
+            ViewProfileStore = new FakeViewProfileStore()
         });
 
         var exitCode = await app.RunAsync([
@@ -165,7 +168,8 @@ public sealed partial class AppTests
             Console = console,
             TimeProvider = timeProvider,
             DeviceHostFactory = new FakeDeviceHostFactory(host),
-            ViewSessionFactory = new FakeViewSessionFactory(session)
+            ViewSessionFactory = new FakeViewSessionFactory(session),
+            ViewProfileStore = new FakeViewProfileStore()
         });
 
         var exitCode = await app.RunAsync([
@@ -190,7 +194,8 @@ public sealed partial class AppTests
             Console = console,
             TimeProvider = timeProvider,
             DeviceHostFactory = new FakeDeviceHostFactory(host),
-            ViewSessionFactory = new FakeViewSessionFactory(session)
+            ViewSessionFactory = new FakeViewSessionFactory(session),
+            ViewProfileStore = new FakeViewProfileStore()
         });
 
         var exitCode = await app.RunAsync([
@@ -309,7 +314,8 @@ public sealed partial class AppTests
             Console = console,
             TimeProvider = timeProvider,
             DeviceHostFactory = new FakeDeviceHostFactory(host),
-            ViewSessionFactory = new FakeViewSessionFactory(session)
+            ViewSessionFactory = new FakeViewSessionFactory(session),
+            ViewProfileStore = new FakeViewProfileStore()
         });
 
         var exitCode = await app.RunAsync([
@@ -337,7 +343,8 @@ public sealed partial class AppTests
             Console = console,
             TimeProvider = timeProvider,
             DeviceHostFactory = new FakeDeviceHostFactory(host),
-            ViewSessionFactory = new FakeViewSessionFactory(session)
+            ViewSessionFactory = new FakeViewSessionFactory(session),
+            ViewProfileStore = new FakeViewProfileStore()
         });
 
         var exitCode = await app.RunAsync([
