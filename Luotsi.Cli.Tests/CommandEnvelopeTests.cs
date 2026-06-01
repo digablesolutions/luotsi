@@ -970,6 +970,41 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayScenarioDraft_Uses_Selector_Default_Match_Modes_When_Metadata_Omits_Match()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = "/tmp/inspect-selector-default-match-replay-root";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), """
+        {"type":"session_started","session_id":"inspect-session","started_at":"2026-05-18T10:00:00Z"}
+        {"type":"command_result","session_id":"inspect-session","id":"1","command":"tap_text","ok":true,"started_at":"2026-05-18T10:00:01Z","ended_at":"2026-05-18T10:00:02Z","selector":{"text":"Files","resource_id":"com.elotouch.home:id/tvAppName","class_name":"android.widget.TextView"},"data":{"x":814,"y":315}}
+        {"type":"session_ended","session_id":"inspect-session","ended_at":"2026-05-18T10:00:09Z","reason":"client_exit"}
+        """);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "scenario-draft", "--artifacts", replayRoot, "--output", "/tmp/selector-default-match-draft.json", "--write-markdown"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var originDetail = envelope.RootElement
+            .GetProperty("data")
+            .GetProperty("step_origins")[0]
+            .GetProperty("detail")
+            .GetString();
+        Assert.Contains("text:contains=Files", originDetail, StringComparison.Ordinal);
+        Assert.Contains("resource_id:exact=com.elotouch.home:id/tvAppName", originDetail, StringComparison.Ordinal);
+        Assert.Contains("class_name:exact=android.widget.TextView", originDetail, StringComparison.Ordinal);
+        var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "scenario-draft.md"));
+        Assert.Contains("text:contains=Files", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayScenarioDraft_Promotes_ScreenDelta_Text_Into_Waits()
     {
         var console = new FakeConsole();

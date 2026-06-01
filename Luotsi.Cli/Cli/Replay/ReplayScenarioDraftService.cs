@@ -875,10 +875,10 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
         }
 
         var parts = new List<string>();
-        AddSelectorPart(parts, selector, "text", "text_match");
-        AddSelectorPart(parts, selector, "content_description", "content_description_match");
-        AddSelectorPart(parts, selector, "resource_id", "resource_id_match");
-        AddSelectorPart(parts, selector, "class_name", "class_name_match");
+        AddSelectorPart(parts, selector, "text", "text_match", ScreenElementMatchModes.Contains);
+        AddSelectorPart(parts, selector, "content_description", "content_description_match", ScreenElementMatchModes.Exact);
+        AddSelectorPart(parts, selector, "resource_id", "resource_id_match", ScreenElementMatchModes.Exact);
+        AddSelectorPart(parts, selector, "class_name", "class_name_match", ScreenElementMatchModes.Exact);
         if (selector.TryGetProperty("region", out var region) &&
             region.ValueKind == JsonValueKind.Object &&
             TryGetInt32(region, "left", out var left) &&
@@ -898,14 +898,14 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
         return parts.Count > 0;
     }
 
-    private static void AddSelectorPart(List<string> parts, JsonElement selector, string valueName, string matchName)
+    private static void AddSelectorPart(List<string> parts, JsonElement selector, string valueName, string matchName, string defaultMatch)
     {
         if (!TryGetString(selector, valueName, out var value))
         {
             return;
         }
 
-        var match = TryGetOptionalString(selector, matchName) ?? ScreenElementMatchModes.Exact;
+        var match = TryGetOptionalString(selector, matchName) ?? defaultMatch;
         parts.Add($"{valueName}:{match}={value}");
     }
 
