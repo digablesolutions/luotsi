@@ -32,7 +32,7 @@ Start here:
 
 ### Can my agent inspect and act on a real Android device?
 
-Yes. `inspect` opens a long-lived JSONL session, emits screen snapshots and deltas, accepts JSON commands such as `wait_visible`, `tap_text`, `type_text`, `screenshot`, and `exit`, and writes the same event stream into replay artifacts.
+Yes. `inspect` opens a long-lived JSONL session, emits screen snapshots and deltas, accepts JSON commands such as `wait_visible`, `tap_text`, `tap_element`, `type_text`, `screenshot`, and `exit`, and writes the same event stream into replay artifacts.
 
 ### Can CI run this and leave useful evidence?
 
@@ -387,6 +387,14 @@ Scenarios are JSON playbooks. See the public [Scenario Playbooks guide](https://
   ]
 }
 ```
+
+Selector-backed steps are available when text alone is too broad:
+
+```json
+{ "name": "tap Files", "action": "tapElement", "selector": { "text": "Files", "textMatch": "exact", "resourceId": "com.elotouch.home:id/tvAppName" } }
+```
+
+Use `waitElement` for the same structured selector wait. Scenario selectors use camelCase fields (`textMatch`, `resourceId`, `allowAmbiguous`) while inspect JSONL uses snake_case.
 
 Template syntax: `${env:NAME}`, `${env:NAME|fallback}`, `${var:name}`, `${now:HHmmss}`.
 

@@ -70,8 +70,27 @@ internal sealed class ScenarioTemplateResolver(TimeProvider timeProvider, IEnvir
             ExpectedSha256File = ResolveValue(step.ExpectedSha256File, variables, resolvedVariables),
             BaselineFile = ResolveValue(step.BaselineFile, variables, resolvedVariables),
             ExpectedRegionSha256 = ResolveValue(step.ExpectedRegionSha256, variables, resolvedVariables),
-            ExpectedRegionSha256File = ResolveValue(step.ExpectedRegionSha256File, variables, resolvedVariables)
+            ExpectedRegionSha256File = ResolveValue(step.ExpectedRegionSha256File, variables, resolvedVariables),
+            Selector = ResolveSelector(step.Selector, variables, resolvedVariables)
         };
+
+    private ScreenElementSelector? ResolveSelector(
+        ScreenElementSelector? selector,
+        IReadOnlyDictionary<string, string>? variables,
+        IDictionary<string, string> resolvedVariables) =>
+        selector is null
+            ? null
+            : selector with
+            {
+                Text = ResolveValue(selector.Text, variables, resolvedVariables),
+                TextMatch = ResolveValue(selector.TextMatch, variables, resolvedVariables) ?? selector.TextMatch,
+                ContentDescription = ResolveValue(selector.ContentDescription, variables, resolvedVariables),
+                ContentDescriptionMatch = ResolveValue(selector.ContentDescriptionMatch, variables, resolvedVariables) ?? selector.ContentDescriptionMatch,
+                ResourceId = ResolveValue(selector.ResourceId, variables, resolvedVariables),
+                ResourceIdMatch = ResolveValue(selector.ResourceIdMatch, variables, resolvedVariables) ?? selector.ResourceIdMatch,
+                ClassName = ResolveValue(selector.ClassName, variables, resolvedVariables),
+                ClassNameMatch = ResolveValue(selector.ClassNameMatch, variables, resolvedVariables) ?? selector.ClassNameMatch
+            };
 
     private string ResolveVariable(
         string name,

@@ -106,7 +106,7 @@ public interface IDeviceHost : IScenarioActionHost, IScenarioScreenshotAssertion
     /// <param name="selector">Element selector.</param>
     /// <param name="timeoutSec">Timeout in seconds.</param>
     /// <returns>Matched element.</returns>
-    Task<ScreenElement> WaitVisibleAsync(ScreenElementSelector selector, int timeoutSec) =>
+    new Task<ScreenElement> WaitVisibleAsync(ScreenElementSelector selector, int timeoutSec) =>
         throw new NotSupportedException("Structured element selectors are not supported by this device host.");
 
     /// <summary>
@@ -115,7 +115,7 @@ public interface IDeviceHost : IScenarioActionHost, IScenarioScreenshotAssertion
     /// <param name="selector">Element selector.</param>
     /// <param name="timeoutSec">Timeout in seconds.</param>
     /// <returns>Tap metadata.</returns>
-    Task<TapResult> TapElementAsync(ScreenElementSelector selector, int timeoutSec) =>
+    new Task<TapResult> TapElementAsync(ScreenElementSelector selector, int timeoutSec) =>
         throw new NotSupportedException("Structured element selectors are not supported by this device host.");
 
     /// <summary>

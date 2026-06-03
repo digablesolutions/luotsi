@@ -62,7 +62,7 @@ Filtering returns a focused subgraph with one-hop context. `total_node_count` an
 | `scenario` | Scenario entry from a failure capsule. |
 | `artifact` | Screenshot, logcat, hierarchy, report, or metadata file linked to a scenario. |
 | `action` | Promoted action or command such as `waitVisible`, `tap_text`, or `take_screenshot`. |
-| `selector` | Promoted selector, currently text-based. |
+| `selector` | Promoted text or structured element selector. |
 | `screen_state` | Screen or screenshot observation. |
 | `telemetry_signal` | Semantic telemetry signal emitted by the app or observed by Luotsi. |
 | `scenario_draft` | Generated scenario draft summary. |

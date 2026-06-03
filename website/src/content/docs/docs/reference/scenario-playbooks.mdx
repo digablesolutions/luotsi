@@ -51,12 +51,29 @@ This matters most for coordinate-heavy steps where the wrong device or orientati
 
 ## Action families
 
-- Interaction: `waitVisible`, `waitNotVisible`, `tapText`, `tapPoint`, `doubleTapHeaderLogo`, `doubleTap`, `typeText`, `typePin`, `keyevent`
+- Interaction: `waitVisible`, `waitElement`, `waitNotVisible`, `tapText`, `tapElement`, `tapPoint`, `doubleTapHeaderLogo`, `doubleTap`, `typeText`, `typePin`, `keyevent`
 - Waits and assertions: `waitLog`, `waitStep`, `waitActionReady`, `resetLog`, `assertEvent`, `assertScreenshot`, `assertTextInputReady`, `assertBelow`, `assertAligned`, `assertAppVersion`
 - App and package: `startApp`, `startUri`, `forceStop`, `clear`, `clearApp`, `waitForActivity`, `waitForNotActivity`, `isAppInstalled`, `listInstalledPackages`, `grantPermission`, `revokePermission`
 - Artifacts and utility: `takeScreenshot`, `captureArtifacts`, `screenState`, `sleep`
 
 `doubleTap` is currently a compatibility alias for the header-logo interaction only. If `headerLogo: true` is omitted, scenario validation rejects the step.
+
+Use `waitElement` and `tapElement` when text is too broad for a stable scenario. They accept a nested `selector` object with camelCase fields:
+
+```json
+{
+  "name": "tap Files",
+  "action": "tapElement",
+  "selector": {
+    "text": "Files",
+    "textMatch": "exact",
+    "resourceId": "com.elotouch.home:id/tvAppName",
+    "className": "android.widget.TextView"
+  }
+}
+```
+
+Selector `textMatch` defaults to `contains`; `contentDescriptionMatch`, `resourceIdMatch`, and `classNameMatch` default to `exact`. Add `region` with `left`, `top`, `right`, and `bottom` when duplicate elements need a layout constraint.
 
 ## Defaults and validation
 

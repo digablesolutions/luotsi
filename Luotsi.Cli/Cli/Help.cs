@@ -369,7 +369,7 @@ Notes:
   --write-markdown, it writes replay-scrub.json and replay-scrub.md into the
   artifact root. Replay graph emits a stable node
   and edge model over sessions, timeline events, failures, scenarios,
-  artifacts, actions, text selectors, screen observations, telemetry
+  artifacts, actions, selectors, screen observations, telemetry
   signals, and generated scenario draft provenance. Its result includes query,
   taxonomy, agent_summary, total_node_count, total_edge_count, node_kinds,
   edge_kinds, insights, actions, and failure_paths so agents can quickly

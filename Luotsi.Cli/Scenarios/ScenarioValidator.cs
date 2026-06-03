@@ -96,6 +96,11 @@ internal static class ScenarioValidator
                 RequireScenarioValue(step.Text, $"{stepLabel} {action} requires text.");
                 break;
 
+            case "waitElement":
+            case "tapElement":
+                ValidateSelector(step, action);
+                break;
+
             case "typePin":
                 RequireScenarioValue(step.Text, $"{stepLabel} typePin requires text.");
                 if (step.Text!.Any(static digit => !char.IsDigit(digit)))
@@ -279,6 +284,16 @@ internal static class ScenarioValidator
         {
             throw new UsageException(message);
         }
+    }
+
+    private static void ValidateSelector(ScenarioStep step, string action)
+    {
+        if (step.Selector is null)
+        {
+            throw new UsageException($"{action} requires selector.");
+        }
+
+        ScreenElementSelectorValidator.Validate(step.Selector, action);
     }
 
     private static void ValidateRegex(string? pattern, string messagePrefix)

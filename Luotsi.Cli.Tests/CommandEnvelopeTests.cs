@@ -958,8 +958,13 @@ public sealed partial class AppTests
         Assert.Equal(0, exitCode);
         var data = envelope.RootElement.GetProperty("data");
         var step = data.GetProperty("scenario").GetProperty("steps")[0];
-        Assert.Equal("tapText", step.GetProperty("action").GetString());
-        Assert.Equal("Files", step.GetProperty("text").GetString());
+        Assert.Equal("tapElement", step.GetProperty("action").GetString());
+        Assert.False(step.TryGetProperty("text", out _));
+        var selector = step.GetProperty("selector");
+        Assert.Equal("Files", selector.GetProperty("text").GetString());
+        Assert.Equal("exact", selector.GetProperty("text_match").GetString());
+        Assert.Equal("com.elotouch.home:id/tvAppName", selector.GetProperty("resource_id").GetString());
+        Assert.Equal("android.widget.TextView", selector.GetProperty("class_name").GetString());
         var origin = data.GetProperty("step_origins")[0];
         Assert.Contains("resource_id:exact=com.elotouch.home:id/tvAppName", origin.GetProperty("detail").GetString(), StringComparison.Ordinal);
         var reviewItems = data.GetProperty("review_items").EnumerateArray().ToArray();
@@ -1000,6 +1005,14 @@ public sealed partial class AppTests
         Assert.Contains("text:contains=Files", originDetail, StringComparison.Ordinal);
         Assert.Contains("resource_id:exact=com.elotouch.home:id/tvAppName", originDetail, StringComparison.Ordinal);
         Assert.Contains("class_name:exact=android.widget.TextView", originDetail, StringComparison.Ordinal);
+        var selector = envelope.RootElement
+            .GetProperty("data")
+            .GetProperty("scenario")
+            .GetProperty("steps")[0]
+            .GetProperty("selector");
+        Assert.Equal("contains", selector.GetProperty("text_match").GetString());
+        Assert.Equal("exact", selector.GetProperty("resource_id_match").GetString());
+        Assert.Equal("exact", selector.GetProperty("class_name_match").GetString());
         var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "scenario-draft.md"));
         Assert.Contains("text:contains=Files", markdown, StringComparison.Ordinal);
     }
@@ -1361,6 +1374,40 @@ public sealed partial class AppTests
         var data = envelope.RootElement.GetProperty("data");
         Assert.True(data.GetProperty("scenario_draft_available").GetBoolean());
         Assert.Contains("command_result:tap_text", data.GetProperty("scenario_draft_reason").GetString(), StringComparison.Ordinal);
+        Assert.Contains(data.GetProperty("suggested_commands").EnumerateArray(), command =>
+        {
+            var value = command.GetProperty("command").GetString();
+            return value is not null &&
+                value.Contains("scenario-draft", StringComparison.Ordinal) &&
+                value.Contains("--write-json --write-markdown", StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayCapsule_Suggests_ScenarioDraft_When_Structured_Selector_Timeline_Exists()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var inspectRoot = Path.Join(replayRoot, "inspect");
+        fileSystem.CreateDirectory(inspectRoot);
+        fileSystem.AddFile(Path.Join(inspectRoot, "session-timeline.jsonl"), """
+        {"type":"command_result","session_id":"inspect-session","id":"1","command":"tap_element","ok":true,"selector":{"text":"Files","text_match":"exact","resource_id":"com.elotouch.home:id/tvAppName"},"data":{"x":814,"y":315}}
+        """);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "capsule", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.True(data.GetProperty("scenario_draft_available").GetBoolean());
+        Assert.Contains("command_result:tap_element", data.GetProperty("scenario_draft_reason").GetString(), StringComparison.Ordinal);
         Assert.Contains(data.GetProperty("suggested_commands").EnumerateArray(), command =>
         {
             var value = command.GetProperty("command").GetString();

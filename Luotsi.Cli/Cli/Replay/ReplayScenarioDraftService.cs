@@ -153,6 +153,7 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
         step.Action switch
         {
             "waitVisible" when !string.IsNullOrWhiteSpace(step.Text) => "waitVisible:" + step.Text,
+            "waitElement" when step.Selector is not null => "waitElement:" + step.Selector.Describe(),
             "waitStep" when !string.IsNullOrWhiteSpace(step.Step) => "waitStep:" + step.Step,
             "waitActionReady" when !string.IsNullOrWhiteSpace(step.Text) => "waitActionReady:" + step.Step + ":" + step.Text,
             "assertEvent" when !string.IsNullOrWhiteSpace(step.Event) => "assertEvent:" + step.Event,
@@ -160,7 +161,7 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
         };
 
     private static string GetStepTarget(ScenarioStep step) =>
-        step.Text ?? step.Step ?? step.Event ?? step.Code ?? step.Label ?? step.Action;
+        step.Text ?? step.Selector?.Describe() ?? step.Step ?? step.Event ?? step.Code ?? step.Label ?? step.Action;
 
     private static IEnumerable<ReplayScenarioDraftSourceSummary> BuildSourceSummaries(
         IReadOnlyList<ReplayScenarioDraftStepOrigin> origins,
@@ -568,9 +569,9 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
 
         var step = command switch
         {
-            "tap_text" or "tap_element" or "tap_selector" => CreateTextStep(evt, data, "tapText", "tap text"),
+            "tap_text" or "tap_element" or "tap_selector" => CreateSelectorOrTextStep(evt, data, "tapElement", "tapText", "tap element", "tap text"),
             "tap_point" => CreateTapPointStep(data),
-            "wait_visible" or "wait_element" or "wait_selector" => CreateTextStep(evt, data, "waitVisible", "wait visible"),
+            "wait_visible" or "wait_element" or "wait_selector" => CreateSelectorOrTextStep(evt, data, "waitElement", "waitVisible", "wait element", "wait visible"),
             "type_text" => CreateTextStep(evt, data, "typeText", "type text"),
             "keyevent" => TryGetString(data, "code", out var code)
                 ? new ScenarioStep("keyevent " + code, "keyevent", null, code, null)
@@ -666,6 +667,9 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
             "waitVisible" or "waitNotVisible" or "tapText" or "typeText" or "waitLog" => TryGetString(evt, "text", out var text)
                 ? new DraftStep(new ScenarioStep(stepName, action, text, null, null, TimeoutSec: action.StartsWith("wait", StringComparison.OrdinalIgnoreCase) ? 15 : null), "scenario_event", eventType, null, action + ": " + text, "high")
                 : null,
+            "waitElement" or "tapElement" => TryCreateSelector(evt, out var selector)
+                ? new DraftStep(new ScenarioStep(stepName, action, null, null, null, TimeoutSec: action.StartsWith("wait", StringComparison.OrdinalIgnoreCase) ? 15 : null, Selector: selector), "scenario_event", eventType, null, action + ": " + selector.Describe(), "high")
+                : null,
             "keyevent" => TryGetString(evt, "code", out var code)
                 ? new DraftStep(new ScenarioStep(stepName, action, null, code, null), "scenario_event", eventType, null, "keyevent: " + code, "high")
                 : null,
@@ -694,6 +698,24 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
         return new DraftStep(new ScenarioStep("key command " + command, "keyevent", null, command, null), "view_event", eventType, null, "key command: " + command, "medium");
     }
 
+    private static ScenarioStep? CreateSelectorOrTextStep(JsonElement evt, JsonElement data, string selectorAction, string textAction, string selectorFallbackName, string textFallbackName)
+    {
+        if (TryCreateSelector(evt, out var selector))
+        {
+            var label = FirstNonBlank(selector.Text, selector.ContentDescription, LastResourceSegment(selector.ResourceId), selector.ClassName) ?? selector.Describe();
+            return new ScenarioStep(
+                selectorFallbackName + " " + label,
+                selectorAction,
+                null,
+                null,
+                null,
+                TimeoutSec: selectorAction.StartsWith("wait", StringComparison.OrdinalIgnoreCase) ? 15 : null,
+                Selector: selector);
+        }
+
+        return CreateTextStep(evt, data, textAction, textFallbackName);
+    }
+
     private static ScenarioStep? CreateTextStep(JsonElement evt, JsonElement data, string action, string fallbackName)
     {
         if (!TryGetString(data, "text", out var text) &&
@@ -718,9 +740,11 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
             yield return "Draft includes coordinate taps; add scenario metadata for device layout before using in CI.";
         }
 
-        if (steps.All(static step => !string.Equals(step.Action, "waitVisible", StringComparison.OrdinalIgnoreCase)))
+        if (steps.All(static step =>
+            !string.Equals(step.Action, "waitVisible", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(step.Action, "waitElement", StringComparison.OrdinalIgnoreCase)))
         {
-            yield return "Draft has no waitVisible steps; add waits around asynchronous UI transitions.";
+            yield return "Draft has no waitVisible or waitElement steps; add waits around asynchronous UI transitions.";
         }
     }
 
@@ -732,6 +756,10 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
             if (string.Equals(step.Action, "tapText", StringComparison.OrdinalIgnoreCase))
             {
                 yield return new ReplayScenarioDraftSuggestion(i + 1, "selector", "medium", "Review whether this tap should be preceded by waitVisible for the same text.");
+            }
+            else if (string.Equals(step.Action, "tapElement", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return new ReplayScenarioDraftSuggestion(i + 1, "selector", "medium", "Review whether this tap should be preceded by waitElement for the same selector.");
             }
             else if (string.Equals(step.Action, "tapPoint", StringComparison.OrdinalIgnoreCase))
             {
@@ -795,7 +823,7 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
                 "info",
                 "selector",
                 origin.StepIndex,
-                "Inspect selector metadata was captured in the replay origin. Generated scenario steps currently replay text actions, so verify resource_id/class/region constraints before committing.",
+                "Inspect selector metadata was captured in the replay origin. Generated scenario steps can now replay structured element selectors; verify resource_id/class/region constraints before committing.",
                 origin.SourceCommand);
         }
 
@@ -854,9 +882,86 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
     private static bool TryGetSelectorText(JsonElement evt, out string text)
     {
         text = string.Empty;
-        return evt.ValueKind == JsonValueKind.Object &&
-            evt.TryGetProperty("selector", out var selector) &&
-            TryGetString(selector, "text", out text);
+        if (!TryCreateSelector(evt, out var selector) || string.IsNullOrWhiteSpace(selector.Text))
+        {
+            return false;
+        }
+
+        text = selector.Text;
+        return true;
+    }
+
+    private static bool TryCreateSelector(JsonElement evt, out ScreenElementSelector selector)
+    {
+        selector = new ScreenElementSelector();
+        if (evt.ValueKind != JsonValueKind.Object ||
+            !evt.TryGetProperty("selector", out var source) ||
+            source.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+
+        var candidate = new ScreenElementSelector(
+            TryGetOptionalString(source, "text"),
+            TryGetOptionalString(source, "text_match", "textMatch") ?? ScreenElementMatchModes.Contains,
+            TryGetOptionalString(source, "content_description", "contentDescription"),
+            TryGetOptionalString(source, "content_description_match", "contentDescriptionMatch") ?? ScreenElementMatchModes.Exact,
+            TryGetOptionalString(source, "resource_id", "resourceId"),
+            TryGetOptionalString(source, "resource_id_match", "resourceIdMatch") ?? ScreenElementMatchModes.Exact,
+            TryGetOptionalString(source, "class_name", "className"),
+            TryGetOptionalString(source, "class_name_match", "classNameMatch") ?? ScreenElementMatchModes.Exact,
+            TryGetSelectorRegion(source),
+            TryGetBool(source, "allow_ambiguous", "allowAmbiguous") ?? false);
+
+        if (!candidate.HasCriteria)
+        {
+            return false;
+        }
+
+        selector = ScreenElementSelectorValidator.Validate(candidate, "selector");
+        return true;
+    }
+
+    private static Bounds? TryGetSelectorRegion(JsonElement selector)
+    {
+        if (!selector.TryGetProperty("region", out var region) ||
+            region.ValueKind != JsonValueKind.Object ||
+            !TryGetInt32(region, "left", out var left) ||
+            !TryGetInt32(region, "top", out var top) ||
+            !TryGetInt32(region, "right", out var right) ||
+            !TryGetInt32(region, "bottom", out var bottom))
+        {
+            return null;
+        }
+
+        return new Bounds(left, top, right, bottom);
+    }
+
+    private static string? TryGetOptionalString(JsonElement root, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (TryGetString(root, name, out var value))
+            {
+                return value;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool? TryGetBool(JsonElement root, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            var value = TryGetBool(root, name);
+            if (value is not null)
+            {
+                return value;
+            }
+        }
+
+        return null;
     }
 
     private static string CreateInspectCommandDetail(JsonElement evt, string command) =>
@@ -908,6 +1013,20 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
         var match = TryGetOptionalString(selector, matchName) ?? defaultMatch;
         parts.Add($"{valueName}:{match}={value}");
     }
+
+    private static string? LastResourceSegment(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var index = value.LastIndexOf('/');
+        return index >= 0 && index + 1 < value.Length ? value[(index + 1)..] : value;
+    }
+
+    private static string? FirstNonBlank(params string?[] values) =>
+        values.FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
 
     private static int? TryGetOptionalInt32(JsonElement root, string name) =>
         TryGetInt32(root, name, out var value) ? value : null;

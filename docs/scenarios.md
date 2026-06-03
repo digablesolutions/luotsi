@@ -110,7 +110,7 @@ When optional parameters are omitted, these defaults apply:
 
 | Field | Default | Used by |
 |---|---|---|
-| `timeoutSec` | `15` | `waitVisible`, `waitNotVisible`, `tapText`, `waitLog`, `waitStep`, `waitActionReady`, `assertEvent`, `assertTextInputReady`, `waitForActivity`, `waitForNotActivity` |
+| `timeoutSec` | `15` | `waitVisible`, `waitElement`, `waitNotVisible`, `tapText`, `tapElement`, `waitLog`, `waitStep`, `waitActionReady`, `assertEvent`, `assertTextInputReady`, `waitForActivity`, `waitForNotActivity` |
 | `postTapDelayMs` | `300` | `tapPoint` |
 | `intervalMs` | `120` | `typePin` |
 | `milliseconds` | `1000` | `sleep` |
@@ -128,8 +128,10 @@ When optional parameters are omitted, these defaults apply:
 | Action | Key arguments |
 |---|---|
 | `waitVisible` | `text`, `timeoutSec` |
+| `waitElement` | `selector`, `timeoutSec` |
 | `waitNotVisible` | `text`, `timeoutSec` |
 | `tapText` | `text`, `timeoutSec` |
+| `tapElement` | `selector`, `timeoutSec` |
 | `tapPoint` | `x`, `y` or `xRatio`, `yRatio`; `postTapDelayMs` *(optional)* |
 | `doubleTapHeaderLogo` | — |
 | `doubleTap` | `headerLogo: true` only; equivalent to `doubleTapHeaderLogo` |
@@ -138,6 +140,25 @@ When optional parameters are omitted, these defaults apply:
 | `keyevent` | `code` (KEYCODE_* string) |
 
 `doubleTap` is currently a compatibility alias for the header-logo interaction only. If `headerLogo: true` is omitted, scenario validation rejects the step.
+
+`waitElement` and `tapElement` use the same structured selector contract as inspect mode, but scenario JSON uses camelCase fields:
+
+```json
+{
+  "name": "tap Files",
+  "action": "tapElement",
+  "timeoutSec": 10,
+  "selector": {
+    "text": "Files",
+    "textMatch": "exact",
+    "resourceId": "com.elotouch.home:id/tvAppName",
+    "className": "android.widget.TextView",
+    "region": { "left": 0, "top": 0, "right": 1000, "bottom": 600 }
+  }
+}
+```
+
+Selector fields are `text`, `textMatch` (`contains` by default), `contentDescription`, `contentDescriptionMatch`, `resourceId`, `resourceIdMatch`, `className`, `classNameMatch`, `region`, and `allowAmbiguous`. Non-text match modes default to `exact`; ambiguity is rejected unless `allowAmbiguous` is `true`.
 
 ### Waits & Assertions
 

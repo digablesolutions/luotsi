@@ -11,8 +11,10 @@ public interface IScenarioActionHost
 {
     Task<ScreenState> GetScreenStateAsync();
     Task<ScreenElement> WaitVisibleAsync(string text, int timeoutSec);
+    Task<ScreenElement> WaitVisibleAsync(ScreenElementSelector selector, int timeoutSec);
     Task<WaitNotVisibleResult> WaitNotVisibleAsync(string text, int timeoutSec);
     Task<TapResult> TapTextAsync(string text, int timeoutSec);
+    Task<TapResult> TapElementAsync(ScreenElementSelector selector, int timeoutSec);
     Task<TapPointResult> TapPointAsync(string? label, int? x, int? y, double? xRatio, double? yRatio, int postTapDelayMs);
     Task<DoubleTapHeaderLogoResult> DoubleTapHeaderLogoAsync();
     Task<TypeTextResult> TypeTextAsync(string text);
@@ -66,8 +68,10 @@ public sealed class ScenarioExecutor
     internal static readonly HashSet<string> SupportedScenarioActions =
     [
         "waitVisible",
+        "waitElement",
         "waitNotVisible",
         "tapText",
+        "tapElement",
         "tapPoint",
         "doubleTapHeaderLogo",
         "doubleTap",
@@ -443,6 +447,7 @@ public sealed class ScenarioExecutor
             StepIndex: index,
             Step: step.Name ?? step.Action,
             Action: step.Action,
+            Selector: step.Selector,
             DurationMs: durationMs,
             Metrics: metrics,
             Error: error));

@@ -510,6 +510,7 @@ public sealed record ScenarioLayoutMetadata(
 /// <param name="RegionHeight">Optional screenshot assertion region height.</param>
 /// <param name="ExpectedRegionSha256">Expected SHA-256 of normalized RGBA pixels in the screenshot region.</param>
 /// <param name="ExpectedRegionSha256File">Host-local file containing the expected region SHA-256.</param>
+/// <param name="Selector">Optional structured UI selector for element-backed actions.</param>
 public sealed record ScenarioStep(
     string? Name,
     string Action,
@@ -556,7 +557,8 @@ public sealed record ScenarioStep(
     int? RegionWidth = null,
     int? RegionHeight = null,
     string? ExpectedRegionSha256 = null,
-    string? ExpectedRegionSha256File = null);
+    string? ExpectedRegionSha256File = null,
+    ScreenElementSelector? Selector = null);
 
 /// <summary>
 /// JSON command envelope.

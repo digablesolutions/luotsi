@@ -49,6 +49,137 @@ public sealed partial class AppTests
                 Assert.Equal(0, envelope.GetProperty("steps")[1].GetProperty("timing").GetProperty("harness_delay_ms").GetInt32());
     }
 
+    [Fact]
+    public async Task RunScenarioAsync_ElementSelector_Actions_Invoke_DeviceHost()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var element = new ScreenElement("Files", "Files app", "com.elotouch.home:id/tvAppName", "android.widget.TextView", true, true, 700, 260, 928, 370);
+        var host = new FakeDeviceHost(new ScreenState(timeProvider.GetUtcNow(), 1, [element]));
+        var scenarios = new ScenarioExecutor(host, fileSystem, timeProvider, new FakeDelay(timeProvider));
+        var scenarioPath = "/tmp/selector-scenario.json";
+        fileSystem.AddFile(scenarioPath, """
+        {
+          "name": "selector basic",
+          "steps": [
+            {
+              "name": "wait files",
+              "action": "waitElement",
+              "timeoutSec": 5,
+              "selector": {
+                "text": "Files",
+                "textMatch": "exact",
+                "resourceId": "com.elotouch.home:id/tvAppName",
+                "className": "android.widget.TextView",
+                "region": { "left": 0, "top": 0, "right": 1000, "bottom": 600 }
+              }
+            },
+            {
+              "name": "tap files",
+              "action": "tapElement",
+              "timeoutSec": 7,
+              "selector": {
+                "resourceId": "com.elotouch.home:id/tvAppName",
+                "className": "android.widget.TextView",
+                "allowAmbiguous": true
+              }
+            }
+          ]
+        }
+        """);
+
+        var result = await scenarios.RunAsync(scenarioPath);
+        var envelope = SerializeToJsonElement(result);
+
+        Assert.Equal("passed", envelope.GetProperty("status").GetString());
+        Assert.Equal("waitElement", envelope.GetProperty("steps")[0].GetProperty("action").GetString());
+        Assert.Equal("tapElement", envelope.GetProperty("steps")[1].GetProperty("action").GetString());
+        Assert.Equal(2, host.SelectorWaitRequests.Count);
+        Assert.Equal("Files", host.SelectorWaitRequests[0].Text);
+        Assert.Equal(ScreenElementMatchModes.Exact, host.SelectorWaitRequests[0].TextMatch);
+        Assert.Equal("com.elotouch.home:id/tvAppName", host.SelectorWaitRequests[0].ResourceId);
+        Assert.Equal(new Bounds(0, 0, 1000, 600), host.SelectorWaitRequests[0].Region);
+        Assert.Single(host.SelectorTapRequests);
+        Assert.True(host.SelectorTapRequests[0].AllowAmbiguous);
+        Assert.Equal("android.widget.TextView", host.SelectorTapRequests[0].ClassName);
+    }
+
+    [Fact]
+    public async Task RunScenarioAsync_ElementSelector_Resolves_Template_Fields()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var element = new ScreenElement("Files", "Files app", "com.elotouch.home:id/tvAppName", "android.widget.TextView", true, true, 700, 260, 928, 370);
+        var host = new FakeDeviceHost(new ScreenState(timeProvider.GetUtcNow(), 1, [element]));
+        var scenarios = new ScenarioExecutor(host, fileSystem, timeProvider, new FakeDelay(timeProvider));
+        var scenarioPath = "/tmp/selector-template-scenario.json";
+        fileSystem.AddFile(scenarioPath, """
+        {
+          "name": "selector templates",
+          "variables": {
+            "text": "Files",
+            "textMatch": "exact",
+            "content": "Files app",
+            "resourcePrefix": "com.elotouch.home",
+            "resourceName": "tvAppName",
+            "className": "TextView",
+            "classMatch": "contains"
+          },
+          "steps": [
+            {
+              "name": "wait templated",
+              "action": "waitElement",
+              "selector": {
+                "text": "${var:text}",
+                "textMatch": "${var:textMatch}",
+                "contentDescription": "${var:content}",
+                "resourceId": "${var:resourcePrefix}:id/${var:resourceName}",
+                "className": "android.widget.${var:className}",
+                "classNameMatch": "${var:classMatch}"
+              }
+            }
+          ]
+        }
+        """);
+
+        var result = await scenarios.RunAsync(scenarioPath);
+        var envelope = SerializeToJsonElement(result);
+        var selector = Assert.Single(host.SelectorWaitRequests);
+
+        Assert.Equal("passed", envelope.GetProperty("status").GetString());
+        Assert.Equal("Files", selector.Text);
+        Assert.Equal(ScreenElementMatchModes.Exact, selector.TextMatch);
+        Assert.Equal("Files app", selector.ContentDescription);
+        Assert.Equal("com.elotouch.home:id/tvAppName", selector.ResourceId);
+        Assert.Equal("android.widget.TextView", selector.ClassName);
+        Assert.Equal(ScreenElementMatchModes.Contains, selector.ClassNameMatch);
+    }
+
+    [Fact]
+    public async Task RunScenarioAsync_ElementSelector_Requires_Criteria_Before_Device_Work()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var element = new ScreenElement("Files", null, null, "android.widget.TextView", true, true, 700, 260, 928, 370);
+        var host = new FakeDeviceHost(new ScreenState(timeProvider.GetUtcNow(), 1, [element]));
+        var scenarios = new ScenarioExecutor(host, fileSystem, timeProvider, new FakeDelay(timeProvider));
+        var scenarioPath = "/tmp/empty-selector-scenario.json";
+        fileSystem.AddFile(scenarioPath, """
+        {
+          "name": "empty selector",
+          "steps": [
+            { "name": "wait nothing", "action": "waitElement", "selector": {} }
+          ]
+        }
+        """);
+
+        var error = await Assert.ThrowsAsync<UsageException>(() => scenarios.RunAsync(scenarioPath));
+
+        Assert.Contains("waitElement requires at least one selector field", error.Message, StringComparison.Ordinal);
+        Assert.Empty(host.SelectorWaitRequests);
+        Assert.Empty(host.SelectorTapRequests);
+    }
+
 
     [Fact]
     public async Task ScenarioList_Filters_By_Tag_Name_And_Action()
@@ -757,6 +888,59 @@ public sealed partial class AppTests
           "scenario_ended",
           "scenario_run_ended"
         ]);
+    }
+
+    [Fact]
+    public async Task RunAsync_File_Selector_Step_Writes_Selector_To_Events_And_Replay_Timeline()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var element = new ScreenElement("Files", "Files app", "com.elotouch.home:id/tvAppName", "android.widget.TextView", true, true, 700, 260, 928, 370);
+        fileSystem.AddFile("/tmp/scenario.json", """
+        {
+          "name": "selector event",
+          "steps": [
+            {
+              "name": "wait files",
+              "action": "waitElement",
+              "selector": {
+                "text": "Files",
+                "textMatch": "exact",
+                "resourceId": "com.elotouch.home:id/tvAppName"
+              }
+            }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            TimeProvider = timeProvider,
+            FileSystem = fileSystem,
+            ProcessRunner = new DefaultProcessRunner(),
+            Delay = new FakeDelay(timeProvider),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost(new ScreenState(timeProvider.GetUtcNow(), 1, [element]))),
+            Console = console
+        });
+
+        var exitCode = await app.RunAsync(["run", "--file", "/tmp/scenario.json", "--events-jsonl", "/tmp/events.jsonl"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+        var events = ReadJsonlEvents(fileSystem, "/tmp/events.jsonl");
+        var started = Assert.Single(events, static evt => evt.GetProperty("event").GetString() == "scenario_step_started");
+        var passed = Assert.Single(events, static evt => evt.GetProperty("event").GetString() == "scenario_step_passed");
+        var artifactRoot = envelope.RootElement.GetProperty("artifacts").GetProperty("artifact_root").GetString();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("waitElement", passed.GetProperty("action").GetString());
+        Assert.Equal("Files", started.GetProperty("selector").GetProperty("text").GetString());
+        Assert.Equal("Files", passed.GetProperty("selector").GetProperty("text").GetString());
+        Assert.Equal("exact", passed.GetProperty("selector").GetProperty("text_match").GetString());
+        Assert.Equal("com.elotouch.home:id/tvAppName", passed.GetProperty("selector").GetProperty("resource_id").GetString());
+        Assert.NotNull(artifactRoot);
+        var timeline = ReadJsonlEvents(fileSystem, Path.Join(artifactRoot!, "session-timeline.jsonl"));
+        var timelinePassed = Assert.Single(timeline, static evt => evt.GetProperty("type").GetString() == "scenario_step_passed");
+        Assert.Equal("Files", timelinePassed.GetProperty("selector").GetProperty("text").GetString());
+        Assert.Equal("com.elotouch.home:id/tvAppName", timelinePassed.GetProperty("selector").GetProperty("resource_id").GetString());
     }
 
     [Fact]
