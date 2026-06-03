@@ -69,7 +69,8 @@ internal sealed class ScenarioActionDispatcher(
     private static ScreenElementSelector BuildSelector(ScenarioStep step, string action) =>
         ScreenElementSelectorValidator.Validate(
             step.Selector ?? throw new UsageException($"{action} requires selector."),
-            action);
+            action,
+            ScreenElementSelectorFieldNaming.CamelCase);
 
     private static ScreenshotAssertionRegion? BuildScreenshotRegion(ScenarioStep step)
     {

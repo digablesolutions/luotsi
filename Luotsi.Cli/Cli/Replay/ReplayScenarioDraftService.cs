@@ -938,31 +938,14 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
     }
 
     private static string? TryGetOptionalString(JsonElement root, params string[] names)
-    {
-        foreach (var name in names)
-        {
-            if (TryGetString(root, name, out var value))
-            {
-                return value;
-            }
-        }
-
-        return null;
-    }
+        => names
+            .Select(name => TryGetString(root, name, out var value) ? value : null)
+            .FirstOrDefault(static value => value is not null);
 
     private static bool? TryGetBool(JsonElement root, params string[] names)
-    {
-        foreach (var name in names)
-        {
-            var value = TryGetBool(root, name);
-            if (value is not null)
-            {
-                return value;
-            }
-        }
-
-        return null;
-    }
+        => names
+            .Select(name => TryGetBool(root, name))
+            .FirstOrDefault(static value => value is not null);
 
     private static string CreateInspectCommandDetail(JsonElement evt, string command) =>
         TryFormatSelector(evt, out var selector)

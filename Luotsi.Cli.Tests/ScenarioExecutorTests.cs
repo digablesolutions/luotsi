@@ -176,6 +176,42 @@ public sealed partial class AppTests
         var error = await Assert.ThrowsAsync<UsageException>(() => scenarios.RunAsync(scenarioPath));
 
         Assert.Contains("waitElement requires at least one selector field", error.Message, StringComparison.Ordinal);
+        Assert.Contains("contentDescription", error.Message, StringComparison.Ordinal);
+        Assert.Contains("resourceId", error.Message, StringComparison.Ordinal);
+        Assert.Contains("className", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("content_description", error.Message, StringComparison.Ordinal);
+        Assert.Empty(host.SelectorWaitRequests);
+        Assert.Empty(host.SelectorTapRequests);
+    }
+
+    [Fact]
+    public async Task RunScenarioAsync_ElementSelector_Validation_Uses_Scenario_Field_Names()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var host = new FakeDeviceHost(new ScreenState(timeProvider.GetUtcNow(), 1, []));
+        var scenarios = new ScenarioExecutor(host, fileSystem, timeProvider, new FakeDelay(timeProvider));
+        var scenarioPath = "/tmp/invalid-selector-match-scenario.json";
+        fileSystem.AddFile(scenarioPath, """
+        {
+          "name": "invalid selector match",
+          "steps": [
+            {
+              "name": "wait invalid",
+              "action": "waitElement",
+              "selector": {
+                "resourceId": "dev.luotsi:id/login",
+                "resourceIdMatch": "regex"
+              }
+            }
+          ]
+        }
+        """);
+
+        var error = await Assert.ThrowsAsync<UsageException>(() => scenarios.RunAsync(scenarioPath));
+
+        Assert.Contains("resourceIdMatch must be 'exact' or 'contains'.", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("resource_id_match", error.Message, StringComparison.Ordinal);
         Assert.Empty(host.SelectorWaitRequests);
         Assert.Empty(host.SelectorTapRequests);
     }

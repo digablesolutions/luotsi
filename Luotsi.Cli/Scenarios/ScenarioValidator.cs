@@ -293,7 +293,7 @@ internal static class ScenarioValidator
             throw new UsageException($"{action} requires selector.");
         }
 
-        ScreenElementSelectorValidator.Validate(step.Selector, action);
+        ScreenElementSelectorValidator.Validate(step.Selector, action, ScreenElementSelectorFieldNaming.CamelCase);
     }
 
     private static void ValidateRegex(string? pattern, string messagePrefix)
