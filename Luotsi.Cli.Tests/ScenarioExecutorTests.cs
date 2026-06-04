@@ -185,6 +185,45 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunScenarioAsync_ElementSelector_Missing_Selector_Includes_Step_Context()
+    {
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var host = new FakeDeviceHost(new ScreenState(timeProvider.GetUtcNow(), 1, []));
+        var scenarios = new ScenarioExecutor(host, fileSystem, timeProvider, new FakeDelay(timeProvider));
+        var scenarioPath = "/tmp/missing-selector-scenario.json";
+        fileSystem.AddFile(scenarioPath, """
+        {
+          "name": "missing selector",
+          "steps": [
+            { "name": "wait login", "action": "waitElement" }
+          ]
+        }
+        """);
+
+        var error = await Assert.ThrowsAsync<UsageException>(() => scenarios.RunAsync(scenarioPath));
+
+        Assert.Contains("Scenario 'missing selector' step 1 'wait login' waitElement requires selector.", error.Message, StringComparison.Ordinal);
+        Assert.Empty(host.SelectorWaitRequests);
+        Assert.Empty(host.SelectorTapRequests);
+    }
+
+    [Fact]
+    public async Task ScenarioActionDispatcher_Missing_Selector_Includes_Step_Name()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var host = new FakeDeviceHost(new ScreenState(timeProvider.GetUtcNow(), 1, []));
+        var dispatcher = new ScenarioActionDispatcher(host, host, new FakeDelay(timeProvider));
+        var step = new ScenarioStep("tap login", "tapElement", null, null, null);
+
+        var error = await Assert.ThrowsAsync<UsageException>(() => dispatcher.ExecuteAsync(step, null));
+
+        Assert.Contains("tapElement requires selector for step 'tap login'.", error.Message, StringComparison.Ordinal);
+        Assert.Empty(host.SelectorWaitRequests);
+        Assert.Empty(host.SelectorTapRequests);
+    }
+
+    [Fact]
     public async Task RunScenarioAsync_ElementSelector_Validation_Uses_Scenario_Field_Names()
     {
         var fileSystem = new FakeFileSystem();
