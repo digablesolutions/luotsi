@@ -313,7 +313,10 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
 
             if (string.Equals(type, "command_result", StringComparison.Ordinal) &&
                 TryGetString(root, "command", out var command) &&
-                command is "tap_text" or "wait_visible" or "type_text" or "keyevent" or "screenshot" or "take_screenshot" or "telemetry_tail" or "telemetry_watch")
+                command is "tap_text" or "tap_element" or "tap_selector" or
+                    "wait_visible" or "wait_element" or "wait_selector" or
+                    "type_text" or "keyevent" or "screenshot" or "take_screenshot" or
+                    "telemetry_tail" or "telemetry_watch")
             {
                 return "command_result:" + command;
             }

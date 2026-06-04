@@ -14,7 +14,7 @@ internal static class ReplayGraphTaxonomy
             new("scenario", "Scenario entry from a failure capsule."),
             new("artifact", "Screenshot, logcat, hierarchy, report, or metadata file linked to a scenario."),
             new("action", "Promoted action or command such as waitVisible, tap_text, or take_screenshot."),
-            new("selector", "Promoted selector, currently text-based."),
+            new("selector", "Promoted text or structured element selector."),
             new("screen_state", "Screen or screenshot observation."),
             new("telemetry_signal", "Semantic telemetry signal emitted by the app or observed by Luotsi."),
             new("scenario_draft", "Generated scenario draft summary."),

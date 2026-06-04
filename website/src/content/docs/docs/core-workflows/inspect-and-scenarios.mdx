@@ -52,7 +52,7 @@ It writes a discovery map, JSONL event trace, and review-required scenario candi
 
 - Root variables and lightweight template substitution
 - App, device, and layout metadata for calibrated runs
-- Direct interaction steps, waits, assertions, app lifecycle, and artifact capture, including screenshot-first fallback steps for weaker hierarchy output
+- Direct interaction steps, structured selector steps (`waitElement`/`tapElement`), waits, assertions, app lifecycle, and artifact capture, including screenshot-first fallback steps for weaker hierarchy output
 - Failure bundles and replay metadata when something breaks
 - `continueOnError: true` on runtime-failure steps when the flow should continue after a bounded failure
 

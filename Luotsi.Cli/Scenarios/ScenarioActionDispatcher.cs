@@ -18,8 +18,10 @@ internal sealed class ScenarioActionDispatcher(
         return step.Action switch
         {
             "waitVisible" => await _actionHost.WaitVisibleAsync(step.Text ?? throw new UsageException("waitVisible requires text."), step.TimeoutSec ?? 15).ConfigureAwait(false),
+            "waitElement" => await _actionHost.WaitVisibleAsync(BuildSelector(step, "waitElement"), step.TimeoutSec ?? 15).ConfigureAwait(false),
             "waitNotVisible" => await _actionHost.WaitNotVisibleAsync(step.Text ?? throw new UsageException("waitNotVisible requires text."), step.TimeoutSec ?? 15).ConfigureAwait(false),
             "tapText" => await _actionHost.TapTextAsync(step.Text ?? throw new UsageException("tapText requires text."), step.TimeoutSec ?? 15).ConfigureAwait(false),
+            "tapElement" => await _actionHost.TapElementAsync(BuildSelector(step, "tapElement"), step.TimeoutSec ?? 15).ConfigureAwait(false),
             "tapPoint" => await _actionHost.TapPointAsync(step.Label ?? step.Name ?? step.Text, step.X, step.Y, step.XRatio, step.YRatio, step.PostTapDelayMs ?? 300).ConfigureAwait(false),
             "doubleTapHeaderLogo" => await _actionHost.DoubleTapHeaderLogoAsync().ConfigureAwait(false),
             "doubleTap" when step.HeaderLogo is true => await _actionHost.DoubleTapHeaderLogoAsync().ConfigureAwait(false),
@@ -63,6 +65,12 @@ internal sealed class ScenarioActionDispatcher(
             _ => throw new UsageException($"Unknown scenario action '{step.Action}'.")
         };
     }
+
+    private static ScreenElementSelector BuildSelector(ScenarioStep step, string action) =>
+        ScreenElementSelectorValidator.Validate(
+            step.Selector ?? throw new UsageException($"{action} requires selector."),
+            action,
+            ScreenElementSelectorFieldNaming.CamelCase);
 
     private static ScreenshotAssertionRegion? BuildScreenshotRegion(ScenarioStep step)
     {
