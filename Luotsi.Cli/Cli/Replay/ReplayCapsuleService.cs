@@ -41,7 +41,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         var scenarioDraftArtifacts = FindScenarioDraftArtifacts(files);
         var scenarioDraftSummary = ReadScenarioDraftSummary(artifacts.Root, scenarioDraftArtifacts.SummaryPath);
         var commandHints = BuildCommandHints(artifacts.Root, primaryFailure, scenarioDraft.Available, scenarioDraftArtifacts).ToArray();
-        var nextSteps = BuildRecommendedNextSteps(artifacts.Root, primaryFailure, scenarioDraft.Available).ToArray();
+        var nextSteps = BuildRecommendedNextSteps(artifacts.Root, primaryFailure, scenarioDraft.Available, scenarioDraftSummary).ToArray();
         var readmePath = options.HasFlag("write-readme")
             ? Path.Join(artifacts.Root, CapsuleReadmeFileName)
             : null;
@@ -174,8 +174,18 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
     private static IEnumerable<ReplayCapsuleNextStep> BuildRecommendedNextSteps(
         string artifactRoot,
         ReplayCapsulePrimaryFailureResult? primaryFailure,
-        bool scenarioDraftAvailable)
+        bool scenarioDraftAvailable,
+        ReplayCapsuleScenarioDraftSummary? scenarioDraftSummary)
     {
+        foreach (var action in scenarioDraftSummary?.NextActions ?? [])
+        {
+            yield return new ReplayCapsuleNextStep(
+                action.Kind,
+                action.Title,
+                action.Reason,
+                action.Command);
+        }
+
         if (primaryFailure is not null)
         {
             yield return new ReplayCapsuleNextStep(
@@ -256,8 +266,10 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
                 CountScenarioSteps(root),
                 CountArray(root, "warnings"),
                 CountArray(root, "reviewItems"),
+                CountArray(root, "nextActions"),
                 CountArray(root, "normalizations"),
                 ReadStringArray(root, "warnings", 5),
+                ReadNextActions(root, 5),
                 ReadReviewItems(root, 5));
         }
         catch (JsonException)
@@ -363,6 +375,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             builder.AppendLine($"- Scenario draft steps: `{scenarioDraftSummary.StepCount}`");
             builder.AppendLine($"- Scenario draft warnings: `{scenarioDraftSummary.WarningCount}`");
             builder.AppendLine($"- Scenario draft review items: `{scenarioDraftSummary.ReviewItemCount}`");
+            builder.AppendLine($"- Scenario draft next actions: `{scenarioDraftSummary.NextActionCount}`");
             builder.AppendLine($"- Scenario draft normalizations: `{scenarioDraftSummary.NormalizationCount}`");
             if (scenarioDraftSummary.Warnings.Count > 0)
             {
@@ -372,6 +385,19 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
                 foreach (var warning in scenarioDraftSummary.Warnings)
                 {
                     builder.AppendLine("- " + EscapeMarkdown(warning));
+                }
+            }
+
+            if (scenarioDraftSummary.NextActions.Count > 0)
+            {
+                builder.AppendLine();
+                builder.AppendLine("### Scenario Draft Next Actions");
+                builder.AppendLine();
+                foreach (var action in scenarioDraftSummary.NextActions)
+                {
+                    builder.AppendLine($"- **{EscapeMarkdown(action.Title)}** (`{EscapeMarkdown(action.Kind)}`)");
+                    builder.AppendLine($"  {EscapeMarkdown(action.Reason)}");
+                    builder.AppendLine($"  `{EscapeMarkdown(action.Command)}`");
                 }
             }
 
@@ -637,6 +663,36 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             .Where(static item => !string.IsNullOrWhiteSpace(item))
             .Take(limit)
             .ToArray();
+    }
+
+    private static IReadOnlyList<ReplayScenarioDraftNextAction> ReadNextActions(JsonElement root, int limit)
+    {
+        if (!root.TryGetProperty("nextActions", out var property) || property.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var items = new List<ReplayScenarioDraftNextAction>();
+        foreach (var item in property.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object ||
+                !TryGetString(item, "command", out var command))
+            {
+                continue;
+            }
+
+            items.Add(new ReplayScenarioDraftNextAction(
+                TryGetString(item, "kind", out var kind) ? kind : "next_action",
+                TryGetString(item, "title", out var title) ? title : "Next action",
+                TryGetString(item, "reason", out var reason) ? reason : string.Empty,
+                command));
+            if (items.Count == limit)
+            {
+                break;
+            }
+        }
+
+        return items;
     }
 
     private static IReadOnlyList<ReplayScenarioDraftReviewItem> ReadReviewItems(JsonElement root, int limit)

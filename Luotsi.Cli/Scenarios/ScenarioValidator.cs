@@ -98,7 +98,7 @@ internal static class ScenarioValidator
 
             case "waitElement":
             case "tapElement":
-                ValidateSelector(step, action);
+                ValidateSelector(step, action, stepLabel);
                 break;
 
             case "typePin":
@@ -286,15 +286,20 @@ internal static class ScenarioValidator
         }
     }
 
-    private static void ValidateSelector(ScenarioStep step, string action)
+    private static void ValidateSelector(ScenarioStep step, string action, string stepLabel)
     {
         if (step.Selector is null)
         {
-            throw new UsageException($"{action} requires selector.");
+            throw new UsageException($"{FormatStepLabel(stepLabel, step)} {action} requires selector.");
         }
 
         ScreenElementSelectorValidator.Validate(step.Selector, action, ScreenElementSelectorFieldNaming.CamelCase);
     }
+
+    private static string FormatStepLabel(string stepLabel, ScenarioStep step) =>
+        string.IsNullOrWhiteSpace(step.Name)
+            ? stepLabel
+            : $"{stepLabel} '{step.Name}'";
 
     private static void ValidateRegex(string? pattern, string messagePrefix)
     {

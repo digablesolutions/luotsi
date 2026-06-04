@@ -337,7 +337,7 @@ Notes:
   into open, capsule, scrub, graph, and cluster follow-ups. Failed scenario runs also expose
   failure_capsule_path and an embedded failure_capsule summary with linked
   reports and failure artifacts. Replay scenario-draft turns inspect/replay action events into a conservative draft
-  scenario with warnings and suggestions for cleanup. The result includes
+  scenario with warnings, suggestions, and typed next_actions for the authoring handoff. The result includes
   source_summaries, step_origins, and normalizations so reviewers can see
   which steps came from inspect commands, screen deltas, view events,
   telemetry, or existing scenario events. With --write-json and

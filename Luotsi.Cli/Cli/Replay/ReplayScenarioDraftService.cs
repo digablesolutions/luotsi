@@ -59,6 +59,7 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
             .ToArray();
         var sourceSummaries = BuildSourceSummaries(origins, normalizationNotes).ToArray();
         var reviewItems = BuildReviewItems(warnings, suggestions, origins, normalizationNotes).ToArray();
+        var nextActions = BuildNextActions(output, artifacts.Root, jsonPath, origins, reviewItems, normalizationNotes).ToArray();
         var result = new ReplayScenarioDraftResult(
             ResultSchemas.ScenarioDraft,
             artifacts.Root,
@@ -73,7 +74,8 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
             sourceSummaries,
             origins,
             normalizationNotes,
-            BuildCommandHints(output, artifacts.Root, markdownPath, origins).ToArray());
+            nextActions,
+            BuildCommandHints(output, artifacts.Root, jsonPath, markdownPath, origins).ToArray());
 
         if (!string.IsNullOrWhiteSpace(output))
         {
@@ -112,6 +114,12 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
                 continue;
             }
 
+            if (TryCreatePreTapWaitNormalization(normalized, step, out var waitStep, out normalization))
+            {
+                normalizations.Add(normalization);
+                normalized.Add(waitStep);
+            }
+
             normalized.Add(step);
         }
 
@@ -148,6 +156,57 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
             BuildSourceCommand(candidate.SourcePath, candidate.Sequence));
         return true;
     }
+
+    private static bool TryCreatePreTapWaitNormalization(
+        IReadOnlyList<DraftStep> normalized,
+        DraftStep candidate,
+        out DraftStep waitStep,
+        out ReplayScenarioDraftNormalization normalization)
+    {
+        waitStep = null!;
+        normalization = null!;
+
+        var wait = CreatePreTapWaitStep(candidate.Step);
+        var waitKey = wait is null ? null : GetWaitKey(wait);
+        if (wait is null || waitKey is null)
+        {
+            return false;
+        }
+
+        var previous = normalized.LastOrDefault();
+        if (previous is not null && string.Equals(GetWaitKey(previous.Step), waitKey, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var target = GetStepTarget(candidate.Step);
+        waitStep = candidate with
+        {
+            Step = wait,
+            Detail = $"inserted {wait.Action} before {candidate.Step.Action}: {target}"
+        };
+        normalization = new ReplayScenarioDraftNormalization(
+            "inserted_pre_tap_wait",
+            $"Inserted {wait.Action} before {candidate.Step.Action} for `{target}`.",
+            candidate.Source,
+            candidate.EventType,
+            candidate.Confidence,
+            candidate.SourcePath,
+            candidate.Sequence,
+            candidate.Timestamp,
+            BuildSourceCommand(candidate.SourcePath, candidate.Sequence));
+        return true;
+    }
+
+    private static ScenarioStep? CreatePreTapWaitStep(ScenarioStep step) =>
+        step.Action switch
+        {
+            "tapText" when !string.IsNullOrWhiteSpace(step.Text) =>
+                new ScenarioStep("wait for " + step.Text, "waitVisible", step.Text, null, null, TimeoutSec: 15),
+            "tapElement" when step.Selector is not null =>
+                new ScenarioStep("wait for " + GetStepTarget(step), "waitElement", null, null, null, TimeoutSec: 15, Selector: step.Selector),
+            _ => null
+        };
 
     private static string? GetWaitKey(ScenarioStep step) =>
         step.Action switch
@@ -276,6 +335,21 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
         }
 
         builder.AppendLine();
+        builder.AppendLine("## Recommended Next Actions");
+        builder.AppendLine();
+        if (result.NextActions.Count == 0)
+        {
+            builder.AppendLine("- None");
+        }
+        else
+        {
+            foreach (var action in result.NextActions)
+            {
+                builder.AppendLine($"- `{action.Kind}` {action.Title}: {action.Reason} `{action.Command}`");
+            }
+        }
+
+        builder.AppendLine();
         builder.AppendLine("## Next Commands");
         builder.AppendLine();
         foreach (var command in result.SuggestedCommands)
@@ -365,16 +439,63 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
             builder.Append(" | ");
             builder.Append(EscapeMarkdown(step.Name ?? string.Empty));
             builder.Append(" | ");
-            builder.Append(EscapeMarkdown(step.Text ?? step.Code ?? step.Label ?? string.Empty));
+            builder.Append(EscapeMarkdown(GetStepTarget(step)));
             builder.AppendLine(" |");
         }
 
         return builder.ToString();
     }
 
+    private static IEnumerable<ReplayScenarioDraftNextAction> BuildNextActions(
+        string? output,
+        string artifactRoot,
+        string? jsonPath,
+        IReadOnlyList<ReplayScenarioDraftStepOrigin> origins,
+        IReadOnlyList<ReplayScenarioDraftReviewItem> reviewItems,
+        IReadOnlyList<ReplayScenarioDraftNormalization> normalizations)
+    {
+        var reviewReason = reviewItems.Count == 0 && normalizations.Count == 0
+            ? "Confirm the generated scenario flow and source provenance before editing."
+            : $"Review {reviewItems.Count} checklist item(s) and {normalizations.Count} normalization(s) before editing.";
+        yield return new ReplayScenarioDraftNextAction(
+            "review_draft",
+            "Review generated draft",
+            reviewReason,
+            $"luotsi replay open --artifacts {Quote(artifactRoot)}");
+
+        if (!string.IsNullOrWhiteSpace(output))
+        {
+            yield return new ReplayScenarioDraftNextAction(
+                "validate_scenario",
+                "Validate generated scenario",
+                "Run static scenario validation before committing or running the draft.",
+                $"luotsi scenario-validate --file {Quote(output)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(jsonPath))
+        {
+            yield return new ReplayScenarioDraftNextAction(
+                "audit_provenance",
+                "Audit draft provenance",
+                "Use the graph to inspect generated steps, draft normalizations, source families, and timeline links.",
+                $"luotsi replay graph --artifacts {Quote(artifactRoot)} --node-kind scenario_draft --write-markdown");
+        }
+
+        var firstOrigin = origins.FirstOrDefault(static origin => !string.IsNullOrWhiteSpace(origin.SourceCommand));
+        if (!string.IsNullOrWhiteSpace(firstOrigin?.SourceCommand))
+        {
+            yield return new ReplayScenarioDraftNextAction(
+                "reopen_source_event",
+                "Reopen first source event",
+                "Inspect the timeline event that produced the first generated draft step.",
+                firstOrigin.SourceCommand);
+        }
+    }
+
     private static IEnumerable<ReplayScenarioDraftCommandHint> BuildCommandHints(
         string? output,
         string artifactRoot,
+        string? jsonPath,
         string? markdownPath,
         IReadOnlyList<ReplayScenarioDraftStepOrigin> origins)
     {
@@ -390,9 +511,12 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
             $"luotsi replay scrub --artifacts {Quote(artifactRoot)} --context 3 --write-markdown",
             "Write a scrub view around the same evidence before editing the draft.");
 
-        yield return new ReplayScenarioDraftCommandHint(
-            $"luotsi replay graph --artifacts {Quote(artifactRoot)} --node-kind generated_step --write-markdown",
-            "Audit generated-step provenance in the semantic graph.");
+        if (!string.IsNullOrWhiteSpace(jsonPath))
+        {
+            yield return new ReplayScenarioDraftCommandHint(
+                $"luotsi replay graph --artifacts {Quote(artifactRoot)} --node-kind scenario_draft --write-markdown",
+                "Audit draft provenance, generated steps, and normalizations in the semantic graph.");
+        }
 
         if (!string.IsNullOrWhiteSpace(output))
         {
@@ -753,11 +877,13 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
         for (var i = 0; i < steps.Count; i++)
         {
             var step = steps[i];
-            if (string.Equals(step.Action, "tapText", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(step.Action, "tapText", StringComparison.OrdinalIgnoreCase) &&
+                !HasMatchingPreviousWait(steps, i))
             {
                 yield return new ReplayScenarioDraftSuggestion(i + 1, "selector", "medium", "Review whether this tap should be preceded by waitVisible for the same text.");
             }
-            else if (string.Equals(step.Action, "tapElement", StringComparison.OrdinalIgnoreCase))
+            else if (string.Equals(step.Action, "tapElement", StringComparison.OrdinalIgnoreCase) &&
+                !HasMatchingPreviousWait(steps, i))
             {
                 yield return new ReplayScenarioDraftSuggestion(i + 1, "selector", "medium", "Review whether this tap should be preceded by waitElement for the same selector.");
             }
@@ -776,6 +902,18 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem)
                 yield return new ReplayScenarioDraftSuggestion(i + 1, "telemetry", "medium", "Verify this semantic telemetry assertion is emitted reliably by the app before using it as a CI gate.");
             }
         }
+    }
+
+    private static bool HasMatchingPreviousWait(IReadOnlyList<ScenarioStep> steps, int index)
+    {
+        if (index <= 0)
+        {
+            return false;
+        }
+
+        var wait = CreatePreTapWaitStep(steps[index]);
+        return wait is not null &&
+            string.Equals(GetWaitKey(steps[index - 1]), GetWaitKey(wait), StringComparison.OrdinalIgnoreCase);
     }
 
     private static IEnumerable<ReplayScenarioDraftReviewItem> BuildReviewItems(

@@ -82,7 +82,7 @@ internal sealed class ReplayGraphScenarioDraftAppender(IFileSystem fileSystem)
         Dictionary<string, ReplayGraphNodeResult> nodes,
         List<ReplayGraphEdgeResult> edges)
     {
-        if (!root.TryGetProperty("step_origins", out var origins) || origins.ValueKind != JsonValueKind.Array)
+        if (!TryGetProperty(root, "stepOrigins", "step_origins", out var origins) || origins.ValueKind != JsonValueKind.Array)
         {
             return;
         }
@@ -99,10 +99,14 @@ internal sealed class ReplayGraphScenarioDraftAppender(IFileSystem fileSystem)
         Dictionary<string, ReplayGraphNodeResult> nodes,
         List<ReplayGraphEdgeResult> edges)
     {
-        var stepIndex = TryGetInt32(origin, "step_index");
+        var stepIndex = TryGetInt32(origin, "stepIndex", "step_index");
         var source = TryGetString(origin, "source");
-        var eventType = TryGetString(origin, "event_type");
+        var eventType = TryGetString(origin, "eventType", "event_type");
         var command = TryGetString(origin, "command");
+        var sourcePath = TryGetString(origin, "sourcePath", "source_path");
+        var sequence = TryGetInt32(origin, "sequence")?.ToString(CultureInfo.InvariantCulture);
+        var timestamp = TryGetString(origin, "timestamp");
+        var sourceCommand = TryGetString(origin, "sourceCommand", "source_command");
         var stepId = draftId + ":step:" + (stepIndex?.ToString(CultureInfo.InvariantCulture) ?? "unknown");
         AddNode(nodes, new ReplayGraphNodeResult(
             stepId,
@@ -115,7 +119,11 @@ internal sealed class ReplayGraphScenarioDraftAppender(IFileSystem fileSystem)
                 ["event_type"] = eventType,
                 ["command"] = command,
                 ["confidence"] = TryGetString(origin, "confidence"),
-                ["detail"] = TryGetString(origin, "detail")
+                ["detail"] = TryGetString(origin, "detail"),
+                ["source_path"] = sourcePath,
+                ["sequence"] = sequence,
+                ["timestamp"] = timestamp,
+                ["source_command"] = sourceCommand
             }));
         edges.Add(new ReplayGraphEdgeResult(draftId, stepId, "generates_step", new Dictionary<string, string?>()));
 
@@ -124,9 +132,16 @@ internal sealed class ReplayGraphScenarioDraftAppender(IFileSystem fileSystem)
             return;
         }
 
-        var sourceId = "draft_source:" + StableId(source);
-        AddNode(nodes, new ReplayGraphNodeResult(sourceId, "draft_source", source, new Dictionary<string, string?> { ["source"] = source }));
-        edges.Add(new ReplayGraphEdgeResult(stepId, sourceId, "derived_from", new Dictionary<string, string?> { ["event_type"] = eventType, ["command"] = command }));
+        var sourceId = AddSourceNode(source, nodes);
+        edges.Add(new ReplayGraphEdgeResult(stepId, sourceId, "derived_from", new Dictionary<string, string?>
+        {
+            ["event_type"] = eventType,
+            ["command"] = command,
+            ["source_path"] = sourcePath,
+            ["sequence"] = sequence,
+            ["timestamp"] = timestamp,
+            ["source_command"] = sourceCommand
+        }));
     }
 
     private static void AddSourceSummaries(
@@ -135,7 +150,7 @@ internal sealed class ReplayGraphScenarioDraftAppender(IFileSystem fileSystem)
         Dictionary<string, ReplayGraphNodeResult> nodes,
         List<ReplayGraphEdgeResult> edges)
     {
-        if (!root.TryGetProperty("source_summaries", out var sourceSummaries) || sourceSummaries.ValueKind != JsonValueKind.Array)
+        if (!TryGetProperty(root, "sourceSummaries", "source_summaries", out var sourceSummaries) || sourceSummaries.ValueKind != JsonValueKind.Array)
         {
             return;
         }
@@ -157,7 +172,7 @@ internal sealed class ReplayGraphScenarioDraftAppender(IFileSystem fileSystem)
             return;
         }
 
-        var sourceId = "draft_source:" + StableId(source);
+        var sourceId = SourceId(source);
         AddNode(nodes, new ReplayGraphNodeResult(
             sourceId,
             "draft_source",
@@ -165,8 +180,8 @@ internal sealed class ReplayGraphScenarioDraftAppender(IFileSystem fileSystem)
             new Dictionary<string, string?>
             {
                 ["source"] = source,
-                ["step_count"] = TryGetInt32(sourceSummary, "step_count")?.ToString(CultureInfo.InvariantCulture),
-                ["normalization_count"] = TryGetInt32(sourceSummary, "normalization_count")?.ToString(CultureInfo.InvariantCulture),
+                ["step_count"] = TryGetInt32(sourceSummary, "stepCount", "step_count")?.ToString(CultureInfo.InvariantCulture),
+                ["normalization_count"] = TryGetInt32(sourceSummary, "normalizationCount", "normalization_count")?.ToString(CultureInfo.InvariantCulture),
                 ["confidence"] = TryGetString(sourceSummary, "confidence")
             }));
         edges.Add(new ReplayGraphEdgeResult(draftId, sourceId, "uses_source", new Dictionary<string, string?>()));
@@ -198,6 +213,13 @@ internal sealed class ReplayGraphScenarioDraftAppender(IFileSystem fileSystem)
         List<ReplayGraphEdgeResult> edges)
     {
         var kind = TryGetString(normalization, "kind") ?? "normalization";
+        var source = TryGetString(normalization, "source");
+        var eventType = TryGetString(normalization, "eventType", "event_type");
+        var sourcePath = TryGetString(normalization, "sourcePath", "source_path");
+        var sequenceValue = TryGetInt32(normalization, "sequence");
+        var sequenceText = sequenceValue?.ToString(CultureInfo.InvariantCulture);
+        var timestamp = TryGetString(normalization, "timestamp");
+        var sourceCommand = TryGetString(normalization, "sourceCommand", "source_command");
         var normalizationId = draftId + ":normalization:" + sequence.ToString(CultureInfo.InvariantCulture);
         AddNode(nodes, new ReplayGraphNodeResult(
             normalizationId,
@@ -207,21 +229,72 @@ internal sealed class ReplayGraphScenarioDraftAppender(IFileSystem fileSystem)
             {
                 ["kind"] = kind,
                 ["detail"] = TryGetString(normalization, "detail"),
-                ["source"] = TryGetString(normalization, "source"),
-                ["event_type"] = TryGetString(normalization, "event_type"),
-                ["confidence"] = TryGetString(normalization, "confidence")
+                ["source"] = source,
+                ["event_type"] = eventType,
+                ["confidence"] = TryGetString(normalization, "confidence"),
+                ["source_path"] = sourcePath,
+                ["sequence"] = sequenceText,
+                ["timestamp"] = timestamp,
+                ["source_command"] = sourceCommand
             }));
         edges.Add(new ReplayGraphEdgeResult(draftId, normalizationId, "applies_normalization", new Dictionary<string, string?> { ["kind"] = kind }));
+
+        if (!string.IsNullOrWhiteSpace(source))
+        {
+            var sourceId = AddSourceNode(source, nodes);
+            edges.Add(new ReplayGraphEdgeResult(normalizationId, sourceId, "derived_from", new Dictionary<string, string?>
+            {
+                ["event_type"] = eventType,
+                ["source_path"] = sourcePath,
+                ["sequence"] = sequenceText,
+                ["timestamp"] = timestamp,
+                ["source_command"] = sourceCommand
+            }));
+        }
     }
 
-    private static void AddNode(Dictionary<string, ReplayGraphNodeResult> nodes, ReplayGraphNodeResult node) =>
-        nodes.TryAdd(node.Id, node);
+    private static string AddSourceNode(string source, Dictionary<string, ReplayGraphNodeResult> nodes)
+    {
+        var sourceId = SourceId(source);
+        AddNode(nodes, new ReplayGraphNodeResult(sourceId, "draft_source", source, new Dictionary<string, string?> { ["source"] = source }));
+        return sourceId;
+    }
+
+    private static string SourceId(string source) => "draft_source:" + StableId(source);
+
+    private static void AddNode(Dictionary<string, ReplayGraphNodeResult> nodes, ReplayGraphNodeResult node)
+    {
+        if (nodes.TryAdd(node.Id, node))
+        {
+            return;
+        }
+
+        var existing = nodes[node.Id];
+        var properties = existing.Properties.ToDictionary(static property => property.Key, static property => property.Value, StringComparer.Ordinal);
+        foreach (var property in node.Properties)
+        {
+            if (string.IsNullOrWhiteSpace(property.Value))
+            {
+                continue;
+            }
+
+            if (!properties.TryGetValue(property.Key, out var existingValue) || string.IsNullOrWhiteSpace(existingValue))
+            {
+                properties[property.Key] = property.Value;
+            }
+        }
+
+        nodes[node.Id] = existing with { Properties = properties };
+    }
 
     private static string StableId(string value)
     {
         var stable = StableIdChars.Replace(value.Trim(), "-").Trim('-');
         return stable.Length == 0 ? "value" : stable.ToLowerInvariant();
     }
+
+    private static bool TryGetProperty(JsonElement root, string name, string fallbackName, out JsonElement property) =>
+        root.TryGetProperty(name, out property) || root.TryGetProperty(fallbackName, out property);
 
     private static bool TryGetString(JsonElement root, string name, out string value)
     {
@@ -237,6 +310,9 @@ internal sealed class ReplayGraphScenarioDraftAppender(IFileSystem fileSystem)
 
     private static string? TryGetString(JsonElement root, string name) =>
         TryGetString(root, name, out var value) ? value : null;
+
+    private static string? TryGetString(JsonElement root, string name, string fallbackName) =>
+        TryGetString(root, name) ?? TryGetString(root, fallbackName);
 
     private static string? TryGetObjectString(JsonElement root, string objectName, string propertyName)
     {
@@ -257,4 +333,7 @@ internal sealed class ReplayGraphScenarioDraftAppender(IFileSystem fileSystem)
 
         return value;
     }
+
+    private static int? TryGetInt32(JsonElement root, string name, string fallbackName) =>
+        TryGetInt32(root, name) ?? TryGetInt32(root, fallbackName);
 }

@@ -47,7 +47,7 @@ internal static class ReplayGraphInsightBuilder
 
         if (nodes.Any(static node => string.Equals(node.Kind, "scenario_draft", StringComparison.Ordinal)))
         {
-            actions.Add(new ReplayGraphActionResult("audit_draft", "Inspect generated scenario draft provenance.", $"luotsi replay graph --artifacts {Quote(artifactRoot)} --node-kind generated_step --write-markdown"));
+            actions.Add(new ReplayGraphActionResult("audit_draft", "Inspect generated scenario draft provenance.", $"luotsi replay graph --artifacts {Quote(artifactRoot)} --node-kind scenario_draft --write-markdown"));
         }
 
         return actions;
@@ -115,7 +115,7 @@ internal static class ReplayGraphInsightBuilder
         insights.Add(new ReplayGraphInsightResult(
             "scenario_draft",
             "info",
-            "Scenario draft provenance is present; use generated_step and draft_source edges to audit where each step came from.",
+            "Scenario draft provenance is present; use generated_step, draft_normalization, and draft_source edges to audit where draft changes came from.",
             drafts.Select(static node => node.Id).ToArray(),
             []));
     }
