@@ -286,6 +286,7 @@ internal sealed class ArtifactSummaryBuilder(string root, IFileSystem fileSystem
 
         AddArrayCount(parts, root, "warnings");
         AddArrayCount(parts, root, "reviewItems", "review_items");
+        AddArrayCount(parts, root, "nextActions", "next_actions");
         AddArrayCount(parts, root, "normalizations");
         return parts.Count == 0 ? null : string.Join(" | ", parts);
     }

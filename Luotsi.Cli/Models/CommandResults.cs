@@ -477,7 +477,14 @@ public sealed record ReplayScenarioDraftResult(
     IReadOnlyList<ReplayScenarioDraftSourceSummary> SourceSummaries,
     IReadOnlyList<ReplayScenarioDraftStepOrigin> StepOrigins,
     IReadOnlyList<ReplayScenarioDraftNormalization> Normalizations,
+    IReadOnlyList<ReplayScenarioDraftNextAction> NextActions,
     IReadOnlyList<ReplayScenarioDraftCommandHint> SuggestedCommands);
+
+public sealed record ReplayScenarioDraftNextAction(
+    string Kind,
+    string Title,
+    string Reason,
+    string Command);
 
 public sealed record ReplayScenarioDraftCommandHint(
     string Command,
@@ -585,8 +592,10 @@ public sealed record ReplayCapsuleScenarioDraftSummary(
     int StepCount,
     int WarningCount,
     int ReviewItemCount,
+    int NextActionCount,
     int NormalizationCount,
     IReadOnlyList<string> Warnings,
+    IReadOnlyList<ReplayScenarioDraftNextAction> NextActions,
     IReadOnlyList<ReplayScenarioDraftReviewItem> ReviewItems);
 
 public sealed record ReplayCapsuleArtifactCounts(

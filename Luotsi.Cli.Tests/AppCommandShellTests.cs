@@ -257,6 +257,32 @@ public sealed class AppCommandShellTests
     }
 
     [Fact]
+    public void WriteSuccess_HumanOutput_Uses_NextActions_For_FollowUp_Command()
+    {
+        var console = new FakeConsole();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-18T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var writer = new AppCommandEnvelopeWriter(console, timeProvider, CreateProvenance());
+
+        writer.WriteSuccess(
+            "replay",
+            DateTimeOffset.Parse("2026-05-18T09:59:59Z", null, System.Globalization.DateTimeStyles.RoundtripKind),
+            new
+            {
+                schema = ResultSchemas.ScenarioDraft,
+                next_actions = new[]
+                {
+                    new { kind = "review_draft", title = "Review generated draft", reason = "Review before editing.", command = "luotsi replay open --artifacts /tmp/replay-root" }
+                }
+            },
+            new ArtifactData("/tmp/replay-root", "final"),
+            AppCommandConsoleOutputMode.Human);
+
+        Assert.Contains("  next: luotsi replay open --artifacts /tmp/replay-root", console.OutputLines);
+        Assert.Contains("  next_actions: 1", console.OutputLines);
+        Assert.Contains("    - kind=review_draft; title=Review generated draft; summary=Review before editing.; command=luotsi replay open --artifacts /tmp/replay-root", console.OutputLines);
+    }
+
+    [Fact]
     public void WriteSuccess_HumanOutput_Shows_Run_Failure_Capsule()
     {
         var console = new FakeConsole();

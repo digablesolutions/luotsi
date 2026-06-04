@@ -147,6 +147,7 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
         AddArraySummary(lines, value, "services");
         AddArraySummary(lines, value, "profiles");
         AddArraySummary(lines, value, "recommended_next_steps");
+        AddArraySummary(lines, value, "next_actions");
         AddArraySummary(lines, value, "suggested_commands");
 
         if (lines.Count == 0)
@@ -217,6 +218,7 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
         AddNextStepTitle(lines, value);
         AddRecommendedCommandWithFallback(lines, value, artifacts);
         AddArraySummary(lines, value, "recommended_next_steps");
+        AddArraySummary(lines, value, "next_actions");
         AddArraySummary(lines, value, "suggested_commands");
         return lines;
     }
@@ -494,7 +496,7 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
             return !string.IsNullOrWhiteSpace(command);
         }
 
-        foreach (var propertyName in new[] { "artifact_commands", "recommended_commands", "commands", "recommended_next_steps", "suggested_commands" })
+        foreach (var propertyName in new[] { "artifact_commands", "recommended_commands", "commands", "recommended_next_steps", "next_actions", "suggested_commands" })
         {
             if (!value.TryGetProperty(propertyName, out var commands) || commands.ValueKind != JsonValueKind.Array)
             {

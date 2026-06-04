@@ -274,8 +274,18 @@ internal sealed class ArtifactEvidenceDetailReader(string root, IFileSystem file
         var parts = new List<string>();
         AddJsonProperty(parts, root, "confidence");
         AddArrayCount(parts, root, "sourceSummaries", "source_summaries");
+        if (root.TryGetProperty("scenario", out var scenario) &&
+            scenario.ValueKind == JsonValueKind.Object &&
+            scenario.TryGetProperty("steps", out var steps) &&
+            steps.ValueKind == JsonValueKind.Array)
+        {
+            parts.Add($"steps={steps.GetArrayLength()}");
+        }
+
         AddArrayCount(parts, root, "warnings");
         AddArrayCount(parts, root, "reviewItems", "review_items");
+        AddArrayCount(parts, root, "nextActions", "next_actions");
+        AddArrayCount(parts, root, "normalizations");
         return parts.Count == 0 ? null : string.Join(" | ", parts);
     }
 

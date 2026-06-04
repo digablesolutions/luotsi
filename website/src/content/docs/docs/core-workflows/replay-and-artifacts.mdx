@@ -74,9 +74,10 @@ The public distinction that matters is:
 `replay scenario-draft` is intentionally conservative. It promotes replay evidence into a starter scenario and keeps review data next to the generated steps:
 
 - `review_items` is the short human checklist for selectors, telemetry, visual assertions, low-confidence provenance, and normalizations.
+- `next_actions` is the ordered authoring handoff for reviewing, validating, auditing persisted provenance, and reopening the first source event.
 - `source_summaries` shows how many steps came from inspect commands, screen deltas, view events, telemetry, or existing scenario events.
 - `step_origins` maps every generated step back to its source event, timeline file, sequence, timestamp, confidence, and an exact `replay timeline` command.
-- `normalizations` records cleanup decisions such as dropping adjacent duplicate inferred waits.
+- `normalizations` records stabilization and cleanup decisions such as inserting waits before generated taps or dropping adjacent duplicate inferred waits.
 
 ```bash
 luotsi replay scenario-draft --artifacts ./artifacts/my-inspect --output ./scenarios/draft.json --write-json --write-markdown
@@ -120,9 +121,9 @@ Timeline events are still evidence, not assertions. They preserve what Luotsi ob
 - `primary_failure` with an exact `source_command` that reopens the failing event.
 - `failure_timeline` entries with their own exact `replay timeline` commands.
 - `artifact_manifest` and `artifact_counts` for screenshots, videos, logs, reports, timelines, and generated replay files.
-- `scenario_draft_artifacts` and `scenario_draft_summary` when a draft has already been generated, including a bounded preview of warnings and review items.
+- `scenario_draft_artifacts` and `scenario_draft_summary` when a draft has already been generated, including bounded previews of warnings, next actions, and review items.
 - `suggested_commands` that lead the operator from summary to timeline, scrub, search, open, graph, or scenario draft without guessing paths.
-- `recommended_next_steps` that rank scrub, graph, search, cluster, open, and draft actions for the current bundle.
+- `recommended_next_steps` that rank persisted draft next actions first when a draft summary exists, then scrub, graph, search, cluster, open, and draft-generation actions for the current bundle.
 
 Use `--write-readme --write-json` for shareable artifacts. That writes `replay-capsule.md` for humans and `replay-capsule-summary.json` for automation, then refreshes the artifact index.
 
@@ -131,9 +132,9 @@ Use `--write-readme --write-json` for shareable artifacts. That writes `replay-c
 `replay scenario-draft` is the first Explore-to-Scenario slice. It only promotes evidence that can be traced back to timeline events, and it keeps uncertainty visible:
 
 - The generated scenario JSON is meant to be validated and edited, not blindly committed.
-- `scenario-draft-summary.json` gives confidence, warning, review, normalization, and step counts.
-- `scenario-draft.md` lists review items, source summaries, normalizations, step origins, and the draft steps.
-- `step_origins` and `normalizations` include `source_path`, `sequence`, `timestamp`, and `source_command` so every generated step can be audited with `replay timeline`.
+- `scenario-draft-summary.json` gives confidence, warnings, review items, next actions, normalization notes, and generated step context.
+- `scenario-draft.md` lists recommended next actions, review items, source summaries, normalizations, step origins, and the draft steps.
+- `step_origins` and `normalizations` include `source_path`, `sequence`, `timestamp`, and `source_command` so every generated step and inserted pre-tap wait can be audited with `replay timeline`.
 
 This is enough for the near-term authoring loop: explore a flow, generate a draft, review selectors and coordinates, validate it, then harden it into a scenario.
 

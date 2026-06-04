@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Runtime.InteropServices;
 using System.IO.Compression;
+using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli;
 using Luotsi.Cli.Cli.Routing;
 using Luotsi.Cli.Errors;
@@ -886,19 +887,31 @@ public sealed partial class AppTests
         Assert.Equal(1, data.GetProperty("step_origins")[0].GetProperty("sequence").GetInt32());
         Assert.Equal(DateTimeOffset.Parse("2026-05-18T10:00:01Z", System.Globalization.CultureInfo.InvariantCulture), data.GetProperty("step_origins")[0].GetProperty("timestamp").GetDateTimeOffset());
         Assert.Equal("luotsi replay timeline --artifacts <artifact-root> --source-path session-timeline.jsonl --sequence 1 --context 2", data.GetProperty("step_origins")[0].GetProperty("source_command").GetString());
-        var reviewItems = data.GetProperty("review_items").EnumerateArray().ToArray();
-        Assert.Contains(reviewItems, item =>
-            item.GetProperty("category").GetString() == "selector" &&
-            item.GetProperty("command").GetString() == "luotsi screen-state");
+        Assert.Empty(data.GetProperty("normalizations").EnumerateArray());
+        var suggestions = data.GetProperty("suggestions").EnumerateArray().ToArray();
+        Assert.DoesNotContain(suggestions, suggestion =>
+            suggestion.GetProperty("message").GetString()!.Contains("preceded by waitVisible", StringComparison.Ordinal));
         var sourceSummary = Assert.Single(data.GetProperty("source_summaries").EnumerateArray());
         Assert.Equal("inspect_command", sourceSummary.GetProperty("source").GetString());
         Assert.Equal(4, sourceSummary.GetProperty("step_count").GetInt32());
         Assert.Equal(0, sourceSummary.GetProperty("normalization_count").GetInt32());
+        var nextActions = data.GetProperty("next_actions").EnumerateArray().ToArray();
+        Assert.Equal("review_draft", nextActions[0].GetProperty("kind").GetString());
+        Assert.Equal($"luotsi replay open --artifacts {replayRoot}", nextActions[0].GetProperty("command").GetString());
+        Assert.Contains(nextActions, action =>
+            action.GetProperty("kind").GetString() == "validate_scenario" &&
+            action.GetProperty("command").GetString() == "luotsi scenario-validate --file /tmp/draft.json");
+        Assert.Contains(nextActions, action =>
+            action.GetProperty("kind").GetString() == "audit_provenance" &&
+            action.GetProperty("command").GetString() == $"luotsi replay graph --artifacts {replayRoot} --node-kind scenario_draft --write-markdown");
+        Assert.Contains(nextActions, action =>
+            action.GetProperty("kind").GetString() == "reopen_source_event" &&
+            action.GetProperty("command").GetString() == "luotsi replay timeline --artifacts <artifact-root> --source-path session-timeline.jsonl --sequence 1 --context 2");
         var suggestedCommands = data.GetProperty("suggested_commands").EnumerateArray().ToArray();
         Assert.Contains(suggestedCommands, command =>
             command.GetProperty("command").GetString() == $"luotsi replay capsule --artifacts {replayRoot} --write-readme --write-json");
         Assert.Contains(suggestedCommands, command =>
-            command.GetProperty("command").GetString() == $"luotsi replay graph --artifacts {replayRoot} --node-kind generated_step --write-markdown");
+            command.GetProperty("command").GetString() == $"luotsi replay graph --artifacts {replayRoot} --node-kind scenario_draft --write-markdown");
         Assert.Contains(suggestedCommands, command =>
             command.GetProperty("command").GetString() == "luotsi scenario-validate --file /tmp/draft.json");
         Assert.Contains(suggestedCommands, command =>
@@ -913,7 +926,10 @@ public sealed partial class AppTests
         Assert.Contains("# Luotsi Scenario Draft", review, StringComparison.Ordinal);
         Assert.Contains("draft smoke", review, StringComparison.Ordinal);
         Assert.Contains("## Review Checklist", review, StringComparison.Ordinal);
-        Assert.Contains("luotsi screen-state", review, StringComparison.Ordinal);
+        Assert.DoesNotContain("luotsi screen-state", review, StringComparison.Ordinal);
+        Assert.Contains("## Recommended Next Actions", review, StringComparison.Ordinal);
+        Assert.Contains("review_draft", review, StringComparison.Ordinal);
+        Assert.Contains("validate_scenario", review, StringComparison.Ordinal);
         Assert.Contains("## Source Summary", review, StringComparison.Ordinal);
         Assert.Contains("## Step Origins", review, StringComparison.Ordinal);
         Assert.Contains("## Next Commands", review, StringComparison.Ordinal);
@@ -931,6 +947,134 @@ public sealed partial class AppTests
         var validateExitCode = await validateApp.RunAsync(["scenario-validate", "--file", "/tmp/draft.json"]);
 
         Assert.Equal(0, validateExitCode);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayScenarioDraft_PersistedArtifacts_RoundTrip_Through_Capsule()
+    {
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedInspectReplayDraftArtifacts(fileSystem);
+        var draftPath = Path.Join(replayRoot, "draft-scenario.json");
+        var scenarioDraftConsole = new FakeConsole();
+        var scenarioDraftApp = new App(new AppDependencies
+        {
+            Console = scenarioDraftConsole,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var scenarioDraftExitCode = await scenarioDraftApp.RunAsync(["replay", "scenario-draft", "--artifacts", replayRoot, "--output", draftPath, "--write-json", "--write-markdown"]);
+        using var scenarioDraftEnvelope = scenarioDraftConsole.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, scenarioDraftExitCode);
+        var scenarioDraftData = scenarioDraftEnvelope.RootElement.GetProperty("data");
+        Assert.True(scenarioDraftData.TryGetProperty("next_actions", out var envelopeNextActions));
+        Assert.False(scenarioDraftData.TryGetProperty("nextActions", out _));
+        var envelopeActions = envelopeNextActions.EnumerateArray().ToArray();
+        Assert.Contains(envelopeActions, action => action.GetProperty("kind").GetString() == "review_draft");
+        var envelopeAuditAction = Assert.Single(envelopeActions, static action => action.GetProperty("kind").GetString() == "audit_provenance");
+        Assert.Equal($"luotsi replay graph --artifacts {replayRoot} --node-kind scenario_draft --write-markdown", envelopeAuditAction.GetProperty("command").GetString());
+        Assert.DoesNotContain("--node-kind generated_step", envelopeAuditAction.GetProperty("command").GetString(), StringComparison.Ordinal);
+
+        using var persistedSummary = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "scenario-draft-summary.json")));
+        Assert.True(persistedSummary.RootElement.TryGetProperty("nextActions", out var persistedNextActions));
+        Assert.False(persistedSummary.RootElement.TryGetProperty("next_actions", out _));
+        var persistedActions = persistedNextActions.EnumerateArray().ToArray();
+        Assert.Contains(persistedActions, action => action.GetProperty("kind").GetString() == "review_draft");
+        var persistedAuditAction = Assert.Single(persistedActions, static action => action.GetProperty("kind").GetString() == "audit_provenance");
+        Assert.Equal($"luotsi replay graph --artifacts {replayRoot} --node-kind scenario_draft --write-markdown", persistedAuditAction.GetProperty("command").GetString());
+        Assert.DoesNotContain("--node-kind generated_step", persistedAuditAction.GetProperty("command").GetString(), StringComparison.Ordinal);
+
+        var graphConsole = new FakeConsole();
+        var graphApp = new App(new AppDependencies
+        {
+            Console = graphConsole,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var graphExitCode = await graphApp.RunAsync(["replay", "graph", "--artifacts", replayRoot]);
+        using var graphEnvelope = graphConsole.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, graphExitCode);
+        var graphData = graphEnvelope.RootElement.GetProperty("data");
+        Assert.Equal(1, graphData.GetProperty("node_kinds").GetProperty("scenario_draft").GetInt32());
+        Assert.Equal(
+            scenarioDraftData.GetProperty("scenario").GetProperty("steps").GetArrayLength(),
+            graphData.GetProperty("node_kinds").GetProperty("generated_step").GetInt32());
+        Assert.True(graphData.GetProperty("node_kinds").GetProperty("draft_source").GetInt32() >= 1);
+        Assert.Contains(graphData.GetProperty("edges").EnumerateArray(), edge => edge.GetProperty("kind").GetString() == "generates_step");
+        Assert.Contains(graphData.GetProperty("edges").EnumerateArray(), edge => edge.GetProperty("kind").GetString() == "derived_from");
+        var graphNodes = graphData.GetProperty("nodes").EnumerateArray().ToArray();
+        var generatedStep = graphNodes
+            .Where(static node => node.GetProperty("kind").GetString() == "generated_step")
+            .Select(static node => node.GetProperty("properties"))
+            .First(properties =>
+                properties.TryGetProperty("source_path", out var sourcePath) &&
+                sourcePath.GetString() == "session-timeline.jsonl");
+        Assert.Equal("1", generatedStep.GetProperty("sequence").GetString());
+        Assert.Equal(
+            "luotsi replay timeline --artifacts <artifact-root> --source-path session-timeline.jsonl --sequence 1 --context 2",
+            generatedStep.GetProperty("source_command").GetString());
+
+        var capsuleConsole = new FakeConsole();
+        var capsuleApp = new App(new AppDependencies
+        {
+            Console = capsuleConsole,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var capsuleExitCode = await capsuleApp.RunAsync(["replay", "capsule", "--artifacts", replayRoot, "--write-json", "--write-readme"]);
+        using var capsuleEnvelope = capsuleConsole.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, capsuleExitCode);
+        var capsuleDraftSummary = capsuleEnvelope.RootElement.GetProperty("data").GetProperty("scenario_draft_summary");
+        var capsuleNextActions = capsuleDraftSummary.GetProperty("next_actions").EnumerateArray().ToArray();
+        Assert.Contains(capsuleNextActions, action =>
+            action.GetProperty("kind").GetString() == "review_draft" &&
+            action.GetProperty("command").GetString() == $"luotsi replay open --artifacts {replayRoot}");
+        var capsuleAuditAction = Assert.Single(capsuleNextActions, static action => action.GetProperty("kind").GetString() == "audit_provenance");
+        Assert.Equal($"luotsi replay graph --artifacts {replayRoot} --node-kind scenario_draft --write-markdown", capsuleAuditAction.GetProperty("command").GetString());
+        Assert.DoesNotContain("--node-kind generated_step", capsuleAuditAction.GetProperty("command").GetString(), StringComparison.Ordinal);
+
+        var readme = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-capsule.md"));
+        Assert.Contains("Scenario Draft Next Actions", readme, StringComparison.Ordinal);
+        Assert.Contains($"luotsi replay graph --artifacts {replayRoot} --node-kind scenario_draft --write-markdown", readme, StringComparison.Ordinal);
+        Assert.DoesNotContain("--node-kind generated_step", readme, StringComparison.Ordinal);
+
+        var markdownIndex = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, ArtifactSession.ArtifactIndexFileName));
+        Assert.Contains("scenario-draft-summary.json", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("next_actions=4", markdownIndex, StringComparison.Ordinal);
+        var detail = new ArtifactEvidenceDetailReader(replayRoot, fileSystem).TryBuild("scenario-draft-summary.json");
+        Assert.NotNull(detail);
+        Assert.Contains("next_actions=4", detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayScenarioDraft_NextActions_Omit_Validation_When_Output_Is_Not_Written()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedInspectReplayDraftArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "scenario-draft", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var nextActions = envelope.RootElement.GetProperty("data").GetProperty("next_actions").EnumerateArray().ToArray();
+        Assert.Contains(nextActions, action => action.GetProperty("kind").GetString() == "review_draft");
+        Assert.Contains(nextActions, action => action.GetProperty("kind").GetString() == "reopen_source_event");
+        Assert.DoesNotContain(nextActions, action => action.GetProperty("kind").GetString() == "validate_scenario");
+        Assert.DoesNotContain(nextActions, action => action.GetProperty("kind").GetString() == "audit_provenance");
+        Assert.DoesNotContain(envelope.RootElement.GetProperty("data").GetProperty("suggested_commands").EnumerateArray(), command =>
+            command.GetProperty("command").GetString()!.Contains("--node-kind scenario_draft", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -957,20 +1101,31 @@ public sealed partial class AppTests
 
         Assert.Equal(0, exitCode);
         var data = envelope.RootElement.GetProperty("data");
-        var step = data.GetProperty("scenario").GetProperty("steps")[0];
-        Assert.Equal("tapElement", step.GetProperty("action").GetString());
-        Assert.False(step.TryGetProperty("text", out _));
-        var selector = step.GetProperty("selector");
+        var steps = data.GetProperty("scenario").GetProperty("steps").EnumerateArray().ToArray();
+        Assert.Equal(2, steps.Length);
+        Assert.Equal("waitElement", steps[0].GetProperty("action").GetString());
+        Assert.Equal("tapElement", steps[1].GetProperty("action").GetString());
+        Assert.False(steps[0].TryGetProperty("text", out _));
+        Assert.False(steps[1].TryGetProperty("text", out _));
+        var selector = steps[0].GetProperty("selector");
         Assert.Equal("Files", selector.GetProperty("text").GetString());
         Assert.Equal("exact", selector.GetProperty("text_match").GetString());
         Assert.Equal("com.elotouch.home:id/tvAppName", selector.GetProperty("resource_id").GetString());
         Assert.Equal("android.widget.TextView", selector.GetProperty("class_name").GetString());
         var origin = data.GetProperty("step_origins")[0];
+        Assert.Contains("inserted waitElement before tapElement", origin.GetProperty("detail").GetString(), StringComparison.Ordinal);
         Assert.Contains("resource_id:exact=com.elotouch.home:id/tvAppName", origin.GetProperty("detail").GetString(), StringComparison.Ordinal);
+        var normalizations = data.GetProperty("normalizations").EnumerateArray().ToArray();
+        var normalization = Assert.Single(normalizations);
+        Assert.Equal("inserted_pre_tap_wait", normalization.GetProperty("kind").GetString());
+        Assert.Contains("Inserted waitElement before tapElement", normalization.GetProperty("detail").GetString(), StringComparison.Ordinal);
         var reviewItems = data.GetProperty("review_items").EnumerateArray().ToArray();
         Assert.Contains(reviewItems, item =>
             item.GetProperty("category").GetString() == "selector" &&
             item.GetProperty("message").GetString()!.Contains("selector metadata", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(reviewItems, item =>
+            item.GetProperty("category").GetString() == "normalization" &&
+            item.GetProperty("message").GetString()!.Contains("Inserted waitElement before tapElement", StringComparison.Ordinal));
         Assert.Contains("resource_id:exact=com.elotouch.home:id/tvAppName", await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "scenario-draft.md")), StringComparison.Ordinal);
     }
 
@@ -1013,6 +1168,10 @@ public sealed partial class AppTests
         Assert.Equal("contains", selector.GetProperty("text_match").GetString());
         Assert.Equal("exact", selector.GetProperty("resource_id_match").GetString());
         Assert.Equal("exact", selector.GetProperty("class_name_match").GetString());
+        Assert.Equal("inserted_pre_tap_wait", Assert.Single(envelope.RootElement
+            .GetProperty("data")
+            .GetProperty("normalizations")
+            .EnumerateArray()).GetProperty("kind").GetString());
         var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "scenario-draft.md"));
         Assert.Contains("text:contains=Files", markdown, StringComparison.Ordinal);
     }
@@ -1042,12 +1201,17 @@ public sealed partial class AppTests
 
         Assert.Equal(0, exitCode);
         var steps = envelope.RootElement.GetProperty("data").GetProperty("scenario").GetProperty("steps").EnumerateArray().ToArray();
-        Assert.Equal("tapText", steps[0].GetProperty("action").GetString());
+        Assert.Equal("waitVisible", steps[0].GetProperty("action").GetString());
         Assert.Equal("Sign in", steps[0].GetProperty("text").GetString());
-        Assert.Equal("waitVisible", steps[1].GetProperty("action").GetString());
-        Assert.Equal("Welcome", steps[1].GetProperty("text").GetString());
+        Assert.Equal("tapText", steps[1].GetProperty("action").GetString());
+        Assert.Equal("Sign in", steps[1].GetProperty("text").GetString());
         Assert.Equal("waitVisible", steps[2].GetProperty("action").GetString());
-        Assert.Equal("Open menu", steps[2].GetProperty("text").GetString());
+        Assert.Equal("Welcome", steps[2].GetProperty("text").GetString());
+        Assert.Equal("waitVisible", steps[3].GetProperty("action").GetString());
+        Assert.Equal("Open menu", steps[3].GetProperty("text").GetString());
+        var normalizations = envelope.RootElement.GetProperty("data").GetProperty("normalizations").EnumerateArray().ToArray();
+        var normalization = Assert.Single(normalizations, normalization => normalization.GetProperty("kind").GetString() == "inserted_pre_tap_wait");
+        Assert.Contains("Inserted waitVisible before tapText", normalization.GetProperty("detail").GetString(), StringComparison.Ordinal);
 
         var validateConsole = new FakeConsole();
         var validateApp = new App(new AppDependencies
@@ -1434,6 +1598,20 @@ public sealed partial class AppTests
             ]
           },
           "warnings": ["Review selectors."],
+          "nextActions": [
+            {
+              "kind": "review_draft",
+              "title": "Review generated draft",
+              "reason": "Review before editing.",
+              "command": "luotsi replay open --artifacts /tmp/replay-capsule-root"
+            },
+            {
+              "kind": "audit_provenance",
+              "title": "Audit draft provenance",
+              "reason": "Inspect generated steps and normalizations.",
+              "command": "luotsi replay graph --artifacts /tmp/replay-capsule-root --node-kind scenario_draft --write-markdown"
+            }
+          ],
           "reviewItems": [
             {
               "severity": "info",
@@ -1477,22 +1655,38 @@ public sealed partial class AppTests
         Assert.Equal(2, draftSummary.GetProperty("step_count").GetInt32());
         Assert.Equal(1, draftSummary.GetProperty("warning_count").GetInt32());
         Assert.Equal(2, draftSummary.GetProperty("review_item_count").GetInt32());
+        Assert.Equal(2, draftSummary.GetProperty("next_action_count").GetInt32());
         Assert.Equal(1, draftSummary.GetProperty("normalization_count").GetInt32());
         Assert.Equal("Review selectors.", draftSummary.GetProperty("warnings")[0].GetString());
+        var nextActions = draftSummary.GetProperty("next_actions").EnumerateArray().ToArray();
+        Assert.Equal("review_draft", nextActions[0].GetProperty("kind").GetString());
+        Assert.Equal("Review generated draft", nextActions[0].GetProperty("title").GetString());
+        Assert.Contains("replay open", nextActions[0].GetProperty("command").GetString(), StringComparison.Ordinal);
         var reviewItems = draftSummary.GetProperty("review_items").EnumerateArray().ToArray();
         Assert.Equal("selector", reviewItems[0].GetProperty("category").GetString());
         Assert.Equal("Review wait selector.", reviewItems[0].GetProperty("message").GetString());
         Assert.Contains("--source-path session-timeline.jsonl", reviewItems[0].GetProperty("command").GetString(), StringComparison.Ordinal);
         Assert.Contains(data.GetProperty("suggested_commands").EnumerateArray(), command =>
             command.GetProperty("command").GetString()!.Contains("Review Checklist", StringComparison.Ordinal));
+        var nextSteps = data.GetProperty("recommended_next_steps").EnumerateArray().ToArray();
+        Assert.Equal("review_draft", nextSteps[0].GetProperty("kind").GetString());
+        Assert.Equal("Review generated draft", nextSteps[0].GetProperty("title").GetString());
+        Assert.Equal("audit_provenance", nextSteps[1].GetProperty("kind").GetString());
+        Assert.Contains("scenario_draft", nextSteps[1].GetProperty("command").GetString(), StringComparison.Ordinal);
+        Assert.Contains(nextSteps, step => step.GetProperty("kind").GetString() == "scrub_failure");
         var readme = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-capsule.md"));
         Assert.Contains("Scenario draft summary: `scenario-draft-summary.json`", readme, StringComparison.Ordinal);
         Assert.Contains("Scenario draft review: `scenario-draft.md`", readme, StringComparison.Ordinal);
         Assert.Contains("Scenario draft file: `draft-scenario.json`", readme, StringComparison.Ordinal);
         Assert.Contains("Scenario draft confidence: `medium`", readme, StringComparison.Ordinal);
         Assert.Contains("Scenario draft review items: `2`", readme, StringComparison.Ordinal);
+        Assert.Contains("Scenario draft next actions: `2`", readme, StringComparison.Ordinal);
         Assert.Contains("### Scenario Draft Warning Preview", readme, StringComparison.Ordinal);
         Assert.Contains("Review selectors.", readme, StringComparison.Ordinal);
+        Assert.Contains("### Scenario Draft Next Actions", readme, StringComparison.Ordinal);
+        Assert.Contains("Review generated draft", readme, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay graph --artifacts /tmp/replay-capsule-root --node-kind scenario_draft --write-markdown", readme, StringComparison.Ordinal);
+        Assert.Contains("Best next step: Review generated draft (`review_draft`)", readme, StringComparison.Ordinal);
         Assert.Contains("### Scenario Draft Review Preview", readme, StringComparison.Ordinal);
         Assert.Contains("Review wait selector.", readme, StringComparison.Ordinal);
     }
@@ -2221,6 +2415,7 @@ public sealed partial class AppTests
         fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), """
         {"type":"session_started","session_id":"inspect-session","started_at":"2026-05-18T10:00:00Z"}
         {"type":"command_result","session_id":"inspect-session","id":"1","command":"tap_text","ok":true,"started_at":"2026-05-18T10:00:01Z","ended_at":"2026-05-18T10:00:02Z","data":{"text":"Sign in"}}
+        {"type":"screen_delta","session_id":"inspect-session","started_at":"2026-05-18T10:00:03Z","delta":{"added":[{"text":"Sign in"}]}}
         {"type":"session_ended","session_id":"inspect-session","ended_at":"2026-05-18T10:00:09Z","reason":"client_exit"}
         """);
         fileSystem.AddFile(Path.Join(replayRoot, "session-replay.json"), """
@@ -2233,14 +2428,14 @@ public sealed partial class AppTests
           "reason": "client_exit",
           "exitCode": 0,
           "timelineFileName": "session-timeline.jsonl",
-          "eventCount": 3,
-          "eventTypes": ["session_started", "command_result", "session_ended"]
+          "eventCount": 4,
+          "eventTypes": ["session_started", "command_result", "screen_delta", "session_ended"]
         }
         """);
         fileSystem.AddFile(Path.Join(replayRoot, "scenario-draft-summary.json"), """
         {
           "schema": "luotsi-scenario-draft.v1",
-          "artifact_root": "/tmp/replay-graph-draft-root",
+          "artifactRoot": "/tmp/replay-graph-draft-root",
           "output": "/tmp/draft.json",
           "confidence": "medium",
           "scenario": {
@@ -2249,14 +2444,15 @@ public sealed partial class AppTests
               { "name": "tap Sign in", "action": "tapText", "text": "Sign in" }
             ]
           },
-          "source_summaries": [
-            { "source": "inspect_command", "step_count": 1, "normalization_count": 1, "event_types": ["command_result"], "confidence": "medium" }
+          "sourceSummaries": [
+            { "source": "inspect_command", "stepCount": 1, "normalizationCount": 0, "eventTypes": ["command_result"], "confidence": "medium" },
+            { "source": "screen_delta", "stepCount": 0, "normalizationCount": 1, "eventTypes": ["screen_delta"], "confidence": "medium" }
           ],
-          "step_origins": [
-            { "step_index": 1, "source": "inspect_command", "event_type": "command_result", "command": "tap_text", "detail": "tap_text", "confidence": "medium" }
+          "stepOrigins": [
+            { "stepIndex": 1, "source": "inspect_command", "eventType": "command_result", "command": "tap_text", "detail": "tap_text", "confidence": "medium", "sourcePath": "session-timeline.jsonl", "sequence": 1, "timestamp": "2026-05-18T10:00:01Z", "sourceCommand": "luotsi replay timeline --artifacts <artifact-root> --source-path session-timeline.jsonl --sequence 1 --context 2" }
           ],
           "normalizations": [
-            { "kind": "duplicate_wait", "detail": "Dropped adjacent duplicate waitVisible for `Sign in`.", "source": "screen_delta", "event_type": "screen_delta", "confidence": "medium" }
+            { "kind": "duplicate_wait", "detail": "Dropped adjacent duplicate waitVisible for `Sign in`.", "source": "screen_delta", "eventType": "screen_delta", "confidence": "medium", "sourcePath": "session-timeline.jsonl", "sequence": 2, "timestamp": "2026-05-18T10:00:03Z", "sourceCommand": "luotsi replay timeline --artifacts <artifact-root> --source-path session-timeline.jsonl --sequence 2 --context 2" }
           ]
         }
         """);
@@ -2280,6 +2476,24 @@ public sealed partial class AppTests
         Assert.Contains(data.GetProperty("edges").EnumerateArray(), edge => edge.GetProperty("kind").GetString() == "derived_from");
         Assert.Contains(data.GetProperty("edges").EnumerateArray(), edge => edge.GetProperty("kind").GetString() == "uses_source");
         Assert.Contains(data.GetProperty("edges").EnumerateArray(), edge => edge.GetProperty("kind").GetString() == "applies_normalization");
+        var nodes = data.GetProperty("nodes").EnumerateArray().ToArray();
+        var stepProperties = Assert.Single(nodes, node => node.GetProperty("kind").GetString() == "generated_step").GetProperty("properties");
+        Assert.Equal("session-timeline.jsonl", stepProperties.GetProperty("source_path").GetString());
+        Assert.Equal("1", stepProperties.GetProperty("sequence").GetString());
+        Assert.Equal("luotsi replay timeline --artifacts <artifact-root> --source-path session-timeline.jsonl --sequence 1 --context 2", stepProperties.GetProperty("source_command").GetString());
+        var normalizationNode = Assert.Single(nodes, node => node.GetProperty("kind").GetString() == "draft_normalization");
+        var normalizationProperties = normalizationNode.GetProperty("properties");
+        Assert.Equal("session-timeline.jsonl", normalizationProperties.GetProperty("source_path").GetString());
+        Assert.Equal("2", normalizationProperties.GetProperty("sequence").GetString());
+        Assert.Equal("luotsi replay timeline --artifacts <artifact-root> --source-path session-timeline.jsonl --sequence 2 --context 2", normalizationProperties.GetProperty("source_command").GetString());
+        var screenDeltaSource = Assert.Single(nodes, node =>
+            node.GetProperty("kind").GetString() == "draft_source" &&
+            node.GetProperty("label").GetString() == "screen_delta");
+        Assert.Equal("1", screenDeltaSource.GetProperty("properties").GetProperty("normalization_count").GetString());
+        var normalizationSourceEdge = Assert.Single(data.GetProperty("edges").EnumerateArray(), edge =>
+            edge.GetProperty("from").GetString() == normalizationNode.GetProperty("id").GetString() &&
+            edge.GetProperty("kind").GetString() == "derived_from");
+        Assert.Equal("session-timeline.jsonl", normalizationSourceEdge.GetProperty("properties").GetProperty("source_path").GetString());
     }
 
     [Fact]
