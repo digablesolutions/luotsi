@@ -993,6 +993,7 @@ public sealed partial class AppTests
         Assert.Equal("luotsi preflight --device emulator-5554 --package <app.id>", runHandoff.GetProperty("preflight_command").GetString());
         Assert.Equal("luotsi run --path /tmp/validated-draft.json --dry-run", runHandoff.GetProperty("dry_run_command").GetString());
         Assert.Equal("luotsi run --file /tmp/validated-draft.json --device emulator-5554", runHandoff.GetProperty("run_command").GetString());
+        Assert.False(runHandoff.TryGetProperty("claimed_run_command", out _));
         Assert.Contains(data.GetProperty("next_actions").EnumerateArray(), action =>
             action.GetProperty("kind").GetString() == "dry_run_scenario" &&
             action.GetProperty("command").GetString() == "luotsi run --path /tmp/validated-draft.json --dry-run");
@@ -1015,6 +1016,7 @@ public sealed partial class AppTests
         Assert.Equal("ready", summary.RootElement.GetProperty("runHandoff").GetProperty("status").GetString());
         Assert.Equal("luotsi preflight --device emulator-5554 --package <app.id>", summary.RootElement.GetProperty("runHandoff").GetProperty("preflightCommand").GetString());
         Assert.Equal("luotsi run --path /tmp/validated-draft.json --dry-run", summary.RootElement.GetProperty("runHandoff").GetProperty("dryRunCommand").GetString());
+        Assert.False(summary.RootElement.GetProperty("runHandoff").TryGetProperty("claimedRunCommand", out _));
 
         var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "scenario-draft.md"));
         Assert.Contains("## Validation", markdown, StringComparison.Ordinal);
@@ -1027,6 +1029,7 @@ public sealed partial class AppTests
         Assert.Contains("luotsi preflight --device emulator-5554 --package <app.id>", markdown, StringComparison.Ordinal);
         Assert.Contains("luotsi run --path /tmp/validated-draft.json --dry-run", markdown, StringComparison.Ordinal);
         Assert.Contains("luotsi run --file /tmp/validated-draft.json --device emulator-5554", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("--claim-device", markdown, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1092,9 +1095,12 @@ public sealed partial class AppTests
         Assert.Equal("luotsi preflight --device emulator-5554 --package dev.luotsi.app", runHandoff.GetProperty("preflight_command").GetString());
         Assert.Equal("luotsi run --path /tmp/package-draft.json --dry-run", runHandoff.GetProperty("dry_run_command").GetString());
         Assert.Equal("luotsi run --file /tmp/package-draft.json --device emulator-5554 --package dev.luotsi.app", runHandoff.GetProperty("run_command").GetString());
+        Assert.Equal("luotsi run --file /tmp/package-draft.json --device emulator-5554 --package dev.luotsi.app --claim-device --claim-wait-sec 60", runHandoff.GetProperty("claimed_run_command").GetString());
         Assert.Contains(data.GetProperty("next_actions").EnumerateArray(), action =>
             action.GetProperty("kind").GetString() == "preflight_device" &&
             action.GetProperty("command").GetString() == "luotsi preflight --device emulator-5554 --package dev.luotsi.app");
+        Assert.Contains(data.GetProperty("suggested_commands").EnumerateArray(), command =>
+            command.GetProperty("command").GetString() == "luotsi run --file /tmp/package-draft.json --device emulator-5554 --package dev.luotsi.app --claim-device --claim-wait-sec 60");
         Assert.Contains(data.GetProperty("suggested_commands").EnumerateArray(), command =>
             command.GetProperty("command").GetString() == "luotsi run --file /tmp/package-draft.json --device emulator-5554 --package dev.luotsi.app");
 
@@ -1106,6 +1112,7 @@ public sealed partial class AppTests
         Assert.Equal("data.package", persistedSummary.RootElement.GetProperty("packageProvenance").GetProperty("source").GetString());
         Assert.Equal("emulator-5554", persistedSummary.RootElement.GetProperty("deviceProvenance").GetProperty("serial").GetString());
         Assert.Equal("luotsi preflight --device emulator-5554 --package dev.luotsi.app", persistedSummary.RootElement.GetProperty("runHandoff").GetProperty("preflightCommand").GetString());
+        Assert.Equal("luotsi run --file /tmp/package-draft.json --device emulator-5554 --package dev.luotsi.app --claim-device --claim-wait-sec 60", persistedSummary.RootElement.GetProperty("runHandoff").GetProperty("claimedRunCommand").GetString());
         Assert.Equal("luotsi run --file /tmp/package-draft.json --device emulator-5554 --package dev.luotsi.app", persistedSummary.RootElement.GetProperty("runHandoff").GetProperty("runCommand").GetString());
 
         var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "scenario-draft.md"));
@@ -1115,6 +1122,7 @@ public sealed partial class AppTests
         Assert.Contains("## Device Provenance", markdown, StringComparison.Ordinal);
         Assert.Contains("Serial: `emulator-5554`", markdown, StringComparison.Ordinal);
         Assert.Contains("luotsi preflight --device emulator-5554 --package dev.luotsi.app", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi run --file /tmp/package-draft.json --device emulator-5554 --package dev.luotsi.app --claim-device --claim-wait-sec 60", markdown, StringComparison.Ordinal);
         Assert.Contains("luotsi run --file /tmp/package-draft.json --device emulator-5554 --package dev.luotsi.app", markdown, StringComparison.Ordinal);
 
         var markdownIndex = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, ArtifactSession.ArtifactIndexFileName));
@@ -1188,6 +1196,7 @@ public sealed partial class AppTests
         var runHandoff = data.GetProperty("run_handoff");
         Assert.Equal("luotsi preflight --device <serial> --package <app.id>", runHandoff.GetProperty("preflight_command").GetString());
         Assert.Equal("luotsi run --file /tmp/path-target-draft.json --device <serial>", runHandoff.GetProperty("run_command").GetString());
+        Assert.False(runHandoff.TryGetProperty("claimed_run_command", out _));
 
         using var summary = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "scenario-draft-summary.json")));
         Assert.False(summary.RootElement.TryGetProperty("deviceProvenance", out _));
@@ -2030,6 +2039,12 @@ public sealed partial class AppTests
             "eventType": "command_result",
             "command": "wait_visible"
           },
+          "deviceProvenance": {
+            "serial": "emulator-5554",
+            "source": "session_replay.target",
+            "sessionKind": "inspect",
+            "sessionId": "inspect-session"
+          },
           "validation": {
             "status": "validated",
             "command": "luotsi scenario-validate --file /tmp/ready-draft.json",
@@ -2038,9 +2053,10 @@ public sealed partial class AppTests
           "runHandoff": {
             "status": "ready",
             "reason": "Static validation passed.",
-            "preflightCommand": "luotsi preflight --device <serial> --package dev.luotsi.app",
+            "preflightCommand": "luotsi preflight --device emulator-5554 --package dev.luotsi.app",
             "dryRunCommand": "luotsi run --path /tmp/ready-draft.json --dry-run",
-            "runCommand": "luotsi run --file /tmp/ready-draft.json --device <serial> --package dev.luotsi.app"
+            "runCommand": "luotsi run --file /tmp/ready-draft.json --device emulator-5554 --package dev.luotsi.app",
+            "claimedRunCommand": "luotsi run --file /tmp/ready-draft.json --device emulator-5554 --package dev.luotsi.app --claim-device --claim-wait-sec 60"
           },
           "nextActions": [
             {
@@ -2059,7 +2075,7 @@ public sealed partial class AppTests
               "kind": "preflight_device",
               "title": "Preflight target device",
               "reason": "Verify adb/device/app readiness before executing the generated scenario.",
-              "command": "luotsi preflight --device <serial> --package dev.luotsi.app"
+              "command": "luotsi preflight --device emulator-5554 --package dev.luotsi.app"
             },
             {
               "kind": "audit_provenance",
@@ -2088,26 +2104,33 @@ public sealed partial class AppTests
         var data = envelope.RootElement.GetProperty("data");
         var draftSummary = data.GetProperty("scenario_draft_summary");
         Assert.Equal("dev.luotsi.app", draftSummary.GetProperty("package_provenance").GetProperty("package").GetString());
+        Assert.Equal("emulator-5554", draftSummary.GetProperty("device_provenance").GetProperty("serial").GetString());
         Assert.Equal("validated", draftSummary.GetProperty("validation").GetProperty("status").GetString());
         Assert.Equal("ready", draftSummary.GetProperty("run_handoff").GetProperty("status").GetString());
+        Assert.Equal("luotsi run --file /tmp/ready-draft.json --device emulator-5554 --package dev.luotsi.app --claim-device --claim-wait-sec 60", draftSummary.GetProperty("run_handoff").GetProperty("claimed_run_command").GetString());
 
         var nextSteps = data.GetProperty("recommended_next_steps").EnumerateArray().ToArray();
         Assert.Equal("dry_run_scenario", nextSteps[0].GetProperty("kind").GetString());
         Assert.Equal("luotsi run --path /tmp/ready-draft.json --dry-run", nextSteps[0].GetProperty("command").GetString());
         Assert.Equal("preflight_device", nextSteps[1].GetProperty("kind").GetString());
-        Assert.Equal("luotsi preflight --device <serial> --package dev.luotsi.app", nextSteps[1].GetProperty("command").GetString());
-        Assert.Equal("run_scenario", nextSteps[2].GetProperty("kind").GetString());
-        Assert.Equal("luotsi run --file /tmp/ready-draft.json --device <serial> --package dev.luotsi.app", nextSteps[2].GetProperty("command").GetString());
+        Assert.Equal("luotsi preflight --device emulator-5554 --package dev.luotsi.app", nextSteps[1].GetProperty("command").GetString());
+        Assert.Equal("claimed_run_scenario", nextSteps[2].GetProperty("kind").GetString());
+        Assert.Equal("luotsi run --file /tmp/ready-draft.json --device emulator-5554 --package dev.luotsi.app --claim-device --claim-wait-sec 60", nextSteps[2].GetProperty("command").GetString());
+        Assert.Equal("run_scenario", nextSteps[3].GetProperty("kind").GetString());
+        Assert.Equal("luotsi run --file /tmp/ready-draft.json --device emulator-5554 --package dev.luotsi.app", nextSteps[3].GetProperty("command").GetString());
         Assert.Contains(nextSteps, step => step.GetProperty("kind").GetString() == "review_draft");
         Assert.Contains(nextSteps, step => step.GetProperty("kind").GetString() == "audit_provenance");
         Assert.Single(nextSteps, step => step.GetProperty("kind").GetString() == "dry_run_scenario");
         Assert.Single(nextSteps, step => step.GetProperty("kind").GetString() == "preflight_device");
+        Assert.Single(nextSteps, step => step.GetProperty("kind").GetString() == "claimed_run_scenario");
 
         var readme = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-capsule.md"));
         Assert.Contains("Scenario draft package: `dev.luotsi.app`", readme, StringComparison.Ordinal);
+        Assert.Contains("Scenario draft device: `emulator-5554`", readme, StringComparison.Ordinal);
         Assert.Contains("Scenario draft validation: `validated`", readme, StringComparison.Ordinal);
         Assert.Contains("Scenario draft run handoff: `ready`", readme, StringComparison.Ordinal);
-        Assert.Contains("Scenario draft run: `luotsi run --file /tmp/ready-draft.json --device <serial> --package dev.luotsi.app`", readme, StringComparison.Ordinal);
+        Assert.Contains("Scenario draft claimed run: `luotsi run --file /tmp/ready-draft.json --device emulator-5554 --package dev.luotsi.app --claim-device --claim-wait-sec 60`", readme, StringComparison.Ordinal);
+        Assert.Contains("Scenario draft run: `luotsi run --file /tmp/ready-draft.json --device emulator-5554 --package dev.luotsi.app`", readme, StringComparison.Ordinal);
         Assert.Contains("Best next step: Plan generated scenario (`dry_run_scenario`)", readme, StringComparison.Ordinal);
     }
 

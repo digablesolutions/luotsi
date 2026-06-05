@@ -340,9 +340,10 @@ Notes:
   scenario with warnings, suggestions, and typed next_actions for the authoring handoff. Pass
   --validate with --output/--file to run static scenario validation immediately and persist
   the compact validation result beside the draft. Validated drafts also include run_handoff
-  dry-run and device-run commands so the next step can be planned before execution. Trusted package
-  and replay-target evidence are recorded as package_provenance/device_provenance and used for app
-  preflight/run commands when available. The result includes
+  dry-run, preflight, device-run, and shared-lab claimed-run commands so the next step
+  can be planned before execution. Trusted package and replay-target evidence are recorded
+  as package_provenance/device_provenance and used for app preflight/run commands when available.
+  The claimed run is emitted only when package and device serial are concrete. The result includes
   source_summaries, step_origins, and normalizations so reviewers can see
   which steps came from inspect commands, screen deltas, view events,
   telemetry, or existing scenario events. With --write-json and

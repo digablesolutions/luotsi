@@ -67,11 +67,11 @@ Raw replay `--format` modes cannot be combined with `--human`, `--quiet`, `--jso
 
 Replay commands that keep the normal envelope put their command-specific contract under `data`:
 
-- `replay capsule` returns a failure-capsule summary with `primary_failure`, `failure_timeline`, `artifact_manifest`, optional scenario draft summary fields including bounded `next_actions` and `run_handoff`, draft-led `recommended_next_steps` that promote ready dry-run/preflight/run commands first, and `suggested_commands`.
+- `replay capsule` returns a failure-capsule summary with `primary_failure`, `failure_timeline`, `artifact_manifest`, optional scenario draft summary fields including bounded `next_actions` and `run_handoff`, draft-led `recommended_next_steps` that promote ready dry-run/preflight/claimed-run/direct-run commands first, and `suggested_commands`.
 - `replay summarize` returns session summaries plus `commands` that route into capsule, open, scrub, graph, and clustering when failures are present.
 - `replay timeline` returns ordered events plus `commands` that route into capsule, open, scrub, and graph when selected events include failures.
 - `replay search` returns text matches plus `commands` back into capsule, open, scrub, and graph when matches are replay-relevant.
-- `replay scenario-draft` returns draft metadata, warnings, suggestions, review items, ordered `next_actions`, optional `package_provenance`, optional `device_provenance`, optional static `validation`, optional gated `run_handoff`, source summaries, step origins, normalizations such as inserted pre-tap waits or dropped duplicate waits, and the generated output paths. When persisted, the main review artifacts are `scenario-draft-summary.json` and `scenario-draft.md`.
+- `replay scenario-draft` returns draft metadata, warnings, suggestions, review items, ordered `next_actions`, optional `package_provenance`, optional `device_provenance`, optional static `validation`, optional gated `run_handoff` with `claimed_run_command` only when package and device serial are concrete, source summaries, step origins, normalizations such as inserted pre-tap waits or dropped duplicate waits, and the generated output paths. When persisted, the main review artifacts are `scenario-draft-summary.json` and `scenario-draft.md`.
 - `replay graph` returns a stable graph payload with `query`, `agent_summary`, counts, taxonomy, insights, actions, evidence, facts, causal chains, hypotheses, optional output paths, plus returned `nodes` and `edges`; scenario-draft step and normalization nodes preserve source audit fields when available.
 - `replay cluster` groups failed replay sessions by normalized failure shape and returns cluster summaries plus suggested next triage commands.
 

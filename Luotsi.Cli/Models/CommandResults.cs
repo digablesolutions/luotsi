@@ -531,7 +531,9 @@ public sealed record ReplayScenarioDraftRunHandoff(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? DryRunCommand = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    string? RunCommand = null);
+    string? RunCommand = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? ClaimedRunCommand = null);
 
 public sealed record ReplayScenarioDraftNextAction(
     string Kind,

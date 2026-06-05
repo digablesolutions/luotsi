@@ -297,6 +297,15 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
                 runHandoff.PreflightCommand);
         }
 
+        if (!string.IsNullOrWhiteSpace(runHandoff.ClaimedRunCommand))
+        {
+            yield return new ReplayCapsuleNextStep(
+                "claimed_run_scenario",
+                "Claim and run generated scenario",
+                "Claim the selected device for this run before executing the validated draft in a shared lab.",
+                runHandoff.ClaimedRunCommand);
+        }
+
         if (!string.IsNullOrWhiteSpace(runHandoff.RunCommand))
         {
             yield return new ReplayCapsuleNextStep(
@@ -472,6 +481,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             AppendField(builder, "Scenario draft run handoff", scenarioDraftSummary.RunHandoff?.Status);
             AppendField(builder, "Scenario draft dry run", scenarioDraftSummary.RunHandoff?.DryRunCommand);
             AppendField(builder, "Scenario draft preflight", scenarioDraftSummary.RunHandoff?.PreflightCommand);
+            AppendField(builder, "Scenario draft claimed run", scenarioDraftSummary.RunHandoff?.ClaimedRunCommand);
             AppendField(builder, "Scenario draft run", scenarioDraftSummary.RunHandoff?.RunCommand);
             builder.AppendLine($"- Scenario draft steps: `{scenarioDraftSummary.StepCount}`");
             builder.AppendLine($"- Scenario draft warnings: `{scenarioDraftSummary.WarningCount}`");
@@ -840,7 +850,8 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             reason,
             TryGetString(property, "preflightCommand", out var preflightCommand) ? preflightCommand : null,
             TryGetString(property, "dryRunCommand", out var dryRunCommand) ? dryRunCommand : null,
-            TryGetString(property, "runCommand", out var runCommand) ? runCommand : null);
+            TryGetString(property, "runCommand", out var runCommand) ? runCommand : null,
+            TryGetString(property, "claimedRunCommand", out var claimedRunCommand) ? claimedRunCommand : null);
     }
 
     private static IReadOnlyList<ReplayScenarioDraftNextAction> ReadNextActions(JsonElement root, int limit)

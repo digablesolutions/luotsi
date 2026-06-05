@@ -444,6 +444,11 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem, Scenari
                 builder.AppendLine($"- Preflight: `{EscapeMarkdown(result.RunHandoff.PreflightCommand)}`");
             }
 
+            if (!string.IsNullOrWhiteSpace(result.RunHandoff.ClaimedRunCommand))
+            {
+                builder.AppendLine($"- Claimed run: `{EscapeMarkdown(result.RunHandoff.ClaimedRunCommand)}`");
+            }
+
             if (!string.IsNullOrWhiteSpace(result.RunHandoff.RunCommand))
             {
                 builder.AppendLine($"- Run: `{EscapeMarkdown(result.RunHandoff.RunCommand)}`");
@@ -728,6 +733,13 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem, Scenari
             yield return new ReplayScenarioDraftCommandHint(
                 runHandoff.PreflightCommand,
                 "Check the selected device and target app before executing the generated scenario.");
+
+            if (!string.IsNullOrWhiteSpace(runHandoff.ClaimedRunCommand))
+            {
+                yield return new ReplayScenarioDraftCommandHint(
+                    runHandoff.ClaimedRunCommand,
+                    "Claim the selected device before running the generated scenario in a shared lab.");
+            }
 
             yield return new ReplayScenarioDraftCommandHint(
                 runHandoff.RunCommand,
@@ -1437,7 +1449,8 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem, Scenari
             "Static validation passed; plan the generated scenario before running it on a selected device.",
             BuildPreflightCommand(package, serial),
             BuildDryRunCommand(output),
-            BuildRunCommand(output, package, serial));
+            BuildRunCommand(output, package, serial),
+            BuildClaimedRunCommand(output, package, serial));
     }
 
     private static string? ResolvePreflightPackage(ScenarioFile scenario)
@@ -1494,6 +1507,16 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem, Scenari
         return string.IsNullOrWhiteSpace(package)
             ? command
             : command + $" --package {Quote(package)}";
+    }
+
+    private static string? BuildClaimedRunCommand(string output, string? package, string? serial)
+    {
+        if (string.IsNullOrWhiteSpace(package) || string.IsNullOrWhiteSpace(serial))
+        {
+            return null;
+        }
+
+        return $"luotsi run --file {Quote(output)} --device {Quote(serial)} --package {Quote(package)} --claim-device --claim-wait-sec 60";
     }
 
     private static string? BuildReviewCommand(string kind) =>
