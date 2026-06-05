@@ -901,6 +901,11 @@ public sealed partial class AppTests
         Assert.Contains(nextActions, action =>
             action.GetProperty("kind").GetString() == "validate_scenario" &&
             action.GetProperty("command").GetString() == "luotsi scenario-validate --file /tmp/draft.json");
+        var runHandoff = data.GetProperty("run_handoff");
+        Assert.Equal("needs_validation", runHandoff.GetProperty("status").GetString());
+        Assert.False(runHandoff.TryGetProperty("preflight_command", out _));
+        Assert.False(runHandoff.TryGetProperty("dry_run_command", out _));
+        Assert.False(runHandoff.TryGetProperty("run_command", out _));
         Assert.Contains(nextActions, action =>
             action.GetProperty("kind").GetString() == "audit_provenance" &&
             action.GetProperty("command").GetString() == $"luotsi replay graph --artifacts {replayRoot} --node-kind scenario_draft --write-markdown");
@@ -930,6 +935,8 @@ public sealed partial class AppTests
         Assert.Contains("## Recommended Next Actions", review, StringComparison.Ordinal);
         Assert.Contains("review_draft", review, StringComparison.Ordinal);
         Assert.Contains("validate_scenario", review, StringComparison.Ordinal);
+        Assert.Contains("## Run Handoff", review, StringComparison.Ordinal);
+        Assert.Contains("Status: `needs_validation`", review, StringComparison.Ordinal);
         Assert.Contains("## Source Summary", review, StringComparison.Ordinal);
         Assert.Contains("## Step Origins", review, StringComparison.Ordinal);
         Assert.Contains("## Next Commands", review, StringComparison.Ordinal);
@@ -947,6 +954,382 @@ public sealed partial class AppTests
         var validateExitCode = await validateApp.RunAsync(["scenario-validate", "--file", "/tmp/draft.json"]);
 
         Assert.Equal(0, validateExitCode);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayScenarioDraft_Validate_Writes_Status_And_Omits_Validate_NextAction()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedInspectReplayDraftArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "scenario-draft", "--artifacts", replayRoot, "--output", "/tmp/validated-draft.json", "--validate", "--write-json", "--write-markdown"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        var validation = data.GetProperty("validation");
+        Assert.Equal("validated", validation.GetProperty("status").GetString());
+        Assert.Equal("luotsi scenario-validate --file /tmp/validated-draft.json", validation.GetProperty("command").GetString());
+        Assert.Equal("Static scenario validation passed.", validation.GetProperty("message").GetString());
+        Assert.False(validation.TryGetProperty("error", out _));
+        Assert.Equal("emulator-5554", data.GetProperty("scenario").GetProperty("metadata").GetProperty("device").GetProperty("serial").GetString());
+        var deviceProvenance = data.GetProperty("device_provenance");
+        Assert.Equal("emulator-5554", deviceProvenance.GetProperty("serial").GetString());
+        Assert.Equal("session_replay.target", deviceProvenance.GetProperty("source").GetString());
+        Assert.Equal("inspect", deviceProvenance.GetProperty("session_kind").GetString());
+        Assert.Equal("inspect-session", deviceProvenance.GetProperty("session_id").GetString());
+        Assert.Equal("session-replay.json", deviceProvenance.GetProperty("source_path").GetString());
+        Assert.DoesNotContain(data.GetProperty("next_actions").EnumerateArray(), action =>
+            action.GetProperty("kind").GetString() == "validate_scenario");
+        var runHandoff = data.GetProperty("run_handoff");
+        Assert.Equal("ready", runHandoff.GetProperty("status").GetString());
+        Assert.Equal("luotsi preflight --device emulator-5554 --package <app.id>", runHandoff.GetProperty("preflight_command").GetString());
+        Assert.Equal("luotsi run --path /tmp/validated-draft.json --dry-run", runHandoff.GetProperty("dry_run_command").GetString());
+        Assert.Equal("luotsi run --file /tmp/validated-draft.json --device emulator-5554", runHandoff.GetProperty("run_command").GetString());
+        Assert.False(runHandoff.TryGetProperty("claimed_run_command", out _));
+        Assert.Contains(data.GetProperty("next_actions").EnumerateArray(), action =>
+            action.GetProperty("kind").GetString() == "dry_run_scenario" &&
+            action.GetProperty("command").GetString() == "luotsi run --path /tmp/validated-draft.json --dry-run");
+        Assert.Contains(data.GetProperty("next_actions").EnumerateArray(), action =>
+            action.GetProperty("kind").GetString() == "preflight_device" &&
+            action.GetProperty("command").GetString() == "luotsi preflight --device emulator-5554 --package <app.id>");
+        Assert.DoesNotContain(data.GetProperty("suggested_commands").EnumerateArray(), command =>
+            command.GetProperty("command").GetString() == "luotsi scenario-validate --file /tmp/validated-draft.json");
+        Assert.Contains(data.GetProperty("suggested_commands").EnumerateArray(), command =>
+            command.GetProperty("command").GetString() == "luotsi run --path /tmp/validated-draft.json --dry-run");
+        Assert.Contains(data.GetProperty("suggested_commands").EnumerateArray(), command =>
+            command.GetProperty("command").GetString() == "luotsi preflight --device emulator-5554 --package <app.id>");
+        Assert.Contains(data.GetProperty("suggested_commands").EnumerateArray(), command =>
+            command.GetProperty("command").GetString() == "luotsi run --file /tmp/validated-draft.json --device emulator-5554");
+
+        using var summary = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "scenario-draft-summary.json")));
+        Assert.Equal("validated", summary.RootElement.GetProperty("validation").GetProperty("status").GetString());
+        Assert.Equal("luotsi scenario-validate --file /tmp/validated-draft.json", summary.RootElement.GetProperty("validation").GetProperty("command").GetString());
+        Assert.Equal("emulator-5554", summary.RootElement.GetProperty("deviceProvenance").GetProperty("serial").GetString());
+        Assert.Equal("ready", summary.RootElement.GetProperty("runHandoff").GetProperty("status").GetString());
+        Assert.Equal("luotsi preflight --device emulator-5554 --package <app.id>", summary.RootElement.GetProperty("runHandoff").GetProperty("preflightCommand").GetString());
+        Assert.Equal("luotsi run --path /tmp/validated-draft.json --dry-run", summary.RootElement.GetProperty("runHandoff").GetProperty("dryRunCommand").GetString());
+        Assert.False(summary.RootElement.GetProperty("runHandoff").TryGetProperty("claimedRunCommand", out _));
+
+        var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "scenario-draft.md"));
+        Assert.Contains("## Validation", markdown, StringComparison.Ordinal);
+        Assert.Contains("Status: `validated`", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi scenario-validate --file /tmp/validated-draft.json", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Device Provenance", markdown, StringComparison.Ordinal);
+        Assert.Contains("Serial: `emulator-5554`", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Run Handoff", markdown, StringComparison.Ordinal);
+        Assert.Contains("Status: `ready`", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi preflight --device emulator-5554 --package <app.id>", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi run --path /tmp/validated-draft.json --dry-run", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi run --file /tmp/validated-draft.json --device emulator-5554", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("--claim-device", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayScenarioDraft_Infers_Package_And_Device_Metadata_And_Handoff()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = "/tmp/package-draft-root";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), """
+        {"type":"session_started","session_id":"inspect-session","started_at":"2026-05-18T10:00:00Z"}
+        {"type":"command_result","session_id":"inspect-session","id":"1","command":"wait_visible","ok":true,"started_at":"2026-05-18T10:00:01Z","ended_at":"2026-05-18T10:00:02Z","data":{"text":"Sign in","package":"dev.luotsi.app"}}
+        {"type":"session_ended","session_id":"inspect-session","ended_at":"2026-05-18T10:00:09Z","reason":"client_exit"}
+        """);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-replay.json"), """
+        {
+          "schema": "luotsi-session-replay.v1",
+          "sessionKind": "inspect",
+          "sessionId": "inspect-session",
+          "startedAt": "2026-05-18T10:00:00Z",
+          "endedAt": "2026-05-18T10:00:09Z",
+          "reason": "client_exit",
+          "exitCode": 0,
+          "target": "emulator-5554",
+          "timelineFileName": "session-timeline.jsonl",
+          "eventCount": 3,
+          "eventTypes": ["session_started", "command_result", "session_ended"]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "scenario-draft", "--artifacts", replayRoot, "--output", "/tmp/package-draft.json", "--validate", "--write-json", "--write-markdown"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("dev.luotsi.app", data.GetProperty("scenario").GetProperty("metadata").GetProperty("package").GetString());
+        Assert.Equal("emulator-5554", data.GetProperty("scenario").GetProperty("metadata").GetProperty("device").GetProperty("serial").GetString());
+        var packageProvenance = data.GetProperty("package_provenance");
+        Assert.Equal("dev.luotsi.app", packageProvenance.GetProperty("package").GetString());
+        Assert.Equal("data.package", packageProvenance.GetProperty("source").GetString());
+        Assert.Equal("command_result", packageProvenance.GetProperty("event_type").GetString());
+        Assert.Equal("wait_visible", packageProvenance.GetProperty("command").GetString());
+        Assert.Equal("session-timeline.jsonl", packageProvenance.GetProperty("source_path").GetString());
+        Assert.Equal(1, packageProvenance.GetProperty("sequence").GetInt32());
+        Assert.Equal(DateTimeOffset.Parse("2026-05-18T10:00:01Z", System.Globalization.CultureInfo.InvariantCulture), packageProvenance.GetProperty("timestamp").GetDateTimeOffset());
+        Assert.Equal("luotsi replay timeline --artifacts <artifact-root> --source-path session-timeline.jsonl --sequence 1 --context 2", packageProvenance.GetProperty("source_command").GetString());
+        var deviceProvenance = data.GetProperty("device_provenance");
+        Assert.Equal("emulator-5554", deviceProvenance.GetProperty("serial").GetString());
+        Assert.Equal("session_replay.target", deviceProvenance.GetProperty("source").GetString());
+        Assert.Equal("inspect", deviceProvenance.GetProperty("session_kind").GetString());
+        Assert.Equal("inspect-session", deviceProvenance.GetProperty("session_id").GetString());
+        Assert.Equal("session-replay.json", deviceProvenance.GetProperty("source_path").GetString());
+        Assert.Equal(DateTimeOffset.Parse("2026-05-18T10:00:00Z", System.Globalization.CultureInfo.InvariantCulture), deviceProvenance.GetProperty("started_at").GetDateTimeOffset());
+
+        var runHandoff = data.GetProperty("run_handoff");
+        Assert.Equal("ready", runHandoff.GetProperty("status").GetString());
+        Assert.Equal("luotsi preflight --device emulator-5554 --package dev.luotsi.app", runHandoff.GetProperty("preflight_command").GetString());
+        Assert.Equal("luotsi run --path /tmp/package-draft.json --dry-run", runHandoff.GetProperty("dry_run_command").GetString());
+        Assert.Equal("luotsi run --file /tmp/package-draft.json --device emulator-5554 --package dev.luotsi.app", runHandoff.GetProperty("run_command").GetString());
+        Assert.Equal("luotsi run --file /tmp/package-draft.json --device emulator-5554 --package dev.luotsi.app --claim-device --claim-wait-sec 60", runHandoff.GetProperty("claimed_run_command").GetString());
+        Assert.Contains(data.GetProperty("next_actions").EnumerateArray(), action =>
+            action.GetProperty("kind").GetString() == "preflight_device" &&
+            action.GetProperty("command").GetString() == "luotsi preflight --device emulator-5554 --package dev.luotsi.app");
+        Assert.Contains(data.GetProperty("suggested_commands").EnumerateArray(), command =>
+            command.GetProperty("command").GetString() == "luotsi run --file /tmp/package-draft.json --device emulator-5554 --package dev.luotsi.app --claim-device --claim-wait-sec 60");
+        Assert.Contains(data.GetProperty("suggested_commands").EnumerateArray(), command =>
+            command.GetProperty("command").GetString() == "luotsi run --file /tmp/package-draft.json --device emulator-5554 --package dev.luotsi.app");
+
+        using var persistedScenario = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/package-draft.json"));
+        Assert.Equal("dev.luotsi.app", persistedScenario.RootElement.GetProperty("metadata").GetProperty("package").GetString());
+        Assert.Equal("emulator-5554", persistedScenario.RootElement.GetProperty("metadata").GetProperty("device").GetProperty("serial").GetString());
+        using var persistedSummary = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "scenario-draft-summary.json")));
+        Assert.Equal("dev.luotsi.app", persistedSummary.RootElement.GetProperty("packageProvenance").GetProperty("package").GetString());
+        Assert.Equal("data.package", persistedSummary.RootElement.GetProperty("packageProvenance").GetProperty("source").GetString());
+        Assert.Equal("emulator-5554", persistedSummary.RootElement.GetProperty("deviceProvenance").GetProperty("serial").GetString());
+        Assert.Equal("luotsi preflight --device emulator-5554 --package dev.luotsi.app", persistedSummary.RootElement.GetProperty("runHandoff").GetProperty("preflightCommand").GetString());
+        Assert.Equal("luotsi run --file /tmp/package-draft.json --device emulator-5554 --package dev.luotsi.app --claim-device --claim-wait-sec 60", persistedSummary.RootElement.GetProperty("runHandoff").GetProperty("claimedRunCommand").GetString());
+        Assert.Equal("luotsi run --file /tmp/package-draft.json --device emulator-5554 --package dev.luotsi.app", persistedSummary.RootElement.GetProperty("runHandoff").GetProperty("runCommand").GetString());
+
+        var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "scenario-draft.md"));
+        Assert.Contains("## Package Provenance", markdown, StringComparison.Ordinal);
+        Assert.Contains("Package: `dev.luotsi.app`", markdown, StringComparison.Ordinal);
+        Assert.Contains("Source: `data.package`", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Device Provenance", markdown, StringComparison.Ordinal);
+        Assert.Contains("Serial: `emulator-5554`", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi preflight --device emulator-5554 --package dev.luotsi.app", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi run --file /tmp/package-draft.json --device emulator-5554 --package dev.luotsi.app --claim-device --claim-wait-sec 60", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi run --file /tmp/package-draft.json --device emulator-5554 --package dev.luotsi.app", markdown, StringComparison.Ordinal);
+
+        var markdownIndex = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, ArtifactSession.ArtifactIndexFileName));
+        Assert.Contains("package=dev.luotsi.app", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("device=emulator-5554", markdownIndex, StringComparison.Ordinal);
+        var detail = new ArtifactEvidenceDetailReader(replayRoot, fileSystem).TryBuild("scenario-draft-summary.json");
+        Assert.NotNull(detail);
+        Assert.Contains("package=dev.luotsi.app", detail, StringComparison.Ordinal);
+        Assert.Contains("device=emulator-5554", detail, StringComparison.Ordinal);
+
+        var capsuleConsole = new FakeConsole();
+        var capsuleApp = new App(new AppDependencies
+        {
+            Console = capsuleConsole,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var capsuleExitCode = await capsuleApp.RunAsync(["replay", "capsule", "--artifacts", replayRoot, "--write-json"]);
+        using var capsuleEnvelope = capsuleConsole.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, capsuleExitCode);
+        var capsulePackageProvenance = capsuleEnvelope.RootElement.GetProperty("data").GetProperty("scenario_draft_summary").GetProperty("package_provenance");
+        Assert.Equal("dev.luotsi.app", capsulePackageProvenance.GetProperty("package").GetString());
+        Assert.Equal("data.package", capsulePackageProvenance.GetProperty("source").GetString());
+        var capsuleDeviceProvenance = capsuleEnvelope.RootElement.GetProperty("data").GetProperty("scenario_draft_summary").GetProperty("device_provenance");
+        Assert.Equal("emulator-5554", capsuleDeviceProvenance.GetProperty("serial").GetString());
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayScenarioDraft_Does_Not_Infer_Device_From_Ambiguous_Replay_Targets()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = "/tmp/ambiguous-device-draft-root";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), """
+        {"type":"session_started","session_id":"inspect-session","started_at":"2026-05-18T10:00:00Z"}
+        {"type":"command_result","session_id":"inspect-session","id":"1","command":"wait_visible","ok":true,"started_at":"2026-05-18T10:00:01Z","ended_at":"2026-05-18T10:00:02Z","data":{"text":"Sign in","package":"dev.luotsi.app"}}
+        {"type":"session_ended","session_id":"inspect-session","ended_at":"2026-05-18T10:00:09Z","reason":"client_exit"}
+        """);
+        fileSystem.AddFile(Path.Join(replayRoot, "first", "session-replay.json"), """
+        {
+          "schema": "luotsi-session-replay.v1",
+          "sessionKind": "inspect",
+          "sessionId": "first-session",
+          "startedAt": "2026-05-18T10:00:00Z",
+          "target": "emulator-5554"
+        }
+        """);
+        fileSystem.AddFile(Path.Join(replayRoot, "second", "session-replay.json"), """
+        {
+          "schema": "luotsi-session-replay.v1",
+          "sessionKind": "inspect",
+          "sessionId": "second-session",
+          "startedAt": "2026-05-18T10:00:01Z",
+          "target": "emulator-5556"
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "scenario-draft", "--artifacts", replayRoot, "--output", "/tmp/ambiguous-device-draft.json", "--validate", "--write-json"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("dev.luotsi.app", data.GetProperty("package_provenance").GetProperty("package").GetString());
+        Assert.False(data.TryGetProperty("device_provenance", out _));
+        Assert.False(data.GetProperty("scenario").GetProperty("metadata").TryGetProperty("device", out _));
+        var runHandoff = data.GetProperty("run_handoff");
+        Assert.Equal("luotsi preflight --device <serial> --package dev.luotsi.app", runHandoff.GetProperty("preflight_command").GetString());
+        Assert.Equal("luotsi run --file /tmp/ambiguous-device-draft.json --device <serial> --package dev.luotsi.app", runHandoff.GetProperty("run_command").GetString());
+        Assert.False(runHandoff.TryGetProperty("claimed_run_command", out _));
+
+        using var summary = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "scenario-draft-summary.json")));
+        Assert.False(summary.RootElement.TryGetProperty("deviceProvenance", out _));
+        Assert.Equal("dev.luotsi.app", summary.RootElement.GetProperty("packageProvenance").GetProperty("package").GetString());
+        Assert.False(summary.RootElement.GetProperty("runHandoff").TryGetProperty("claimedRunCommand", out _));
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayScenarioDraft_Does_Not_Infer_Device_From_NonSerial_Replay_Target()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = "/tmp/path-target-draft-root";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), """
+        {"type":"session_started","session_id":"run-session","started_at":"2026-05-18T10:00:00Z"}
+        {"type":"command_result","session_id":"run-session","id":"1","command":"wait_visible","ok":true,"started_at":"2026-05-18T10:00:01Z","ended_at":"2026-05-18T10:00:02Z","data":{"text":"Sign in"}}
+        {"type":"session_ended","session_id":"run-session","ended_at":"2026-05-18T10:00:09Z","reason":"client_exit"}
+        """);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-replay.json"), """
+        {
+          "schema": "luotsi-session-replay.v1",
+          "sessionKind": "run",
+          "sessionId": "run-session",
+          "startedAt": "2026-05-18T10:00:00Z",
+          "endedAt": "2026-05-18T10:00:09Z",
+          "reason": "completed",
+          "exitCode": 0,
+          "target": "/tmp/scenario.json",
+          "timelineFileName": "session-timeline.jsonl",
+          "eventCount": 3,
+          "eventTypes": ["session_started", "command_result", "session_ended"]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "scenario-draft", "--artifacts", replayRoot, "--output", "/tmp/path-target-draft.json", "--validate", "--write-json"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.False(data.TryGetProperty("device_provenance", out _));
+        Assert.False(data.GetProperty("scenario").GetProperty("metadata").TryGetProperty("device", out _));
+        var runHandoff = data.GetProperty("run_handoff");
+        Assert.Equal("luotsi preflight --device <serial> --package <app.id>", runHandoff.GetProperty("preflight_command").GetString());
+        Assert.Equal("luotsi run --file /tmp/path-target-draft.json --device <serial>", runHandoff.GetProperty("run_command").GetString());
+        Assert.False(runHandoff.TryGetProperty("claimed_run_command", out _));
+
+        using var summary = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "scenario-draft-summary.json")));
+        Assert.False(summary.RootElement.TryGetProperty("deviceProvenance", out _));
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayScenarioDraft_Validate_Without_Output_Returns_Usage_Error()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedInspectReplayDraftArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "scenario-draft", "--artifacts", replayRoot, "--validate"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("--validate requires --output", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayScenarioDraft_Validate_Failure_Preserves_Draft_Output()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = "/tmp/invalid-validated-draft-root";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), """
+        {"type":"session_started","session_id":"inspect-session","started_at":"2026-05-18T10:00:00Z"}
+        {"type":"command_result","session_id":"inspect-session","id":"1","command":"tap_point","ok":true,"started_at":"2026-05-18T10:00:01Z","ended_at":"2026-05-18T10:00:02Z","data":{"x":-1,"y":24,"label":"bad tap"}}
+        {"type":"session_ended","session_id":"inspect-session","ended_at":"2026-05-18T10:00:09Z","reason":"client_exit"}
+        """);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "scenario-draft", "--artifacts", replayRoot, "--file", "/tmp/invalid-draft.json", "--validate", "--write-json", "--write-markdown"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.True(fileSystem.FileExists("/tmp/invalid-draft.json"));
+        using var draft = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/invalid-draft.json"));
+        Assert.Equal(-1, draft.RootElement.GetProperty("steps")[0].GetProperty("x").GetInt32());
+        var data = envelope.RootElement.GetProperty("data");
+        var validation = data.GetProperty("validation");
+        Assert.Equal("failed", validation.GetProperty("status").GetString());
+        Assert.Equal("luotsi scenario-validate --file /tmp/invalid-draft.json", validation.GetProperty("command").GetString());
+        Assert.Contains("coordinates must be zero or greater", validation.GetProperty("error").GetString(), StringComparison.Ordinal);
+        Assert.Contains(data.GetProperty("next_actions").EnumerateArray(), action =>
+            action.GetProperty("kind").GetString() == "validate_scenario");
+        var runHandoff = data.GetProperty("run_handoff");
+        Assert.Equal("blocked", runHandoff.GetProperty("status").GetString());
+        Assert.False(runHandoff.TryGetProperty("preflight_command", out _));
+        Assert.False(runHandoff.TryGetProperty("dry_run_command", out _));
+        Assert.DoesNotContain(data.GetProperty("next_actions").EnumerateArray(), action =>
+            action.GetProperty("kind").GetString() == "dry_run_scenario");
+        Assert.DoesNotContain(data.GetProperty("next_actions").EnumerateArray(), action =>
+            action.GetProperty("kind").GetString() == "preflight_device");
+
+        using var summary = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "scenario-draft-summary.json")));
+        Assert.Equal("failed", summary.RootElement.GetProperty("validation").GetProperty("status").GetString());
+        Assert.Contains("coordinates must be zero or greater", summary.RootElement.GetProperty("validation").GetProperty("error").GetString(), StringComparison.Ordinal);
+        Assert.Equal("blocked", summary.RootElement.GetProperty("runHandoff").GetProperty("status").GetString());
+
+        var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "scenario-draft.md"));
+        Assert.Contains("Status: `failed`", markdown, StringComparison.Ordinal);
+        Assert.Contains("Status: `blocked`", markdown, StringComparison.Ordinal);
+        Assert.Contains("coordinates must be zero or greater", markdown, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1689,6 +2072,122 @@ public sealed partial class AppTests
         Assert.Contains("Best next step: Review generated draft (`review_draft`)", readme, StringComparison.Ordinal);
         Assert.Contains("### Scenario Draft Review Preview", readme, StringComparison.Ordinal);
         Assert.Contains("Review wait selector.", readme, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayCapsule_Promotes_Ready_Scenario_Draft_Run_Handoff()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        fileSystem.AddFile(Path.Join(replayRoot, "scenario-draft-summary.json"), """
+        {
+          "schema": "luotsi-scenario-draft.v1",
+          "confidence": "medium",
+          "scenario": {
+            "steps": [
+              { "action": "waitVisible" }
+            ]
+          },
+          "packageProvenance": {
+            "package": "dev.luotsi.app",
+            "source": "data.package",
+            "eventType": "command_result",
+            "command": "wait_visible"
+          },
+          "deviceProvenance": {
+            "serial": "emulator-5554",
+            "source": "session_replay.target",
+            "sessionKind": "inspect",
+            "sessionId": "inspect-session"
+          },
+          "validation": {
+            "status": "validated",
+            "command": "luotsi scenario-validate --file /tmp/ready-draft.json",
+            "message": "Static scenario validation passed."
+          },
+          "runHandoff": {
+            "status": "ready",
+            "reason": "Static validation passed.",
+            "preflightCommand": "luotsi preflight --device emulator-5554 --package dev.luotsi.app",
+            "dryRunCommand": "luotsi run --path /tmp/ready-draft.json --dry-run",
+            "runCommand": "luotsi run --file /tmp/ready-draft.json --device emulator-5554 --package dev.luotsi.app",
+            "claimedRunCommand": "luotsi run --file /tmp/ready-draft.json --device emulator-5554 --package dev.luotsi.app --claim-device --claim-wait-sec 60"
+          },
+          "nextActions": [
+            {
+              "kind": "review_draft",
+              "title": "Review generated draft",
+              "reason": "Review before editing.",
+              "command": "luotsi replay open --artifacts /tmp/replay-capsule-root"
+            },
+            {
+              "kind": "dry_run_scenario",
+              "title": "Plan scenario run",
+              "reason": "Confirm the generated scenario is selected as expected before starting a device run.",
+              "command": "luotsi run --path /tmp/ready-draft.json --dry-run"
+            },
+            {
+              "kind": "preflight_device",
+              "title": "Preflight target device",
+              "reason": "Verify adb/device/app readiness before executing the generated scenario.",
+              "command": "luotsi preflight --device emulator-5554 --package dev.luotsi.app"
+            },
+            {
+              "kind": "audit_provenance",
+              "title": "Audit draft provenance",
+              "reason": "Inspect generated steps and normalizations.",
+              "command": "luotsi replay graph --artifacts /tmp/replay-capsule-root --node-kind scenario_draft --write-markdown"
+            }
+          ],
+          "reviewItems": [],
+          "normalizations": []
+        }
+        """);
+        fileSystem.AddFile(Path.Join(replayRoot, "scenario-draft.md"), "# Luotsi Scenario Draft\n");
+        fileSystem.AddFile(Path.Join(replayRoot, "ready-draft.json"), "{}");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "capsule", "--artifacts", replayRoot, "--write-readme"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        var draftSummary = data.GetProperty("scenario_draft_summary");
+        Assert.Equal("dev.luotsi.app", draftSummary.GetProperty("package_provenance").GetProperty("package").GetString());
+        Assert.Equal("emulator-5554", draftSummary.GetProperty("device_provenance").GetProperty("serial").GetString());
+        Assert.Equal("validated", draftSummary.GetProperty("validation").GetProperty("status").GetString());
+        Assert.Equal("ready", draftSummary.GetProperty("run_handoff").GetProperty("status").GetString());
+        Assert.Equal("luotsi run --file /tmp/ready-draft.json --device emulator-5554 --package dev.luotsi.app --claim-device --claim-wait-sec 60", draftSummary.GetProperty("run_handoff").GetProperty("claimed_run_command").GetString());
+
+        var nextSteps = data.GetProperty("recommended_next_steps").EnumerateArray().ToArray();
+        Assert.Equal("dry_run_scenario", nextSteps[0].GetProperty("kind").GetString());
+        Assert.Equal("luotsi run --path /tmp/ready-draft.json --dry-run", nextSteps[0].GetProperty("command").GetString());
+        Assert.Equal("preflight_device", nextSteps[1].GetProperty("kind").GetString());
+        Assert.Equal("luotsi preflight --device emulator-5554 --package dev.luotsi.app", nextSteps[1].GetProperty("command").GetString());
+        Assert.Equal("claimed_run_scenario", nextSteps[2].GetProperty("kind").GetString());
+        Assert.Equal("luotsi run --file /tmp/ready-draft.json --device emulator-5554 --package dev.luotsi.app --claim-device --claim-wait-sec 60", nextSteps[2].GetProperty("command").GetString());
+        Assert.Equal("run_scenario", nextSteps[3].GetProperty("kind").GetString());
+        Assert.Equal("luotsi run --file /tmp/ready-draft.json --device emulator-5554 --package dev.luotsi.app", nextSteps[3].GetProperty("command").GetString());
+        Assert.Contains(nextSteps, step => step.GetProperty("kind").GetString() == "review_draft");
+        Assert.Contains(nextSteps, step => step.GetProperty("kind").GetString() == "audit_provenance");
+        Assert.Single(nextSteps, step => step.GetProperty("kind").GetString() == "dry_run_scenario");
+        Assert.Single(nextSteps, step => step.GetProperty("kind").GetString() == "preflight_device");
+        Assert.Single(nextSteps, step => step.GetProperty("kind").GetString() == "claimed_run_scenario");
+
+        var readme = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-capsule.md"));
+        Assert.Contains("Scenario draft package: `dev.luotsi.app`", readme, StringComparison.Ordinal);
+        Assert.Contains("Scenario draft device: `emulator-5554`", readme, StringComparison.Ordinal);
+        Assert.Contains("Scenario draft validation: `validated`", readme, StringComparison.Ordinal);
+        Assert.Contains("Scenario draft run handoff: `ready`", readme, StringComparison.Ordinal);
+        Assert.Contains("Scenario draft claimed run: `luotsi run --file /tmp/ready-draft.json --device emulator-5554 --package dev.luotsi.app --claim-device --claim-wait-sec 60`", readme, StringComparison.Ordinal);
+        Assert.Contains("Scenario draft run: `luotsi run --file /tmp/ready-draft.json --device emulator-5554 --package dev.luotsi.app`", readme, StringComparison.Ordinal);
+        Assert.Contains("Best next step: Plan generated scenario (`dry_run_scenario`)", readme, StringComparison.Ordinal);
     }
 
     [Fact]

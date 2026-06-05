@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using Luotsi.Cli.Artifacts;
@@ -177,59 +178,156 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         bool scenarioDraftAvailable,
         ReplayCapsuleScenarioDraftSummary? scenarioDraftSummary)
     {
-        foreach (var action in scenarioDraftSummary?.NextActions ?? [])
+        var emittedKinds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var emittedCommands = new HashSet<string>(StringComparer.Ordinal);
+
+        var runHandoffNextSteps = BuildRunHandoffNextSteps(scenarioDraftSummary?.RunHandoff)
+            .Where(step => TryMarkRecommendedStep(step, emittedKinds, emittedCommands));
+        foreach (var step in runHandoffNextSteps)
         {
-            yield return new ReplayCapsuleNextStep(
+            yield return step;
+        }
+
+        var scenarioDraftNextSteps = (scenarioDraftSummary?.NextActions ?? [])
+            .Select(action => new ReplayCapsuleNextStep(
                 action.Kind,
                 action.Title,
                 action.Reason,
-                action.Command);
+                action.Command))
+            .Where(step => TryMarkRecommendedStep(step, emittedKinds, emittedCommands));
+        foreach (var step in scenarioDraftNextSteps)
+        {
+            yield return step;
         }
 
         if (primaryFailure is not null)
         {
-            yield return new ReplayCapsuleNextStep(
+            var scrub = new ReplayCapsuleNextStep(
                 "scrub_failure",
                 "Scrub the failure window",
                 "Start with the focused previous/current/next timeline view before opening broad artifacts.",
                 $"luotsi replay scrub --artifacts {Quote(artifactRoot)} --failures --context 3 --write-markdown");
+            if (TryMarkRecommendedStep(scrub, emittedKinds, emittedCommands))
+            {
+                yield return scrub;
+            }
 
-            yield return new ReplayCapsuleNextStep(
+            var graph = new ReplayCapsuleNextStep(
                 "graph_failure",
                 "Open semantic failure context",
                 "Use the graph when an agent or reviewer needs evidence, facts, causal chains, and hypotheses.",
                 $"luotsi replay graph --artifacts {Quote(artifactRoot)} --failed --write-json --write-markdown");
+            if (TryMarkRecommendedStep(graph, emittedKinds, emittedCommands))
+            {
+                yield return graph;
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(primaryFailure?.Message))
         {
-            yield return new ReplayCapsuleNextStep(
+            var search = new ReplayCapsuleNextStep(
                 "search_failure_text",
                 "Search the bundle for the failure text",
                 "Find matching logcat, timeline, hierarchy, report, or markdown references.",
                 $"luotsi replay search --artifacts {Quote(artifactRoot)} --contains {Quote(primaryFailure.Message)}");
+            if (TryMarkRecommendedStep(search, emittedKinds, emittedCommands))
+            {
+                yield return search;
+            }
 
-            yield return new ReplayCapsuleNextStep(
+            var cluster = new ReplayCapsuleNextStep(
                 "cluster_similar_failures",
                 "Find similar failures across replay bundles",
                 "Use this when the current artifact root sits under a larger CI or local artifacts directory.",
                 $"luotsi replay cluster --artifacts {Quote(ResolveClusterRoot(artifactRoot))} --min-count 2 --contains {Quote(primaryFailure.Message)} --write-markdown");
+            if (TryMarkRecommendedStep(cluster, emittedKinds, emittedCommands))
+            {
+                yield return cluster;
+            }
         }
 
-        yield return new ReplayCapsuleNextStep(
+        var open = new ReplayCapsuleNextStep(
             "open_artifacts",
             "Open the artifact browser",
             "Use this when screenshots, videos, logs, and generated replay artifacts need human inspection.",
             $"luotsi replay open --artifacts {Quote(artifactRoot)}");
+        if (TryMarkRecommendedStep(open, emittedKinds, emittedCommands))
+        {
+            yield return open;
+        }
 
         if (scenarioDraftAvailable)
         {
-            yield return new ReplayCapsuleNextStep(
+            var draft = new ReplayCapsuleNextStep(
                 "draft_scenario",
                 "Draft a scenario from replay",
                 "Use captured inspect/view/telemetry events to create a reviewable starter scenario.",
                 $"luotsi replay scenario-draft --artifacts {Quote(artifactRoot)} --output draft-scenario.json --write-json --write-markdown");
+            if (TryMarkRecommendedStep(draft, emittedKinds, emittedCommands))
+            {
+                yield return draft;
+            }
         }
+    }
+
+    private static IEnumerable<ReplayCapsuleNextStep> BuildRunHandoffNextSteps(ReplayScenarioDraftRunHandoff? runHandoff)
+    {
+        if (runHandoff is null ||
+            !string.Equals(runHandoff.Status, "ready", StringComparison.OrdinalIgnoreCase))
+        {
+            yield break;
+        }
+
+        if (!string.IsNullOrWhiteSpace(runHandoff.DryRunCommand))
+        {
+            yield return new ReplayCapsuleNextStep(
+                "dry_run_scenario",
+                "Plan generated scenario",
+                "Validated draft is ready; confirm the scenario selection and execution plan before device work.",
+                runHandoff.DryRunCommand);
+        }
+
+        if (!string.IsNullOrWhiteSpace(runHandoff.PreflightCommand))
+        {
+            yield return new ReplayCapsuleNextStep(
+                "preflight_device",
+                "Preflight target device",
+                "Verify adb, device, and target app readiness before executing the generated scenario.",
+                runHandoff.PreflightCommand);
+        }
+
+        if (!string.IsNullOrWhiteSpace(runHandoff.ClaimedRunCommand))
+        {
+            yield return new ReplayCapsuleNextStep(
+                "claimed_run_scenario",
+                "Claim and run generated scenario",
+                "Claim the selected device for this run before executing the validated draft in a shared lab.",
+                runHandoff.ClaimedRunCommand);
+        }
+
+        if (!string.IsNullOrWhiteSpace(runHandoff.RunCommand))
+        {
+            yield return new ReplayCapsuleNextStep(
+                "run_scenario",
+                "Run generated scenario",
+                "Execute the validated draft on a selected device after review and preflight.",
+                runHandoff.RunCommand);
+        }
+    }
+
+    private static bool TryMarkRecommendedStep(
+        ReplayCapsuleNextStep step,
+        ISet<string> emittedKinds,
+        ISet<string> emittedCommands)
+    {
+        if (emittedKinds.Contains(step.Kind) || emittedCommands.Contains(step.Command))
+        {
+            return false;
+        }
+
+        emittedKinds.Add(step.Kind);
+        emittedCommands.Add(step.Command);
+        return true;
     }
 
     private static ReplayCapsuleScenarioDraftArtifacts FindScenarioDraftArtifacts(IReadOnlyList<string> files)
@@ -268,6 +366,10 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
                 CountArray(root, "reviewItems"),
                 CountArray(root, "nextActions"),
                 CountArray(root, "normalizations"),
+                ReadPackageProvenance(root),
+                ReadDeviceProvenance(root),
+                ReadValidation(root),
+                ReadRunHandoff(root),
                 ReadStringArray(root, "warnings", 5),
                 ReadNextActions(root, 5),
                 ReadReviewItems(root, 5));
@@ -372,6 +474,14 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         if (scenarioDraftSummary is not null)
         {
             AppendField(builder, "Scenario draft confidence", scenarioDraftSummary.Confidence);
+            AppendField(builder, "Scenario draft package", scenarioDraftSummary.PackageProvenance?.Package);
+            AppendField(builder, "Scenario draft device", scenarioDraftSummary.DeviceProvenance?.Serial);
+            AppendField(builder, "Scenario draft validation", scenarioDraftSummary.Validation?.Status);
+            AppendField(builder, "Scenario draft run handoff", scenarioDraftSummary.RunHandoff?.Status);
+            AppendField(builder, "Scenario draft dry run", scenarioDraftSummary.RunHandoff?.DryRunCommand);
+            AppendField(builder, "Scenario draft preflight", scenarioDraftSummary.RunHandoff?.PreflightCommand);
+            AppendField(builder, "Scenario draft claimed run", scenarioDraftSummary.RunHandoff?.ClaimedRunCommand);
+            AppendField(builder, "Scenario draft run", scenarioDraftSummary.RunHandoff?.RunCommand);
             builder.AppendLine($"- Scenario draft steps: `{scenarioDraftSummary.StepCount}`");
             builder.AppendLine($"- Scenario draft warnings: `{scenarioDraftSummary.WarningCount}`");
             builder.AppendLine($"- Scenario draft review items: `{scenarioDraftSummary.ReviewItemCount}`");
@@ -665,6 +775,84 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             .ToArray();
     }
 
+    private static ReplayScenarioDraftValidation? ReadValidation(JsonElement root)
+    {
+        if (!root.TryGetProperty("validation", out var property) ||
+            property.ValueKind != JsonValueKind.Object ||
+            !TryGetString(property, "status", out var status) ||
+            !TryGetString(property, "command", out var command))
+        {
+            return null;
+        }
+
+        return new ReplayScenarioDraftValidation(
+            status,
+            command,
+            TryGetString(property, "message", out var message) ? message : null,
+            TryGetString(property, "error", out var error) ? error : null);
+    }
+
+    private static ReplayScenarioDraftPackageProvenance? ReadPackageProvenance(JsonElement root)
+    {
+        if (!root.TryGetProperty("packageProvenance", out var property) ||
+            property.ValueKind != JsonValueKind.Object ||
+            !TryGetString(property, "package", out var package) ||
+            !TryGetString(property, "source", out var source) ||
+            !TryGetString(property, "eventType", out var eventType))
+        {
+            return null;
+        }
+
+        return new ReplayScenarioDraftPackageProvenance(
+            package,
+            source,
+            eventType,
+            TryGetString(property, "command", out var command) ? command : null,
+            TryGetString(property, "sourcePath", out var sourcePath) ? sourcePath : null,
+            TryGetInt(property, "sequence", out var sequence) ? sequence : null,
+            TryGetDateTimeOffset(property, "timestamp", out var timestamp) ? timestamp : null,
+            TryGetString(property, "sourceCommand", out var sourceCommand) ? sourceCommand : null);
+    }
+
+    private static ReplayScenarioDraftDeviceProvenance? ReadDeviceProvenance(JsonElement root)
+    {
+        if (!root.TryGetProperty("deviceProvenance", out var property) ||
+            property.ValueKind != JsonValueKind.Object ||
+            !TryGetString(property, "serial", out var serial) ||
+            !TryGetString(property, "source", out var source) ||
+            !TryGetString(property, "sessionKind", out var sessionKind))
+        {
+            return null;
+        }
+
+        return new ReplayScenarioDraftDeviceProvenance(
+            serial,
+            source,
+            sessionKind,
+            TryGetString(property, "sessionId", out var sessionId) ? sessionId : null,
+            TryGetString(property, "sourcePath", out var sourcePath) ? sourcePath : null,
+            TryGetDateTimeOffset(property, "startedAt", out var startedAt) ? startedAt : null);
+    }
+
+    private static ReplayScenarioDraftRunHandoff? ReadRunHandoff(JsonElement root)
+    {
+        if (!root.TryGetProperty("runHandoff", out var property) ||
+            property.ValueKind != JsonValueKind.Object ||
+            !TryGetString(property, "status", out var status) ||
+            !TryGetString(property, "reason", out var reason))
+        {
+            return null;
+        }
+
+        return new ReplayScenarioDraftRunHandoff(
+            status,
+            reason,
+            TryGetString(property, "preflightCommand", out var preflightCommand) ? preflightCommand : null,
+            TryGetString(property, "dryRunCommand", out var dryRunCommand) ? dryRunCommand : null,
+            TryGetString(property, "runCommand", out var runCommand) ? runCommand : null,
+            TryGetString(property, "claimedRunCommand", out var claimedRunCommand) ? claimedRunCommand : null);
+    }
+
     private static IReadOnlyList<ReplayScenarioDraftNextAction> ReadNextActions(JsonElement root, int limit)
     {
         if (!root.TryGetProperty("nextActions", out var property) || property.ValueKind != JsonValueKind.Array)
@@ -731,6 +919,18 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         return root.TryGetProperty(name, out var property) &&
             property.ValueKind == JsonValueKind.Number &&
             property.TryGetInt32(out value);
+    }
+
+    private static bool TryGetDateTimeOffset(JsonElement root, string name, out DateTimeOffset value)
+    {
+        value = default;
+        return root.TryGetProperty(name, out var property) &&
+            property.ValueKind == JsonValueKind.String &&
+            DateTimeOffset.TryParse(
+                property.GetString(),
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.RoundtripKind,
+                out value);
     }
 
     private static string Quote(string value) =>

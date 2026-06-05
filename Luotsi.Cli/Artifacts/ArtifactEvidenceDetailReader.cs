@@ -282,6 +282,26 @@ internal sealed class ArtifactEvidenceDetailReader(string root, IFileSystem file
             parts.Add($"steps={steps.GetArrayLength()}");
         }
 
+        if (root.TryGetProperty("validation", out var validation) && validation.ValueKind == JsonValueKind.Object)
+        {
+            AddJsonProperty(parts, validation, "status", "validation_status");
+        }
+
+        if (root.TryGetProperty("packageProvenance", out var packageProvenance) && packageProvenance.ValueKind == JsonValueKind.Object)
+        {
+            AddJsonProperty(parts, packageProvenance, "package");
+        }
+
+        if (root.TryGetProperty("deviceProvenance", out var deviceProvenance) && deviceProvenance.ValueKind == JsonValueKind.Object)
+        {
+            AddJsonProperty(parts, deviceProvenance, "serial", "device");
+        }
+
+        if (root.TryGetProperty("runHandoff", out var runHandoff) && runHandoff.ValueKind == JsonValueKind.Object)
+        {
+            AddJsonProperty(parts, runHandoff, "status", "run_handoff");
+        }
+
         AddArrayCount(parts, root, "warnings");
         AddArrayCount(parts, root, "reviewItems", "review_items");
         AddArrayCount(parts, root, "nextActions", "next_actions");

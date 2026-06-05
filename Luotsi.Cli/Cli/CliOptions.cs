@@ -100,6 +100,7 @@ public sealed class CliOptions
         "no-require-device-ready",
         "quiet",
         "read-only",
+        "validate",
         "validate-only"
     }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 

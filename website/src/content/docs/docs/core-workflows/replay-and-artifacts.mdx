@@ -45,7 +45,7 @@ luotsi replay open --last --artifacts ./artifacts
 - `replay scrub`: local previous/focused/next event view with exact commands to move through replay evidence, open the capsule, search, or graph the focused failure
 - `replay search`: text search across timelines and text-like artifacts with follow-up commands when matches are replay-relevant
 - `replay open`: regenerate and open the artifact browser locally
-- `replay capsule`: compact manifest with primary failure reopen command, failure timeline with exact reopen commands, existing scenario draft artifacts and summary counts, artifact manifest, and suggested next commands
+- `replay capsule`: compact manifest with primary failure reopen command, failure timeline with exact reopen commands, existing scenario draft artifacts and summary counts, ready draft run handoff, artifact manifest, and suggested next commands
 - `replay scenario-draft`: turn inspect or replay actions into a conservative starter scenario
 
 `artifacts pack` writes `luotsi-artifact-package.json` into the zip with the run id, created timestamp, category counts, and recommended reopen commands. `artifacts unpack` requires that manifest, reports it back in the result, and both pack and unpack support `--dry-run` when you want to validate the handoff without writing files yet.
@@ -75,21 +75,24 @@ The public distinction that matters is:
 
 - `review_items` is the short human checklist for selectors, telemetry, visual assertions, low-confidence provenance, and normalizations.
 - `next_actions` is the ordered authoring handoff for reviewing, validating, auditing persisted provenance, and reopening the first source event.
+- `validation` appears when `--validate` is used with `--output` or `--file`; it records static validation status without running a device scenario.
+- `package_provenance` appears when trusted timeline evidence names the app package; the draft scenario metadata and ready handoff commands use that package.
+- `device_provenance` appears when replay metadata has one trusted adb target; the draft scenario metadata and ready handoff commands use that serial.
+- `run_handoff` records whether the draft is ready for a non-device run plan. Validated drafts include `run --path <draft> --dry-run`, app preflight, direct run, and, when trusted package plus concrete device serial are available, a claimed run with `--claim-device --claim-wait-sec 60`. Blocked drafts explain what must be fixed first.
 - `source_summaries` shows how many steps came from inspect commands, screen deltas, view events, telemetry, or existing scenario events.
 - `step_origins` maps every generated step back to its source event, timeline file, sequence, timestamp, confidence, and an exact `replay timeline` command.
 - `normalizations` records stabilization and cleanup decisions such as inserting waits before generated taps or dropping adjacent duplicate inferred waits.
 
 ```bash
-luotsi replay scenario-draft --artifacts ./artifacts/my-inspect --output ./scenarios/draft.json --write-json --write-markdown
-luotsi scenario-validate --file ./scenarios/draft.json
+luotsi replay scenario-draft --artifacts ./artifacts/my-inspect --output ./scenarios/draft.json --validate --write-json --write-markdown
 ```
 
 Use the generated markdown review before committing a draft. Coordinate taps and visual assertions are especially device-specific and should be tightened before CI use.
 
 When you persist draft review artifacts, Luotsi currently writes:
 
-- `scenario-draft-summary.json` for machine-readable counts, warnings, review items, and provenance summary
-- `scenario-draft.md` for the human review checklist, origins, normalizations, and emitted draft steps
+- `scenario-draft-summary.json` for machine-readable counts, warnings, package provenance when available, validation status when requested, review items, and provenance summary
+- `scenario-draft.md` for the human review checklist, optional package provenance, validation status, run handoff, origins, normalizations, and emitted draft steps
 
 ## Practical workflow
 
@@ -121,9 +124,9 @@ Timeline events are still evidence, not assertions. They preserve what Luotsi ob
 - `primary_failure` with an exact `source_command` that reopens the failing event.
 - `failure_timeline` entries with their own exact `replay timeline` commands.
 - `artifact_manifest` and `artifact_counts` for screenshots, videos, logs, reports, timelines, and generated replay files.
-- `scenario_draft_artifacts` and `scenario_draft_summary` when a draft has already been generated, including bounded previews of warnings, next actions, and review items.
+- `scenario_draft_artifacts` and `scenario_draft_summary` when a draft has already been generated, including package/device provenance, validation status, run handoff, and bounded previews of warnings, next actions, and review items.
 - `suggested_commands` that lead the operator from summary to timeline, scrub, search, open, graph, or scenario draft without guessing paths.
-- `recommended_next_steps` that rank persisted draft next actions first when a draft summary exists, then scrub, graph, search, cluster, open, and draft-generation actions for the current bundle.
+- `recommended_next_steps` that rank ready draft dry-run, preflight, claimed-run, and direct-run handoff commands first when available, then other persisted draft actions, scrub, graph, search, cluster, open, and draft-generation actions for the current bundle.
 
 Use `--write-readme --write-json` for shareable artifacts. That writes `replay-capsule.md` for humans and `replay-capsule-summary.json` for automation, then refreshes the artifact index.
 
@@ -132,11 +135,11 @@ Use `--write-readme --write-json` for shareable artifacts. That writes `replay-c
 `replay scenario-draft` is the first Explore-to-Scenario slice. It only promotes evidence that can be traced back to timeline events, and it keeps uncertainty visible:
 
 - The generated scenario JSON is meant to be validated and edited, not blindly committed.
-- `scenario-draft-summary.json` gives confidence, warnings, review items, next actions, normalization notes, and generated step context.
-- `scenario-draft.md` lists recommended next actions, review items, source summaries, normalizations, step origins, and the draft steps.
+- `scenario-draft-summary.json` gives confidence, warnings, package/device provenance when available, validation status when requested, run handoff status including claimed-run command when concrete, review items, next actions, normalization notes, and generated step context.
+- `scenario-draft.md` lists package/device provenance, validation, and run handoff status including claimed-run command when concrete, plus recommended next actions, review items, source summaries, normalizations, step origins, and the draft steps.
 - `step_origins` and `normalizations` include `source_path`, `sequence`, `timestamp`, and `source_command` so every generated step and inserted pre-tap wait can be audited with `replay timeline`.
 
-This is enough for the near-term authoring loop: explore a flow, generate a draft, review selectors and coordinates, validate it, then harden it into a scenario.
+This is enough for the near-term authoring loop: explore a flow, generate a draft, review selectors and coordinates, validate it, plan it with `run --path <draft> --dry-run`, then harden it into a scenario.
 
 ## CI triage recipe
 
@@ -144,8 +147,7 @@ This is enough for the near-term authoring loop: explore a flow, generate a draf
 luotsi replay capsule --artifacts ./artifacts/failing-run --write-readme --write-json
 luotsi replay timeline --artifacts ./artifacts/failing-run --failures --context 3 --write-markdown
 luotsi replay scrub --artifacts ./artifacts/failing-run --failures --context 3 --write-markdown
-luotsi replay scenario-draft --artifacts ./artifacts/failing-run --output ./scenarios/recovered-draft.json --write-json --write-markdown
-luotsi scenario-validate --file ./scenarios/recovered-draft.json
+luotsi replay scenario-draft --artifacts ./artifacts/failing-run --output ./scenarios/recovered-draft.json --validate --write-json --write-markdown
 luotsi replay open --artifacts ./artifacts/failing-run
 ```
 

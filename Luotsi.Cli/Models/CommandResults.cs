@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Luotsi.Cli.Telemetry;
 
 namespace Luotsi.Cli.Models;
@@ -477,8 +478,62 @@ public sealed record ReplayScenarioDraftResult(
     IReadOnlyList<ReplayScenarioDraftSourceSummary> SourceSummaries,
     IReadOnlyList<ReplayScenarioDraftStepOrigin> StepOrigins,
     IReadOnlyList<ReplayScenarioDraftNormalization> Normalizations,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    ReplayScenarioDraftPackageProvenance? PackageProvenance,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    ReplayScenarioDraftDeviceProvenance? DeviceProvenance,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    ReplayScenarioDraftValidation? Validation,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    ReplayScenarioDraftRunHandoff? RunHandoff,
     IReadOnlyList<ReplayScenarioDraftNextAction> NextActions,
     IReadOnlyList<ReplayScenarioDraftCommandHint> SuggestedCommands);
+
+public sealed record ReplayScenarioDraftValidation(
+    string Status,
+    string Command,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Message = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Error = null);
+
+public sealed record ReplayScenarioDraftPackageProvenance(
+    string Package,
+    string Source,
+    string EventType,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Command = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? SourcePath = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    int? Sequence = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    DateTimeOffset? Timestamp = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? SourceCommand = null);
+
+public sealed record ReplayScenarioDraftDeviceProvenance(
+    string Serial,
+    string Source,
+    string SessionKind,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? SessionId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? SourcePath = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    DateTimeOffset? StartedAt = null);
+
+public sealed record ReplayScenarioDraftRunHandoff(
+    string Status,
+    string Reason,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? PreflightCommand = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? DryRunCommand = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? RunCommand = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? ClaimedRunCommand = null);
 
 public sealed record ReplayScenarioDraftNextAction(
     string Kind,
@@ -594,6 +649,14 @@ public sealed record ReplayCapsuleScenarioDraftSummary(
     int ReviewItemCount,
     int NextActionCount,
     int NormalizationCount,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    ReplayScenarioDraftPackageProvenance? PackageProvenance,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    ReplayScenarioDraftDeviceProvenance? DeviceProvenance,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    ReplayScenarioDraftValidation? Validation,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    ReplayScenarioDraftRunHandoff? RunHandoff,
     IReadOnlyList<string> Warnings,
     IReadOnlyList<ReplayScenarioDraftNextAction> NextActions,
     IReadOnlyList<ReplayScenarioDraftReviewItem> ReviewItems);
