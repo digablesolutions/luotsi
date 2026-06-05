@@ -880,12 +880,25 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem, Scenari
         var nestedPackageCarrierProperties = root.EnumerateObject()
             .Where(property => property.Value.ValueKind == JsonValueKind.Object &&
                 PackageCarrierPropertyNames.Contains(property.Name, StringComparer.Ordinal));
-        foreach (var property in nestedPackageCarrierProperties)
-        {
-            if (TryFindPackageCandidate(property.Value, BuildPackageSource(source, property.Name), out package, out packageSource))
+        var nestedPackageCandidate = nestedPackageCarrierProperties
+            .Select(property =>
             {
-                return true;
-            }
+                var nestedPackage = string.Empty;
+                var nestedPackageSource = string.Empty;
+                var found = TryFindPackageCandidate(
+                    property.Value,
+                    BuildPackageSource(source, property.Name),
+                    out nestedPackage,
+                    out nestedPackageSource);
+                return (Found: found, Package: nestedPackage, PackageSource: nestedPackageSource);
+            })
+            .Where(candidate => candidate.Found)
+            .FirstOrDefault();
+        if (nestedPackageCandidate.Found)
+        {
+            package = nestedPackageCandidate.Package;
+            packageSource = nestedPackageCandidate.PackageSource;
+            return true;
         }
 
         return false;
