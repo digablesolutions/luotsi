@@ -1153,6 +1153,62 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayScenarioDraft_Does_Not_Infer_Device_From_Ambiguous_Replay_Targets()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = "/tmp/ambiguous-device-draft-root";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), """
+        {"type":"session_started","session_id":"inspect-session","started_at":"2026-05-18T10:00:00Z"}
+        {"type":"command_result","session_id":"inspect-session","id":"1","command":"wait_visible","ok":true,"started_at":"2026-05-18T10:00:01Z","ended_at":"2026-05-18T10:00:02Z","data":{"text":"Sign in","package":"dev.luotsi.app"}}
+        {"type":"session_ended","session_id":"inspect-session","ended_at":"2026-05-18T10:00:09Z","reason":"client_exit"}
+        """);
+        fileSystem.AddFile(Path.Join(replayRoot, "first", "session-replay.json"), """
+        {
+          "schema": "luotsi-session-replay.v1",
+          "sessionKind": "inspect",
+          "sessionId": "first-session",
+          "startedAt": "2026-05-18T10:00:00Z",
+          "target": "emulator-5554"
+        }
+        """);
+        fileSystem.AddFile(Path.Join(replayRoot, "second", "session-replay.json"), """
+        {
+          "schema": "luotsi-session-replay.v1",
+          "sessionKind": "inspect",
+          "sessionId": "second-session",
+          "startedAt": "2026-05-18T10:00:01Z",
+          "target": "emulator-5556"
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "scenario-draft", "--artifacts", replayRoot, "--output", "/tmp/ambiguous-device-draft.json", "--validate", "--write-json"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("dev.luotsi.app", data.GetProperty("package_provenance").GetProperty("package").GetString());
+        Assert.False(data.TryGetProperty("device_provenance", out _));
+        Assert.False(data.GetProperty("scenario").GetProperty("metadata").TryGetProperty("device", out _));
+        var runHandoff = data.GetProperty("run_handoff");
+        Assert.Equal("luotsi preflight --device <serial> --package dev.luotsi.app", runHandoff.GetProperty("preflight_command").GetString());
+        Assert.Equal("luotsi run --file /tmp/ambiguous-device-draft.json --device <serial> --package dev.luotsi.app", runHandoff.GetProperty("run_command").GetString());
+        Assert.False(runHandoff.TryGetProperty("claimed_run_command", out _));
+
+        using var summary = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "scenario-draft-summary.json")));
+        Assert.False(summary.RootElement.TryGetProperty("deviceProvenance", out _));
+        Assert.Equal("dev.luotsi.app", summary.RootElement.GetProperty("packageProvenance").GetProperty("package").GetString());
+        Assert.False(summary.RootElement.GetProperty("runHandoff").TryGetProperty("claimedRunCommand", out _));
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayScenarioDraft_Does_Not_Infer_Device_From_NonSerial_Replay_Target()
     {
         var console = new FakeConsole();
