@@ -62,7 +62,7 @@ internal sealed class TcpViewShareServer(string bindEndpoint) : IAsyncDisposable
             return BoundEndpoint ?? _bindEndpoint;
         }
 
-        var endpoint = ViewShareEndpointParser.ParseBindable(_bindEndpoint);
+        var endpoint = await ViewShareEndpointParser.ParseBindableAsync(_bindEndpoint, cancellationToken).ConfigureAwait(false);
         var listener = new TcpListener(endpoint.Address, endpoint.Port);
         listener.Server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
         listener.Start(ListenerBacklog);
@@ -339,7 +339,6 @@ internal sealed class ViewPacketStreamWriter
         BinaryPrimitives.WriteInt32LittleEndian(buffer.AsSpan(8, 4), header.Width);
         BinaryPrimitives.WriteInt32LittleEndian(buffer.AsSpan(12, 4), header.Height);
         await stream.WriteAsync(buffer, cancellationToken).ConfigureAwait(false);
-        await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public static async Task WritePacketAsync(Stream stream, ViewPacket packet, CancellationToken cancellationToken = default)
@@ -358,8 +357,6 @@ internal sealed class ViewPacketStreamWriter
         {
             await stream.WriteAsync(packet.Payload, cancellationToken).ConfigureAwait(false);
         }
-
-        await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static byte EncodeCodec(string codec) => codec.ToLowerInvariant() switch
@@ -388,7 +385,7 @@ internal static class ViewShareEndpointParser
         return (uri.Host, uri.Port);
     }
 
-    public static (IPAddress Address, int Port) ParseBindable(string endpoint)
+    public static async Task<(IPAddress Address, int Port)> ParseBindableAsync(string endpoint, CancellationToken cancellationToken = default)
     {
         var uri = Parse(endpoint, allowZeroPort: true);
         var host = uri.Host;
@@ -402,7 +399,7 @@ internal static class ViewShareEndpointParser
             return (address, uri.Port);
         }
 
-        var addresses = Dns.GetHostAddresses(host);
+        var addresses = await Dns.GetHostAddressesAsync(host, cancellationToken).ConfigureAwait(false);
         return addresses.Length == 0 ? throw new InvalidOperationException($"Share bind endpoint '{endpoint}' did not resolve to a host address.") : (addresses[0], uri.Port);
     }
 
