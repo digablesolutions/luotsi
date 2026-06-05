@@ -849,31 +849,39 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem, Scenari
             return false;
         }
 
-        foreach (var name in PackagePropertyNames)
+        var packageCandidate = PackagePropertyNames
+            .Select(name => (Name: name, Value: TryGetString(root, name, out var value) ? value : null))
+            .Where(candidate => candidate.Value is not null && IsLikelyAndroidPackage(candidate.Value))
+            .FirstOrDefault();
+        if (packageCandidate.Value is not null)
         {
-            if (TryGetString(root, name, out var value) && IsLikelyAndroidPackage(value))
-            {
-                package = value.Trim();
-                packageSource = BuildPackageSource(source, name);
-                return true;
-            }
+            package = packageCandidate.Value.Trim();
+            packageSource = BuildPackageSource(source, packageCandidate.Name);
+            return true;
         }
 
-        foreach (var name in FocusPropertyNames)
-        {
-            if (TryGetString(root, name, out var focus) && TryParsePackageFromFocus(focus, out var focusedPackage))
+        var focusCandidate = FocusPropertyNames
+            .Select(name =>
             {
-                package = focusedPackage;
-                packageSource = BuildPackageSource(source, name);
-                return true;
-            }
+                var focusedPackage = string.Empty;
+                var found = TryGetString(root, name, out var focus) &&
+                    TryParsePackageFromFocus(focus, out focusedPackage);
+                return (Name: name, Package: found ? focusedPackage : null);
+            })
+            .Where(candidate => candidate.Package is not null)
+            .FirstOrDefault();
+        if (focusCandidate.Package is not null)
+        {
+            package = focusCandidate.Package;
+            packageSource = BuildPackageSource(source, focusCandidate.Name);
+            return true;
         }
 
-        foreach (var property in root.EnumerateObject())
+        foreach (var property in root.EnumerateObject()
+            .Where(property => property.Value.ValueKind == JsonValueKind.Object &&
+                PackageCarrierPropertyNames.Contains(property.Name, StringComparer.Ordinal)))
         {
-            if (property.Value.ValueKind == JsonValueKind.Object &&
-                PackageCarrierPropertyNames.Contains(property.Name, StringComparer.Ordinal) &&
-                TryFindPackageCandidate(property.Value, BuildPackageSource(source, property.Name), out package, out packageSource))
+            if (TryFindPackageCandidate(property.Value, BuildPackageSource(source, property.Name), out package, out packageSource))
             {
                 return true;
             }
@@ -1460,15 +1468,10 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem, Scenari
             return scenario.Metadata.Package;
         }
 
-        foreach (var step in EnumerateScenarioSteps(scenario))
-        {
-            if (!string.IsNullOrWhiteSpace(step.Package))
-            {
-                return step.Package;
-            }
-        }
-
-        return null;
+        return EnumerateScenarioSteps(scenario)
+            .Where(step => !string.IsNullOrWhiteSpace(step.Package))
+            .Select(step => step.Package)
+            .FirstOrDefault();
     }
 
     private static IEnumerable<ScenarioStep> EnumerateScenarioSteps(ScenarioFile scenario)

@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using Luotsi.Cli.Artifacts;
@@ -180,25 +181,21 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         var emittedKinds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var emittedCommands = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (var step in BuildRunHandoffNextSteps(scenarioDraftSummary?.RunHandoff))
+        foreach (var step in BuildRunHandoffNextSteps(scenarioDraftSummary?.RunHandoff)
+            .Where(step => TryMarkRecommendedStep(step, emittedKinds, emittedCommands)))
         {
-            if (TryMarkRecommendedStep(step, emittedKinds, emittedCommands))
-            {
-                yield return step;
-            }
+            yield return step;
         }
 
-        foreach (var action in scenarioDraftSummary?.NextActions ?? [])
-        {
-            var step = new ReplayCapsuleNextStep(
+        foreach (var step in (scenarioDraftSummary?.NextActions ?? [])
+            .Select(action => new ReplayCapsuleNextStep(
                 action.Kind,
                 action.Title,
                 action.Reason,
-                action.Command);
-            if (TryMarkRecommendedStep(step, emittedKinds, emittedCommands))
-            {
-                yield return step;
-            }
+                action.Command))
+            .Where(step => TryMarkRecommendedStep(step, emittedKinds, emittedCommands)))
+        {
+            yield return step;
         }
 
         if (primaryFailure is not null)

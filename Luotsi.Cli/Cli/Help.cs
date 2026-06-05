@@ -288,7 +288,7 @@ Usage:
   luotsi replay scrub --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--source-path <timeline-path>] [--sequence <n>] [--context <n>] [--limit 200] [--write-json] [--write-markdown]
   luotsi replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--contains <text>] [--insight <kind>] [--severity info|warning|error] [--evidence <kind>] [--fact <text>] [--node <id> --depth 1] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
   luotsi replay cluster --artifacts <artifact-root> [--min-count <n>] [--similarity same_failure_shape|likely_same_cause|same_bucket] [--contains <text>] [--write-json] [--write-markdown]
-  luotsi replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>] [--validate] [--write-json] [--write-markdown]
+  luotsi replay scenario-draft --artifacts <artifact-root> [--output <scenario.json>|--file <scenario.json>] [--name <name>] [--validate] [--write-json] [--write-markdown]
   luotsi replay search --artifacts <artifact-root> --contains <text> [--limit 50]
 
 Examples:
@@ -713,7 +713,7 @@ Command groups:
     replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--contains <text>] [--insight <kind>] [--severity info|warning|error] [--evidence <kind>] [--fact <text>] [--node <id> --depth 1] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
     replay cluster --artifacts <artifact-root> [--write-json] [--write-markdown]
     replay open (--artifacts <artifact-root> | --last [--artifacts <directory>]) [--dry-run] [--write-json] [--write-markdown]
-    replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>] [--validate] [--write-json] [--write-markdown]
+    replay scenario-draft --artifacts <artifact-root> [--output <scenario.json>|--file <scenario.json>] [--name <name>] [--validate] [--write-json] [--write-markdown]
     replay search --artifacts <artifact-root> --contains <text> [--limit 50]
 
   Install and update
