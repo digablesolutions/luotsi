@@ -87,8 +87,10 @@ After the process exits, inspect the artifact base directory instead of reconnec
 luotsi artifacts list --artifacts artifacts/agent-loop
 luotsi replay open --last --artifacts artifacts/agent-loop --dry-run
 luotsi replay timeline --artifacts artifacts/agent-loop/<run-id> --type command_result
-luotsi replay scenario-draft --artifacts artifacts/agent-loop/<run-id> --output scenarios/from-agent-loop.json --write-markdown
+luotsi replay scenario-draft --artifacts artifacts/agent-loop/<run-id> --output scenarios/from-agent-loop.json --validate --write-markdown
 ```
+
+When the captured command results and replay metadata include a trusted app package and adb target, the generated draft records package/device provenance and the validated handoff commands use those values for preflight and execution.
 
 ## Boundaries
 

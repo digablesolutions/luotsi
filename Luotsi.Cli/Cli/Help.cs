@@ -288,7 +288,7 @@ Usage:
   luotsi replay scrub --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--source-path <timeline-path>] [--sequence <n>] [--context <n>] [--limit 200] [--write-json] [--write-markdown]
   luotsi replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--contains <text>] [--insight <kind>] [--severity info|warning|error] [--evidence <kind>] [--fact <text>] [--node <id> --depth 1] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
   luotsi replay cluster --artifacts <artifact-root> [--min-count <n>] [--similarity same_failure_shape|likely_same_cause|same_bucket] [--contains <text>] [--write-json] [--write-markdown]
-  luotsi replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>] [--write-json] [--write-markdown]
+  luotsi replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>] [--validate] [--write-json] [--write-markdown]
   luotsi replay search --artifacts <artifact-root> --contains <text> [--limit 50]
 
 Examples:
@@ -312,7 +312,7 @@ Examples:
   luotsi replay graph --artifacts artifacts/20260518-100000-run --node failure:session-timeline.jsonl:3 --depth 2
   luotsi replay cluster --artifacts artifacts/ci-runs --write-json --write-markdown
   luotsi replay cluster --artifacts artifacts/ci-runs --min-count 2 --similarity same_failure_shape --contains waitVisible
-  luotsi replay scenario-draft --artifacts artifacts/20260518-100000-inspect --output scenarios/draft.json --write-markdown
+  luotsi replay scenario-draft --artifacts artifacts/20260518-100000-inspect --output scenarios/draft.json --validate --write-markdown
   luotsi replay search --artifacts artifacts/20260518-100000-run --contains "not visible"
 
 Output:
@@ -337,7 +337,12 @@ Notes:
   into open, capsule, scrub, graph, and cluster follow-ups. Failed scenario runs also expose
   failure_capsule_path and an embedded failure_capsule summary with linked
   reports and failure artifacts. Replay scenario-draft turns inspect/replay action events into a conservative draft
-  scenario with warnings, suggestions, and typed next_actions for the authoring handoff. The result includes
+  scenario with warnings, suggestions, and typed next_actions for the authoring handoff. Pass
+  --validate with --output/--file to run static scenario validation immediately and persist
+  the compact validation result beside the draft. Validated drafts also include run_handoff
+  dry-run and device-run commands so the next step can be planned before execution. Trusted package
+  and replay-target evidence are recorded as package_provenance/device_provenance and used for app
+  preflight/run commands when available. The result includes
   source_summaries, step_origins, and normalizations so reviewers can see
   which steps came from inspect commands, screen deltas, view events,
   telemetry, or existing scenario events. With --write-json and
@@ -707,7 +712,7 @@ Command groups:
     replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--contains <text>] [--insight <kind>] [--severity info|warning|error] [--evidence <kind>] [--fact <text>] [--node <id> --depth 1] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
     replay cluster --artifacts <artifact-root> [--write-json] [--write-markdown]
     replay open (--artifacts <artifact-root> | --last [--artifacts <directory>]) [--dry-run] [--write-json] [--write-markdown]
-    replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>] [--write-json] [--write-markdown]
+    replay scenario-draft --artifacts <artifact-root> --output <scenario.json> [--name <name>] [--validate] [--write-json] [--write-markdown]
     replay search --artifacts <artifact-root> --contains <text> [--limit 50]
 
   Install and update
