@@ -99,7 +99,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             ]));
     }
 
-    public Task<ArtifactPackResult> PackAsync(string target, string? searchRoot, string? output, bool force, bool dryRun)
+    public async Task<ArtifactPackResult> PackAsync(string target, string? searchRoot, string? output, bool force, bool dryRun)
     {
         var artifactRoot = ArtifactRootResolver.ResolveArtifactRoot(_fileSystem, target, searchRoot, _environment, preferWorkspaceHome: true);
         var outputPath = ResolveOutputPath(artifactRoot, output);
@@ -113,7 +113,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         var entryCount = sourceFiles.Length + 1;
         if (dryRun)
         {
-            return Task.FromResult(new ArtifactPackResult(
+            return new ArtifactPackResult(
                 artifactRoot,
                 outputPath,
                 entryCount,
@@ -125,7 +125,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
                     new ArtifactRecommendedCommandResult("pack_artifacts", "Write this artifact package.", $"luotsi artifacts pack {Quote(artifactRoot)} --output {Quote(outputPath)}"),
                     new ArtifactRecommendedCommandResult("unpack_artifacts", "Restore this package locally after writing it.", $"luotsi artifacts unpack {Quote(outputPath)} --output {Quote(ResolveUnpackOutputPath(outputPath, null))}"),
                     new ArtifactRecommendedCommandResult("open_artifacts", "Open this artifact root in the local workbench.", $"luotsi artifacts open {Quote(artifactRoot)}")
-                ]));
+                ]);
         }
 
         var outputDirectory = Path.GetDirectoryName(outputPath);
@@ -134,20 +134,20 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             _fileSystem.CreateDirectory(outputDirectory);
         }
 
-        PackArtifactRoot(artifactRoot, outputPath, sourceFiles, manifest, force);
-        return Task.FromResult(new ArtifactPackResult(
+        await PackArtifactRootAsync(artifactRoot, outputPath, sourceFiles, manifest, force).ConfigureAwait(false);
+        return new ArtifactPackResult(
             artifactRoot,
             outputPath,
             entryCount,
             dryRun,
             PackageManifestFileName,
             manifest,
-            ComputeSha256(outputPath),
+            await ComputeSha256Async(outputPath).ConfigureAwait(false),
             [
                 new ArtifactRecommendedCommandResult("unpack_artifacts", "Restore this package locally for review or replay.", $"luotsi artifacts unpack {Quote(outputPath)} --output {Quote(ResolveUnpackOutputPath(outputPath, null))}"),
                 new ArtifactRecommendedCommandResult("open_artifacts", "Open this artifact root in the local workbench.", $"luotsi artifacts open {Quote(artifactRoot)}"),
                 new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench for this artifact root.", $"luotsi replay open --artifacts {Quote(artifactRoot)}")
-            ]));
+            ]);
     }
 
     public async Task<ArtifactUnpackResult> UnpackAsync(string packagePath, string? output, bool force, bool dryRun)
@@ -175,7 +175,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         if (!dryRun)
         {
             _fileSystem.CreateDirectory(outputDirectory);
-            entries = UnpackArtifactPackage(packagePath, outputDirectory, force);
+            entries = await UnpackArtifactPackageAsync(packagePath, outputDirectory, force).ConfigureAwait(false);
             indexPath = await RefreshUnpackedIndexAsync(outputDirectory).ConfigureAwait(false);
         }
 
@@ -188,7 +188,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             PackageManifestFileName,
             manifestOutputPath,
             packageManifest,
-            ComputeSha256(packagePath),
+            await ComputeSha256Async(packagePath).ConfigureAwait(false),
             [
                 new ArtifactRecommendedCommandResult("info_artifacts", "Inspect the unpacked artifact root without mutating it.", $"luotsi artifacts info {Quote(outputDirectory)}"),
                 new ArtifactRecommendedCommandResult("open_artifacts", "Open the unpacked artifact root.", $"luotsi artifacts open {Quote(outputDirectory)}"),
@@ -222,7 +222,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         return Path.Join(artifactRoot, HtmlIndexFileName);
     }
 
-    private void PackArtifactRoot(string artifactRoot, string outputPath, IReadOnlyList<string> sourceFiles, ArtifactPackageManifestResult manifest, bool force)
+    private async Task PackArtifactRootAsync(string artifactRoot, string outputPath, IReadOnlyList<string> sourceFiles, ArtifactPackageManifestResult manifest, bool force)
     {
         using var output = _fileSystem.OpenWrite(outputPath, overwrite: force);
         using var archive = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: false);
@@ -233,7 +233,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             var entry = archive.CreateEntry(entryName, CompressionLevel.SmallestSize);
             using var entryStream = entry.Open();
             using var input = _fileSystem.OpenRead(file);
-            input.CopyTo(entryStream);
+            await input.CopyToAsync(entryStream).ConfigureAwait(false);
         }
     }
 
@@ -433,7 +433,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             ? parsed
             : 0;
 
-    private int UnpackArtifactPackage(string packagePath, string outputDirectory, bool force)
+    private async Task<int> UnpackArtifactPackageAsync(string packagePath, string outputDirectory, bool force)
     {
         var fullOutputDirectory = Path.GetFullPath(outputDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var count = 0;
@@ -451,7 +451,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
 
             using var entryStream = entry.Open();
             using var output = _fileSystem.OpenWrite(destinationPath, overwrite: force);
-            entryStream.CopyTo(output);
+            await entryStream.CopyToAsync(output).ConfigureAwait(false);
             count++;
         }
 
@@ -636,10 +636,11 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             ? $"\"{value.Replace("\"", "\\\"", StringComparison.Ordinal)}\""
             : value;
 
-    private string ComputeSha256(string path)
+    private async Task<string> ComputeSha256Async(string path)
     {
         using var stream = _fileSystem.OpenRead(path);
-        return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+        var hash = await SHA256.HashDataAsync(stream).ConfigureAwait(false);
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 }
 
