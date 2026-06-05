@@ -181,19 +181,21 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         var emittedKinds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var emittedCommands = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (var step in BuildRunHandoffNextSteps(scenarioDraftSummary?.RunHandoff)
-            .Where(step => TryMarkRecommendedStep(step, emittedKinds, emittedCommands)))
+        var runHandoffNextSteps = BuildRunHandoffNextSteps(scenarioDraftSummary?.RunHandoff)
+            .Where(step => TryMarkRecommendedStep(step, emittedKinds, emittedCommands));
+        foreach (var step in runHandoffNextSteps)
         {
             yield return step;
         }
 
-        foreach (var step in (scenarioDraftSummary?.NextActions ?? [])
+        var scenarioDraftNextSteps = (scenarioDraftSummary?.NextActions ?? [])
             .Select(action => new ReplayCapsuleNextStep(
                 action.Kind,
                 action.Title,
                 action.Reason,
                 action.Command))
-            .Where(step => TryMarkRecommendedStep(step, emittedKinds, emittedCommands)))
+            .Where(step => TryMarkRecommendedStep(step, emittedKinds, emittedCommands));
+        foreach (var step in scenarioDraftNextSteps)
         {
             yield return step;
         }

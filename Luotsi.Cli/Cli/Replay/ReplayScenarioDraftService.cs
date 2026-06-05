@@ -877,9 +877,10 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem, Scenari
             return true;
         }
 
-        foreach (var property in root.EnumerateObject()
+        var nestedPackageCarrierProperties = root.EnumerateObject()
             .Where(property => property.Value.ValueKind == JsonValueKind.Object &&
-                PackageCarrierPropertyNames.Contains(property.Name, StringComparer.Ordinal)))
+                PackageCarrierPropertyNames.Contains(property.Name, StringComparer.Ordinal));
+        foreach (var property in nestedPackageCarrierProperties)
         {
             if (TryFindPackageCandidate(property.Value, BuildPackageSource(source, property.Name), out package, out packageSource))
             {
