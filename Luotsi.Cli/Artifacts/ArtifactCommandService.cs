@@ -1,7 +1,9 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
@@ -14,6 +16,28 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
     private const string MarkdownIndexFileName = ArtifactSession.ArtifactIndexFileName;
     private const string HtmlIndexFileName = ArtifactSession.ArtifactHtmlIndexFileName;
     private const string PackageManifestFileName = "luotsi-artifact-package.json";
+    private const string RedactionModeOff = "off";
+    private const string RedactionModeLabSafe = "lab-safe";
+
+    private static readonly Regex QuotedSecretValuePattern = new(
+        """(?i)(["']?)(token|secret|password|api[_-]?key|apikey)(["']?\s*[:=]\s*)(["'])([^"']*)(["'])""",
+        RegexOptions.Compiled);
+
+    private static readonly Regex UnquotedSecretValuePattern = new(
+        """(?i)(["']?)(token|secret|password|api[_-]?key|apikey)(["']?\s*[:=]\s*)(?!bearer\b|basic\b)([^"'\s,;}&<]+)""",
+        RegexOptions.Compiled);
+
+    private static readonly Regex BearerTokenPattern = new(
+        """(?i)\bbearer\s+[A-Za-z0-9._~+/=-]+""",
+        RegexOptions.Compiled);
+
+    private static readonly Regex BasicTokenPattern = new(
+        """(?i)\bbasic\s+[A-Za-z0-9._~+/=-]+""",
+        RegexOptions.Compiled);
+
+    private static readonly Regex LongCredentialPattern = new(
+        """\b(?:[A-Fa-f0-9]{32,}|[A-Za-z0-9+/]{40,}={0,2})\b""",
+        RegexOptions.Compiled);
 
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
     private readonly IArtifactFolderOpener _artifactOpener = artifactOpener ?? throw new ArgumentNullException(nameof(artifactOpener));
@@ -39,6 +63,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             fileCount,
             [
                 new ArtifactRecommendedCommandResult("pack_artifacts", "Pack this artifact root for sharing or CI upload.", $"luotsi artifacts pack {Quote(artifactRoot)}"),
+                new ArtifactRecommendedCommandResult("pack_artifacts_lab_safe", "Pack a lab-safe redacted copy for support, CI, or agents.", $"luotsi artifacts pack {Quote(artifactRoot)} --redact lab-safe"),
                 new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench for this artifact root.", $"luotsi replay open --artifacts {Quote(artifactRoot)}")
             ]);
     }
@@ -72,7 +97,8 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
                 new ArtifactRecommendedCommandResult("replay_open_latest", "Open the replay workbench for the latest artifact root from this search root.", $"luotsi replay open --last --artifacts {Quote(baseRoot)}"),
                 new ArtifactRecommendedCommandResult("info_artifacts", "Inspect one artifact root or run id from this list without mutating it.", "luotsi artifacts info <artifact-root-or-run-id>"),
                 new ArtifactRecommendedCommandResult("open_artifacts", "Open an artifact root or run id from this list.", "luotsi artifacts open <artifact-root-or-run-id>"),
-                new ArtifactRecommendedCommandResult("pack_artifacts", "Pack an artifact root or run id from this list.", "luotsi artifacts pack <artifact-root-or-run-id>")
+                new ArtifactRecommendedCommandResult("pack_artifacts", "Pack an artifact root or run id from this list.", "luotsi artifacts pack <artifact-root-or-run-id>"),
+                new ArtifactRecommendedCommandResult("pack_artifacts_lab_safe", "Pack a lab-safe redacted copy of an artifact root or run id.", "luotsi artifacts pack <artifact-root-or-run-id> --redact lab-safe")
             ]));
     }
 
@@ -95,12 +121,14 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             [
                 new ArtifactRecommendedCommandResult("open_artifacts", "Open this artifact root in the local artifact browser.", $"luotsi artifacts open {Quote(artifactRoot)}"),
                 new ArtifactRecommendedCommandResult("pack_artifacts", "Pack this artifact root for sharing or CI upload.", $"luotsi artifacts pack {Quote(artifactRoot)}"),
+                new ArtifactRecommendedCommandResult("pack_artifacts_lab_safe", "Pack a lab-safe redacted copy for support, CI, or agents.", $"luotsi artifacts pack {Quote(artifactRoot)} --redact lab-safe"),
                 new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench for this artifact root.", $"luotsi replay open --artifacts {Quote(artifactRoot)}")
             ]));
     }
 
-    public async Task<ArtifactPackResult> PackAsync(string target, string? searchRoot, string? output, bool force, bool dryRun)
+    public async Task<ArtifactPackResult> PackAsync(string target, string? searchRoot, string? output, bool force, bool dryRun, string? redactionMode)
     {
+        var redactionPolicy = ParseRedactionMode(redactionMode);
         var artifactRoot = ArtifactRootResolver.ResolveArtifactRoot(_fileSystem, target, searchRoot, _environment, preferWorkspaceHome: true);
         var outputPath = ResolveOutputPath(artifactRoot, output);
         if (_fileSystem.FileExists(outputPath) && !force)
@@ -109,8 +137,10 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         }
 
         var sourceFiles = GetPackableSourceFiles(artifactRoot, outputPath);
-        var manifest = CreatePackageManifest(artifactRoot, sourceFiles);
+        var redaction = CreateRedactionSummary(sourceFiles, redactionPolicy);
+        var manifest = CreatePackageManifest(artifactRoot, sourceFiles, redaction);
         var entryCount = sourceFiles.Length + 1;
+        var labSafeOutputPath = ResolveLabSafeOutputPath(outputPath);
         if (dryRun)
         {
             return new ArtifactPackResult(
@@ -122,7 +152,8 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
                 manifest,
                 null,
                 [
-                    new ArtifactRecommendedCommandResult("pack_artifacts", "Write this artifact package.", $"luotsi artifacts pack {Quote(artifactRoot)} --output {Quote(outputPath)}"),
+                    new ArtifactRecommendedCommandResult("pack_artifacts", "Write this artifact package.", BuildPackCommand(artifactRoot, outputPath, redactionPolicy)),
+                    new ArtifactRecommendedCommandResult("pack_artifacts_lab_safe", "Write a lab-safe redacted artifact package.", BuildPackCommand(artifactRoot, labSafeOutputPath, RedactionModeLabSafe)),
                     new ArtifactRecommendedCommandResult("unpack_artifacts", "Restore this package locally after writing it.", $"luotsi artifacts unpack {Quote(outputPath)} --output {Quote(ResolveUnpackOutputPath(outputPath, null))}"),
                     new ArtifactRecommendedCommandResult("open_artifacts", "Open this artifact root in the local workbench.", $"luotsi artifacts open {Quote(artifactRoot)}")
                 ]);
@@ -134,7 +165,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             _fileSystem.CreateDirectory(outputDirectory);
         }
 
-        await PackArtifactRootAsync(artifactRoot, outputPath, sourceFiles, manifest, force).ConfigureAwait(false);
+        await PackArtifactRootAsync(artifactRoot, outputPath, sourceFiles, manifest, force, redactionPolicy).ConfigureAwait(false);
         return new ArtifactPackResult(
             artifactRoot,
             outputPath,
@@ -143,11 +174,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             PackageManifestFileName,
             manifest,
             await ComputeSha256Async(outputPath).ConfigureAwait(false),
-            [
-                new ArtifactRecommendedCommandResult("unpack_artifacts", "Restore this package locally for review or replay.", $"luotsi artifacts unpack {Quote(outputPath)} --output {Quote(ResolveUnpackOutputPath(outputPath, null))}"),
-                new ArtifactRecommendedCommandResult("open_artifacts", "Open this artifact root in the local workbench.", $"luotsi artifacts open {Quote(artifactRoot)}"),
-                new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench for this artifact root.", $"luotsi replay open --artifacts {Quote(artifactRoot)}")
-            ]);
+            CreatePackRecommendedCommands(artifactRoot, outputPath, labSafeOutputPath, redactionPolicy));
     }
 
     public async Task<ArtifactUnpackResult> UnpackAsync(string packagePath, string? output, bool force, bool dryRun)
@@ -222,7 +249,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         return Path.Join(artifactRoot, HtmlIndexFileName);
     }
 
-    private async Task PackArtifactRootAsync(string artifactRoot, string outputPath, IReadOnlyList<string> sourceFiles, ArtifactPackageManifestResult manifest, bool force)
+    private async Task PackArtifactRootAsync(string artifactRoot, string outputPath, IReadOnlyList<string> sourceFiles, ArtifactPackageManifestResult manifest, bool force, string redactionMode)
     {
         using var output = _fileSystem.OpenWrite(outputPath, overwrite: force);
         using var archive = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: false);
@@ -233,7 +260,14 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             var entry = archive.CreateEntry(entryName, CompressionLevel.SmallestSize);
             using var entryStream = entry.Open();
             using var input = _fileSystem.OpenRead(file);
-            await input.CopyToAsync(entryStream).ConfigureAwait(false);
+            if (ShouldRedactFile(file, redactionMode))
+            {
+                await WriteRedactedTextAsync(input, entryStream).ConfigureAwait(false);
+            }
+            else
+            {
+                await input.CopyToAsync(entryStream).ConfigureAwait(false);
+            }
         }
     }
 
@@ -244,7 +278,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         JsonSerializer.Serialize(entryStream, manifest, ArtifactPackageJson.Options);
     }
 
-    private ArtifactPackageManifestResult CreatePackageManifest(string artifactRoot, IReadOnlyList<string> sourceFiles)
+    private ArtifactPackageManifestResult CreatePackageManifest(string artifactRoot, IReadOnlyList<string> sourceFiles, ArtifactPackageRedactionResult? redaction)
     {
         var relativeFiles = sourceFiles
             .Select(path => NormalizeZipEntryName(Path.GetRelativePath(artifactRoot, path)))
@@ -262,7 +296,8 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
                 new ArtifactRecommendedCommandResult("open_artifacts", "Open the unpacked artifact root locally.", "luotsi artifacts open <unpacked-artifact-root>"),
                 new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench for the unpacked artifact root.", "luotsi replay open --artifacts <unpacked-artifact-root>")
             ],
-            relativeFiles);
+            relativeFiles,
+            redaction);
     }
 
     private ArtifactPackageManifestResult ReadPackageManifest(string packagePath)
@@ -327,6 +362,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             }
 
             files = ValidateManifestFiles(files, manifestPath);
+            var redaction = ReadOptionalRedaction(root, manifestPath);
             var commands = recommendedCommandsElement.EnumerateArray()
                 .Select((element, index) =>
                 {
@@ -349,7 +385,8 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
                 sourceFileCount,
                 ReadCategoryCounts(categoryCountsElement),
                 commands,
-                files);
+                files,
+                redaction);
         }
         catch (JsonException ex)
         {
@@ -432,6 +469,31 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         root.TryGetProperty(propertyName, out var value) && value.TryGetInt32(out var parsed)
             ? parsed
             : 0;
+
+    private static ArtifactPackageRedactionResult? ReadOptionalRedaction(JsonElement root, string manifestPath)
+    {
+        if (!root.TryGetProperty("redaction", out var redactionElement) || redactionElement.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        if (redactionElement.ValueKind != JsonValueKind.Object)
+        {
+            throw new UsageException($"Artifact package manifest '{manifestPath}' has invalid object property 'redaction'.");
+        }
+
+        var mode = GetRequiredString(redactionElement, "mode", $"{manifestPath} redaction");
+        if (!string.Equals(mode, RedactionModeLabSafe, StringComparison.Ordinal) &&
+            !string.Equals(mode, RedactionModeOff, StringComparison.Ordinal))
+        {
+            throw new UsageException($"Artifact package manifest '{manifestPath}' has unsupported redaction mode '{mode}'.");
+        }
+
+        return new ArtifactPackageRedactionResult(
+            mode,
+            GetRequiredInt(redactionElement, "redacted_file_count", $"{manifestPath} redaction"),
+            GetRequiredInt(redactionElement, "text_file_count", $"{manifestPath} redaction"));
+    }
 
     private async Task<int> UnpackArtifactPackageAsync(string packagePath, string outputDirectory, bool force)
     {
@@ -544,6 +606,33 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             .Where(path => string.IsNullOrWhiteSpace(outputPath) || !string.Equals(Path.GetFullPath(path), Path.GetFullPath(outputPath), StringComparison.OrdinalIgnoreCase))
             .ToArray();
 
+    private ArtifactPackageRedactionResult? CreateRedactionSummary(IReadOnlyList<string> sourceFiles, string redactionMode)
+    {
+        if (string.Equals(redactionMode, RedactionModeOff, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var textFileCount = 0;
+        var redactedFileCount = 0;
+        foreach (var file in sourceFiles)
+        {
+            if (!IsTextLikeArtifact(file))
+            {
+                continue;
+            }
+
+            textFileCount++;
+            var text = ReadAllText(file);
+            if (!string.Equals(text, RedactText(text), StringComparison.Ordinal))
+            {
+                redactedFileCount++;
+            }
+        }
+
+        return new ArtifactPackageRedactionResult(redactionMode, redactedFileCount, textFileCount);
+    }
+
     private ArtifactListEntryResult CreateListEntry(string artifactRoot)
     {
         var files = GetArtifactFiles(artifactRoot);
@@ -602,6 +691,127 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             logs,
             timelines,
             Math.Max(0, files.Count - screenshots - videos - reports - logs - timelines));
+    }
+
+    private static string ParseRedactionMode(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return RedactionModeOff;
+        }
+
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            RedactionModeOff => RedactionModeOff,
+            RedactionModeLabSafe => RedactionModeLabSafe,
+            _ => throw new UsageException("Option --redact must be one of: off, lab-safe.")
+        };
+    }
+
+    private static bool ShouldRedactFile(string path, string redactionMode) =>
+        string.Equals(redactionMode, RedactionModeLabSafe, StringComparison.Ordinal) && IsTextLikeArtifact(path);
+
+    private static bool IsTextLikeArtifact(string path)
+    {
+        var extension = Path.GetExtension(path).ToLowerInvariant();
+        if (string.IsNullOrEmpty(extension) && string.Equals(Path.GetFileName(path), ".env", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return extension is ".json" or ".jsonl" or ".xml" or ".txt" or ".log" or ".md" or ".html" or ".csv" or ".properties" or ".env";
+    }
+
+    private string ReadAllText(string path)
+    {
+        using var input = _fileSystem.OpenRead(path);
+        using var reader = new StreamReader(input, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        return reader.ReadToEnd();
+    }
+
+    private static async Task WriteRedactedTextAsync(Stream input, Stream output)
+    {
+        using var buffer = new MemoryStream();
+        await input.CopyToAsync(buffer).ConfigureAwait(false);
+        var bytes = buffer.ToArray();
+
+        using var reader = new StreamReader(new MemoryStream(bytes), Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        var original = await reader.ReadToEndAsync().ConfigureAwait(false);
+        var redacted = RedactText(original);
+        if (string.Equals(original, redacted, StringComparison.Ordinal))
+        {
+            await output.WriteAsync(bytes, 0, bytes.Length).ConfigureAwait(false);
+            return;
+        }
+
+        await using var writer = new StreamWriter(output, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), bufferSize: 1024, leaveOpen: true);
+        await writer.WriteAsync(redacted).ConfigureAwait(false);
+        await writer.FlushAsync().ConfigureAwait(false);
+    }
+
+    private static string RedactText(string text)
+    {
+        var redacted = QuotedSecretValuePattern.Replace(text, match =>
+            $"{match.Groups[1].Value}{match.Groups[2].Value}{match.Groups[3].Value}{match.Groups[4].Value}[REDACTED:{NormalizeRedactionKind(match.Groups[2].Value)}]{match.Groups[6].Value}");
+        redacted = UnquotedSecretValuePattern.Replace(redacted, match =>
+            $"{match.Groups[1].Value}{match.Groups[2].Value}{match.Groups[3].Value}[REDACTED:{NormalizeRedactionKind(match.Groups[2].Value)}]");
+        redacted = BearerTokenPattern.Replace(redacted, "Bearer [REDACTED:token]");
+        redacted = BasicTokenPattern.Replace(redacted, "Basic [REDACTED:authorization]");
+        redacted = LongCredentialPattern.Replace(redacted, "[REDACTED:credential]");
+        return redacted;
+    }
+
+    private static string NormalizeRedactionKind(string key)
+    {
+        var normalized = key.Replace("_", string.Empty, StringComparison.Ordinal).Replace("-", string.Empty, StringComparison.Ordinal).ToLowerInvariant();
+        return normalized switch
+        {
+            "apikey" => "apikey",
+            "authorization" => "authorization",
+            "password" => "password",
+            "secret" => "secret",
+            _ => "token"
+        };
+    }
+
+    private static string BuildPackCommand(string artifactRoot, string outputPath, string redactionMode)
+    {
+        var command = $"luotsi artifacts pack {Quote(artifactRoot)} --output {Quote(outputPath)}";
+        return string.Equals(redactionMode, RedactionModeLabSafe, StringComparison.Ordinal)
+            ? $"{command} --redact lab-safe"
+            : command;
+    }
+
+    private static IReadOnlyList<ArtifactRecommendedCommandResult> CreatePackRecommendedCommands(string artifactRoot, string outputPath, string labSafeOutputPath, string redactionMode)
+    {
+        var commands = new List<ArtifactRecommendedCommandResult>
+        {
+            new("unpack_artifacts", "Restore this package locally for review or replay.", $"luotsi artifacts unpack {Quote(outputPath)} --output {Quote(ResolveUnpackOutputPath(outputPath, null))}")
+        };
+
+        if (!string.Equals(redactionMode, RedactionModeLabSafe, StringComparison.Ordinal))
+        {
+            commands.Add(new ArtifactRecommendedCommandResult("pack_artifacts_lab_safe", "Create a lab-safe redacted copy of this artifact root.", BuildPackCommand(artifactRoot, labSafeOutputPath, RedactionModeLabSafe)));
+        }
+
+        commands.Add(new ArtifactRecommendedCommandResult("open_artifacts", "Open this artifact root in the local workbench.", $"luotsi artifacts open {Quote(artifactRoot)}"));
+        commands.Add(new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench for this artifact root.", $"luotsi replay open --artifacts {Quote(artifactRoot)}"));
+        return commands;
+    }
+
+    private static string ResolveLabSafeOutputPath(string outputPath)
+    {
+        var separatorIndex = outputPath.LastIndexOfAny(['/', '\\']);
+        var directoryPrefix = separatorIndex >= 0 ? outputPath[..(separatorIndex + 1)] : string.Empty;
+        var fileName = separatorIndex >= 0 ? outputPath[(separatorIndex + 1)..] : outputPath;
+        var extension = Path.GetExtension(fileName);
+        var stem = string.IsNullOrEmpty(extension) ? fileName : fileName[..^extension.Length];
+        var labSafeName = stem.EndsWith("-lab-safe", StringComparison.OrdinalIgnoreCase)
+            ? fileName
+            : $"{stem}-lab-safe{extension}";
+
+        return directoryPrefix + labSafeName;
     }
 
     private static string ResolveOutputPath(string artifactRoot, string? output)
@@ -714,6 +924,11 @@ internal sealed record ArtifactUnpackResult(
 
 internal sealed record ArtifactRecommendedCommandResult(string Kind, string Summary, string Command);
 
+internal sealed record ArtifactPackageRedactionResult(
+    string Mode,
+    int RedactedFileCount,
+    int TextFileCount);
+
 internal sealed record ArtifactPackageManifestResult(
     string Schema,
     string RunId,
@@ -721,7 +936,8 @@ internal sealed record ArtifactPackageManifestResult(
     int SourceFileCount,
     ArtifactCategoryCountsResult CategoryCounts,
     IReadOnlyList<ArtifactRecommendedCommandResult> RecommendedCommands,
-    IReadOnlyList<string> Files);
+    IReadOnlyList<string> Files,
+    ArtifactPackageRedactionResult? Redaction = null);
 
 internal static class ArtifactPackageJson
 {

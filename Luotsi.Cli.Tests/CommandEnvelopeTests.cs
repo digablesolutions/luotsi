@@ -124,6 +124,7 @@ public sealed partial class AppTests
         Assert.Contains("luotsi artifacts info (<artifact-root-or-run-id> | --last [--artifacts <directory>])", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi artifacts open (<artifact-root-or-run-id> | --last [--artifacts <directory>]) [--dry-run]", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi artifacts pack <artifact-root-or-run-id>", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("[--redact lab-safe|off]", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi artifacts unpack <artifact.zip>", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi-artifact-package.json", console.ErrorLines[0], StringComparison.Ordinal);
     }
@@ -4755,7 +4756,11 @@ public sealed partial class AppTests
         Assert.Equal("20260526-120000-run", packManifest.GetProperty("run_id").GetString());
         Assert.Equal(2, packManifest.GetProperty("source_file_count").GetInt32());
         Assert.Equal(2, packManifest.GetProperty("files").GetArrayLength());
+        Assert.False(packManifest.TryGetProperty("redaction", out _));
         Assert.Matches("^[0-9a-f]{64}$", data.GetProperty("sha256").GetString());
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "pack_artifacts_lab_safe" &&
+            command.GetProperty("command").GetString() == $"luotsi artifacts pack {replayRoot} --output /tmp/share/replay-lab-safe.zip --redact lab-safe");
         using var archive = new ZipArchive(new MemoryStream(fileSystem.ReadBytes(output)), ZipArchiveMode.Read);
         var manifestEntry = Assert.Single(archive.Entries, entry => entry.FullName == "luotsi-artifact-package.json");
         using (var manifestStream = manifestEntry.Open())
@@ -4769,6 +4774,123 @@ public sealed partial class AppTests
         }
         Assert.Contains(archive.Entries, entry => entry.FullName == "index.html");
         Assert.Contains(archive.Entries, entry => entry.FullName == "failures/failure.png");
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsPack_RedactOff_Writes_Exact_Copy_Without_Redaction_Metadata()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var replayRoot = "/tmp/luotsi/20260526-120000-run";
+        var output = "/tmp/share/replay.zip";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), "{\"token\":\"source-token\",\"detail\":\"visible\"}");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "pack", replayRoot, "--output", output, "--redact", "off"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.False(envelope.RootElement.GetProperty("data").GetProperty("manifest").TryGetProperty("redaction", out _));
+        using var archive = new ZipArchive(new MemoryStream(fileSystem.ReadBytes(output)), ZipArchiveMode.Read);
+        var timeline = ReadZipEntryText(archive, "session-timeline.jsonl");
+        Assert.Contains("source-token", timeline, StringComparison.Ordinal);
+        Assert.DoesNotContain("[REDACTED", timeline, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsPack_RedactLabSafe_Redacts_Text_Entries_And_Preserves_Binary()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var replayRoot = "/tmp/luotsi/20260526-120000-run";
+        var output = "/tmp/share/replay-redacted.zip";
+        var unpackedRoot = "/tmp/unpacked-redacted";
+        var screenshotBytes = new byte[] { 0x89, 0x50, 0x4e, 0x47, 0x00, 0x01, 0xff };
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "index.html"), "<!doctype html><title>safe</title>");
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), """{"type":"command_result","token":"secret-session-token","detail":"visible"}""");
+        fileSystem.AddFile(Path.Join(replayRoot, "logs", "logcat.txt"), "password=super-secret; authorization: Bearer abcdefghijklmnopqrstuvwxyz012345");
+        await using (var screenshot = fileSystem.OpenWrite(Path.Join(replayRoot, "screens", "failure.png")))
+        {
+            await screenshot.WriteAsync(screenshotBytes);
+        }
+
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "pack", replayRoot, "--output", output, "--redact", "lab-safe"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        var redaction = data.GetProperty("manifest").GetProperty("redaction");
+        Assert.Equal("lab-safe", redaction.GetProperty("mode").GetString());
+        Assert.Equal(3, redaction.GetProperty("text_file_count").GetInt32());
+        Assert.Equal(2, redaction.GetProperty("redacted_file_count").GetInt32());
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "unpack_artifacts");
+
+        Assert.Contains("secret-session-token", await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "session-timeline.jsonl")), StringComparison.Ordinal);
+        Assert.Contains("super-secret", await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "logs", "logcat.txt")), StringComparison.Ordinal);
+        Assert.Equal(screenshotBytes, fileSystem.ReadBytes(Path.Join(replayRoot, "screens", "failure.png")));
+
+        using (var archive = new ZipArchive(new MemoryStream(fileSystem.ReadBytes(output)), ZipArchiveMode.Read))
+        {
+            using var manifest = JsonDocument.Parse(ReadZipEntryBytes(archive, "luotsi-artifact-package.json"));
+            Assert.Equal("lab-safe", manifest.RootElement.GetProperty("redaction").GetProperty("mode").GetString());
+
+            var timeline = ReadZipEntryText(archive, "session-timeline.jsonl");
+            Assert.Contains("\"token\":\"[REDACTED:token]\"", timeline, StringComparison.Ordinal);
+            Assert.DoesNotContain("secret-session-token", timeline, StringComparison.Ordinal);
+
+            var logcat = ReadZipEntryText(archive, "logs/logcat.txt");
+            Assert.Contains("password=[REDACTED:password]", logcat, StringComparison.Ordinal);
+            Assert.Contains("Bearer [REDACTED:token]", logcat, StringComparison.Ordinal);
+            Assert.DoesNotContain("super-secret", logcat, StringComparison.Ordinal);
+            Assert.DoesNotContain("abcdefghijklmnopqrstuvwxyz012345", logcat, StringComparison.Ordinal);
+            Assert.Equal(screenshotBytes, ReadZipEntryBytes(archive, "screens/failure.png"));
+        }
+
+        console.OutputLines.Clear();
+        console.ErrorLines.Clear();
+
+        Assert.Equal(0, await app.RunAsync(["artifacts", "unpack", output, "--output", unpackedRoot]));
+        using var unpackEnvelope = console.ParseSingleOutputAsJson();
+        var unpackData = unpackEnvelope.RootElement.GetProperty("data");
+        Assert.Equal("lab-safe", unpackData.GetProperty("manifest").GetProperty("redaction").GetProperty("mode").GetString());
+        Assert.Contains("[REDACTED:token]", await fileSystem.ReadAllTextAsync(Path.GetFullPath(Path.Join(unpackedRoot, "session-timeline.jsonl"))), StringComparison.Ordinal);
+        Assert.Contains("[REDACTED:password]", await fileSystem.ReadAllTextAsync(Path.GetFullPath(Path.Join(unpackedRoot, "logs", "logcat.txt"))), StringComparison.Ordinal);
+        Assert.Equal(screenshotBytes, fileSystem.ReadBytes(Path.GetFullPath(Path.Join(unpackedRoot, "screens", "failure.png"))));
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsPack_Rejects_Unknown_Redaction_Mode()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var replayRoot = "/tmp/luotsi/20260526-120000-run";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "index.html"), "<!doctype html>");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "pack", replayRoot, "--redact", "full"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("--redact must be one of: off, lab-safe", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -4801,6 +4923,138 @@ public sealed partial class AppTests
         Assert.False(fileSystem.FileExists(output));
         Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
             command.GetProperty("kind").GetString() == "pack_artifacts");
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "pack_artifacts_lab_safe" &&
+            command.GetProperty("command").GetString() == $"luotsi artifacts pack {replayRoot} --output /tmp/share/replay-lab-safe.zip --redact lab-safe");
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsPack_LabSafe_Redacts_Text_Entries_And_Preserves_Binary_Entries()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var replayRoot = "/tmp/luotsi/20260526-120000-run";
+        var output = "/tmp/share/redacted-replay.zip";
+        var pngBytes = new byte[] { 0x89, 0x50, 0x4e, 0x47, 0x01 };
+        var mp4Bytes = new byte[] { 0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70 };
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "logs", "logcat.log"), "Authorization: Bearer abc.def.secret\ntoken=tok_123456\n");
+        fileSystem.AddFile(Path.Join(replayRoot, "scenario-results.json"), """
+        {
+          "api_key": "sk_live_1234567890",
+          "password": "correct horse battery staple",
+          "trace": "0123456789abcdef0123456789abcdef"
+        }
+        """);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), "{\"type\":\"command_result\",\"secret\":\"timeline-secret\"}");
+        await using (var png = fileSystem.OpenWrite(Path.Join(replayRoot, "screens", "failure.png")))
+        {
+            await png.WriteAsync(pngBytes);
+        }
+
+        await using (var mp4 = fileSystem.OpenWrite(Path.Join(replayRoot, "recordings", "failure.mp4")))
+        {
+            await mp4.WriteAsync(mp4Bytes);
+        }
+
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "pack", replayRoot, "--output", output, "--redact", "lab-safe"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var manifest = envelope.RootElement.GetProperty("data").GetProperty("manifest");
+        var redaction = manifest.GetProperty("redaction");
+        Assert.Equal("lab-safe", redaction.GetProperty("mode").GetString());
+        Assert.Equal(3, redaction.GetProperty("text_file_count").GetInt32());
+        Assert.Equal(3, redaction.GetProperty("redacted_file_count").GetInt32());
+
+        using var archive = new ZipArchive(new MemoryStream(fileSystem.ReadBytes(output)), ZipArchiveMode.Read);
+        var manifestEntry = Assert.Single(archive.Entries, entry => entry.FullName == "luotsi-artifact-package.json");
+        using (var manifestStream = manifestEntry.Open())
+        using (var persistedManifest = JsonDocument.Parse(manifestStream))
+        {
+            var persistedRedaction = persistedManifest.RootElement.GetProperty("redaction");
+            Assert.Equal("lab-safe", persistedRedaction.GetProperty("mode").GetString());
+            Assert.Equal(3, persistedRedaction.GetProperty("text_file_count").GetInt32());
+            Assert.Equal(3, persistedRedaction.GetProperty("redacted_file_count").GetInt32());
+        }
+
+        var logcat = ReadZipEntryText(archive, "logs/logcat.log");
+        Assert.Contains("Bearer [REDACTED:token]", logcat, StringComparison.Ordinal);
+        Assert.Contains("token=[REDACTED:token]", logcat, StringComparison.Ordinal);
+        Assert.DoesNotContain("abc.def.secret", logcat, StringComparison.Ordinal);
+        Assert.DoesNotContain("tok_123456", logcat, StringComparison.Ordinal);
+
+        var report = ReadZipEntryText(archive, "scenario-results.json");
+        Assert.Contains("\"api_key\": \"[REDACTED:apikey]\"", report, StringComparison.Ordinal);
+        Assert.Contains("\"password\": \"[REDACTED:password]\"", report, StringComparison.Ordinal);
+        Assert.Contains("\"trace\": \"[REDACTED:credential]\"", report, StringComparison.Ordinal);
+        Assert.DoesNotContain("sk_live_1234567890", report, StringComparison.Ordinal);
+        Assert.DoesNotContain("correct horse battery staple", report, StringComparison.Ordinal);
+        Assert.DoesNotContain("0123456789abcdef0123456789abcdef", report, StringComparison.Ordinal);
+
+        var timeline = ReadZipEntryText(archive, "session-timeline.jsonl");
+        Assert.Contains("\"secret\":\"[REDACTED:secret]\"", timeline, StringComparison.Ordinal);
+        Assert.Equal(pngBytes, ReadZipEntryBytes(archive, "screens/failure.png"));
+        Assert.Equal(mp4Bytes, ReadZipEntryBytes(archive, "recordings/failure.mp4"));
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsPack_LabSafe_Does_Not_Modify_Source_Text()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var replayRoot = "/tmp/luotsi/20260526-120000-run";
+        var output = "/tmp/share/redacted-replay.zip";
+        var sourcePath = Path.Join(replayRoot, "logs", "logcat.log");
+        var sourceText = "Authorization: Bearer source-token\npassword=source-password\n";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(sourcePath, sourceText);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        Assert.Equal(0, await app.RunAsync(["artifacts", "pack", replayRoot, "--output", output, "--redact", "lab-safe"]));
+
+        Assert.Equal(sourceText, await fileSystem.ReadAllTextAsync(sourcePath));
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsPack_DryRun_LabSafe_Reports_Redaction_Metadata_Without_Writing_Zip()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var replayRoot = "/tmp/luotsi/20260526-120000-run";
+        var output = "/tmp/share/redacted-replay.zip";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), "{\"token\":\"dry-run-token\"}");
+        fileSystem.AddFile(Path.Join(replayRoot, "screens", "failure.png"), "png");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "pack", replayRoot, "--output", output, "--dry-run", "--redact", "lab-safe"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.True(data.GetProperty("dry_run").GetBoolean());
+        var redaction = data.GetProperty("manifest").GetProperty("redaction");
+        Assert.Equal("lab-safe", redaction.GetProperty("mode").GetString());
+        Assert.Equal(1, redaction.GetProperty("text_file_count").GetInt32());
+        Assert.Equal(1, redaction.GetProperty("redacted_file_count").GetInt32());
+        Assert.False(fileSystem.FileExists(output));
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("command").GetString() == $"luotsi artifacts pack {replayRoot} --output {output} --redact lab-safe");
     }
 
     [Fact]
@@ -4935,6 +5189,7 @@ public sealed partial class AppTests
         Assert.Equal("luotsi-artifact-package.json", data.GetProperty("manifest_path").GetString());
         Assert.Equal(Path.Join("/tmp/unpacked", "luotsi-artifact-package.json"), data.GetProperty("manifest_output_path").GetString());
         Assert.Equal("20260526-120000-run", data.GetProperty("manifest").GetProperty("run_id").GetString());
+        Assert.False(data.GetProperty("manifest").TryGetProperty("redaction", out _));
         Assert.Matches("^[0-9a-f]{64}$", data.GetProperty("sha256").GetString());
         Assert.False(fileSystem.DirectoryExists("/tmp/unpacked"));
         Assert.False(fileSystem.FileExists(Path.GetFullPath(Path.Join("/tmp/unpacked", "index.html"))));
@@ -5584,6 +5839,23 @@ public sealed partial class AppTests
                 MetadataFile = "failure.json"
             }
         };
+
+    private static string ReadZipEntryText(ZipArchive archive, string entryName)
+    {
+        var entry = Assert.Single(archive.Entries, candidate => candidate.FullName == entryName);
+        using var stream = entry.Open();
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
+    }
+
+    private static byte[] ReadZipEntryBytes(ZipArchive archive, string entryName)
+    {
+        var entry = Assert.Single(archive.Entries, candidate => candidate.FullName == entryName);
+        using var stream = entry.Open();
+        using var output = new MemoryStream();
+        stream.CopyTo(output);
+        return output.ToArray();
+    }
 
     private static AdbDiagnosticResult CreateAdbDiagnostic(
         string name,
