@@ -24,6 +24,7 @@ luotsi artifacts open ./artifacts/my-run
 luotsi artifacts open --last --artifacts ./artifacts
 luotsi artifacts pack ./artifacts/my-run --output my-run.zip --dry-run
 luotsi artifacts pack ./artifacts/my-run --output my-run.zip
+luotsi artifacts pack ./artifacts/my-run --output my-run.zip --redact lab-safe
 luotsi replay summarize --artifacts ./artifacts/my-run
 luotsi replay capsule --artifacts ./artifacts/my-run --write-readme --write-json
 luotsi replay timeline --artifacts ./artifacts/my-run --failures
@@ -48,7 +49,7 @@ luotsi replay open --last --artifacts ./artifacts
 - `replay capsule`: compact manifest with primary failure reopen command, failure timeline with exact reopen commands, existing scenario draft artifacts and summary counts, ready draft run handoff, artifact manifest, and suggested next commands
 - `replay scenario-draft`: turn inspect or replay actions into a conservative starter scenario
 
-`artifacts pack` writes `luotsi-artifact-package.json` into the zip with the run id, created timestamp, category counts, and recommended reopen commands. `artifacts unpack` requires that manifest, reports it back in the result, and both pack and unpack support `--dry-run` when you want to validate the handoff without writing files yet.
+`artifacts pack` writes `luotsi-artifact-package.json` into the zip with the run id, created timestamp, category counts, and recommended reopen commands. By default the package is an exact copy; `--redact lab-safe` redacts obvious secrets from text-like zip entries, leaves source artifacts and binary media unchanged, and records redaction counts in the manifest. `artifacts unpack` requires that manifest, reports it back in the result, and both pack and unpack support `--dry-run` when you want to validate the handoff without writing files yet.
 
 ## Newer semantic triage helpers
 

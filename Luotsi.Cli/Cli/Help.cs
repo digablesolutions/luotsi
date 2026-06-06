@@ -56,7 +56,7 @@ Usage:
   luotsi artifacts list [--artifacts <directory>] [--limit 20]
   luotsi artifacts info (<artifact-root-or-run-id> | --last [--artifacts <directory>])
   luotsi artifacts open (<artifact-root-or-run-id> | --last [--artifacts <directory>]) [--dry-run]
-  luotsi artifacts pack <artifact-root-or-run-id> [--output <file.zip>] [--force] [--dry-run]
+  luotsi artifacts pack <artifact-root-or-run-id> [--output <file.zip>] [--force] [--dry-run] [--redact lab-safe|off]
   luotsi artifacts unpack <artifact.zip> [--output <directory>] [--force] [--dry-run]
   luotsi run --path scenarios --report-json results.json --report-junit junit.xml
   luotsi run --path scenarios --events-jsonl events.jsonl
@@ -70,6 +70,9 @@ Artifacts:
   artifacts info summarizes one artifact root without opening or changing it.
   artifacts pack writes a zip suitable for sharing or CI upload, embeds
   luotsi-artifact-package.json, and reports SHA-256 for handoff verification.
+  By default packages are exact copies. Use --redact lab-safe to redact
+  obvious secrets from text-like zip entries while leaving source artifacts
+  and binary media unchanged; the manifest records the redaction policy used.
   Use --dry-run to preview the output path, manifest, and entry count without
   writing.
   artifacts unpack extracts a zip into a local artifact root with zip-slip
@@ -92,6 +95,7 @@ Examples:
   luotsi artifacts open --last --artifacts artifacts
   luotsi artifacts pack artifacts/20260518-100000-run --output replay.zip --dry-run
   luotsi artifacts pack artifacts/20260518-100000-run --output replay.zip
+  luotsi artifacts pack artifacts/20260518-100000-run --output replay.zip --redact lab-safe
   luotsi artifacts unpack replay.zip --output artifacts/replay --dry-run
 """,
         ["inspect"] = """
@@ -704,7 +708,7 @@ Command groups:
     artifacts list [--artifacts <directory>] [--limit 20]
     artifacts info (<artifact-root-or-run-id> | --last [--artifacts <directory>])
     artifacts open (<artifact-root-or-run-id> | --last [--artifacts <directory>]) [--dry-run]
-    artifacts pack <artifact-root-or-run-id> [--output <file.zip>] [--force] [--dry-run]
+    artifacts pack <artifact-root-or-run-id> [--output <file.zip>] [--force] [--dry-run] [--redact lab-safe|off]
     artifacts unpack <artifact.zip> [--output <directory>] [--force] [--dry-run]
     replay summarize --artifacts <artifact-root> [--format json|jsonl]
     replay capsule --artifacts <artifact-root> [--write-readme] [--write-json]
