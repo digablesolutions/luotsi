@@ -95,7 +95,7 @@ Examples:
   luotsi artifacts open --last --artifacts artifacts
   luotsi artifacts pack artifacts/20260518-100000-run --output replay.zip --dry-run
   luotsi artifacts pack artifacts/20260518-100000-run --output replay.zip
-  luotsi artifacts pack artifacts/20260518-100000-run --output replay.zip --redact lab-safe
+  luotsi artifacts pack artifacts/20260518-100000-run --output replay-lab-safe.zip --redact lab-safe
   luotsi artifacts unpack replay.zip --output artifacts/replay --dry-run
 """,
         ["inspect"] = """
