@@ -125,6 +125,7 @@ public sealed partial class AppTests
         Assert.Contains("luotsi artifacts open (<artifact-root-or-run-id> | --last [--artifacts <directory>]) [--dry-run]", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi artifacts pack <artifact-root-or-run-id>", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("[--redact lab-safe|off]", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("luotsi artifacts verify <artifact.zip>", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi artifacts unpack <artifact.zip>", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi-artifact-package.json", console.ErrorLines[0], StringComparison.Ordinal);
     }
@@ -4759,6 +4760,9 @@ public sealed partial class AppTests
         Assert.False(packManifest.TryGetProperty("redaction", out _));
         Assert.Matches("^[0-9a-f]{64}$", data.GetProperty("sha256").GetString());
         Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "verify_artifacts" &&
+            command.GetProperty("command").GetString() == $"luotsi artifacts verify {output}");
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
             command.GetProperty("kind").GetString() == "pack_artifacts_lab_safe" &&
             command.GetProperty("command").GetString() == $"luotsi artifacts pack {replayRoot} --output /tmp/share/replay-lab-safe.zip --redact lab-safe");
         using var archive = new ZipArchive(new MemoryStream(fileSystem.ReadBytes(output)), ZipArchiveMode.Read);
@@ -4926,6 +4930,130 @@ public sealed partial class AppTests
         Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
             command.GetProperty("kind").GetString() == "pack_artifacts_lab_safe" &&
             command.GetProperty("command").GetString() == $"luotsi artifacts pack {replayRoot} --output /tmp/share/replay-lab-safe.zip --redact lab-safe");
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsVerify_Validates_Package_Without_Writing_Output()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var replayRoot = "/tmp/luotsi/20260526-120000-run";
+        var packagePath = "/tmp/share/replay-lab-safe.zip";
+        var suggestedOutput = Path.Join(Path.GetDirectoryName(Path.GetFullPath(packagePath)), Path.GetFileNameWithoutExtension(packagePath));
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "index.html"), "<!doctype html>");
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), "{\"token\":\"handoff-secret\"}");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        Assert.Equal(0, await app.RunAsync(["artifacts", "pack", replayRoot, "--output", packagePath, "--redact", "lab-safe"]));
+        console.OutputLines.Clear();
+        console.ErrorLines.Clear();
+
+        var exitCode = await app.RunAsync(["artifacts", "verify", packagePath]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(packagePath, data.GetProperty("package").GetString());
+        Assert.Equal("valid", data.GetProperty("status").GetString());
+        Assert.Equal(3, data.GetProperty("entry_count").GetInt32());
+        Assert.Equal(suggestedOutput, data.GetProperty("suggested_output_directory").GetString());
+        Assert.Equal("luotsi-artifact-package.json", data.GetProperty("manifest_path").GetString());
+        Assert.Equal("20260526-120000-run", data.GetProperty("manifest").GetProperty("run_id").GetString());
+        Assert.Equal("lab-safe", data.GetProperty("manifest").GetProperty("redaction").GetProperty("mode").GetString());
+        Assert.Equal("lab_safe", data.GetProperty("share_safety").GetString());
+        Assert.Matches("^[0-9a-f]{64}$", data.GetProperty("sha256").GetString());
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "unpack_artifacts" &&
+            command.GetProperty("command").GetString() == $"luotsi artifacts unpack {packagePath} --output {suggestedOutput}");
+        Assert.False(fileSystem.DirectoryExists(suggestedOutput));
+        Assert.False(fileSystem.FileExists(Path.Join(suggestedOutput, "index.html")));
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsVerify_Allows_Existing_Output_Without_Writing()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var replayRoot = "/tmp/luotsi/20260526-120000-run";
+        var packagePath = "/tmp/share/replay.zip";
+        var suggestedOutput = Path.Join(Path.GetDirectoryName(Path.GetFullPath(packagePath)), Path.GetFileNameWithoutExtension(packagePath));
+        var existingIndex = Path.Join(suggestedOutput, "index.html");
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "index.html"), "<!doctype html>");
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), "{\"type\":\"session_started\"}");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        Assert.Equal(0, await app.RunAsync(["artifacts", "pack", replayRoot, "--output", packagePath]));
+        fileSystem.AddFile(existingIndex, "existing local index");
+        console.OutputLines.Clear();
+        console.ErrorLines.Clear();
+
+        var exitCode = await app.RunAsync(["artifacts", "verify", packagePath]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("valid", data.GetProperty("status").GetString());
+        Assert.Equal(suggestedOutput, data.GetProperty("suggested_output_directory").GetString());
+        Assert.Equal("existing local index", await fileSystem.ReadAllTextAsync(existingIndex));
+        Assert.False(fileSystem.FileExists(Path.Join(suggestedOutput, "session-timeline.jsonl")));
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsVerify_Rejects_Archive_Entry_Not_Declared_In_Manifest()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var packagePath = "/tmp/share/replay.zip";
+        fileSystem.CreateDirectory("/tmp/share");
+        await using (var packageStream = fileSystem.OpenWrite(packagePath))
+        {
+            using var archive = new ZipArchive(packageStream, ZipArchiveMode.Create, leaveOpen: true);
+            var index = archive.CreateEntry("index.html");
+            await using (var entry = index.Open())
+            await using (var writer = new StreamWriter(entry))
+            {
+                await writer.WriteAsync("<!doctype html>");
+            }
+
+            var extra = archive.CreateEntry("extra.txt");
+            await using (var entry = extra.Open())
+            await using (var writer = new StreamWriter(entry))
+            {
+                await writer.WriteAsync("extra");
+            }
+
+            var manifest = archive.CreateEntry("luotsi-artifact-package.json");
+            await using (var entry = manifest.Open())
+            await using (var writer = new StreamWriter(entry))
+            {
+                await writer.WriteAsync("""
+                {"schema":"luotsi-artifact-package.v1","run_id":"20260526-120000-run","created_at":"2026-05-26T12:00:00Z","source_file_count":1,"category_counts":{"screenshots":0,"videos":0,"reports":0,"logs":0,"timelines":0,"other":1},"recommended_commands":[{"kind":"open_artifacts","summary":"Open the unpacked artifact root locally.","command":"luotsi artifacts open <unpacked-artifact-root>"}],"files":["index.html"]}
+                """);
+            }
+        }
+
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "verify", packagePath]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("not declared in manifest", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]
