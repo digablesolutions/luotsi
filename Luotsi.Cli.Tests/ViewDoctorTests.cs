@@ -252,9 +252,152 @@ public sealed partial class AppTests
         Assert.Equal("dev.luotsi.app", envelope.RootElement.GetProperty("data").GetProperty("package").GetString());
         Assert.Equal("safe", envelope.RootElement.GetProperty("data").GetProperty("view").GetProperty("preset").GetString());
         Assert.Contains("adb_server_status", envelope.RootElement.GetProperty("data").GetProperty("checks").EnumerateArray().Select(static item => item.GetProperty("name").GetString()));
+        var readinessPlan = envelope.RootElement.GetProperty("data").GetProperty("readiness_plan");
+        Assert.Equal("ready", readinessPlan.GetProperty("status").GetString());
+        Assert.Equal("luotsi run --path <scenarios> --device 192.168.0.134:5555 --package dev.luotsi.app", readinessPlan.GetProperty("next_command").GetString());
+        Assert.Empty(readinessPlan.GetProperty("blockers").EnumerateArray());
+        Assert.Contains(readinessPlan.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "view_device" &&
+            command.GetProperty("command").GetString() == "luotsi view --device 192.168.0.134:5555 --preset safe");
+        Assert.Equal(
+            readinessPlan.GetProperty("recommended_commands").GetArrayLength(),
+            envelope.RootElement.GetProperty("data").GetProperty("recommended_commands").GetArrayLength());
         Assert.Equal(["server-status", "version"], host.AdbDiagnostics);
         Assert.Equal(["dev.luotsi.app"], host.ReadOnlyPreflightRequests);
         Assert.Same(host, factory.LastDeviceHost);
+    }
+
+    [Fact]
+    public async Task RunAsync_Doctor_Blocked_ReadinessPlan_Returns_Blockers_And_Commands()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"))
+        {
+            PreflightException = new InvalidOperationException("target package is not foreground")
+        };
+        var doctor = new FakeViewDoctor(options => new ViewDoctorResult(
+            false,
+            options.PresetName,
+            options,
+            [],
+            null,
+            [new ViewDoctorCheck("helper_package", false, "Android view helper package is not ready.", "missing helper", "Run view setup --fix.")]));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            TimeProvider = timeProvider,
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            ViewDoctorFactory = new FakeViewDoctorFactory(doctor)
+        });
+
+        var exitCode = await app.RunAsync([
+            "doctor",
+            "--device", "192.168.0.134:5555",
+            "--package", "dev.luotsi.app"]);
+
+        using var envelope = console.ParseSingleOutputAsJson();
+        Assert.Equal(1, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.False(data.GetProperty("ready").GetBoolean());
+        var readinessPlan = data.GetProperty("readiness_plan");
+        Assert.Equal("blocked", readinessPlan.GetProperty("status").GetString());
+        Assert.Equal("luotsi doctor --device 192.168.0.134:5555 --package dev.luotsi.app --fix", readinessPlan.GetProperty("next_command").GetString());
+        var blockers = readinessPlan.GetProperty("blockers").EnumerateArray().ToArray();
+        Assert.Contains(blockers, blocker =>
+            blocker.GetProperty("source").GetString() == "doctor" &&
+            blocker.GetProperty("name").GetString() == "package_preflight" &&
+            blocker.GetProperty("command").GetString() == "luotsi preflight --device 192.168.0.134:5555 --package dev.luotsi.app");
+        Assert.Contains(blockers, blocker =>
+            blocker.GetProperty("source").GetString() == "view" &&
+            blocker.GetProperty("name").GetString() == "helper_package" &&
+            blocker.GetProperty("command").GetString() == "luotsi view setup --device 192.168.0.134:5555");
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "doctor_fix" &&
+            command.GetProperty("command").GetString() == "luotsi doctor --device 192.168.0.134:5555 --package dev.luotsi.app --fix");
+    }
+
+    [Fact]
+    public async Task RunAsync_Doctor_ReadinessPlan_Uses_Resolved_Adb_For_Server_Status_Command()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        host.AdbServerStatusResults.Enqueue(CreateAdbDiagnostic("server-status", ["server-status"], exitCode: 1, stderr: "adb server did not ACK"));
+        var doctor = new FakeViewDoctor(options => new ViewDoctorResult(
+            true,
+            options.PresetName,
+            options,
+            [],
+            null,
+            [new ViewDoctorCheck("decoder", true, "FFmpeg native decoder is ready.")]));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            TimeProvider = timeProvider,
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            ViewDoctorFactory = new FakeViewDoctorFactory(doctor)
+        });
+
+        var exitCode = await app.RunAsync([
+            "doctor",
+            "--device", "192.168.0.134:5555",
+            "--adb", "/opt/android platform-tools/adb"]);
+
+        using var envelope = console.ParseSingleOutputAsJson();
+        Assert.Equal(1, exitCode);
+        const string expectedCommand = "\"/opt/android platform-tools/adb\" start-server";
+        var data = envelope.RootElement.GetProperty("data");
+        var readinessPlan = data.GetProperty("readiness_plan");
+        var adbBlocker = Assert.Single(
+            readinessPlan.GetProperty("blockers").EnumerateArray(),
+            blocker => blocker.GetProperty("name").GetString() == "adb_server_status");
+        Assert.Equal(expectedCommand, adbBlocker.GetProperty("command").GetString());
+        Assert.Contains(expectedCommand, adbBlocker.GetProperty("recommendation").GetString(), StringComparison.Ordinal);
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "resolve_adb_server_status" &&
+            command.GetProperty("command").GetString() == expectedCommand);
+    }
+
+    [Fact]
+    public async Task RunAsync_Doctor_ReadinessPlan_Preserves_View_Options_For_Blocker_Commands()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        var doctor = new FakeViewDoctor(options => new ViewDoctorResult(
+            false,
+            options.PresetName,
+            options,
+            [],
+            null,
+            [new ViewDoctorCheck(
+                "mediaprojection_consent",
+                false,
+                "MediaProjection consent cannot be preflighted before the Android consent activity runs.",
+                "consent_state=interactive; fallback=none",
+                "Start a MediaProjection view session on the physical device and approve the Android screen-capture prompt.")]));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            TimeProvider = timeProvider,
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            ViewDoctorFactory = new FakeViewDoctorFactory(doctor)
+        });
+
+        var exitCode = await app.RunAsync([
+            "doctor",
+            "--device", "192.168.0.134:5555",
+            "--capture-backend", "mediaprojection",
+            "--preset", "low-latency"]);
+
+        using var envelope = console.ParseSingleOutputAsJson();
+        Assert.Equal(1, exitCode);
+        var blocker = Assert.Single(envelope.RootElement.GetProperty("data").GetProperty("readiness_plan").GetProperty("blockers").EnumerateArray());
+        Assert.Equal("mediaprojection_consent", blocker.GetProperty("name").GetString());
+        Assert.Equal("luotsi view --device 192.168.0.134:5555 --preset low-latency --capture-backend mediaprojection", blocker.GetProperty("command").GetString());
+        Assert.Contains(envelope.RootElement.GetProperty("data").GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("command").GetString() == "luotsi doctor --device 192.168.0.134:5555 --preset low-latency --capture-backend mediaprojection --fix");
     }
 
     [Fact]
@@ -307,6 +450,10 @@ public sealed partial class AppTests
         Assert.Equal("doctor", envelope.RootElement.GetProperty("command").GetString());
         Assert.True(envelope.RootElement.GetProperty("data").GetProperty("fix").GetBoolean());
         Assert.True(envelope.RootElement.GetProperty("data").GetProperty("ready").GetBoolean());
+        var readinessPlan = envelope.RootElement.GetProperty("data").GetProperty("readiness_plan");
+        Assert.Equal("ready", readinessPlan.GetProperty("status").GetString());
+        Assert.Contains("repairs completed", readinessPlan.GetProperty("summary").GetString(), StringComparison.Ordinal);
+        Assert.Equal("luotsi run --path <scenarios> --device 192.168.0.134:5555", readinessPlan.GetProperty("next_command").GetString());
         var repairNames = envelope.RootElement.GetProperty("data").GetProperty("repairs").EnumerateArray().Select(static item => item.GetProperty("name").GetString()).ToArray();
         Assert.Collection(
             repairNames,

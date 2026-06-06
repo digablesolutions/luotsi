@@ -163,6 +163,8 @@ First run:
   2. Run guided readiness checks and fixes
      luotsi doctor --device <adb serial>
      luotsi doctor --device <adb serial> --fix
+     Doctor JSON includes readiness_plan.status, blockers, next_command, and
+     recommended_commands for agent/operator handoff.
 
   3. Open a live mirror when you need operator feedback
      luotsi view --device <adb serial>
@@ -248,6 +250,10 @@ Output:
   probe attempt/retry counts for transient host readiness failures. Lab doctor
   reports ambiguous selection, offline devices, stale devices, and recommended
   repair commands. With --fix, Luotsi may run safe host-side recovery actions.
+  Top-level doctor is the first-run readiness entry point for one selected
+  device. Its JSON includes readiness_plan with status, blockers, next_command,
+  and recommended_commands so agents and operators can continue from the same
+  envelope.
   Lab claim creates a host-side lease token so CI and agents can avoid selecting
   a device already claimed by another workflow. With --claim-wait-sec, Luotsi
   joins a persistent queue and waits fairly for the selected serial instead of

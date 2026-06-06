@@ -953,6 +953,25 @@ public sealed record DoctorCheck(
     string? Detail = null,
     string? Recommendation = null);
 
+public sealed record DoctorRecommendedCommandResult(
+    string Kind,
+    string Summary,
+    string Command);
+
+public sealed record DoctorReadinessBlocker(
+    string Source,
+    string Name,
+    string Summary,
+    string? Recommendation = null,
+    string? Command = null);
+
+public sealed record DoctorReadinessPlan(
+    string Status,
+    string Summary,
+    string? NextCommand,
+    IReadOnlyList<DoctorReadinessBlocker> Blockers,
+    IReadOnlyList<DoctorRecommendedCommandResult> RecommendedCommands);
+
 public sealed record DoctorResult(
     bool Ready,
     bool Fix,
@@ -961,7 +980,9 @@ public sealed record DoctorResult(
     IReadOnlyList<DoctorCheck> Checks,
     PreflightResult? PackagePreflight,
     View.Diagnostics.ViewDoctorResult View,
-    IReadOnlyList<View.Diagnostics.ViewSetupStep> Repairs);
+    IReadOnlyList<View.Diagnostics.ViewSetupStep> Repairs,
+    DoctorReadinessPlan ReadinessPlan,
+    IReadOnlyList<DoctorRecommendedCommandResult> RecommendedCommands);
 
 // Wait not visible
 public sealed record WaitNotVisibleResult(string Text, int AttemptCount, bool Visible);

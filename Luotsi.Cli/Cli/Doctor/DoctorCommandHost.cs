@@ -4,6 +4,7 @@ using Luotsi.Cli.Cli.Hosting;
 using Luotsi.Cli.Cli.View;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Models;
+using Luotsi.Cli.View.Contracts;
 using Luotsi.Cli.View.Diagnostics;
 
 namespace Luotsi.Cli.Cli.Doctor;
@@ -32,6 +33,7 @@ internal sealed class DoctorCommandHost(
         var fix = options.HasFlag("fix");
         var package = options.Get("package");
         var viewOptions = BuildViewOptions(options, adbExecutable);
+        var adbStartServerCommand = BuildAdbStartServerCommand(viewOptions.AdbExecutable);
 
         var checks = new List<DoctorCheck>();
         var repairSteps = new List<ViewSetupStep>();
@@ -41,7 +43,7 @@ internal sealed class DoctorCommandHost(
             "adb_server_status",
             "ADB server is ready.",
             "ADB server is not ready.",
-            "Run `adb start-server` or point Luotsi at a working adb binary with --adb or LUOTSI_ADB.",
+            $"Run `{adbStartServerCommand}` or point Luotsi at a working adb binary with --adb or LUOTSI_ADB.",
             adbHost.GetAdbServerStatusAsync).ConfigureAwait(false);
         await AddAdbCheckAsync(
             checks,
@@ -74,18 +76,243 @@ internal sealed class DoctorCommandHost(
             packagePreflight = await AddPackagePreflightCheckAsync(checks, adbHost, package).ConfigureAwait(false);
         }
 
+        var ready = checks.All(static check => check.Ok) && viewReport.Ready;
+        var readinessPlan = BuildReadinessPlan(options, viewOptions, adbStartServerCommand, package, fix, checks, viewReport, repairSteps, ready);
         var result = new DoctorResult(
-            checks.All(static check => check.Ok) && viewReport.Ready,
+            ready,
             fix,
             adbExecutable,
             package,
             checks,
             packagePreflight,
             viewReport,
-            repairSteps);
+            repairSteps,
+            readinessPlan,
+            readinessPlan.RecommendedCommands);
         _envelopeWriter.WriteSuccess(options.Command ?? "doctor", started, result, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
         return result.Ready ? 0 : 1;
     }
+
+    private static DoctorReadinessPlan BuildReadinessPlan(
+        CliOptions options,
+        ViewOptions viewOptions,
+        string adbStartServerCommand,
+        string? package,
+        bool fix,
+        IReadOnlyList<DoctorCheck> checks,
+        ViewDoctorResult viewReport,
+        IReadOnlyList<ViewSetupStep> repairSteps,
+        bool ready)
+    {
+        var deviceSelector = string.IsNullOrWhiteSpace(viewOptions.DeviceSelector)
+            ? options.Get("device") ?? "<adb serial>"
+            : viewOptions.DeviceSelector;
+        var viewOptionSuffix = BuildViewOptionSuffix(options);
+        var doctorCommand = BuildDoctorCommand(deviceSelector, package, viewOptionSuffix, includeFix: false);
+        var doctorFixCommand = BuildDoctorCommand(deviceSelector, package, viewOptionSuffix, includeFix: true);
+        var viewDoctorCommand = $"luotsi view-doctor --device {Quote(deviceSelector)}{viewOptionSuffix}";
+        var viewSetupCommand = $"luotsi view setup --device {Quote(deviceSelector)}{viewOptionSuffix}";
+        var preflightCommand = BuildPreflightCommand(deviceSelector, package);
+        var runCommand = BuildRunCommand(deviceSelector, package);
+        var inspectCommand = $"luotsi inspect --device {Quote(deviceSelector)}";
+        var viewCommand = $"luotsi view --device {Quote(deviceSelector)}{viewOptionSuffix}";
+
+        var blockers = new List<DoctorReadinessBlocker>();
+        blockers.AddRange(checks
+            .Where(static check => !check.Ok)
+            .Select(check => new DoctorReadinessBlocker(
+                "doctor",
+                check.Name,
+                check.Summary,
+                check.Recommendation,
+                ResolveDoctorCheckCommand(check.Name, doctorFixCommand, preflightCommand, adbStartServerCommand))));
+        blockers.AddRange(viewReport.Checks
+            .Where(static check => !check.Ok)
+            .Select(check => new DoctorReadinessBlocker(
+                "view",
+                check.Name,
+                check.Summary,
+                check.Recommendation,
+                ResolveViewCheckCommand(check.Name, doctorFixCommand, viewDoctorCommand, viewSetupCommand, viewCommand))));
+        blockers.AddRange(repairSteps
+            .Where(static step => string.Equals(step.Status, ViewStartupPhaseStatus.Failed, StringComparison.OrdinalIgnoreCase))
+            .Select(step => new DoctorReadinessBlocker(
+                "repair",
+                step.Name,
+                step.Summary,
+                step.Recommendation,
+                doctorFixCommand)));
+
+        if (!ready && blockers.Count == 0)
+        {
+            blockers.Add(new DoctorReadinessBlocker(
+                "doctor",
+                "readiness",
+                "Doctor did not report the selected device as ready.",
+                "Review the nested doctor checks and rerun doctor after correcting the reported setup issue.",
+                doctorCommand));
+        }
+
+        var recommendedCommands = new List<DoctorRecommendedCommandResult>();
+        if (ready)
+        {
+            AddRecommendedCommand(recommendedCommands, "run_scenarios", "Run a reviewed scenario path on this device.", runCommand);
+            AddRecommendedCommand(recommendedCommands, "inspect_device", "Open an interactive inspect session on this device.", inspectCommand);
+            AddRecommendedCommand(recommendedCommands, "view_device", "Open live view for this device.", viewCommand);
+            if (!string.IsNullOrWhiteSpace(package))
+            {
+                AddRecommendedCommand(recommendedCommands, "preflight_package", "Recheck target app readiness before a run.", preflightCommand);
+            }
+        }
+        else
+        {
+            if (!fix)
+            {
+                AddRecommendedCommand(recommendedCommands, "doctor_fix", "Apply Luotsi-owned setup fixes and rerun readiness checks.", doctorFixCommand);
+            }
+
+            foreach (var blocker in blockers.Where(static blocker => !string.IsNullOrWhiteSpace(blocker.Command)))
+            {
+                AddRecommendedCommand(recommendedCommands, $"resolve_{blocker.Name}", $"Resolve blocker: {blocker.Summary}", blocker.Command!);
+            }
+
+            AddRecommendedCommand(recommendedCommands, "doctor_rerun", "Rerun the first-run readiness report after applying fixes.", doctorCommand);
+        }
+
+        var nextCommand = recommendedCommands.FirstOrDefault()?.Command;
+        var status = ready ? "ready" : "blocked";
+        var summary = ready
+            ? fix && repairSteps.Count > 0
+                ? "Doctor repairs completed and the selected device is ready for Luotsi workflows."
+                : "The selected device is ready for Luotsi workflows."
+            : $"Doctor found {blockers.Count} readiness blocker{(blockers.Count == 1 ? string.Empty : "s")}.";
+
+        return new DoctorReadinessPlan(
+            status,
+            summary,
+            nextCommand,
+            blockers,
+            recommendedCommands);
+    }
+
+    private static string? ResolveDoctorCheckCommand(string checkName, string doctorFixCommand, string preflightCommand, string adbStartServerCommand) =>
+        checkName switch
+        {
+            "adb_server_status" => adbStartServerCommand,
+            "package_preflight" => preflightCommand,
+            _ => doctorFixCommand
+        };
+
+    private static string BuildAdbStartServerCommand(string adbExecutable) =>
+        $"{Quote(string.IsNullOrWhiteSpace(adbExecutable) ? "adb" : adbExecutable)} start-server";
+
+    private static string? ResolveViewCheckCommand(string checkName, string doctorFixCommand, string viewDoctorCommand, string viewSetupCommand, string viewCommand) =>
+        checkName switch
+        {
+            "device_visibility" => "adb devices",
+            "capture_backend" => viewDoctorCommand,
+            "mediaprojection_api" => viewDoctorCommand,
+            "mediaprojection_encoder" => viewDoctorCommand,
+            "mediaprojection_consent" => viewCommand,
+            "preflight" => viewDoctorCommand,
+            "recording" => viewDoctorCommand,
+            "decoder" => doctorFixCommand,
+            "helper_package" => viewSetupCommand,
+            _ => doctorFixCommand
+        };
+
+    private static void AddRecommendedCommand(List<DoctorRecommendedCommandResult> commands, string kind, string summary, string command)
+    {
+        if (commands.Any(existing => string.Equals(existing.Command, command, StringComparison.Ordinal)))
+        {
+            return;
+        }
+
+        commands.Add(new DoctorRecommendedCommandResult(kind, summary, command));
+    }
+
+    private static string BuildDoctorCommand(string deviceSelector, string? package, string viewOptionSuffix, bool includeFix)
+    {
+        var command = $"luotsi doctor --device {Quote(deviceSelector)}";
+        if (!string.IsNullOrWhiteSpace(package))
+        {
+            command += $" --package {Quote(package)}";
+        }
+
+        command += viewOptionSuffix;
+        return includeFix ? command + " --fix" : command;
+    }
+
+    private static string BuildPreflightCommand(string deviceSelector, string? package)
+    {
+        var command = $"luotsi preflight --device {Quote(deviceSelector)}";
+        if (!string.IsNullOrWhiteSpace(package))
+        {
+            command += $" --package {Quote(package)}";
+        }
+
+        return command;
+    }
+
+    private static string BuildRunCommand(string deviceSelector, string? package)
+    {
+        var command = $"luotsi run --path <scenarios> --device {Quote(deviceSelector)}";
+        if (!string.IsNullOrWhiteSpace(package))
+        {
+            command += $" --package {Quote(package)}";
+        }
+
+        return command;
+    }
+
+    private static string BuildViewOptionSuffix(CliOptions options)
+    {
+        var parts = new List<string>();
+        AddOption(parts, options, "adb");
+        AddOption(parts, options, "adb-timeout-sec");
+        AddOption(parts, options, "profile");
+        AddOption(parts, options, "preset");
+        AddFlag(parts, options, "defaults");
+        AddFlag(parts, options, "read-only");
+        AddFlag(parts, options, "headless");
+        AddFlag(parts, options, "overlay-screen-state");
+        AddFlag(parts, options, "overlay-telemetry");
+        AddFlag(parts, options, "always-on-top");
+        AddOption(parts, options, "decoder");
+        AddOption(parts, options, "capture-backend");
+        AddOption(parts, options, "codec");
+        AddOption(parts, options, "record");
+        AddOption(parts, options, "max-size");
+        AddOption(parts, options, "max-fps");
+        AddOption(parts, options, "video-bit-rate");
+        AddOption(parts, options, "stats-interval-ms");
+        AddOption(parts, options, "renderer-stats-interval-ms");
+        AddOption(parts, options, "scale-mode");
+
+        return parts.Count == 0 ? string.Empty : " " + string.Join(" ", parts);
+    }
+
+    private static void AddOption(List<string> parts, CliOptions options, string name)
+    {
+        var value = options.Get(name);
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            parts.Add($"--{name} {Quote(value)}");
+        }
+    }
+
+    private static void AddFlag(List<string> parts, CliOptions options, string name)
+    {
+        if (options.HasFlag(name))
+        {
+            parts.Add($"--{name}");
+        }
+    }
+
+    private static string Quote(string value) =>
+        value.Any(static ch => char.IsWhiteSpace(ch) || ch == '"')
+            ? $"\"{value.Replace("\"", "\\\"", StringComparison.Ordinal)}\""
+            : value;
 
     private static async Task AddAdbCheckAsync(
         List<DoctorCheck> checks,

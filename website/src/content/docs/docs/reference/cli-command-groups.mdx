@@ -17,6 +17,8 @@ luotsi adb version
 luotsi doctor --device <serial>
 ```
 
+`doctor` returns a `readiness_plan` with status, blockers, `next_command`, and `recommended_commands`, so the first-run report doubles as an operator/agent handoff.
+
 Also in this family:
 
 - `lab status`, `lab doctor`, `lab plan`, `lab claim`, `lab leases`, `lab queue`, `lab release`, `lab extend`, `lab quarantine`, `lab quarantines`, `lab unquarantine`, `lab inventory list`, `lab inventory set`, `lab inventory clear`
