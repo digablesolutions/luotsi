@@ -167,7 +167,7 @@ luotsi doctor --device <serial>
 luotsi doctor --device <serial> --fix
 ```
 
-`doctor` reuses the existing adb, device preflight, and live-view readiness checks. With `--fix`, Luotsi stages FFmpeg native libraries when the selected decoder is missing them, then runs the same helper provisioning flow used by `view setup`. Published Luotsi bundles include the repair assets needed for those fixes, and source checkouts continue to use the repository layout.
+`doctor` reuses the existing adb, device preflight, and live-view readiness checks. Its JSON includes a `readiness_plan` with `status`, `blockers`, `next_command`, and `recommended_commands` so humans and agents can continue from the same result. With `--fix`, Luotsi stages FFmpeg native libraries when the selected decoder is missing them, then runs the same helper provisioning flow used by `view setup`. Published Luotsi bundles include the repair assets needed for those fixes, and source checkouts continue to use the repository layout.
 
 ## Workflow quickstart
 
