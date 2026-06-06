@@ -120,6 +120,7 @@ luotsi artifacts open ./artifacts/my-run
 luotsi artifacts open --last --artifacts ./artifacts
 luotsi artifacts pack ./artifacts/my-run --output my-run.zip --dry-run
 luotsi artifacts pack ./artifacts/my-run --output my-run.zip
+luotsi artifacts pack ./artifacts/my-run --output my-run-lab-safe.zip --redact lab-safe
 luotsi artifacts unpack my-run.zip --output ./artifacts/my-run
 luotsi replay summarize --artifacts ./artifacts/my-run
 luotsi replay capsule --artifacts ./artifacts/my-run --write-readme --write-json

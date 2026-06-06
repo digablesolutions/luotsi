@@ -49,7 +49,7 @@ internal sealed class ArtifactCommandHost(
     private Task<ArtifactPackResult> PackAsync(CliOptions options)
     {
         var target = RequireTarget(options, "pack", "<artifact-root-or-run-id>");
-        return _artifactCommandService.PackAsync(target, options.Get("artifacts"), options.Get("output"), options.HasFlag("force"), options.HasFlag("dry-run"));
+        return _artifactCommandService.PackAsync(target, options.Get("artifacts"), options.Get("output"), options.HasFlag("force"), options.HasFlag("dry-run"), options.Get("redact"));
     }
 
     private Task<ArtifactUnpackResult> UnpackAsync(CliOptions options)
