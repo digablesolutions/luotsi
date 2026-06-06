@@ -192,6 +192,8 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         var outputDirectory = ResolveUnpackOutputPath(packagePath, output);
         var packageManifest = ReadPackageManifest(packagePath);
         var entries = ValidateArtifactPackage(packagePath, outputDirectory, force: true, packageManifest);
+        var unpackForce = _fileSystem.DirectoryExists(outputDirectory) ? " --force" : string.Empty;
+        var unpackCommand = $"luotsi artifacts unpack {Quote(packagePath)} --output {Quote(outputDirectory)}{unpackForce}";
         return new ArtifactVerifyResult(
             packagePath,
             "valid",
@@ -202,7 +204,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             await ComputeSha256Async(packagePath).ConfigureAwait(false),
             ResolveShareSafety(packageManifest),
             [
-                new ArtifactRecommendedCommandResult("unpack_artifacts", "Restore this verified package locally for review or replay.", $"luotsi artifacts unpack {Quote(packagePath)} --output {Quote(outputDirectory)}"),
+                new ArtifactRecommendedCommandResult("unpack_artifacts", "Restore this verified package locally for review or replay.", unpackCommand),
                 new ArtifactRecommendedCommandResult("info_artifacts", "Inspect the restored artifact root after unpacking.", $"luotsi artifacts info {Quote(outputDirectory)}"),
                 new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench after unpacking.", $"luotsi replay open --artifacts {Quote(outputDirectory)}")
             ]);
