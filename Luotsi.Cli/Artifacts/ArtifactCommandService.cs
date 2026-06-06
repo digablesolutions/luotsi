@@ -732,9 +732,20 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
 
     private static async Task WriteRedactedTextAsync(Stream input, Stream output)
     {
-        using var reader = new StreamReader(input, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-        var redacted = RedactText(await reader.ReadToEndAsync().ConfigureAwait(false));
-        await using var writer = new StreamWriter(output, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), leaveOpen: true);
+        using var buffer = new MemoryStream();
+        await input.CopyToAsync(buffer).ConfigureAwait(false);
+        var bytes = buffer.ToArray();
+
+        using var reader = new StreamReader(new MemoryStream(bytes), Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        var original = await reader.ReadToEndAsync().ConfigureAwait(false);
+        var redacted = RedactText(original);
+        if (string.Equals(original, redacted, StringComparison.Ordinal))
+        {
+            await output.WriteAsync(bytes, 0, bytes.Length).ConfigureAwait(false);
+            return;
+        }
+
+        await using var writer = new StreamWriter(output, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), bufferSize: 1024, leaveOpen: true);
         await writer.WriteAsync(redacted).ConfigureAwait(false);
         await writer.FlushAsync().ConfigureAwait(false);
     }
