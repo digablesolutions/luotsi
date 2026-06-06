@@ -23,8 +23,9 @@ internal sealed class ArtifactCommandHost(
             "info" => await InfoAsync(options).ConfigureAwait(false),
             "open" => await OpenAsync(options).ConfigureAwait(false),
             "pack" => await PackAsync(options).ConfigureAwait(false),
+            "verify" => await VerifyAsync(options).ConfigureAwait(false),
             "unpack" => await UnpackAsync(options).ConfigureAwait(false),
-            _ => throw new UsageException("artifacts command must be one of: list, info, open, pack, unpack.")
+            _ => throw new UsageException("artifacts command must be one of: list, info, open, pack, verify, unpack.")
         };
 
         _envelopeWriter.WriteSuccess(options.Command!, started, data, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
@@ -50,6 +51,12 @@ internal sealed class ArtifactCommandHost(
     {
         var target = RequireTarget(options, "pack", "<artifact-root-or-run-id>");
         return _artifactCommandService.PackAsync(target, options.Get("artifacts"), options.Get("output"), options.HasFlag("force"), options.HasFlag("dry-run"), options.Get("redact"));
+    }
+
+    private Task<ArtifactVerifyResult> VerifyAsync(CliOptions options)
+    {
+        var target = RequireTarget(options, "verify", "<artifact.zip>");
+        return _artifactCommandService.VerifyAsync(target, options.Get("output"));
     }
 
     private Task<ArtifactUnpackResult> UnpackAsync(CliOptions options)
