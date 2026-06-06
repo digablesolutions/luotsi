@@ -712,8 +712,16 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
     private static bool ShouldRedactFile(string path, string redactionMode) =>
         string.Equals(redactionMode, RedactionModeLabSafe, StringComparison.Ordinal) && IsTextLikeArtifact(path);
 
-    private static bool IsTextLikeArtifact(string path) =>
-        Path.GetExtension(path).ToLowerInvariant() is ".json" or ".jsonl" or ".xml" or ".txt" or ".log" or ".md" or ".html" or ".csv" or ".properties" or ".env";
+    private static bool IsTextLikeArtifact(string path)
+    {
+        var extension = Path.GetExtension(path).ToLowerInvariant();
+        if (string.IsNullOrEmpty(extension) && string.Equals(Path.GetFileName(path), ".env", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return extension is ".json" or ".jsonl" or ".xml" or ".txt" or ".log" or ".md" or ".html" or ".csv" or ".properties" or ".env";
+    }
 
     private string ReadAllText(string path)
     {
