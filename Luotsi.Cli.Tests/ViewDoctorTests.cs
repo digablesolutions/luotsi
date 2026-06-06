@@ -318,6 +318,48 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_Doctor_ReadinessPlan_Uses_Resolved_Adb_For_Server_Status_Command()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost(CreateScreenState(timeProvider.GetUtcNow(), "Sign in"));
+        host.AdbServerStatusResults.Enqueue(CreateAdbDiagnostic("server-status", ["server-status"], exitCode: 1, stderr: "adb server did not ACK"));
+        var doctor = new FakeViewDoctor(options => new ViewDoctorResult(
+            true,
+            options.PresetName,
+            options,
+            [],
+            null,
+            [new ViewDoctorCheck("decoder", true, "FFmpeg native decoder is ready.")]));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            TimeProvider = timeProvider,
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            ViewDoctorFactory = new FakeViewDoctorFactory(doctor)
+        });
+
+        var exitCode = await app.RunAsync([
+            "doctor",
+            "--device", "192.168.0.134:5555",
+            "--adb", "/opt/android platform-tools/adb"]);
+
+        using var envelope = console.ParseSingleOutputAsJson();
+        Assert.Equal(1, exitCode);
+        const string expectedCommand = "\"/opt/android platform-tools/adb\" start-server";
+        var data = envelope.RootElement.GetProperty("data");
+        var readinessPlan = data.GetProperty("readiness_plan");
+        var adbBlocker = Assert.Single(
+            readinessPlan.GetProperty("blockers").EnumerateArray(),
+            blocker => blocker.GetProperty("name").GetString() == "adb_server_status");
+        Assert.Equal(expectedCommand, adbBlocker.GetProperty("command").GetString());
+        Assert.Contains(expectedCommand, adbBlocker.GetProperty("recommendation").GetString(), StringComparison.Ordinal);
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "resolve_adb_server_status" &&
+            command.GetProperty("command").GetString() == expectedCommand);
+    }
+
+    [Fact]
     public async Task RunAsync_Doctor_ReadinessPlan_Preserves_View_Options_For_Blocker_Commands()
     {
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));

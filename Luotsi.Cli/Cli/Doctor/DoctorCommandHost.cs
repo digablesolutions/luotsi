@@ -33,6 +33,7 @@ internal sealed class DoctorCommandHost(
         var fix = options.HasFlag("fix");
         var package = options.Get("package");
         var viewOptions = BuildViewOptions(options, adbExecutable);
+        var adbStartServerCommand = BuildAdbStartServerCommand(viewOptions.AdbExecutable);
 
         var checks = new List<DoctorCheck>();
         var repairSteps = new List<ViewSetupStep>();
@@ -42,7 +43,7 @@ internal sealed class DoctorCommandHost(
             "adb_server_status",
             "ADB server is ready.",
             "ADB server is not ready.",
-            "Run `adb start-server` or point Luotsi at a working adb binary with --adb or LUOTSI_ADB.",
+            $"Run `{adbStartServerCommand}` or point Luotsi at a working adb binary with --adb or LUOTSI_ADB.",
             adbHost.GetAdbServerStatusAsync).ConfigureAwait(false);
         await AddAdbCheckAsync(
             checks,
@@ -76,7 +77,7 @@ internal sealed class DoctorCommandHost(
         }
 
         var ready = checks.All(static check => check.Ok) && viewReport.Ready;
-        var readinessPlan = BuildReadinessPlan(options, viewOptions, package, fix, checks, viewReport, repairSteps, ready);
+        var readinessPlan = BuildReadinessPlan(options, viewOptions, adbStartServerCommand, package, fix, checks, viewReport, repairSteps, ready);
         var result = new DoctorResult(
             ready,
             fix,
@@ -95,6 +96,7 @@ internal sealed class DoctorCommandHost(
     private static DoctorReadinessPlan BuildReadinessPlan(
         CliOptions options,
         ViewOptions viewOptions,
+        string adbStartServerCommand,
         string? package,
         bool fix,
         IReadOnlyList<DoctorCheck> checks,
@@ -123,7 +125,7 @@ internal sealed class DoctorCommandHost(
                 check.Name,
                 check.Summary,
                 check.Recommendation,
-                ResolveDoctorCheckCommand(check.Name, doctorFixCommand, preflightCommand))));
+                ResolveDoctorCheckCommand(check.Name, doctorFixCommand, preflightCommand, adbStartServerCommand))));
         blockers.AddRange(viewReport.Checks
             .Where(static check => !check.Ok)
             .Select(check => new DoctorReadinessBlocker(
@@ -169,12 +171,9 @@ internal sealed class DoctorCommandHost(
                 AddRecommendedCommand(recommendedCommands, "doctor_fix", "Apply Luotsi-owned setup fixes and rerun readiness checks.", doctorFixCommand);
             }
 
-            foreach (var blocker in blockers)
+            foreach (var blocker in blockers.Where(static blocker => !string.IsNullOrWhiteSpace(blocker.Command)))
             {
-                if (!string.IsNullOrWhiteSpace(blocker.Command))
-                {
-                    AddRecommendedCommand(recommendedCommands, $"resolve_{blocker.Name}", $"Resolve blocker: {blocker.Summary}", blocker.Command);
-                }
+                AddRecommendedCommand(recommendedCommands, $"resolve_{blocker.Name}", $"Resolve blocker: {blocker.Summary}", blocker.Command!);
             }
 
             AddRecommendedCommand(recommendedCommands, "doctor_rerun", "Rerun the first-run readiness report after applying fixes.", doctorCommand);
@@ -196,13 +195,16 @@ internal sealed class DoctorCommandHost(
             recommendedCommands);
     }
 
-    private static string? ResolveDoctorCheckCommand(string checkName, string doctorFixCommand, string preflightCommand) =>
+    private static string? ResolveDoctorCheckCommand(string checkName, string doctorFixCommand, string preflightCommand, string adbStartServerCommand) =>
         checkName switch
         {
-            "adb_server_status" => "adb start-server",
+            "adb_server_status" => adbStartServerCommand,
             "package_preflight" => preflightCommand,
             _ => doctorFixCommand
         };
+
+    private static string BuildAdbStartServerCommand(string adbExecutable) =>
+        $"{Quote(string.IsNullOrWhiteSpace(adbExecutable) ? "adb" : adbExecutable)} start-server";
 
     private static string? ResolveViewCheckCommand(string checkName, string doctorFixCommand, string viewDoctorCommand, string viewSetupCommand, string viewCommand) =>
         checkName switch
