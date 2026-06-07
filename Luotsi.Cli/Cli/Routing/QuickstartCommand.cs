@@ -106,9 +106,10 @@ internal static class QuickstartCommand
                 "Check the CI command shape before using a lab device.",
                 $"luotsi run --path {scenarioPathValue} {deviceFlag} {packageFlag} --dry-run"),
             new QuickstartRecommendedCommandResult(
+            new QuickstartRecommendedCommandResult(
                 "replay",
                 "Reopen the latest local artifact bundle instead of rerunning the device session.",
-                "luotsi replay open --last --artifacts artifacts --dry-run")
+                $"luotsi replay open --last --artifacts {Quote(artifacts)} --dry-run")
         };
 
         return new QuickstartResult(
