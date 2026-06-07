@@ -1,6 +1,6 @@
 # `luotsi-artifact-package.v1`
 
-`luotsi-artifact-package.json` is the manifest embedded at the root of every `luotsi artifacts pack` zip. It is the durable handoff contract for replayable artifact packages. Use `luotsi artifacts verify <artifact.zip>` to validate the manifest, archive entries, SHA-256, and redaction status without extracting the package.
+`luotsi-artifact-package.json` is the manifest embedded at the root of every `luotsi artifacts pack` zip. It is the durable handoff contract for replayable artifact packages. Use `luotsi artifacts verify <artifact.zip>` to validate the manifest, archive entries, SHA-256, and redaction status without extracting the package. Use `luotsi artifacts verify <artifact.zip> --require-lab-safe` when support or CI must reject unredacted packages before unpacking.
 
 ## Top-level fields
 
@@ -92,6 +92,7 @@ Each `recommended_commands` item is an object with:
 
 - Unknown fields must be ignored.
 - Missing `redaction` means the package was created before redaction metadata existed or with the default exact-copy policy.
+- `artifacts verify --require-lab-safe` treats missing `redaction` or any non-`lab-safe` mode as a blocked handoff gate and exits non-zero while still reporting manifest/SHA details.
 - Missing `luotsi-artifact-package.json` is invalid for supported packages and `artifacts verify` / `artifacts unpack` fail with a usage error.
 - Invalid manifest JSON or missing required fields must fail verify/unpack validation early with a clear usage error.
 - New manifest revisions should use a new `schema` value rather than changing the meaning of existing required fields in place.

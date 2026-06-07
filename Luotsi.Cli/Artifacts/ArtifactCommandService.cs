@@ -177,7 +177,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             CreatePackRecommendedCommands(artifactRoot, outputPath, labSafeOutputPath, redactionPolicy));
     }
 
-    public async Task<ArtifactVerifyResult> VerifyAsync(string packagePath, string? output)
+    public async Task<ArtifactVerifyResult> VerifyAsync(string packagePath, string? output, bool requireLabSafe)
     {
         if (string.IsNullOrWhiteSpace(packagePath))
         {
@@ -192,22 +192,23 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         var outputDirectory = ResolveUnpackOutputPath(packagePath, output);
         var packageManifest = ReadPackageManifest(packagePath);
         var entries = ValidateArtifactPackage(packagePath, outputDirectory, force: true, packageManifest);
+        var shareSafety = ResolveShareSafety(packageManifest);
+        var blockers = ResolveVerifyBlockers(shareSafety, requireLabSafe);
+        var status = blockers.Count > 0 ? "blocked" : "valid";
         var unpackForce = _fileSystem.DirectoryExists(outputDirectory) ? " --force" : string.Empty;
         var unpackCommand = $"luotsi artifacts unpack {Quote(packagePath)} --output {Quote(outputDirectory)}{unpackForce}";
         return new ArtifactVerifyResult(
             packagePath,
-            "valid",
+            status,
             entries,
             outputDirectory,
             PackageManifestFileName,
             packageManifest,
             await ComputeSha256Async(packagePath).ConfigureAwait(false),
-            ResolveShareSafety(packageManifest),
-            [
-                new ArtifactRecommendedCommandResult("unpack_artifacts", "Restore this verified package locally for review or replay.", unpackCommand),
-                new ArtifactRecommendedCommandResult("info_artifacts", "Inspect the restored artifact root after unpacking.", $"luotsi artifacts info {Quote(outputDirectory)}"),
-                new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench after unpacking.", $"luotsi replay open --artifacts {Quote(outputDirectory)}")
-            ]);
+            shareSafety,
+            requireLabSafe,
+            blockers,
+            CreateVerifyRecommendedCommands(packagePath, outputDirectory, unpackCommand, status));
     }
 
     public async Task<ArtifactUnpackResult> UnpackAsync(string packagePath, string? output, bool force, bool dryRun)
@@ -818,9 +819,15 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
 
     private static IReadOnlyList<ArtifactRecommendedCommandResult> CreatePackRecommendedCommands(string artifactRoot, string outputPath, string labSafeOutputPath, string redactionMode)
     {
+        var verifyCommand = $"luotsi artifacts verify {Quote(outputPath)}";
+        if (string.Equals(redactionMode, RedactionModeLabSafe, StringComparison.Ordinal))
+        {
+            verifyCommand += " --require-lab-safe";
+        }
+
         var commands = new List<ArtifactRecommendedCommandResult>
         {
-            new("verify_artifacts", "Validate this package before handoff or restore.", $"luotsi artifacts verify {Quote(outputPath)}"),
+            new("verify_artifacts", "Validate this package before handoff or restore.", verifyCommand),
             new("unpack_artifacts", "Restore this package locally for review or replay.", $"luotsi artifacts unpack {Quote(outputPath)} --output {Quote(ResolveUnpackOutputPath(outputPath, null))}")
         };
 
@@ -838,6 +845,39 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         string.Equals(manifest.Redaction?.Mode, RedactionModeLabSafe, StringComparison.Ordinal)
             ? "lab_safe"
             : "not_redacted";
+
+    private static IReadOnlyList<string> ResolveVerifyBlockers(string shareSafety, bool requireLabSafe)
+    {
+        if (!requireLabSafe || string.Equals(shareSafety, "lab_safe", StringComparison.Ordinal))
+        {
+            return [];
+        }
+
+        return ["Package was not packed with --redact lab-safe."];
+    }
+
+    private static IReadOnlyList<ArtifactRecommendedCommandResult> CreateVerifyRecommendedCommands(
+        string packagePath,
+        string outputDirectory,
+        string unpackCommand,
+        string status)
+    {
+        if (string.Equals(status, "blocked", StringComparison.Ordinal))
+        {
+            return
+            [
+                new("pack_artifacts_lab_safe", "Ask the sender to create a lab-safe redacted artifact package.", "luotsi artifacts pack <artifact-root-or-run-id> --output <artifact-lab-safe.zip> --redact lab-safe"),
+                new("verify_artifacts_lab_safe", "Re-run the lab-safe handoff gate before unpacking.", $"luotsi artifacts verify {Quote(packagePath)} --require-lab-safe")
+            ];
+        }
+
+        return
+        [
+            new ArtifactRecommendedCommandResult("unpack_artifacts", "Restore this verified package locally for review or replay.", unpackCommand),
+            new ArtifactRecommendedCommandResult("info_artifacts", "Inspect the restored artifact root after unpacking.", $"luotsi artifacts info {Quote(outputDirectory)}"),
+            new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench after unpacking.", $"luotsi replay open --artifacts {Quote(outputDirectory)}")
+        ];
+    }
 
     private static string ResolveLabSafeOutputPath(string outputPath)
     {
@@ -958,6 +998,8 @@ internal sealed record ArtifactVerifyResult(
     ArtifactPackageManifestResult Manifest,
     string Sha256,
     string ShareSafety,
+    bool LabSafeRequired,
+    IReadOnlyList<string> Blockers,
     IReadOnlyList<ArtifactRecommendedCommandResult> RecommendedCommands);
 
 internal sealed record ArtifactUnpackResult(
