@@ -126,6 +126,7 @@ public sealed partial class AppTests
         Assert.Contains("luotsi artifacts pack <artifact-root-or-run-id>", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("[--redact lab-safe|off]", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi artifacts verify <artifact.zip>", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("[--require-lab-safe]", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi artifacts unpack <artifact.zip>", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi-artifact-package.json", console.ErrorLines[0], StringComparison.Ordinal);
     }
@@ -4840,6 +4841,9 @@ public sealed partial class AppTests
         Assert.Equal(3, redaction.GetProperty("text_file_count").GetInt32());
         Assert.Equal(2, redaction.GetProperty("redacted_file_count").GetInt32());
         Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "verify_artifacts" &&
+            command.GetProperty("command").GetString() == $"luotsi artifacts verify {output} --require-lab-safe");
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
             command.GetProperty("kind").GetString() == "unpack_artifacts");
 
         Assert.Contains("secret-session-token", await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "session-timeline.jsonl")), StringComparison.Ordinal);
@@ -4966,6 +4970,8 @@ public sealed partial class AppTests
         Assert.Equal("20260526-120000-run", data.GetProperty("manifest").GetProperty("run_id").GetString());
         Assert.Equal("lab-safe", data.GetProperty("manifest").GetProperty("redaction").GetProperty("mode").GetString());
         Assert.Equal("lab_safe", data.GetProperty("share_safety").GetString());
+        Assert.False(data.GetProperty("lab_safe_required").GetBoolean());
+        Assert.Empty(data.GetProperty("blockers").EnumerateArray());
         Assert.Matches("^[0-9a-f]{64}$", data.GetProperty("sha256").GetString());
         Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
             command.GetProperty("kind").GetString() == "unpack_artifacts" &&
@@ -5003,9 +5009,88 @@ public sealed partial class AppTests
         Assert.Equal(0, exitCode);
         var data = envelope.RootElement.GetProperty("data");
         Assert.Equal("valid", data.GetProperty("status").GetString());
+        Assert.Equal("not_redacted", data.GetProperty("share_safety").GetString());
+        Assert.False(data.GetProperty("lab_safe_required").GetBoolean());
+        Assert.Empty(data.GetProperty("blockers").EnumerateArray());
         Assert.Equal(suggestedOutput, data.GetProperty("suggested_output_directory").GetString());
         Assert.Equal("existing local index", await fileSystem.ReadAllTextAsync(existingIndex));
         Assert.False(fileSystem.FileExists(Path.Join(suggestedOutput, "session-timeline.jsonl")));
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsVerify_RequireLabSafe_Blocks_Unredacted_Package()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var replayRoot = "/tmp/luotsi/20260526-120000-run";
+        var packagePath = "/tmp/share/replay.zip";
+        var suggestedOutput = Path.Join(Path.GetDirectoryName(Path.GetFullPath(packagePath)), Path.GetFileNameWithoutExtension(packagePath));
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "index.html"), "<!doctype html>");
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), "{\"token\":\"handoff-secret\"}");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        Assert.Equal(0, await app.RunAsync(["artifacts", "pack", replayRoot, "--output", packagePath]));
+        console.OutputLines.Clear();
+        console.ErrorLines.Clear();
+
+        var exitCode = await app.RunAsync(["artifacts", "verify", packagePath, "--require-lab-safe"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(1, exitCode);
+        Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("blocked", data.GetProperty("status").GetString());
+        Assert.Equal("not_redacted", data.GetProperty("share_safety").GetString());
+        Assert.True(data.GetProperty("lab_safe_required").GetBoolean());
+        Assert.Contains(data.GetProperty("blockers").EnumerateArray(), blocker =>
+            blocker.GetString() == "Package was not packed with --redact lab-safe.");
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "pack_artifacts_lab_safe");
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "verify_artifacts_lab_safe" &&
+            command.GetProperty("command").GetString() == $"luotsi artifacts verify {packagePath} --require-lab-safe");
+        Assert.DoesNotContain(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "unpack_artifacts");
+        Assert.False(fileSystem.DirectoryExists(suggestedOutput));
+        Assert.False(fileSystem.FileExists(Path.Join(suggestedOutput, "index.html")));
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsVerify_RequireLabSafe_Passes_LabSafe_Package()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var replayRoot = "/tmp/luotsi/20260526-120000-run";
+        var packagePath = "/tmp/share/replay-lab-safe.zip";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "index.html"), "<!doctype html>");
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), "{\"token\":\"handoff-secret\"}");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        Assert.Equal(0, await app.RunAsync(["artifacts", "pack", replayRoot, "--output", packagePath, "--redact", "lab-safe"]));
+        console.OutputLines.Clear();
+        console.ErrorLines.Clear();
+
+        var exitCode = await app.RunAsync(["artifacts", "verify", packagePath, "--require-lab-safe"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("valid", data.GetProperty("status").GetString());
+        Assert.Equal("lab_safe", data.GetProperty("share_safety").GetString());
+        Assert.True(data.GetProperty("lab_safe_required").GetBoolean());
+        Assert.Empty(data.GetProperty("blockers").EnumerateArray());
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "unpack_artifacts");
     }
 
     [Fact]

@@ -86,6 +86,7 @@ public sealed partial class AppTests
         Assert.Contains("luotsi-artifact-package.json", markdown, StringComparison.Ordinal);
         Assert.Contains("artifacts pack", markdown, StringComparison.Ordinal);
         Assert.Contains("artifacts verify", markdown, StringComparison.Ordinal);
+        Assert.Contains("--require-lab-safe", markdown, StringComparison.Ordinal);
         Assert.Contains("artifacts unpack", markdown, StringComparison.Ordinal);
         Assert.Contains("artifacts open --last", markdown, StringComparison.Ordinal);
         Assert.Contains("replay open --last", markdown, StringComparison.Ordinal);
@@ -117,6 +118,7 @@ public sealed partial class AppTests
         Assert.Contains("luotsi-artifact-package.json", markdown, StringComparison.Ordinal);
         Assert.Contains("artifacts info", markdown, StringComparison.Ordinal);
         Assert.Contains("artifacts verify", markdown, StringComparison.Ordinal);
+        Assert.Contains("--require-lab-safe", markdown, StringComparison.Ordinal);
         Assert.Contains("artifacts open --last", markdown, StringComparison.Ordinal);
         Assert.Contains("replay open --last", markdown, StringComparison.Ordinal);
     }

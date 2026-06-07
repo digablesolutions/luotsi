@@ -57,7 +57,7 @@ Usage:
   luotsi artifacts info (<artifact-root-or-run-id> | --last [--artifacts <directory>])
   luotsi artifacts open (<artifact-root-or-run-id> | --last [--artifacts <directory>]) [--dry-run]
   luotsi artifacts pack <artifact-root-or-run-id> [--output <file.zip>] [--force] [--dry-run] [--redact lab-safe|off]
-  luotsi artifacts verify <artifact.zip> [--output <directory>]
+  luotsi artifacts verify <artifact.zip> [--output <directory>] [--require-lab-safe]
   luotsi artifacts unpack <artifact.zip> [--output <directory>] [--force] [--dry-run]
   luotsi run --path scenarios --report-json results.json --report-junit junit.xml
   luotsi run --path scenarios --events-jsonl events.jsonl
@@ -74,6 +74,9 @@ Artifacts:
   artifacts verify validates a package manifest and archive entries, reports
   SHA-256 and lab-safe redaction status, and returns exact unpack commands
   without writing files.
+  Add --require-lab-safe to make verify an enforcing handoff gate: packages
+  that were not packed with --redact lab-safe return blocked status and a
+  non-zero exit code before anyone unpacks them.
   By default packages are exact copies. Use --redact lab-safe to redact
   obvious secrets from text-like zip entries while leaving source artifacts
   and binary media unchanged; the manifest records the redaction policy used.
@@ -100,7 +103,7 @@ Examples:
   luotsi artifacts pack artifacts/20260518-100000-run --output replay.zip --dry-run
   luotsi artifacts pack artifacts/20260518-100000-run --output replay.zip
   luotsi artifacts pack artifacts/20260518-100000-run --output replay-lab-safe.zip --redact lab-safe
-  luotsi artifacts verify replay-lab-safe.zip
+  luotsi artifacts verify replay-lab-safe.zip --require-lab-safe
   luotsi artifacts unpack replay.zip --output artifacts/replay --dry-run
 """,
         ["inspect"] = """
@@ -720,7 +723,7 @@ Command groups:
     artifacts info (<artifact-root-or-run-id> | --last [--artifacts <directory>])
     artifacts open (<artifact-root-or-run-id> | --last [--artifacts <directory>]) [--dry-run]
     artifacts pack <artifact-root-or-run-id> [--output <file.zip>] [--force] [--dry-run] [--redact lab-safe|off]
-    artifacts verify <artifact.zip> [--output <directory>]
+    artifacts verify <artifact.zip> [--output <directory>] [--require-lab-safe]
     artifacts unpack <artifact.zip> [--output <directory>] [--force] [--dry-run]
     replay summarize --artifacts <artifact-root> [--format json|jsonl]
     replay capsule --artifacts <artifact-root> [--write-readme] [--write-json]

@@ -29,7 +29,7 @@ internal sealed class ArtifactCommandHost(
         };
 
         _envelopeWriter.WriteSuccess(options.Command!, started, data, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
-        return 0;
+        return data is ArtifactVerifyResult { Status: "blocked" } ? 1 : 0;
     }
 
     private Task<ArtifactListResult> ListAsync(CliOptions options) =>
@@ -56,7 +56,7 @@ internal sealed class ArtifactCommandHost(
     private Task<ArtifactVerifyResult> VerifyAsync(CliOptions options)
     {
         var target = RequireTarget(options, "verify", "<artifact.zip>");
-        return _artifactCommandService.VerifyAsync(target, options.Get("output"));
+        return _artifactCommandService.VerifyAsync(target, options.Get("output"), options.HasFlag("require-lab-safe"));
     }
 
     private Task<ArtifactUnpackResult> UnpackAsync(CliOptions options)
