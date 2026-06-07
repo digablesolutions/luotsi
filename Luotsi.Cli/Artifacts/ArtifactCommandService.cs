@@ -248,10 +248,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             throw new UsageException($"Artifact unpack output '{outputDirectory}' already exists. Use --force to write into it.");
         }
 
-        var sha256 = await ComputeSha256Async(packagePath).ConfigureAwait(false);
-        var verification = VerifyPackageSha256(packagePath, normalizedExpectedSha256, sha256);
         var packageManifest = ReadPackageManifest(packagePath);
-        var entries = ValidateArtifactPackage(packagePath, outputDirectory, force, packageManifest);
         var shareSafety = ResolveShareSafety(packageManifest);
         var blockers = ResolveVerifyBlockers(shareSafety, requireLabSafe);
         if (blockers.Count > 0)
@@ -259,6 +256,9 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             throw new UsageException($"Artifact package '{packagePath}' is not lab-safe. {blockers[0]}");
         }
 
+        var sha256 = await ComputeSha256Async(packagePath).ConfigureAwait(false);
+        var verification = VerifyPackageSha256(packagePath, normalizedExpectedSha256, sha256);
+        var entries = ValidateArtifactPackage(packagePath, outputDirectory, force, packageManifest);
         var manifestOutputPath = Path.Join(outputDirectory, PackageManifestFileName);
         string? indexPath = null;
         if (!dryRun)
