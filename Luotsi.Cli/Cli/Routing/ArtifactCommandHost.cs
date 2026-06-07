@@ -62,7 +62,7 @@ internal sealed class ArtifactCommandHost(
     private Task<ArtifactUnpackResult> UnpackAsync(CliOptions options)
     {
         var target = RequireTarget(options, "unpack", "<artifact.zip>");
-        return _artifactCommandService.UnpackAsync(target, options.Get("output"), options.HasFlag("force"), options.HasFlag("dry-run"), options.Get("sha256"));
+        return _artifactCommandService.UnpackAsync(target, options.Get("output"), options.HasFlag("force"), options.HasFlag("dry-run"), options.HasFlag("require-lab-safe"), options.Get("sha256"));
     }
 
     private static string RequireTarget(CliOptions options, string subcommand, string argumentName)
