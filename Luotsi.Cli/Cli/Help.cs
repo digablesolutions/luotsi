@@ -58,7 +58,7 @@ Usage:
   luotsi artifacts open (<artifact-root-or-run-id> | --last [--artifacts <directory>]) [--dry-run]
   luotsi artifacts pack <artifact-root-or-run-id> [--output <file.zip>] [--force] [--dry-run] [--redact lab-safe|off]
   luotsi artifacts verify <artifact.zip> [--output <directory>] [--require-lab-safe]
-  luotsi artifacts unpack <artifact.zip> [--output <directory>] [--force] [--dry-run] [--sha256 <digest>]
+  luotsi artifacts unpack <artifact.zip> [--output <directory>] [--force] [--dry-run] [--require-lab-safe] [--sha256 <digest>]
   luotsi run --path scenarios --report-json results.json --report-junit junit.xml
   luotsi run --path scenarios --events-jsonl events.jsonl
 
@@ -77,9 +77,9 @@ Artifacts:
   artifacts verify validates a package manifest and archive entries, reports
   SHA-256 and lab-safe redaction status, and returns exact unpack commands
   without writing files.
-  Add --require-lab-safe to make verify an enforcing handoff gate: packages
-  that were not packed with --redact lab-safe return blocked status and a
-  non-zero exit code before anyone unpacks them.
+  Add --require-lab-safe to make verify or unpack an enforcing handoff gate:
+  packages that were not packed with --redact lab-safe return blocked status
+  for verify or a usage error for unpack before any files are extracted.
   By default packages are exact copies. Use --redact lab-safe to redact
   obvious secrets from text-like zip entries while leaving source artifacts
   and binary media unchanged; the manifest records the redaction policy used.
@@ -88,8 +88,9 @@ Artifacts:
   artifacts unpack extracts a zip into a local artifact root with zip-slip
   protection, requires luotsi-artifact-package.json, refreshes index.html for
   non-dry-run restores, and reports the manifest plus SHA-256 before you open
-  or replay it. Use --sha256 <digest> to require an expected package checksum
-  before any files are extracted.
+  or replay it. Use --require-lab-safe to reject unredacted packages and
+  --sha256 <digest> to require an expected package checksum before any files
+  are extracted.
   artifacts info/open also accept --last so you can jump straight back to the
   latest run artifact root under the default Luotsi run-artifact home or
   --artifacts <directory>.
@@ -109,7 +110,7 @@ Examples:
   luotsi artifacts pack artifacts/20260518-100000-run --output replay.zip
   luotsi artifacts pack artifacts/20260518-100000-run --output replay-lab-safe.zip --redact lab-safe
   luotsi artifacts verify replay-lab-safe.zip --require-lab-safe
-  luotsi artifacts unpack replay.zip --output artifacts/replay --sha256 <digest>
+  luotsi artifacts unpack replay-lab-safe.zip --output artifacts/replay --require-lab-safe --sha256 <digest>
   luotsi artifacts unpack replay.zip --output artifacts/replay --dry-run
 """,
         ["inspect"] = """
@@ -730,7 +731,7 @@ Command groups:
     artifacts open (<artifact-root-or-run-id> | --last [--artifacts <directory>]) [--dry-run]
     artifacts pack <artifact-root-or-run-id> [--output <file.zip>] [--force] [--dry-run] [--redact lab-safe|off]
     artifacts verify <artifact.zip> [--output <directory>] [--require-lab-safe]
-    artifacts unpack <artifact.zip> [--output <directory>] [--force] [--dry-run] [--sha256 <digest>]
+    artifacts unpack <artifact.zip> [--output <directory>] [--force] [--dry-run] [--require-lab-safe] [--sha256 <digest>]
     replay summarize --artifacts <artifact-root> [--format json|jsonl]
     replay capsule --artifacts <artifact-root> [--write-readme] [--write-json]
     replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]

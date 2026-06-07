@@ -27,7 +27,7 @@ luotsi artifacts pack ./artifacts/my-run --output my-run.zip
 luotsi artifacts pack ./artifacts/my-run --output my-run-lab-safe.zip --redact lab-safe
 luotsi artifacts verify my-run-lab-safe.zip --require-lab-safe
 luotsi artifacts info my-run-lab-safe.zip
-luotsi artifacts unpack my-run-lab-safe.zip --output ./artifacts/my-run --sha256 <digest>
+luotsi artifacts unpack my-run-lab-safe.zip --output ./artifacts/my-run --require-lab-safe --sha256 <digest>
 luotsi replay summarize --artifacts ./artifacts/my-run
 luotsi replay capsule --artifacts ./artifacts/my-run --write-readme --write-json
 luotsi replay timeline --artifacts ./artifacts/my-run --failures
@@ -53,7 +53,7 @@ luotsi replay open --last --artifacts ./artifacts
 - `replay capsule`: compact manifest with primary failure reopen command, failure timeline with exact reopen commands, existing scenario draft artifacts and summary counts, ready draft run handoff, artifact manifest, and suggested next commands
 - `replay scenario-draft`: turn inspect or replay actions into a conservative starter scenario
 
-`artifacts pack` writes `luotsi-artifact-package.json` into the zip with the run id, created timestamp, category counts, and recommended reopen commands. By default the package is an exact copy; `--redact lab-safe` redacts obvious secrets from text-like zip entries, leaves source artifacts and binary media unchanged, and records redaction counts in the manifest. Successful pack results recommend unpacking with `--sha256`. `artifacts verify` validates the manifest and archive entries without extracting the package, reports SHA-256 plus `share_safety`, and returns exact unpack/replay commands. With `--require-lab-safe`, unredacted packages return `status: blocked`, blockers, repair commands, and exit code 1 before unpacking. `artifacts info <package.zip>` offers the same non-mutating package intake through the existing info workflow. `artifacts unpack` requires that manifest, rejects `--sha256` mismatches before writing files, reports the manifest back in the result, and both pack and unpack support `--dry-run` when you want to validate the handoff without writing files yet.
+`artifacts pack` writes `luotsi-artifact-package.json` into the zip with the run id, created timestamp, category counts, and recommended reopen commands. By default the package is an exact copy; `--redact lab-safe` redacts obvious secrets from text-like zip entries, leaves source artifacts and binary media unchanged, and records redaction counts in the manifest. Successful pack results recommend unpacking with `--sha256`; lab-safe packages also carry `--require-lab-safe` into handoff commands. `artifacts verify` validates the manifest and archive entries without extracting the package, reports SHA-256 plus `share_safety`, and returns exact unpack/replay commands. With `--require-lab-safe`, unredacted packages return `status: blocked`, blockers, repair commands, and exit code 1 before unpacking. `artifacts info <package.zip>` offers the same non-mutating package intake through the existing info workflow. `artifacts unpack` requires that manifest, rejects `--require-lab-safe` failures and `--sha256` mismatches before writing files, reports the manifest back in the result, and both pack and unpack support `--dry-run` when you want to validate the handoff without writing files yet.
 
 ## Newer semantic triage helpers
 
