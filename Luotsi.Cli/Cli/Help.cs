@@ -54,11 +54,11 @@ Luotsi help: artifacts
 Usage:
   luotsi <command> --artifacts <directory>
   luotsi artifacts list [--artifacts <directory>] [--limit 20]
-  luotsi artifacts info (<artifact-root-or-run-id> | --last [--artifacts <directory>])
+  luotsi artifacts info (<artifact-root-or-run-id-or-package.zip> | --last [--artifacts <directory>])
   luotsi artifacts open (<artifact-root-or-run-id> | --last [--artifacts <directory>]) [--dry-run]
   luotsi artifacts pack <artifact-root-or-run-id> [--output <file.zip>] [--force] [--dry-run] [--redact lab-safe|off]
   luotsi artifacts verify <artifact.zip> [--output <directory>] [--require-lab-safe]
-  luotsi artifacts unpack <artifact.zip> [--output <directory>] [--force] [--dry-run]
+  luotsi artifacts unpack <artifact.zip> [--output <directory>] [--force] [--dry-run] [--sha256 <digest>]
   luotsi run --path scenarios --report-json results.json --report-junit junit.xml
   luotsi run --path scenarios --events-jsonl events.jsonl
 
@@ -69,6 +69,9 @@ Artifacts:
   artifacts list shows recent artifact roots and their run ids. artifacts open
   refreshes the index if needed and opens the local browser or file manager.
   artifacts info summarizes one artifact root without opening or changing it.
+  When the target is a packed artifact zip, it validates the package manifest,
+  reports redaction metadata and SHA-256, and suggests unpack/replay commands
+  without extracting files.
   artifacts pack writes a zip suitable for sharing or CI upload, embeds
   luotsi-artifact-package.json, and reports SHA-256 for handoff verification.
   artifacts verify validates a package manifest and archive entries, reports
@@ -85,7 +88,8 @@ Artifacts:
   artifacts unpack extracts a zip into a local artifact root with zip-slip
   protection, requires luotsi-artifact-package.json, refreshes index.html for
   non-dry-run restores, and reports the manifest plus SHA-256 before you open
-  or replay it.
+  or replay it. Use --sha256 <digest> to require an expected package checksum
+  before any files are extracted.
   artifacts info/open also accept --last so you can jump straight back to the
   latest run artifact root under the default Luotsi run-artifact home or
   --artifacts <directory>.
@@ -97,6 +101,7 @@ Examples:
   luotsi run --path scenarios --device emulator-5554 --artifacts artifacts --report-junit junit.xml
   luotsi artifacts list --artifacts artifacts
   luotsi artifacts info 20260518-100000-run --artifacts artifacts
+  luotsi artifacts info replay-lab-safe.zip
   luotsi artifacts open artifacts/20260518-100000-run
   luotsi artifacts open 20260518-100000-run --artifacts artifacts
   luotsi artifacts open --last --artifacts artifacts
@@ -104,6 +109,7 @@ Examples:
   luotsi artifacts pack artifacts/20260518-100000-run --output replay.zip
   luotsi artifacts pack artifacts/20260518-100000-run --output replay-lab-safe.zip --redact lab-safe
   luotsi artifacts verify replay-lab-safe.zip --require-lab-safe
+  luotsi artifacts unpack replay.zip --output artifacts/replay --sha256 <digest>
   luotsi artifacts unpack replay.zip --output artifacts/replay --dry-run
 """,
         ["inspect"] = """
@@ -720,11 +726,11 @@ Command groups:
 
   Artifact replay and triage
     artifacts list [--artifacts <directory>] [--limit 20]
-    artifacts info (<artifact-root-or-run-id> | --last [--artifacts <directory>])
+    artifacts info (<artifact-root-or-run-id-or-package.zip> | --last [--artifacts <directory>])
     artifacts open (<artifact-root-or-run-id> | --last [--artifacts <directory>]) [--dry-run]
     artifacts pack <artifact-root-or-run-id> [--output <file.zip>] [--force] [--dry-run] [--redact lab-safe|off]
     artifacts verify <artifact.zip> [--output <directory>] [--require-lab-safe]
-    artifacts unpack <artifact.zip> [--output <directory>] [--force] [--dry-run]
+    artifacts unpack <artifact.zip> [--output <directory>] [--force] [--dry-run] [--sha256 <digest>]
     replay summarize --artifacts <artifact-root> [--format json|jsonl]
     replay capsule --artifacts <artifact-root> [--write-readme] [--write-json]
     replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
