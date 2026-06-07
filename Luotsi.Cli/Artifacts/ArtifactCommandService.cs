@@ -19,6 +19,8 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
     private const string RedactionModeOff = "off";
     private const string RedactionModeLabSafe = "lab-safe";
 
+    private static readonly Regex Sha256Pattern = new("^[A-Fa-f0-9]{64}$", RegexOptions.Compiled);
+
     private static readonly Regex QuotedSecretValuePattern = new(
         """(?i)(["']?)(token|secret|password|api[_-]?key|apikey)(["']?\s*[:=]\s*)(["'])([^"']*)(["'])""",
         RegexOptions.Compiled);
@@ -102,13 +104,26 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             ]));
     }
 
-    public Task<ArtifactInfoResult> InfoAsync(string? target, string? searchRoot, bool useLast)
+    public async Task<object> InfoAsync(string? target, string? searchRoot, bool useLast)
     {
+        if (!useLast && LooksLikePackageTarget(target) && !_fileSystem.DirectoryExists(target!))
+        {
+            if (_fileSystem.FileExists(target!))
+            {
+                return await CreatePackageInfoAsync(target!).ConfigureAwait(false);
+            }
+
+            if (IsExplicitPath(target!))
+            {
+                throw new UsageException($"Artifact package '{target}' does not exist.");
+            }
+        }
+
         var artifactRoot = useLast
             ? ArtifactRootResolver.ResolveLatestArtifactRoot(_fileSystem, searchRoot, _environment, preferWorkspaceHome: true)
             : ArtifactRootResolver.ResolveArtifactRoot(_fileSystem, target!, searchRoot, _environment, preferWorkspaceHome: true);
         var files = GetArtifactFiles(artifactRoot);
-        return Task.FromResult(new ArtifactInfoResult(
+        return new ArtifactInfoResult(
             Path.GetFileName(Path.GetFullPath(artifactRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
             artifactRoot,
             files.Length,
@@ -123,7 +138,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
                 new ArtifactRecommendedCommandResult("pack_artifacts", "Pack this artifact root for sharing or CI upload.", $"luotsi artifacts pack {Quote(artifactRoot)}"),
                 new ArtifactRecommendedCommandResult("pack_artifacts_lab_safe", "Pack a lab-safe redacted copy for support, CI, or agents.", $"luotsi artifacts pack {Quote(artifactRoot)} --redact lab-safe"),
                 new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench for this artifact root.", $"luotsi replay open --artifacts {Quote(artifactRoot)}")
-            ]));
+            ]);
     }
 
     public async Task<ArtifactPackResult> PackAsync(string target, string? searchRoot, string? output, bool force, bool dryRun, string? redactionMode)
@@ -166,6 +181,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         }
 
         await PackArtifactRootAsync(artifactRoot, outputPath, sourceFiles, manifest, force, redactionPolicy).ConfigureAwait(false);
+        var sha256 = await ComputeSha256Async(outputPath).ConfigureAwait(false);
         return new ArtifactPackResult(
             artifactRoot,
             outputPath,
@@ -173,8 +189,8 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             dryRun,
             PackageManifestFileName,
             manifest,
-            await ComputeSha256Async(outputPath).ConfigureAwait(false),
-            CreatePackRecommendedCommands(artifactRoot, outputPath, labSafeOutputPath, redactionPolicy));
+            sha256,
+            CreatePackRecommendedCommands(artifactRoot, outputPath, labSafeOutputPath, redactionPolicy, sha256));
     }
 
     public async Task<ArtifactVerifyResult> VerifyAsync(string packagePath, string? output, bool requireLabSafe)
@@ -195,8 +211,9 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         var shareSafety = ResolveShareSafety(packageManifest);
         var blockers = ResolveVerifyBlockers(shareSafety, requireLabSafe);
         var status = blockers.Count > 0 ? "blocked" : "valid";
+        var sha256 = await ComputeSha256Async(packagePath).ConfigureAwait(false);
         var unpackForce = _fileSystem.DirectoryExists(outputDirectory) ? " --force" : string.Empty;
-        var unpackCommand = $"luotsi artifacts unpack {Quote(packagePath)} --output {Quote(outputDirectory)}{unpackForce}";
+        var unpackCommand = $"luotsi artifacts unpack {Quote(packagePath)} --output {Quote(outputDirectory)}{unpackForce} --sha256 {sha256}";
         return new ArtifactVerifyResult(
             packagePath,
             status,
@@ -204,14 +221,14 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             outputDirectory,
             PackageManifestFileName,
             packageManifest,
-            await ComputeSha256Async(packagePath).ConfigureAwait(false),
+            sha256,
             shareSafety,
             requireLabSafe,
             blockers,
             CreateVerifyRecommendedCommands(packagePath, outputDirectory, unpackCommand, status));
     }
 
-    public async Task<ArtifactUnpackResult> UnpackAsync(string packagePath, string? output, bool force, bool dryRun)
+    public async Task<ArtifactUnpackResult> UnpackAsync(string packagePath, string? output, bool force, bool dryRun, string? expectedSha256 = null)
     {
         if (string.IsNullOrWhiteSpace(packagePath))
         {
@@ -223,12 +240,15 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             throw new UsageException($"Artifact package '{packagePath}' does not exist.");
         }
 
+        var normalizedExpectedSha256 = NormalizeExpectedSha256(expectedSha256);
         var outputDirectory = ResolveUnpackOutputPath(packagePath, output);
         if (_fileSystem.DirectoryExists(outputDirectory) && !force)
         {
             throw new UsageException($"Artifact unpack output '{outputDirectory}' already exists. Use --force to write into it.");
         }
 
+        var sha256 = await ComputeSha256Async(packagePath).ConfigureAwait(false);
+        var verification = VerifyPackageSha256(packagePath, normalizedExpectedSha256, sha256);
         var packageManifest = ReadPackageManifest(packagePath);
         var entries = ValidateArtifactPackage(packagePath, outputDirectory, force, packageManifest);
         var manifestOutputPath = Path.Join(outputDirectory, PackageManifestFileName);
@@ -249,7 +269,8 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             PackageManifestFileName,
             manifestOutputPath,
             packageManifest,
-            await ComputeSha256Async(packagePath).ConfigureAwait(false),
+            sha256,
+            verification,
             [
                 new ArtifactRecommendedCommandResult("info_artifacts", "Inspect the unpacked artifact root without mutating it.", $"luotsi artifacts info {Quote(outputDirectory)}"),
                 new ArtifactRecommendedCommandResult("open_artifacts", "Open the unpacked artifact root.", $"luotsi artifacts open {Quote(outputDirectory)}"),
@@ -281,6 +302,24 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         var session = ArtifactSession.AttachExisting(artifactRoot, _fileSystem);
         await session.RefreshIndexAsync().ConfigureAwait(false);
         return Path.Join(artifactRoot, HtmlIndexFileName);
+    }
+
+    private async Task<ArtifactPackageInfoResult> CreatePackageInfoAsync(string packagePath)
+    {
+        var outputDirectory = ResolveUnpackOutputPath(packagePath, null);
+        var packageManifest = ReadPackageManifest(packagePath);
+        var entries = ValidateArtifactPackage(packagePath, outputDirectory, force: true, packageManifest);
+        var sha256 = await ComputeSha256Async(packagePath).ConfigureAwait(false);
+        var unpackForce = _fileSystem.DirectoryExists(outputDirectory) ? " --force" : string.Empty;
+        return new ArtifactPackageInfoResult(
+            packagePath,
+            packageManifest.RunId,
+            entries,
+            PackageManifestFileName,
+            packageManifest,
+            sha256,
+            outputDirectory,
+            CreatePackageInfoRecommendedCommands(packagePath, outputDirectory, unpackForce, sha256));
     }
 
     private async Task PackArtifactRootAsync(string artifactRoot, string outputPath, IReadOnlyList<string> sourceFiles, ArtifactPackageManifestResult manifest, bool force, string redactionMode)
@@ -746,6 +785,15 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
     private static bool ShouldRedactFile(string path, string redactionMode) =>
         string.Equals(redactionMode, RedactionModeLabSafe, StringComparison.Ordinal) && IsTextLikeArtifact(path);
 
+    private static bool LooksLikePackageTarget(string? target) =>
+        !string.IsNullOrWhiteSpace(target) &&
+        string.Equals(Path.GetExtension(target), ".zip", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsExplicitPath(string target) =>
+        Path.IsPathRooted(target) ||
+        target.Contains(Path.DirectorySeparatorChar, StringComparison.Ordinal) ||
+        target.Contains(Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
+
     private static bool IsTextLikeArtifact(string path)
     {
         var extension = Path.GetExtension(path).ToLowerInvariant();
@@ -817,7 +865,38 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             : command;
     }
 
-    private static IReadOnlyList<ArtifactRecommendedCommandResult> CreatePackRecommendedCommands(string artifactRoot, string outputPath, string labSafeOutputPath, string redactionMode)
+    private static string? NormalizeExpectedSha256(string? expectedSha256)
+    {
+        if (string.IsNullOrWhiteSpace(expectedSha256))
+        {
+            return null;
+        }
+
+        var normalizedExpected = expectedSha256.Trim().ToLowerInvariant();
+        if (!Sha256Pattern.IsMatch(normalizedExpected))
+        {
+            throw new UsageException("Option --sha256 must be a 64-character hexadecimal SHA-256 digest.");
+        }
+
+        return normalizedExpected;
+    }
+
+    private static ArtifactPackageVerificationResult? VerifyPackageSha256(string packagePath, string? normalizedExpectedSha256, string actualSha256)
+    {
+        if (string.IsNullOrWhiteSpace(normalizedExpectedSha256))
+        {
+            return null;
+        }
+
+        if (!string.Equals(normalizedExpectedSha256, actualSha256, StringComparison.Ordinal))
+        {
+            throw new UsageException($"Artifact package '{packagePath}' SHA-256 mismatch. Expected {normalizedExpectedSha256}, actual {actualSha256}.");
+        }
+
+        return new ArtifactPackageVerificationResult("sha256", normalizedExpectedSha256, actualSha256, true);
+    }
+
+    private static IReadOnlyList<ArtifactRecommendedCommandResult> CreatePackRecommendedCommands(string artifactRoot, string outputPath, string labSafeOutputPath, string redactionMode, string sha256)
     {
         var verifyCommand = $"luotsi artifacts verify {Quote(outputPath)}";
         if (string.Equals(redactionMode, RedactionModeLabSafe, StringComparison.Ordinal))
@@ -828,7 +907,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         var commands = new List<ArtifactRecommendedCommandResult>
         {
             new("verify_artifacts", "Validate this package before handoff or restore.", verifyCommand),
-            new("unpack_artifacts", "Restore this package locally for review or replay.", $"luotsi artifacts unpack {Quote(outputPath)} --output {Quote(ResolveUnpackOutputPath(outputPath, null))}")
+            new("unpack_artifacts", "Restore this package locally after verifying its SHA-256.", $"luotsi artifacts unpack {Quote(outputPath)} --output {Quote(ResolveUnpackOutputPath(outputPath, null))} --sha256 {sha256}")
         };
 
         if (!string.Equals(redactionMode, RedactionModeLabSafe, StringComparison.Ordinal))
@@ -873,11 +952,20 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
 
         return
         [
-            new ArtifactRecommendedCommandResult("unpack_artifacts", "Restore this verified package locally for review or replay.", unpackCommand),
+            new ArtifactRecommendedCommandResult("unpack_artifacts", "Restore this verified package locally after verifying its SHA-256.", unpackCommand),
             new ArtifactRecommendedCommandResult("info_artifacts", "Inspect the restored artifact root after unpacking.", $"luotsi artifacts info {Quote(outputDirectory)}"),
             new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench after unpacking.", $"luotsi replay open --artifacts {Quote(outputDirectory)}")
         ];
     }
+
+    private static IReadOnlyList<ArtifactRecommendedCommandResult> CreatePackageInfoRecommendedCommands(string packagePath, string outputDirectory, string unpackForce, string sha256) =>
+    [
+        new("verify_artifacts", "Validate this package explicitly before handoff or restore.", $"luotsi artifacts verify {Quote(packagePath)} --output {Quote(outputDirectory)}"),
+        new("unpack_artifacts", "Restore this validated package locally after verifying its SHA-256.", $"luotsi artifacts unpack {Quote(packagePath)} --output {Quote(outputDirectory)}{unpackForce} --sha256 {sha256}"),
+        new("unpack_artifacts_dry_run", "Re-run package validation and SHA-256 verification without writing files.", $"luotsi artifacts unpack {Quote(packagePath)} --output {Quote(outputDirectory)}{unpackForce} --dry-run --sha256 {sha256}"),
+        new("open_artifacts_after_unpack", "Open the restored artifact root after unpacking.", $"luotsi artifacts open {Quote(outputDirectory)}"),
+        new("replay_open_after_unpack", "Open the replay workbench after unpacking.", $"luotsi replay open --artifacts {Quote(outputDirectory)}")
+    ];
 
     private static string ResolveLabSafeOutputPath(string outputPath)
     {
@@ -971,6 +1059,16 @@ internal sealed record ArtifactInfoResult(
     ArtifactCategoryCountsResult CategoryCounts,
     IReadOnlyList<ArtifactRecommendedCommandResult> RecommendedCommands);
 
+internal sealed record ArtifactPackageInfoResult(
+    string Package,
+    string RunId,
+    int EntryCount,
+    string ManifestPath,
+    ArtifactPackageManifestResult Manifest,
+    string Sha256,
+    string DefaultOutputDirectory,
+    IReadOnlyList<ArtifactRecommendedCommandResult> RecommendedCommands);
+
 internal sealed record ArtifactCategoryCountsResult(
     int Screenshots,
     int Videos,
@@ -1012,9 +1110,16 @@ internal sealed record ArtifactUnpackResult(
     string ManifestOutputPath,
     ArtifactPackageManifestResult Manifest,
     string Sha256,
+    ArtifactPackageVerificationResult? Verification,
     IReadOnlyList<ArtifactRecommendedCommandResult> RecommendedCommands);
 
 internal sealed record ArtifactRecommendedCommandResult(string Kind, string Summary, string Command);
+
+internal sealed record ArtifactPackageVerificationResult(
+    string Algorithm,
+    string Expected,
+    string Actual,
+    bool Verified);
 
 internal sealed record ArtifactPackageRedactionResult(
     string Mode,

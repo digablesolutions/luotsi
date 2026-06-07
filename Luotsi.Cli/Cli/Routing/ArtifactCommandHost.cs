@@ -35,7 +35,7 @@ internal sealed class ArtifactCommandHost(
     private Task<ArtifactListResult> ListAsync(CliOptions options) =>
         _artifactCommandService.ListAsync(options.Get("artifacts"), options.Int("limit", 20));
 
-    private Task<ArtifactInfoResult> InfoAsync(CliOptions options)
+    private Task<object> InfoAsync(CliOptions options)
     {
         var target = ResolveTarget(options, "info", allowLast: true);
         return _artifactCommandService.InfoAsync(target, options.Get("artifacts"), options.HasFlag("last"));
@@ -62,7 +62,7 @@ internal sealed class ArtifactCommandHost(
     private Task<ArtifactUnpackResult> UnpackAsync(CliOptions options)
     {
         var target = RequireTarget(options, "unpack", "<artifact.zip>");
-        return _artifactCommandService.UnpackAsync(target, options.Get("output"), options.HasFlag("force"), options.HasFlag("dry-run"));
+        return _artifactCommandService.UnpackAsync(target, options.Get("output"), options.HasFlag("force"), options.HasFlag("dry-run"), options.Get("sha256"));
     }
 
     private static string RequireTarget(CliOptions options, string subcommand, string argumentName)
