@@ -152,8 +152,8 @@ internal static class QuickstartCommand
             return value;
         }
 
-        return value.Any(static character => char.IsWhiteSpace(character) || character is '"' or '\'')
-            ? "\"" + value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal) + "\""
+        return value.Any(static character => char.IsWhiteSpace(character) || character == '"')
+            ? $"\"{value.Replace("\"", "\\\"", StringComparison.Ordinal)}\""
             : value;
     }
 }
