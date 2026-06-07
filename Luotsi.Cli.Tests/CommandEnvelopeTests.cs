@@ -93,6 +93,57 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_Quickstart_Returns_First_Run_Plan()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["quickstart"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(console.ErrorLines);
+        Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("quickstart", envelope.RootElement.GetProperty("command").GetString());
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("luotsi-quickstart.v1", data.GetProperty("schema").GetString());
+        Assert.Equal("ready_to_start", data.GetProperty("status").GetString());
+        Assert.Equal("5m", data.GetProperty("time_budget").GetString());
+        Assert.Equal("luotsi doctor --device <adb serial> --package <app.id> --fix", data.GetProperty("first_command").GetString());
+        Assert.Contains("JSONL", data.GetProperty("agent_prompt").GetString(), StringComparison.Ordinal);
+        Assert.True(data.GetProperty("steps").GetArrayLength() >= 6);
+        Assert.Contains(
+            data.GetProperty("recommended_commands").EnumerateArray(),
+            command => command.GetProperty("kind").GetString() == "agent_loop" &&
+                command.GetProperty("command").GetString() == "luotsi inspect --device <adb serial> --artifacts artifacts/first-run");
+    }
+
+    [Fact]
+    public async Task RunAsync_Quickstart_Uses_Device_And_Package_When_Supplied()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["--device", "emulator-5554", "quickstart", "--package", "dev.luotsi.demo", "--artifacts", "artifacts/demo"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("emulator-5554", data.GetProperty("inputs").GetProperty("device").GetString());
+        Assert.Equal("dev.luotsi.demo", data.GetProperty("inputs").GetProperty("package").GetString());
+        Assert.Equal("artifacts/demo", data.GetProperty("inputs").GetProperty("artifacts").GetString());
+        Assert.Equal("luotsi doctor --device emulator-5554 --package dev.luotsi.demo --fix", data.GetProperty("first_command").GetString());
+        Assert.Contains(
+            data.GetProperty("steps").EnumerateArray(),
+            step => step.GetProperty("id").GetString() == "repair_readiness" &&
+                step.GetProperty("command").GetString() == "luotsi doctor --device emulator-5554 --package dev.luotsi.demo --fix");
+        Assert.Contains(
+            data.GetProperty("recommended_commands").EnumerateArray(),
+            command => command.GetProperty("kind").GetString() == "discover" &&
+                command.GetProperty("command").GetString() == "luotsi discover --device emulator-5554 --package dev.luotsi.demo --budget 5m --output-dir artifacts/demo");
+    }
+
+    [Fact]
     public async Task RunAsync_Help_Command_Writes_Replay_Topic()
     {
         var console = new FakeConsole();

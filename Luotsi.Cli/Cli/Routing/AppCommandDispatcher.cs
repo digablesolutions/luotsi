@@ -44,6 +44,7 @@ internal sealed class AppCommandDispatcher(
             "scenario-init" => false,
             "scenario-validate" => false,
             "scenario-explain" => false,
+            "quickstart" => false,
             "version" => false,
             "update" => false,
             "run" => ScenarioCommandDispatcher.RequiresRunner(options),
@@ -60,6 +61,7 @@ internal sealed class AppCommandDispatcher(
         return command switch
         {
             "adb" => await AdbSubcommandDispatcher.ExecuteAsync(options, RequireAdbCommandHost(runner, command)).ConfigureAwait(false),
+            "quickstart" => QuickstartCommand.Build(options),
             "version" => await _selfUpdateService.GetVersionInfoAsync().ConfigureAwait(false),
             "update" => await _selfUpdateService.UpdateAsync(options, artifacts.Root).ConfigureAwait(false),
             "devices" => DeviceInventory.FromDeviceList(await RequireRunner(runner, command).GetDevicesAsync().ConfigureAwait(false)),

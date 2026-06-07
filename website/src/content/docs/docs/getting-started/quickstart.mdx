@@ -5,6 +5,15 @@ description: Connect a device, run doctor, open live view, and execute a first s
 
 This is the shortest path from a connected Android device to a meaningful Luotsi workflow.
 
+## 0. Ask for the five-minute plan
+
+```bash
+luotsi quickstart
+luotsi quickstart --device <serial> --package <app.id> --artifacts artifacts/first-run
+```
+
+The command returns a JSON envelope with a five-minute path, concrete commands, an AI-agent prompt, and the local-first/artifact-first boundary that explains where Luotsi fits beside automation frameworks and hosted device services.
+
 ## 1. Confirm device visibility
 
 ```bash
