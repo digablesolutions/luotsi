@@ -11,13 +11,14 @@ Use these commands to discover devices, validate readiness, and inspect the host
 
 ```bash
 luotsi devices
+luotsi doctor
 luotsi device-status --device <serial>
 luotsi lab inventory list
 luotsi adb version
 luotsi doctor --device <serial>
 ```
 
-`doctor` returns a `readiness_plan` with status, blockers, `next_command`, and `recommended_commands`, so the first-run report doubles as an operator/agent handoff.
+Without a selected device, `doctor` lists adb-visible devices and returns exact next commands. With `--device` or `--device-query`, it returns a `readiness_plan` with status, blockers, `next_command`, and `recommended_commands`, so the first-run report doubles as an operator/agent handoff.
 
 Also in this family:
 

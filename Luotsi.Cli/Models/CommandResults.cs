@@ -972,6 +972,14 @@ public sealed record DoctorReadinessPlan(
     IReadOnlyList<DoctorReadinessBlocker> Blockers,
     IReadOnlyList<DoctorRecommendedCommandResult> RecommendedCommands);
 
+public sealed record DoctorDeviceGuidanceResult(
+    string Status,
+    string Summary,
+    string? NextCommand,
+    IReadOnlyList<DeviceInfo> Devices,
+    IReadOnlyList<DoctorReadinessBlocker> Blockers,
+    IReadOnlyList<DoctorRecommendedCommandResult> RecommendedCommands);
+
 public sealed record DoctorResult(
     bool Ready,
     bool Fix,
