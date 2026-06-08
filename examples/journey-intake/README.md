@@ -23,9 +23,9 @@ luotsi journey-intake validate --file journey-intake.json
 The template points at `luotsi-journey-intake.schema.json`, which documents the
 stable `luotsi-journey-intake.v1` handoff shape. Keep that schema reference when
 copying the file so editors and agent tooling can check the required fields.
-The Luotsi CLI validation command checks the same production handoff before it
-is turned into scenario work, and returns a non-zero exit code when required
-guardrails or commands are missing.
+The Luotsi CLI validation command checks the production-critical handoff fields
+before the file is turned into scenario work, and returns a non-zero exit code
+when required guardrails or commands are missing.
 
 Then follow the public workflow:
 

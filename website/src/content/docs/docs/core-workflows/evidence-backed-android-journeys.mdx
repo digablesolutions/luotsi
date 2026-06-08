@@ -41,7 +41,7 @@ cp examples/journey-intake/evidence-backed-journey-intake.template.json journey-
 luotsi journey-intake validate --file journey-intake.json
 ```
 
-The template uses the `luotsi-journey-intake.v1` schema so editors and agents can check that the handoff includes app context, device assumptions, Journey steps, assertions, guardrails, Luotsi commands, and review fields. `journey-intake validate` applies the same contract from the Luotsi CLI and exits non-zero when a handoff is not ready for scenario drafting.
+The template uses the `luotsi-journey-intake.v1` schema so editors and agents can check that the handoff includes app context, device assumptions, Journey steps, assertions, guardrails, Luotsi commands, and review fields. `journey-intake validate` checks the production-critical handoff fields from the Luotsi CLI and exits non-zero when required guardrails or commands are missing.
 
 Examples of useful Journey intent:
 

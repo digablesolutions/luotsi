@@ -83,12 +83,12 @@ internal sealed class JourneyIntakeValidationService(IFileSystem fileSystem)
                 var run = RequireCommand(value, "runCommand", "$.luotsiHandoff.runCommand", "luotsi run ", errors);
                 var claimedRun = RequireCommand(value, "claimedRunCommand", "$.luotsiHandoff.claimedRunCommand", "luotsi run ", errors);
                 var replay = RequireCommand(value, "replayCommand", "$.luotsiHandoff.replayCommand", "luotsi replay open ", errors);
-                if (dryRun is not null && !dryRun.Contains(" --dry-run", StringComparison.Ordinal))
+                if (dryRun is not null && !HasOptionToken(dryRun, "--dry-run"))
                 {
                     errors.Add("$.luotsiHandoff.dryRunCommand must include ' --dry-run'.");
                 }
 
-                if (claimedRun is not null && !claimedRun.Contains(" --claim-device", StringComparison.Ordinal))
+                if (claimedRun is not null && !HasOptionToken(claimedRun, "--claim-device"))
                 {
                     errors.Add("$.luotsiHandoff.claimedRunCommand must include ' --claim-device'.");
                 }
@@ -215,6 +215,71 @@ internal sealed class JourneyIntakeValidationService(IFileSystem fileSystem)
         }
 
         return true;
+    }
+
+    private static bool HasOptionToken(string command, string optionName)
+    {
+        foreach (var token in EnumerateCommandTokens(command))
+        {
+            if (string.Equals(token, optionName, StringComparison.Ordinal)
+                || token.StartsWith($"{optionName}=", StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static IEnumerable<string> EnumerateCommandTokens(string command)
+    {
+        var tokenStart = -1;
+        var quote = '\0';
+        for (var index = 0; index < command.Length; index++)
+        {
+            var current = command[index];
+            if (quote != '\0')
+            {
+                if (current == quote)
+                {
+                    quote = '\0';
+                }
+
+                continue;
+            }
+
+            if (current is '"' or '\'')
+            {
+                quote = current;
+                if (tokenStart < 0)
+                {
+                    tokenStart = index;
+                }
+
+                continue;
+            }
+
+            if (!char.IsWhiteSpace(current))
+            {
+                if (tokenStart < 0)
+                {
+                    tokenStart = index;
+                }
+
+                continue;
+            }
+
+            if (tokenStart >= 0)
+            {
+                yield return command[tokenStart..index];
+                tokenStart = -1;
+            }
+        }
+
+        if (tokenStart >= 0)
+        {
+            yield return command[tokenStart..];
+        }
     }
 }
 

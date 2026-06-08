@@ -97,6 +97,33 @@ public sealed class JourneyIntakeCommandTests
     }
 
     [Fact]
+    public async Task RunAsync_JourneyIntakeValidate_Rejects_Prefix_Matched_Handoff_Flags()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        fileSystem.AddFile(
+            "/tmp/journey.json",
+            ValidJourneyIntake
+                .Replace(" --dry-run", " --dry-runner", StringComparison.Ordinal)
+                .Replace(" --claim-device", " --claim-deviceX", StringComparison.Ordinal));
+        using var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            ViewProfileStore = new FakeViewProfileStore()
+        });
+
+        var exitCode = await app.RunAsync(["journey-intake", "validate", "--file", "/tmp/journey.json"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(1, exitCode);
+        var errors = envelope.RootElement.GetProperty("data").GetProperty("errors").EnumerateArray().Select(static error => error.GetString()).ToArray();
+        Assert.Contains("$.luotsiHandoff.dryRunCommand must include ' --dry-run'.", errors);
+        Assert.Contains("$.luotsiHandoff.claimedRunCommand must include ' --claim-device'.", errors);
+    }
+
+    [Fact]
     public async Task RunAsync_JourneyIntakeValidate_Missing_File_Returns_Usage_Error()
     {
         var console = new FakeConsole();
