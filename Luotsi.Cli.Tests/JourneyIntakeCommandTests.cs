@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Luotsi.Cli.Cli;
 using Xunit;
 
@@ -141,6 +142,68 @@ public sealed class JourneyIntakeCommandTests
         Assert.Equal(2, exitCode);
         Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
         Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+    }
+
+    [Fact]
+    public async Task RunAsync_JourneyIntakeDraftScenario_Writes_Review_Required_Scenario_Without_Creating_Runner()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var deviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost());
+        fileSystem.AddFile("/tmp/journey.json", ValidJourneyIntake);
+        using var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = deviceHostFactory,
+            ViewProfileStore = new FakeViewProfileStore()
+        });
+
+        var output = "/tmp/scenarios/settings \"draft\".json";
+        var exitCode = await app.RunAsync(["journey-intake", "Draft-Scenario", "--file", "/tmp/journey.json", "--output", output]);
+        using var envelope = console.ParseSingleOutputAsJson();
+        using var scenario = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(output));
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(0, deviceHostFactory.CreateCallCount);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("drafted", data.GetProperty("status").GetString());
+        Assert.True(data.GetProperty("written").GetBoolean());
+        Assert.Equal(output, data.GetProperty("output").GetString());
+        Assert.Contains(
+            "luotsi scenario-validate --file \"/tmp/scenarios/settings \\\"draft\\\".json\"",
+            data.GetProperty("next_commands").EnumerateArray().Select(static command => command.GetString()));
+        Assert.Equal("settings-smoke", scenario.RootElement.GetProperty("name").GetString());
+        Assert.Contains("review-required", scenario.RootElement.GetProperty("tags").EnumerateArray().Select(static tag => tag.GetString()));
+        Assert.Equal("com.example.app", scenario.RootElement.GetProperty("metadata").GetProperty("package").GetString());
+        var notes = scenario.RootElement.GetProperty("metadata").GetProperty("notes").GetString();
+        Assert.Contains("does not execute natural-language", notes, StringComparison.Ordinal);
+        Assert.Contains("Source notes: Imported from Android CLI Journey intent.", notes, StringComparison.Ordinal);
+        Assert.Equal("startApp", scenario.RootElement.GetProperty("setup")[0].GetProperty("action").GetString());
+        Assert.Equal("takeScreenshot", scenario.RootElement.GetProperty("steps")[0].GetProperty("action").GetString());
+    }
+
+    [Fact]
+    public async Task RunAsync_JourneyIntakeDraftScenario_Existing_Output_Returns_Usage_Error_Without_Overwrite()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        fileSystem.AddFile("/tmp/journey.json", ValidJourneyIntake);
+        fileSystem.AddFile("/tmp/scenarios/settings.json", "{}");
+        using var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            ViewProfileStore = new FakeViewProfileStore()
+        });
+
+        var exitCode = await app.RunAsync(["journey-intake", "draft-scenario", "--file", "/tmp/journey.json", "--output", "/tmp/scenarios/settings.json"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Contains("already exists", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
     private const string ValidJourneyIntake = """

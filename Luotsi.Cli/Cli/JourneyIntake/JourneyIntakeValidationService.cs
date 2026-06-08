@@ -1,6 +1,9 @@
+using System.Text;
 using System.Text.Json;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.Infrastructure.Serialization;
+using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Cli.JourneyIntake;
 
@@ -10,17 +13,20 @@ internal sealed class JourneyIntakeValidationService(IFileSystem fileSystem)
 
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
 
-    public async Task<JourneyIntakeValidationResult> ValidateAsync(CliOptions options)
+    public async Task<object> ValidateAsync(CliOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        var action = options.Arguments.FirstOrDefault() ?? "validate";
-        if (!string.Equals(action, "validate", StringComparison.OrdinalIgnoreCase))
+        return ResolveAction(options).ToLowerInvariant() switch
         {
-            throw new UsageException("journey-intake requires subcommand validate.");
-        }
+            "validate" => await ValidateFileAsync(options.Require("file")).ConfigureAwait(false),
+            "draft-scenario" => await DraftScenarioAsync(options).ConfigureAwait(false),
+            _ => throw new UsageException("journey-intake requires subcommand validate or draft-scenario.")
+        };
+    }
 
-        var file = options.Require("file");
+    private async Task<JourneyIntakeValidationResult> ValidateFileAsync(string file)
+    {
         if (!_fileSystem.FileExists(file))
         {
             throw new UsageException($"Journey intake file '{file}' does not exist.");
@@ -103,6 +109,173 @@ internal sealed class JourneyIntakeValidationService(IFileSystem fileSystem)
             });
 
             return BuildResult(file, errors, handoff);
+        }
+    }
+
+    private async Task<JourneyIntakeDraftScenarioResult> DraftScenarioAsync(CliOptions options)
+    {
+        var file = options.Require("file");
+        var output = options.Get("output") ?? options.Get("scenario") ?? options.Get("scenario-file") ?? "scenarios/from-journey.json";
+        var overwrite = options.HasFlag("force") || options.HasFlag("overwrite");
+        if (_fileSystem.FileExists(output) && !overwrite)
+        {
+            throw new UsageException($"Scenario file '{output}' already exists. Use --force to overwrite it.");
+        }
+
+        var validation = await ValidateFileAsync(file).ConfigureAwait(false);
+        if (!validation.Valid)
+        {
+            return new JourneyIntakeDraftScenarioResult(
+                CurrentSchema,
+                "failed",
+                false,
+                file,
+                output,
+                validation.Errors,
+                null,
+                [],
+                "Fix the journey intake validation errors before drafting a scenario.");
+        }
+
+        var intake = await LoadIntakeAsync(file).ConfigureAwait(false);
+        var scenario = BuildScenario(intake, file);
+        var text = JsonSerializer.Serialize(scenario, AppJson.Options) + Environment.NewLine;
+        var directory = Path.GetDirectoryName(output);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            _fileSystem.CreateDirectory(directory);
+        }
+
+        await _fileSystem.WriteAllTextAsync(output, text, new UTF8Encoding(false)).ConfigureAwait(false);
+
+        var nextCommands = new[]
+        {
+            $"luotsi scenario-validate --file {Quote(output)}",
+            $"luotsi run --file {Quote(output)} --validate-only",
+            $"luotsi replay open --artifacts <artifact-root> --dry-run"
+        };
+        return new JourneyIntakeDraftScenarioResult(
+            CurrentSchema,
+            "drafted",
+            true,
+            file,
+            output,
+            [],
+            new JourneyIntakeScenarioDraftSummary(
+                scenario.Name,
+                scenario.Tags ?? [],
+                scenario.Setup?.Count ?? 0,
+                scenario.Steps.Count,
+                scenario.Teardown?.Count ?? 0,
+                "review-required evidence skeleton"),
+            nextCommands,
+            "Review and replace evidence checkpoints with explicit Luotsi waits/assertions before unattended device runs.");
+    }
+
+    private async Task<JourneyIntakeDocument> LoadIntakeAsync(string file)
+    {
+        using var document = JsonDocument.Parse(await _fileSystem.ReadAllTextAsync(file).ConfigureAwait(false));
+        var root = document.RootElement;
+        var app = root.GetProperty("app");
+        var device = root.GetProperty("device");
+        var journey = root.GetProperty("journey");
+        var source = root.GetProperty("source");
+        var guardrails = root.GetProperty("guardrails");
+        return new JourneyIntakeDocument(
+            root.GetProperty("name").GetString()!,
+            source.GetProperty("kind").GetString()!,
+            source.GetProperty("notes").GetString()!,
+            app.GetProperty("package").GetString()!,
+            GetOptionalString(app, "activity"),
+            GetOptionalString(app, "startUri"),
+            GetOptionalString(device, "serial"),
+            GetOptionalString(device, "query"),
+            GetOptionalString(device, "model"),
+            GetOptionalString(device, "androidRelease"),
+            GetOptionalString(device, "sdk"),
+            GetOptionalString(device, "orientation"),
+            journey.GetProperty("userGoal").GetString()!,
+            journey.GetProperty("startingState").GetString()!,
+            ReadStringArray(journey, "steps"),
+            ReadStringArray(journey, "assertions"),
+            ReadStringArray(guardrails, "unsafeActionsToAvoid"),
+            ReadStringArray(guardrails, "preferredSelectors"));
+    }
+
+    private static ScenarioFile BuildScenario(JourneyIntakeDocument intake, string intakeFile)
+    {
+        var label = NormalizeLabel(intake.Name);
+        var steps = new List<ScenarioStep>
+        {
+            new("capture journey start", "takeScreenshot", null, null, null, Label: $"{label}-start"),
+            new("capture journey evidence", "captureArtifacts", null, null, null, Label: $"{label}-evidence")
+        };
+
+        for (var index = 0; index < intake.Assertions.Count; index++)
+        {
+            steps.Add(new ScenarioStep(
+                $"review assertion {index + 1}",
+                "takeScreenshot",
+                null,
+                null,
+                null,
+                Label: $"{label}-assertion-{index + 1}"));
+        }
+
+        return new ScenarioFile(
+            intake.Name,
+            steps,
+            Variables: new Dictionary<string, string>
+            {
+                ["targetPackage"] = intake.Package,
+                ["targetActivity"] = intake.Activity ?? string.Empty,
+                ["journeyGoal"] = intake.UserGoal,
+                ["journeyIntakeFile"] = intakeFile
+            },
+            Tags: ["journey-intake", "generated", "review-required"],
+            Setup:
+            [
+                new ScenarioStep("start app from journey intake", "startApp", null, null, null, Package: "${var:targetPackage}", Activity: string.IsNullOrWhiteSpace(intake.Activity) ? null : "${var:targetActivity}", Wait: !string.IsNullOrWhiteSpace(intake.Activity))
+            ],
+            Teardown:
+            [
+                new ScenarioStep("collect journey draft artifacts", "captureArtifacts", null, null, null, Label: $"{label}-teardown")
+            ],
+            Metadata: new ScenarioMetadata(
+                intake.Package,
+                intake.Activity,
+                BuildScenarioNotes(intake),
+                new ScenarioDeviceMetadata(intake.Serial, intake.Model, intake.AndroidRelease, intake.Sdk),
+                new ScenarioLayoutMetadata(Orientation: intake.Orientation)));
+    }
+
+    private static string BuildScenarioNotes(JourneyIntakeDocument intake)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("Generated by `luotsi journey-intake draft-scenario`.");
+        builder.AppendLine("Review required: this draft captures evidence checkpoints and does not execute natural-language journey steps as assertions.");
+        builder.AppendLine($"Source: {intake.SourceKind}");
+        builder.AppendLine($"Source notes: {intake.SourceNotes}");
+        builder.AppendLine($"Goal: {intake.UserGoal}");
+        builder.AppendLine($"Starting state: {intake.StartingState}");
+        AppendBullets(builder, "Journey steps", intake.Steps);
+        AppendBullets(builder, "Journey assertions to convert into explicit Luotsi checks", intake.Assertions);
+        AppendBullets(builder, "Unsafe actions to avoid", intake.UnsafeActionsToAvoid);
+        AppendBullets(builder, "Selector guidance", intake.PreferredSelectors);
+        return builder.ToString().TrimEnd();
+    }
+
+    private static void AppendBullets(StringBuilder builder, string title, IReadOnlyList<string> values)
+    {
+        if (values.Count == 0)
+        {
+            return;
+        }
+
+        builder.AppendLine($"{title}:");
+        foreach (var value in values)
+        {
+            builder.AppendLine($"- {value}");
         }
     }
 
@@ -222,6 +395,51 @@ internal sealed class JourneyIntakeValidationService(IFileSystem fileSystem)
             string.Equals(token, optionName, StringComparison.Ordinal)
             || token.StartsWith($"{optionName}=", StringComparison.Ordinal));
 
+    private static string ResolveAction(CliOptions options) => options.Arguments.FirstOrDefault() ?? "validate";
+
+    private static string? GetOptionalString(JsonElement root, string propertyName) =>
+        root.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+
+    private static IReadOnlyList<string> ReadStringArray(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return value.EnumerateArray()
+            .Where(static item => item.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(item.GetString()))
+            .Select(static item => item.GetString()!)
+            .ToArray();
+    }
+
+    private static string NormalizeLabel(string value)
+    {
+        var builder = new StringBuilder(value.Length);
+        foreach (var current in value)
+        {
+            if (char.IsLetterOrDigit(current))
+            {
+                builder.Append(char.ToLowerInvariant(current));
+                continue;
+            }
+
+            if (builder.Length > 0 && builder[^1] != '-')
+            {
+                builder.Append('-');
+            }
+        }
+
+        return builder.ToString().Trim('-') is { Length: > 0 } label ? label : "journey-intake";
+    }
+
+    private static string Quote(string value) =>
+        value.Any(static ch => char.IsWhiteSpace(ch) || ch == '"')
+            ? $"\"{value.Replace("\"", "\\\"", StringComparison.Ordinal)}\""
+            : value;
+
     private static IEnumerable<string> EnumerateCommandTokens(string command)
     {
         var tokenStart = -1;
@@ -292,3 +510,42 @@ public sealed record JourneyIntakeHandoff(
     string? RunCommand,
     string? ClaimedRunCommand,
     string? ReplayCommand);
+
+public sealed record JourneyIntakeDraftScenarioResult(
+    string Schema,
+    string Status,
+    bool Written,
+    string IntakeFile,
+    string Output,
+    IReadOnlyList<string> Errors,
+    JourneyIntakeScenarioDraftSummary? Scenario,
+    IReadOnlyList<string> NextCommands,
+    string NextAction);
+
+public sealed record JourneyIntakeScenarioDraftSummary(
+    string Name,
+    IReadOnlyList<string> Tags,
+    int SetupStepCount,
+    int StepCount,
+    int TeardownStepCount,
+    string ReviewStatus);
+
+internal sealed record JourneyIntakeDocument(
+    string Name,
+    string SourceKind,
+    string SourceNotes,
+    string Package,
+    string? Activity,
+    string? StartUri,
+    string? Serial,
+    string? Query,
+    string? Model,
+    string? AndroidRelease,
+    string? Sdk,
+    string? Orientation,
+    string UserGoal,
+    string StartingState,
+    IReadOnlyList<string> Steps,
+    IReadOnlyList<string> Assertions,
+    IReadOnlyList<string> UnsafeActionsToAvoid,
+    IReadOnlyList<string> PreferredSelectors);

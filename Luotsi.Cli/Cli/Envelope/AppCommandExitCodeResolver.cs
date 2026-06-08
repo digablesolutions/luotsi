@@ -15,6 +15,7 @@ internal sealed class AppCommandExitCodeResolver
             ScenarioRunBatchResult { FailedCount: > 0 } => 1,
             ScenarioRunResult { Status: var status } when string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase) => 1,
             JourneyIntakeValidationResult { Valid: false } => 1,
+            JourneyIntakeDraftScenarioResult { Written: false } => 1,
             _ => 0
         };
     }

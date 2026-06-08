@@ -102,6 +102,7 @@ behavior into an executable scenario:
 ```bash
 cp examples/journey-intake/evidence-backed-journey-intake.template.json journey-intake.json
 luotsi journey-intake validate --file journey-intake.json
+luotsi journey-intake draft-scenario --file journey-intake.json --output scenarios/from-journey.json
 ```
 
 The intake file is not executable scenario JSON. Use it to record app context,
@@ -110,6 +111,9 @@ before generating or running a Luotsi scenario. The template points at the
 `luotsi-journey-intake.v1` JSON schema beside it so editors and agent tooling can
 check the handoff shape before promotion. The CLI validator performs the same
 required-field and command guardrail checks as a CI-friendly handoff gate.
+The draft command turns a valid intake into a review-required evidence skeleton
+that can be statically validated before humans replace capture checkpoints with
+explicit waits and assertions.
 
 ```bash
 luotsi scenario-init --file scenarios/smoke.json --name "smoke"
