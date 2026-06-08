@@ -1135,10 +1135,10 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             : value;
 
     private static string EscapeMarkdown(string value) =>
-        value.Replace("\\", "\\\\", StringComparison.Ordinal)
-            .Replace("`", "\\`", StringComparison.Ordinal)
+        value.Replace("`", "\\`", StringComparison.Ordinal)
             .Replace("|", "\\|", StringComparison.Ordinal)
-            .Replace(Environment.NewLine, " ", StringComparison.Ordinal);
+            .Replace("\r", " ", StringComparison.Ordinal)
+            .Replace("\n", " ", StringComparison.Ordinal);
 
     private async Task<string> ComputeSha256Async(string path)
     {

@@ -5928,23 +5928,25 @@ public sealed partial class AppTests
 
         Assert.Equal(0, exitCode);
         var data = envelope.RootElement.GetProperty("data");
-        Assert.Equal(Path.Join("/tmp/intake", "artifact-intake-summary.json"), data.GetProperty("json_path").GetString());
-        Assert.Equal(Path.Join("/tmp/intake", "artifact-intake.md"), data.GetProperty("readme_path").GetString());
-        Assert.True(fileSystem.FileExists(Path.GetFullPath(Path.Join("/tmp/intake", "artifact-intake-summary.json"))));
-        Assert.True(fileSystem.FileExists(Path.GetFullPath(Path.Join("/tmp/intake", "artifact-intake.md"))));
+        var jsonPath = data.GetProperty("json_path").GetString()!;
+        var readmePath = data.GetProperty("readme_path").GetString()!;
+        Assert.Equal(Path.Join("/tmp/intake", "artifact-intake-summary.json"), jsonPath);
+        Assert.Equal(Path.Join("/tmp/intake", "artifact-intake.md"), readmePath);
+        Assert.True(fileSystem.FileExists(jsonPath));
+        Assert.True(fileSystem.FileExists(readmePath));
 
-        using var summary = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(Path.GetFullPath(Path.Join("/tmp/intake", "artifact-intake-summary.json"))));
+        using var summary = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(jsonPath));
         Assert.Equal("restored", summary.RootElement.GetProperty("status").GetString());
         Assert.Equal("lab_safe", summary.RootElement.GetProperty("shareSafety").GetString());
         Assert.Equal(sha256, summary.RootElement.GetProperty("sha256").GetString());
         Assert.True(summary.RootElement.GetProperty("verification").GetProperty("verified").GetBoolean());
 
-        var readme = await fileSystem.ReadAllTextAsync(Path.GetFullPath(Path.Join("/tmp/intake", "artifact-intake.md")));
+        var readme = await fileSystem.ReadAllTextAsync(readmePath);
         Assert.Contains("# Artifact Intake", readme, StringComparison.Ordinal);
         Assert.Contains("Share safety: `lab_safe`", readme, StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --artifacts /tmp/intake", readme, StringComparison.Ordinal);
 
-        var markdownIndex = await fileSystem.ReadAllTextAsync(Path.GetFullPath(Path.Join("/tmp/intake", "index.md")));
+        var markdownIndex = await fileSystem.ReadAllTextAsync(Path.Join("/tmp/intake", "index.md"));
         Assert.Contains("artifact-intake-summary.json", markdownIndex, StringComparison.Ordinal);
         Assert.Contains("artifact-intake.md", markdownIndex, StringComparison.Ordinal);
     }
