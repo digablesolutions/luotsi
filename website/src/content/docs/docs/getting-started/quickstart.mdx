@@ -12,7 +12,9 @@ luotsi quickstart
 luotsi quickstart --device <serial> --package <app.id> --artifacts artifacts/first-run
 ```
 
-The command returns a JSON envelope with a five-minute path, concrete commands, an AI-agent prompt, and the local-first/artifact-first boundary that explains where Luotsi fits beside automation frameworks and hosted device services. If you do not pass `--device`, the first command is `luotsi doctor` so Luotsi can list adb-visible devices and return the exact selected-device next command.
+The command returns a JSON envelope with a five-minute path, concrete commands, an AI-agent prompt, and the local-first/artifact-first boundary that explains where Luotsi fits beside automation frameworks and hosted device services.
+If you do not pass `--device`, the first command is `luotsi doctor`.
+This allows Luotsi to list adb-visible devices and return the exact selected-device next command.
 
 ## 1. Select or explain the target device
 
@@ -63,7 +65,7 @@ luotsi scenario-validate --path scenarios
 luotsi run --path scenarios --device <serial> --report-junit junit.xml
 ```
 
-Use this when you want a versioned playbook with timing, artifacts, and CI-friendly reporting.
+Use this when you want a versioned scenario playbook (tracked in version control) with timing, artifacts, and CI-friendly reporting.
 
 ## 4. Keep the artifacts
 
