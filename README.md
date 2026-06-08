@@ -168,11 +168,12 @@ luotsi quickstart --device <serial> --package <app.id> --artifacts artifacts/fir
 ```
 
 ```bash
+luotsi doctor
 luotsi doctor --device <serial>
 luotsi doctor --device <serial> --fix
 ```
 
-`doctor` reuses the existing adb, device preflight, and live-view readiness checks. Its JSON includes a `readiness_plan` with `status`, `blockers`, `next_command`, and `recommended_commands` so humans and agents can continue from the same result. With `--fix`, Luotsi stages FFmpeg native libraries when the selected decoder is missing them, then runs the same helper provisioning flow used by `view setup`. Published Luotsi bundles include the repair assets needed for those fixes, and source checkouts continue to use the repository layout.
+Without `--device` or `--device-query`, `doctor` lists adb-visible devices and returns exact next commands for the selected-device report. With a selected device, it reuses the existing adb, device preflight, and live-view readiness checks. Its JSON includes a `readiness_plan` with `status`, `blockers`, `next_command`, and `recommended_commands` so humans and agents can continue from the same result. With `--fix`, Luotsi stages FFmpeg native libraries when the selected decoder is missing them, then runs the same helper provisioning flow used by `view setup`. Published Luotsi bundles include the repair assets needed for those fixes, and source checkouts continue to use the repository layout.
 
 ## Workflow quickstart
 
@@ -182,6 +183,7 @@ If you already have a device connected, start from `luotsi quickstart --device <
 
   ```bash
   luotsi devices
+  luotsi doctor
   luotsi doctor --device <serial>
   luotsi doctor --device <serial> --fix
   luotsi view setup --device <serial>
@@ -261,7 +263,7 @@ Quick reference. Start with the public [CLI command groups](https://digablesolut
 | `wait-for-device --device <serial>` | Wait for device readiness |
 | `adb reconnect offline` | Reconnect an offline ADB transport |
 | `preflight --device <serial> --package <app.id>` | Device preflight check |
-| `doctor --device <serial> [--package <app.id>] [--fix]` | Unified onboarding report for adb, package preflight, and live-view prerequisites |
+| `doctor [--device <serial> | --device-query <query>] [--package <app.id>] [--fix]` | Device-selection guidance, or unified onboarding report for adb, package preflight, and live-view prerequisites |
 | `screen-state --device <serial>` | Dump current screen state |
 
 `lab inventory` is the durable contract for lab admission. Register devices with `lab inventory set --serial <adb serial> --pool <pool> --capabilities <csv>`, then use `--device-pool` and `--require-capabilities` on `lab` and `run` commands to keep CI and human workflows selecting only approved hardware. By default this state lives in the local Luotsi workspace; set `LUOTSI_LAB_STATE_ROOT` to move leases, queue entries, quarantines, inventory, and device health to a shared lab path for multi-runner CI.

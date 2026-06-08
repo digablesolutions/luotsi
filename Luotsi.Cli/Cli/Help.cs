@@ -186,10 +186,13 @@ First run:
      luotsi devices
 
   2. Run guided readiness checks and fixes
+     luotsi doctor
      luotsi doctor --device <adb serial>
      luotsi doctor --device <adb serial> --fix
-     Doctor JSON includes readiness_plan.status, blockers, next_command, and
-     recommended_commands for agent/operator handoff.
+     Without a selected device, doctor lists adb-visible devices and returns
+     exact next commands. With --device or --device-query, Doctor JSON includes
+     readiness_plan.status, blockers, next_command, and recommended_commands
+     for agent/operator handoff.
 
   3. Open a live mirror when you need operator feedback
      luotsi view --device <adb serial>
@@ -236,7 +239,7 @@ Usage:
   luotsi wait-for-device [--timeout-sec 15]
   luotsi device-wait [--timeout-sec 15]
   luotsi preflight [--package <app.id>]
-  luotsi doctor --device <adb serial> [--package <app.id>] [--fix]
+  luotsi doctor [--device <adb serial> | --device-query <query>] [--package <app.id>] [--fix]
   luotsi lab status [--device-query <query>]
                    [--device-pool <pool>] [--require-capabilities <csv>]
   luotsi lab doctor [--device-query <query>] [--fix]
@@ -278,10 +281,11 @@ Output:
   probe attempt/retry counts for transient host readiness failures. Lab doctor
   reports ambiguous selection, offline devices, stale devices, and recommended
   repair commands. With --fix, Luotsi may run safe host-side recovery actions.
-  Top-level doctor is the first-run readiness entry point for one selected
-  device. Its JSON includes readiness_plan with status, blockers, next_command,
-  and recommended_commands so agents and operators can continue from the same
-  envelope.
+  Top-level doctor is the first-run readiness entry point. Without --device or
+  --device-query, it lists adb-visible devices and returns next commands for the
+  selected-device report. With one selected device, its JSON includes
+  readiness_plan with status, blockers, next_command, and recommended_commands
+  so agents and operators can continue from the same envelope.
   Lab claim creates a host-side lease token so CI and agents can avoid selecting
   a device already claimed by another workflow. With --claim-wait-sec, Luotsi
   joins a persistent queue and waits fairly for the selected serial instead of
@@ -632,6 +636,7 @@ Workflow index:
 
   First-time setup and repair
     luotsi devices
+    luotsi doctor
     luotsi doctor --device <adb serial>
     luotsi view setup --device <adb serial>
     luotsi help lab
@@ -682,7 +687,7 @@ Command groups:
     wait-for-device [--timeout-sec 15]
     device-wait [--timeout-sec 15]
     preflight [--package <app.id>]
-    doctor --device <adb serial> [--package <app.id>] [--profile <name>] [--preset safe|balanced|high-quality|low-latency] [--defaults] [--read-only] [--decoder ffmpeg|wmf] [--capture-backend auto|screenrecord|mediaprojection] [--record <file>] [--fix]
+    doctor [--device <adb serial> | --device-query <query>] [--package <app.id>] [--profile <name>] [--preset safe|balanced|high-quality|low-latency] [--defaults] [--read-only] [--decoder ffmpeg|wmf] [--capture-backend auto|screenrecord|mediaprojection] [--record <file>] [--fix]
 
   ADB server and wireless
     adb server-status

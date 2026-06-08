@@ -28,7 +28,7 @@ For a machine-readable five-minute plan, run `luotsi quickstart`. Pass `--device
 |---|---|
 | Get a five-minute first-run plan | `luotsi quickstart --device <serial> --package <app.id> --artifacts artifacts/first-run` |
 | Confirm Luotsi can see your device | `luotsi devices` |
-| Diagnose and repair first-run issues | `luotsi doctor --device <serial>` |
+| Choose a device and diagnose first-run issues | `luotsi doctor` then `luotsi doctor --device <serial>` |
 | Prepare or repair live-view prerequisites | `luotsi view setup --device <serial>` |
 | Open a live mirror | `luotsi view --device <serial>` |
 | Snapshot current UI state | `luotsi screen-state --device <serial>` |
@@ -75,7 +75,7 @@ The CLI includes the same flow-oriented summary in `luotsi help quickstart`.
 | `adb reconnect offline` | Reconnect an offline ADB transport (separate from `reconnect` view command) |
 | `adb reconnect device` | Reconnect a device transport without changing the active view/profile state |
 | `preflight --device <serial> --package <app.id>` | Device preflight check; writes `device-fingerprint.json` |
-| `doctor --device <serial> [--package <app.id>] [options]` | Unified onboarding diagnostics for adb, optional package preflight, and live-view readiness |
+| `doctor [--device <serial> | --device-query <query>] [--package <app.id>] [options]` | Device-selection guidance, or unified onboarding diagnostics for adb, optional package preflight, and live-view readiness |
 | `screen-state --device <serial>` | Dump current screen state |
 
 `wait-for-device` is also available as `device-wait` or `adb wait-for-device`.
@@ -85,7 +85,7 @@ Active quarantines are also honored by `--device-query`; use them for unhealthy 
 `lab inventory` persists per-device pool and capability metadata in the Luotsi workspace. `--device-pool` and `--require-capabilities` let `lab status`, `lab doctor`, `lab plan`, `lab claim`, and `run` require that durable inventory registration before allocating a device.
 When `lab plan` is ready, `recommended_commands` includes both an explicit `lab claim` command and a direct `run --path <scenarios> --claim-device ...` command for agents or CI jobs that want allocation and execution in one step. Blocked plans now also return additive scheduler hints such as `blocked_reason`, `next_capacity_at`, `suggested_wait_sec`, and `queue_depth`.
 
-`doctor` is the first-run entry point. It reuses the existing adb/version checks, optional package-specific preflight, and the same live-view readiness report exposed by `view-doctor`. The result includes a `readiness_plan` with `status`, `blockers`, `next_command`, and `recommended_commands` so operators and agents can see whether the machine is ready, what still blocks it, and which exact command to run next. `doctor --fix` stages Luotsi-owned FFmpeg native libraries when the requested decoder is missing them, retrying transient setup/download failures before reporting a final setup result, then routes through the same helper/install readiness path as `view setup`. Published Luotsi bundles include those repair assets; source checkouts continue to resolve them from the repository layout.
+`doctor` is the first-run entry point. Without `--device` or `--device-query`, it lists adb-visible devices and returns `status`, `blockers`, `next_command`, and `recommended_commands` for selecting the next doctor command. With one selected device, it reuses the existing adb/version checks, optional package-specific preflight, and the same live-view readiness report exposed by `view-doctor`. The selected-device result includes a `readiness_plan` with `status`, `blockers`, `next_command`, and `recommended_commands` so operators and agents can see whether the machine is ready, what still blocks it, and which exact command to run next. `doctor --fix` stages Luotsi-owned FFmpeg native libraries when the requested decoder is missing them, retrying transient setup/download failures before reporting a final setup result, then routes through the same helper/install readiness path as `view setup`. Published Luotsi bundles include those repair assets; source checkouts continue to resolve them from the repository layout.
 
 ---
 
