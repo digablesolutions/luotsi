@@ -18,6 +18,7 @@ Start from the template:
 ```bash
 cp examples/journey-intake/evidence-backed-journey-intake.template.json journey-intake.json
 luotsi journey-intake validate --file journey-intake.json
+luotsi journey-intake draft-scenario --file journey-intake.json --output scenarios/from-journey.json
 ```
 
 The template points at `luotsi-journey-intake.schema.json`, which documents the
@@ -32,7 +33,8 @@ Then follow the public workflow:
 ```bash
 luotsi doctor --device <serial> --fix
 luotsi inspect --device <serial> --artifacts artifacts/journey-intake
-luotsi replay scenario-draft --artifacts artifacts/journey-intake/<run-id> --output scenarios/from-journey.json --validate --write-markdown
+luotsi scenario-validate --file scenarios/from-journey.json
+luotsi replay scenario-draft --artifacts artifacts/journey-intake/<run-id> --output scenarios/from-replay.json --validate --write-markdown
 luotsi run --file scenarios/from-journey.json --device <serial> --dry-run
 luotsi run --file scenarios/from-journey.json --device <serial> --output-dir artifacts/from-journey-run
 luotsi replay open --artifacts artifacts/from-journey-run --dry-run

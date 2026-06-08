@@ -143,9 +143,11 @@ Luotsi help: journey-intake
 
 Usage:
   luotsi journey-intake validate --file <journey-intake.json>
+  luotsi journey-intake draft-scenario --file <journey-intake.json> --output <scenario.json> [--force]
 
 Examples:
   luotsi journey-intake validate --file journey-intake.json
+  luotsi journey-intake draft-scenario --file journey-intake.json --output scenarios/from-journey.json
   luotsi journey-intake validate --file examples/journey-intake/evidence-backed-journey-intake.template.json
 
 Notes:
@@ -154,6 +156,10 @@ Notes:
   exploration, replay scenario drafts, and scenario validation. It does not
   create scenarios or touch devices; invalid intake files return a non-zero exit
   code with structured errors so CI can block unsafe handoffs.
+  draft-scenario writes a review-required evidence skeleton from a valid intake.
+  It preserves the goal, source, guardrails, and assertion text in scenario
+  metadata and evidence checkpoints instead of executing natural language as UI
+  assertions.
 """,
         ["discover"] = """
 Luotsi help: discover
@@ -786,6 +792,7 @@ Command groups:
 
   Scenarios and CI reports
     journey-intake validate --file <journey-intake.json>
+    journey-intake draft-scenario --file <journey-intake.json> --output <scenario.json> [--force]
     scenario-init [--file <scenario.json>] [--name <name>] [--package <app.id>] [--activity <activity>] [--width <px>] [--height <px>] [--orientation <name>] [--force]
     scenario-list --path <scenario-file-or-directory-or-glob> [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>]
     scenario-validate (--file <scenario.json> | --path <scenario-file-or-directory-or-glob>) [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>]
