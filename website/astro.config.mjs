@@ -34,6 +34,7 @@ export default defineConfig({
 						{ label: 'Live View', slug: 'docs/core-workflows/live-view' },
 						{ label: 'Inspect And Scenarios', slug: 'docs/core-workflows/inspect-and-scenarios' },
 						{ label: 'AI Agent Workflows', slug: 'docs/core-workflows/ai-agent-workflows' },
+						{ label: 'Evidence-Backed Android Journeys', slug: 'docs/core-workflows/evidence-backed-android-journeys' },
 						{ label: 'Agent Loop Example', slug: 'docs/core-workflows/agent-loop-example' },
 						{ label: 'Autonomous Discovery', slug: 'docs/core-workflows/autonomous-discovery' },
 						{ label: 'Replay And Artifacts', slug: 'docs/core-workflows/replay-and-artifacts' },

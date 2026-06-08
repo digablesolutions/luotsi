@@ -71,6 +71,7 @@ public sealed class CliOptions
         "wait-visible",
         "type-text",
         "keyevent",
+        "journey-intake",
         "lab",
         "logcat",
         "wait-log",

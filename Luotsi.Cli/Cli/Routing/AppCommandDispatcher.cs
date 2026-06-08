@@ -1,5 +1,6 @@
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli.Discovery;
+using Luotsi.Cli.Cli.JourneyIntake;
 using Luotsi.Cli.Cli.View;
 using Luotsi.Cli.Cli.Update;
 using Luotsi.Cli.Errors;
@@ -16,6 +17,7 @@ internal sealed class AppCommandDispatcher(
     ScenarioCommandDispatcher scenarioCommandDispatcher,
     DiscoveryCommandService discoveryCommandService,
     ISelfUpdateService selfUpdateService,
+    JourneyIntakeValidationService journeyIntakeValidationService,
     ViewProfileCoordinator profileCoordinator,
     LabLeaseStore labLeaseStore,
     LabLeaseClaimCoordinator labLeaseClaimCoordinator,
@@ -27,6 +29,7 @@ internal sealed class AppCommandDispatcher(
     private readonly ScenarioCommandDispatcher _scenarioCommandDispatcher = scenarioCommandDispatcher ?? throw new ArgumentNullException(nameof(scenarioCommandDispatcher));
     private readonly DiscoveryCommandService _discoveryCommandService = discoveryCommandService ?? throw new ArgumentNullException(nameof(discoveryCommandService));
     private readonly ISelfUpdateService _selfUpdateService = selfUpdateService ?? throw new ArgumentNullException(nameof(selfUpdateService));
+    private readonly JourneyIntakeValidationService _journeyIntakeValidationService = journeyIntakeValidationService ?? throw new ArgumentNullException(nameof(journeyIntakeValidationService));
     private readonly ViewProfileCoordinator _profileCoordinator = profileCoordinator ?? throw new ArgumentNullException(nameof(profileCoordinator));
     private readonly LabLeaseStore _labLeaseStore = labLeaseStore ?? throw new ArgumentNullException(nameof(labLeaseStore));
     private readonly LabLeaseClaimCoordinator _labLeaseClaimCoordinator = labLeaseClaimCoordinator ?? throw new ArgumentNullException(nameof(labLeaseClaimCoordinator));
@@ -45,6 +48,7 @@ internal sealed class AppCommandDispatcher(
             "scenario-validate" => false,
             "scenario-explain" => false,
             "quickstart" => false,
+            "journey-intake" => false,
             "version" => false,
             "update" => false,
             "run" => ScenarioCommandDispatcher.RequiresRunner(options),
@@ -93,6 +97,7 @@ internal sealed class AppCommandDispatcher(
             "scenario-init" => await _scenarioCommandDispatcher.InitAsync(options).ConfigureAwait(false),
             "scenario-validate" => await _scenarioCommandDispatcher.ValidateAsync(options, artifacts).ConfigureAwait(false),
             "scenario-explain" => await _scenarioCommandDispatcher.ExplainAsync(options).ConfigureAwait(false),
+            "journey-intake" => await _journeyIntakeValidationService.ValidateAsync(options).ConfigureAwait(false),
             "discover" => await _discoveryCommandService.RunAsync(options, RequireRunner(runner, command), artifacts).ConfigureAwait(false),
             "screen-state" => await RequireRunner(runner, command).GetScreenStateAsync().ConfigureAwait(false),
             "telemetry-tail" => await RequireRunner(runner, command).TelemetryTailAsync(options.Int("tail", CliDefaults.DefaultLogTail)).ConfigureAwait(false),

@@ -1,5 +1,6 @@
 using Luotsi.Cli.Cli.Envelope;
 using Luotsi.Cli.Cli.Discovery;
+using Luotsi.Cli.Cli.JourneyIntake;
 using Luotsi.Cli.Cli.Routing;
 using Luotsi.Cli.Cli.Update;
 using Luotsi.Cli.Artifacts;
@@ -25,6 +26,7 @@ internal static class LuotsiCommandServices
         services.AddSingleton<AppCommandExitCodeResolver>();
         services.AddSingleton<AdbSubcommandDispatcher>();
         services.AddSingleton<DiscoveryCommandService>();
+        services.AddSingleton<JourneyIntakeValidationService>();
         services.AddSingleton<AppCommandDispatcher>();
         services.AddSingleton<ArtifactCommandService>();
         services.AddSingleton<ArtifactCommandHost>();

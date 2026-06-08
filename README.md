@@ -333,6 +333,7 @@ The public [CLI command groups](https://digablesolutions.github.io/luotsi/docs/r
 
 | Command | Description |
 |---|---|
+| `journey-intake validate --file <path>` | Validate a non-executable Journey intake handoff before scenario drafting |
 | `scenario-list --path <file-or-dir-or-glob>` | Discover scenario files and filters without executing them |
 | `scenario-init [--file <path>] [--name <name>]` | Generate a starter scenario with metadata, setup, screenshot steps, teardown, docs links, and next commands |
 | `scenario-validate (--file <path> | --path <path>)` | Validate scenarios without creating a device host |
