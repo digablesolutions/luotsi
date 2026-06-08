@@ -24,8 +24,8 @@ luotsi update [--version <tag>] [--channel stable|prerelease] [--dry-run] [--det
   - `artifacts pack` writes `luotsi-artifact-package.json` into the zip (schema/version, run id, created timestamp, category counts, recommended unpack-time commands, and packed file paths).
   - Packages are exact copies by default. `--redact lab-safe` opt-in redacts obvious secrets from text-like entries, leaves source artifacts and binary media unchanged, and records redaction counts in the manifest.
 - Validation and safety gates:
-  - `luotsi artifacts verify <artifact.zip> [--require-lab-safe]` validates a received package without writing files.
-  - `artifacts verify` and `artifacts info <artifact.zip>` require the manifest, check archive entries against it, report SHA-256 plus lab-safe redaction status, and return checksum-verified unpack/replay commands without extracting.
+  - `luotsi artifacts verify <package.zip> [--require-lab-safe]` validates a received package without writing files.
+  - `artifacts verify` and `artifacts info <package.zip>` require the manifest, check archive entries against it, report SHA-256 plus lab-safe redaction status, and return checksum-verified unpack/replay commands without extracting.
   - `--require-lab-safe` makes verify, unpack, or intake an enforcing CI/support handoff gate. Verify reports `status: blocked` for unredacted packages; unpack/intake reject them before extraction.
 - Restore workflows:
   - `artifacts unpack` performs the same validation, supports `--sha256 <digest>` before extraction, and refreshes `index.html` for non-dry-run restores.
