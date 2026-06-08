@@ -218,18 +218,9 @@ internal sealed class JourneyIntakeValidationService(IFileSystem fileSystem)
     }
 
     private static bool HasOptionToken(string command, string optionName)
-    {
-        foreach (var token in EnumerateCommandTokens(command))
-        {
-            if (string.Equals(token, optionName, StringComparison.Ordinal)
-                || token.StartsWith($"{optionName}=", StringComparison.Ordinal))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+        => EnumerateCommandTokens(command).Any(token =>
+            string.Equals(token, optionName, StringComparison.Ordinal)
+            || token.StartsWith($"{optionName}=", StringComparison.Ordinal));
 
     private static IEnumerable<string> EnumerateCommandTokens(string command)
     {
