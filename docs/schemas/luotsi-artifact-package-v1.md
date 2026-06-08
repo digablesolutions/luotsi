@@ -2,7 +2,7 @@
 
 `luotsi-artifact-package.json` is the manifest embedded at the root of every `luotsi artifacts pack` zip. It is the durable handoff contract for replayable artifact packages. Use `luotsi artifacts verify <artifact.zip>` to validate the manifest, archive entries, SHA-256, and redaction status without extracting the package. Use `luotsi artifacts verify <artifact.zip> --require-lab-safe` or `luotsi artifacts unpack <artifact.zip> --require-lab-safe` when support or CI must reject unredacted packages before unpacking.
 
-Use `luotsi artifacts info <artifact.zip>` to inspect and validate a package manifest, redaction metadata, SHA-256, and unpack/replay commands before extracting files. Use `luotsi artifacts intake <artifact.zip> --require-lab-safe --sha256 <digest>` to enforce lab-safe redaction, verify package bytes, restore the artifact root, and return info/open/replay commands in one step. The lower-level `luotsi artifacts unpack <artifact.zip> --require-lab-safe --sha256 <digest>` command enforces the same gates before extraction; failures happen before files are written.
+Use `luotsi artifacts info <artifact.zip>` to inspect and validate a package manifest, redaction metadata, SHA-256, and unpack/replay commands before extracting files. Use `luotsi artifacts intake <artifact.zip> --require-lab-safe --write-json --write-readme --sha256 <digest>` to enforce lab-safe redaction, verify package bytes, restore the artifact root, persist the intake audit summary, and return info/open/replay commands in one step. The lower-level `luotsi artifacts unpack <artifact.zip> --require-lab-safe --sha256 <digest>` command enforces the same gates before extraction; failures happen before files are written.
 
 ## Top-level fields
 
@@ -96,7 +96,7 @@ Each `recommended_commands` item is an object with:
 - Missing `redaction` means the package was created before redaction metadata existed or with the default exact-copy policy.
 - `artifacts verify --require-lab-safe` treats missing `redaction` or any non-`lab-safe` mode as a blocked handoff gate and exits non-zero while still reporting manifest/SHA details.
 - `artifacts unpack --require-lab-safe` treats missing `redaction` or any non-`lab-safe` mode as a usage error before files are extracted.
-- `artifacts intake --require-lab-safe` uses the same extraction-time gate as unpack, then reports whether the package was only `validated` (`--dry-run`) or `restored`.
+- `artifacts intake --require-lab-safe` uses the same extraction-time gate as unpack, then reports whether the package was only `validated` (`--dry-run`) or `restored`; when `--write-json` or `--write-readme` is used on a restore, Luotsi writes `artifact-intake-summary.json` or `artifact-intake.md` into the restored root and refreshes the artifact index.
 - Missing `luotsi-artifact-package.json` is invalid for supported packages and `artifacts info` / `artifacts verify` / `artifacts unpack` / `artifacts intake` fail with a usage error.
 - Invalid manifest JSON or missing required fields must fail info/verify/unpack/intake validation early with a clear usage error.
 - New manifest revisions should use a new `schema` value rather than changing the meaning of existing required fields in place.

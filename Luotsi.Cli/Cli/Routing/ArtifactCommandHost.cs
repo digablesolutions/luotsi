@@ -69,7 +69,7 @@ internal sealed class ArtifactCommandHost(
     private Task<ArtifactIntakeResult> IntakeAsync(CliOptions options)
     {
         var target = RequireTarget(options, "intake", "<artifact.zip>");
-        return _artifactCommandService.IntakeAsync(target, options.Get("output"), options.HasFlag("force"), options.HasFlag("dry-run"), options.HasFlag("require-lab-safe"), options.HasFlag("open"), options.Get("sha256"));
+        return _artifactCommandService.IntakeAsync(target, options.Get("output"), options.HasFlag("force"), options.HasFlag("dry-run"), options.HasFlag("require-lab-safe"), options.HasFlag("open"), options.HasFlag("write-json"), options.HasFlag("write-readme"), options.Get("sha256"));
     }
 
     private static string RequireTarget(CliOptions options, string subcommand, string argumentName)
