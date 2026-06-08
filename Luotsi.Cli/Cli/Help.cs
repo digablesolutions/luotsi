@@ -205,11 +205,11 @@ First run:
      luotsi quickstart
      luotsi quickstart --device <adb serial> --package <app.id> --artifacts artifacts/first-run
 
-  1. Confirm device visibility
+  1. Select or explain the target device
+     luotsi doctor
      luotsi devices
 
   2. Run guided readiness checks and fixes
-     luotsi doctor
      luotsi doctor --device <adb serial>
      luotsi doctor --device <adb serial> --fix
      Without a selected device, doctor lists adb-visible devices and returns

@@ -109,9 +109,21 @@ public sealed partial class AppTests
         Assert.Equal("luotsi-quickstart.v1", data.GetProperty("schema").GetString());
         Assert.Equal("ready_to_start", data.GetProperty("status").GetString());
         Assert.Equal("5m", data.GetProperty("time_budget").GetString());
-        Assert.Equal("luotsi doctor --device <adb serial> --package <app.id> --fix", data.GetProperty("first_command").GetString());
+        Assert.Equal("luotsi doctor", data.GetProperty("first_command").GetString());
         Assert.Contains("JSONL", data.GetProperty("agent_prompt").GetString(), StringComparison.Ordinal);
         Assert.True(data.GetProperty("steps").GetArrayLength() >= 6);
+        Assert.Contains(
+            data.GetProperty("steps").EnumerateArray(),
+            step => step.GetProperty("id").GetString() == "select_device" &&
+                step.GetProperty("command").GetString() == "luotsi doctor");
+        Assert.Contains(
+            data.GetProperty("steps").EnumerateArray(),
+            step => step.GetProperty("id").GetString() == "repair_readiness" &&
+                step.GetProperty("command").GetString() == "luotsi doctor --device <adb serial> --package <app.id> --fix");
+        Assert.Contains(
+            data.GetProperty("recommended_commands").EnumerateArray(),
+            command => command.GetProperty("kind").GetString() == "doctor" &&
+                command.GetProperty("command").GetString() == "luotsi doctor");
         Assert.Contains(
             data.GetProperty("recommended_commands").EnumerateArray(),
             command => command.GetProperty("kind").GetString() == "agent_loop" &&
@@ -135,8 +147,17 @@ public sealed partial class AppTests
         Assert.Equal("luotsi doctor --device emulator-5554 --package dev.luotsi.demo --fix", data.GetProperty("first_command").GetString());
         Assert.Contains(
             data.GetProperty("steps").EnumerateArray(),
+            step => step.GetProperty("id").GetString() == "select_device" &&
+                step.GetProperty("title").GetString() == "Confirm ADB can see the selected Android device." &&
+                step.GetProperty("command").GetString() == "luotsi devices");
+        Assert.Contains(
+            data.GetProperty("steps").EnumerateArray(),
             step => step.GetProperty("id").GetString() == "repair_readiness" &&
                 step.GetProperty("command").GetString() == "luotsi doctor --device emulator-5554 --package dev.luotsi.demo --fix");
+        Assert.Contains(
+            data.GetProperty("recommended_commands").EnumerateArray(),
+            command => command.GetProperty("kind").GetString() == "doctor" &&
+                command.GetProperty("command").GetString() == "luotsi doctor --device emulator-5554 --package dev.luotsi.demo");
         Assert.Contains(
             data.GetProperty("recommended_commands").EnumerateArray(),
             command => command.GetProperty("kind").GetString() == "discover" &&

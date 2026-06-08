@@ -12,16 +12,17 @@ luotsi quickstart
 luotsi quickstart --device <serial> --package <app.id> --artifacts artifacts/first-run
 ```
 
-The command returns a JSON envelope with a five-minute path, concrete commands, an AI-agent prompt, and the local-first/artifact-first boundary that explains where Luotsi fits beside automation frameworks and hosted device services.
+The command returns a JSON envelope with a five-minute path, concrete commands, an AI-agent prompt, and the local-first/artifact-first boundary that explains where Luotsi fits beside automation frameworks and hosted device services. If you do not pass `--device`, the first command is `luotsi doctor` so Luotsi can list adb-visible devices and return the exact selected-device next command.
 
-## 1. Confirm device visibility
+## 1. Select or explain the target device
 
 ```bash
+luotsi doctor
 luotsi devices
 luotsi device-status --device <serial>
 ```
 
-Use the adb transport selector from `luotsi devices` or `adb devices -l` as your `--device` value.
+Use the `next_command` returned by bare `doctor`, or use the adb transport selector from `luotsi devices` / `adb devices -l` as your `--device` value.
 
 ## 2. Run the onboarding check
 

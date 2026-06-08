@@ -22,11 +22,11 @@ luotsi update [--version <tag>] [--channel stable|prerelease] [--dry-run] [--det
 
 Use these entry points when you want the shortest path into a real Luotsi workflow instead of scanning the full command surface.
 
-For a machine-readable five-minute plan, run `luotsi quickstart`. Pass `--device`, `--package`, and `--artifacts` when you want the output to contain concrete commands for a specific app. For the human help topic, run `luotsi help quickstart` or jump directly to a command family with `luotsi help <topic>`.
+For a machine-readable five-minute plan, run `luotsi quickstart`. Without `--device`, the plan starts with `luotsi doctor` so device selection and the exact selected-device next command come from live guidance. Pass `--device`, `--package`, and `--artifacts` when you already know the target and want the output to contain concrete commands for a specific app. For the human help topic, run `luotsi help quickstart` or jump directly to a command family with `luotsi help <topic>`.
 
 | Goal | Command |
 |---|---|
-| Get a five-minute first-run plan | `luotsi quickstart --device <serial> --package <app.id> --artifacts artifacts/first-run` |
+| Get a five-minute first-run plan | `luotsi quickstart` or `luotsi quickstart --device <serial> --package <app.id> --artifacts artifacts/first-run` |
 | Confirm Luotsi can see your device | `luotsi devices` |
 | Choose a device and diagnose first-run issues | `luotsi doctor` then `luotsi doctor --device <serial>` |
 | Prepare or repair live-view prerequisites | `luotsi view setup --device <serial>` |
