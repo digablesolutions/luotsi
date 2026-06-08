@@ -28,6 +28,13 @@ internal sealed class DoctorCommandHost(
         ArgumentNullException.ThrowIfNull(runner);
         ArgumentNullException.ThrowIfNull(artifacts);
 
+        if (string.IsNullOrWhiteSpace(options.Get("device")) && string.IsNullOrWhiteSpace(options.Get("device-query")))
+        {
+            var guidance = await BuildDeviceGuidanceAsync(runner, options.Get("package")).ConfigureAwait(false);
+            _envelopeWriter.WriteSuccess(options.Command ?? "doctor", started, guidance, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
+            return string.Equals(guidance.Status, "ready_to_select", StringComparison.OrdinalIgnoreCase) ? 0 : 1;
+        }
+
         var adbHost = runner as IAdbCommandHost
             ?? throw new InvalidOperationException("Command 'doctor' requires a direct adb-backed device host.");
         var fix = options.HasFlag("fix");
@@ -91,6 +98,111 @@ internal sealed class DoctorCommandHost(
             readinessPlan.RecommendedCommands);
         _envelopeWriter.WriteSuccess(options.Command ?? "doctor", started, result, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
         return result.Ready ? 0 : 1;
+    }
+
+    private static async Task<DoctorDeviceGuidanceResult> BuildDeviceGuidanceAsync(IDeviceHost runner, string? package)
+    {
+        try
+        {
+            var inventory = await runner.GetDevicesAsync().ConfigureAwait(false);
+            var devices = inventory.Devices;
+            var onlineDevices = devices
+                .Where(device => string.Equals(device.Status, "device", StringComparison.OrdinalIgnoreCase))
+                .Where(static device => !string.IsNullOrWhiteSpace(device.Serial))
+                .ToArray();
+
+            if (onlineDevices.Length == 1)
+            {
+                var serial = onlineDevices[0].Serial!;
+                var doctorCommand = BuildDoctorCommand(serial, package, string.Empty, includeFix: false);
+                var doctorFixCommand = BuildDoctorCommand(serial, package, string.Empty, includeFix: true);
+                var recommendedCommands = new List<DoctorRecommendedCommandResult>
+                {
+                    new("doctor_selected", "Run the full first-run readiness report for the only online device.", doctorCommand),
+                    new("doctor_fix_selected", "Apply Luotsi-owned setup fixes if the readiness report reports blockers.", doctorFixCommand),
+                    new("inspect_selected", "Open an interactive inspect session after doctor is ready.", $"luotsi inspect --device {Quote(serial)}")
+                };
+
+                if (!string.IsNullOrWhiteSpace(package))
+                {
+                    recommendedCommands.Add(new DoctorRecommendedCommandResult("preflight_package", "Check target app readiness on the selected device.", BuildPreflightCommand(serial, package)));
+                }
+
+                return new DoctorDeviceGuidanceResult(
+                    "ready_to_select",
+                    $"Found one online device '{serial}'. Run the recommended doctor command to validate first-run readiness.",
+                    doctorCommand,
+                    devices,
+                    [],
+                    recommendedCommands);
+            }
+
+            if (onlineDevices.Length > 1)
+            {
+                var recommendedCommands = new List<DoctorRecommendedCommandResult>
+                {
+                    new("devices", "List attached devices and choose the intended serial.", "luotsi devices"),
+                    new("doctor_with_device", "Run first-run readiness for one explicit device.", BuildDoctorCommand("<adb serial>", package, string.Empty, includeFix: false)),
+                    new("lab_status", "Compare attached devices and refine a query when several are available.", "luotsi lab status")
+                };
+
+                return new DoctorDeviceGuidanceResult(
+                    "needs_device",
+                    $"Found {onlineDevices.Length} online devices. Choose one with --device or --device-query before running doctor.",
+                    "luotsi doctor --device <adb serial>",
+                    devices,
+                    [
+                        new DoctorReadinessBlocker(
+                            "doctor",
+                            "device_selection",
+                            "Doctor needs one selected Android device.",
+                            "Pass --device <adb serial> or --device-query <query>.",
+                            "luotsi doctor --device <adb serial>")
+                    ],
+                    recommendedCommands);
+            }
+
+            return new DoctorDeviceGuidanceResult(
+                "no_devices",
+                devices.Count == 0
+                    ? "No adb-visible devices were found. Connect a device or start an emulator before running doctor."
+                    : "No online adb devices were found. Resolve offline/unauthorized devices before running doctor.",
+                "luotsi devices",
+                devices,
+                [
+                    new DoctorReadinessBlocker(
+                        "doctor",
+                        "device_visibility",
+                        "No online adb device is available for first-run readiness.",
+                        "Connect a device, authorize USB debugging, start an emulator, or run adb start-server.",
+                        "luotsi devices")
+                ],
+                [
+                    new DoctorRecommendedCommandResult("devices", "Refresh the adb-visible device list.", "luotsi devices"),
+                    new DoctorRecommendedCommandResult("adb_start_server", "Start the adb server if no devices are visible.", "adb start-server"),
+                    new DoctorRecommendedCommandResult("doctor_retry", "Retry doctor after an online device appears.", "luotsi doctor --device <adb serial>")
+                ]);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return new DoctorDeviceGuidanceResult(
+                "device_inventory_failed",
+                "Doctor could not read the adb device list.",
+                "luotsi devices",
+                [],
+                [
+                    new DoctorReadinessBlocker(
+                        "doctor",
+                        "device_inventory",
+                        "Reading adb devices failed.",
+                        ex.Message,
+                        "luotsi devices")
+                ],
+                [
+                    new DoctorRecommendedCommandResult("devices", "Run the device inventory command to see the adb error.", "luotsi devices"),
+                    new DoctorRecommendedCommandResult("adb_start_server", "Start the adb server if adb is not responding.", "adb start-server")
+                ]);
+        }
     }
 
     private static DoctorReadinessPlan BuildReadinessPlan(

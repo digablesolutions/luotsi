@@ -59,6 +59,7 @@ Usage:
   luotsi artifacts pack <artifact-root-or-run-id> [--output <file.zip>] [--force] [--dry-run] [--redact lab-safe|off]
   luotsi artifacts verify <artifact.zip> [--output <directory>] [--require-lab-safe]
   luotsi artifacts unpack <artifact.zip> [--output <directory>] [--force] [--dry-run] [--require-lab-safe] [--sha256 <digest>]
+  luotsi artifacts intake <artifact.zip> [--output <directory>] [--force] [--dry-run] [--require-lab-safe] [--sha256 <digest>] [--open]
   luotsi run --path scenarios --report-json results.json --report-junit junit.xml
   luotsi run --path scenarios --events-jsonl events.jsonl
 
@@ -77,9 +78,9 @@ Artifacts:
   artifacts verify validates a package manifest and archive entries, reports
   SHA-256 and lab-safe redaction status, and returns exact unpack commands
   without writing files.
-  Add --require-lab-safe to make verify or unpack an enforcing handoff gate:
+  Add --require-lab-safe to make verify, unpack, or intake an enforcing handoff gate:
   packages that were not packed with --redact lab-safe return blocked status
-  for verify or a usage error for unpack before any files are extracted.
+  for verify or a usage error for unpack/intake before any files are extracted.
   By default packages are exact copies. Use --redact lab-safe to redact
   obvious secrets from text-like zip entries while leaving source artifacts
   and binary media unchanged; the manifest records the redaction policy used.
@@ -91,6 +92,10 @@ Artifacts:
   or replay it. Use --require-lab-safe to reject unredacted packages and
   --sha256 <digest> to require an expected package checksum before any files
   are extracted.
+  artifacts intake is the received-package shortcut for support, CI, and
+  agents: it applies the same unpack validation, restores the package, returns
+  exact info/open/replay commands, and can --open the refreshed index after a
+  successful restore. Use --dry-run for the same validation without writing.
   artifacts info/open also accept --last so you can jump straight back to the
   latest run artifact root under the default Luotsi run-artifact home or
   --artifacts <directory>.
@@ -110,6 +115,7 @@ Examples:
   luotsi artifacts pack artifacts/20260518-100000-run --output replay.zip
   luotsi artifacts pack artifacts/20260518-100000-run --output replay-lab-safe.zip --redact lab-safe
   luotsi artifacts verify replay-lab-safe.zip --require-lab-safe
+  luotsi artifacts intake replay-lab-safe.zip --output artifacts/replay --require-lab-safe --sha256 <digest>
   luotsi artifacts unpack replay-lab-safe.zip --output artifacts/replay --require-lab-safe --sha256 <digest>
   luotsi artifacts unpack replay.zip --output artifacts/replay --dry-run
 """,
@@ -180,10 +186,13 @@ First run:
      luotsi devices
 
   2. Run guided readiness checks and fixes
+     luotsi doctor
      luotsi doctor --device <adb serial>
      luotsi doctor --device <adb serial> --fix
-     Doctor JSON includes readiness_plan.status, blockers, next_command, and
-     recommended_commands for agent/operator handoff.
+     Without a selected device, doctor lists adb-visible devices and returns
+     exact next commands. With --device or --device-query, Doctor JSON includes
+     readiness_plan.status, blockers, next_command, and recommended_commands
+     for agent/operator handoff.
 
   3. Open a live mirror when you need operator feedback
      luotsi view --device <adb serial>
@@ -230,7 +239,7 @@ Usage:
   luotsi wait-for-device [--timeout-sec 15]
   luotsi device-wait [--timeout-sec 15]
   luotsi preflight [--package <app.id>]
-  luotsi doctor --device <adb serial> [--package <app.id>] [--fix]
+  luotsi doctor [--device <adb serial> | --device-query <query>] [--package <app.id>] [--fix]
   luotsi lab status [--device-query <query>]
                    [--device-pool <pool>] [--require-capabilities <csv>]
   luotsi lab doctor [--device-query <query>] [--fix]
@@ -272,10 +281,11 @@ Output:
   probe attempt/retry counts for transient host readiness failures. Lab doctor
   reports ambiguous selection, offline devices, stale devices, and recommended
   repair commands. With --fix, Luotsi may run safe host-side recovery actions.
-  Top-level doctor is the first-run readiness entry point for one selected
-  device. Its JSON includes readiness_plan with status, blockers, next_command,
-  and recommended_commands so agents and operators can continue from the same
-  envelope.
+  Top-level doctor is the first-run readiness entry point. Without --device or
+  --device-query, it lists adb-visible devices and returns next commands for the
+  selected-device report. With one selected device, its JSON includes
+  readiness_plan with status, blockers, next_command, and recommended_commands
+  so agents and operators can continue from the same envelope.
   Lab claim creates a host-side lease token so CI and agents can avoid selecting
   a device already claimed by another workflow. With --claim-wait-sec, Luotsi
   joins a persistent queue and waits fairly for the selected serial instead of
@@ -626,6 +636,7 @@ Workflow index:
 
   First-time setup and repair
     luotsi devices
+    luotsi doctor
     luotsi doctor --device <adb serial>
     luotsi view setup --device <adb serial>
     luotsi help lab
@@ -676,7 +687,7 @@ Command groups:
     wait-for-device [--timeout-sec 15]
     device-wait [--timeout-sec 15]
     preflight [--package <app.id>]
-    doctor --device <adb serial> [--package <app.id>] [--profile <name>] [--preset safe|balanced|high-quality|low-latency] [--defaults] [--read-only] [--decoder ffmpeg|wmf] [--capture-backend auto|screenrecord|mediaprojection] [--record <file>] [--fix]
+    doctor [--device <adb serial> | --device-query <query>] [--package <app.id>] [--profile <name>] [--preset safe|balanced|high-quality|low-latency] [--defaults] [--read-only] [--decoder ffmpeg|wmf] [--capture-backend auto|screenrecord|mediaprojection] [--record <file>] [--fix]
 
   ADB server and wireless
     adb server-status
@@ -740,6 +751,7 @@ Command groups:
     artifacts pack <artifact-root-or-run-id> [--output <file.zip>] [--force] [--dry-run] [--redact lab-safe|off]
     artifacts verify <artifact.zip> [--output <directory>] [--require-lab-safe]
     artifacts unpack <artifact.zip> [--output <directory>] [--force] [--dry-run] [--require-lab-safe] [--sha256 <digest>]
+    artifacts intake <artifact.zip> [--output <directory>] [--force] [--dry-run] [--require-lab-safe] [--sha256 <digest>] [--open]
     replay summarize --artifacts <artifact-root> [--format json|jsonl]
     replay capsule --artifacts <artifact-root> [--write-readme] [--write-json]
     replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]

@@ -218,6 +218,129 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_Doctor_Without_Device_Guides_To_Only_Online_Device()
+    {
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("192.168.0.134:5555", "device", "product:sdk model:Pixel_9 device:emu transport_id:1"));
+        var doctor = new FakeViewDoctor(options => new ViewDoctorResult(
+            true,
+            options.PresetName,
+            options,
+            [],
+            null,
+            [new ViewDoctorCheck("decoder", true, "FFmpeg native decoder is ready.")]));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            DeviceHostFactory = new FakeDeviceHostFactory(host),
+            ViewDoctorFactory = new FakeViewDoctorFactory(doctor)
+        });
+
+        var exitCode = await app.RunAsync(["doctor", "--package", "dev.luotsi.app"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("doctor", envelope.RootElement.GetProperty("command").GetString());
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("ready_to_select", data.GetProperty("status").GetString());
+        Assert.Equal("luotsi doctor --device 192.168.0.134:5555 --package dev.luotsi.app", data.GetProperty("next_command").GetString());
+        Assert.Single(data.GetProperty("devices").EnumerateArray());
+        Assert.Empty(data.GetProperty("blockers").EnumerateArray());
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "doctor_fix_selected" &&
+            command.GetProperty("command").GetString() == "luotsi doctor --device 192.168.0.134:5555 --package dev.luotsi.app --fix");
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "preflight_package" &&
+            command.GetProperty("command").GetString() == "luotsi preflight --device 192.168.0.134:5555 --package dev.luotsi.app");
+        Assert.Empty(doctor.Options);
+        Assert.Empty(host.AdbDiagnostics);
+    }
+
+    [Fact]
+    public async Task RunAsync_Doctor_Without_Device_Blocks_When_No_Online_Devices_Are_Visible()
+    {
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("USB123", "unauthorized", "product:pixel model:Pixel_9"));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var exitCode = await app.RunAsync(["doctor"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(1, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("no_devices", data.GetProperty("status").GetString());
+        Assert.Equal("luotsi devices", data.GetProperty("next_command").GetString());
+        Assert.Contains(data.GetProperty("blockers").EnumerateArray(), blocker =>
+            blocker.GetProperty("name").GetString() == "device_visibility" &&
+            blocker.GetProperty("command").GetString() == "luotsi devices");
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "adb_start_server" &&
+            command.GetProperty("command").GetString() == "adb start-server");
+    }
+
+    [Fact]
+    public async Task RunAsync_Doctor_Without_Device_Asks_For_Selection_When_Multiple_Devices_Are_Online()
+    {
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost();
+        host.ConnectedDevices.Add(new DeviceInfo("usb-1", "device", "model:Pixel_8"));
+        host.ConnectedDevices.Add(new DeviceInfo("usb-2", "device", "model:Pixel_9"));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var exitCode = await app.RunAsync(["doctor"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(1, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("needs_device", data.GetProperty("status").GetString());
+        Assert.Equal("luotsi doctor --device <adb serial>", data.GetProperty("next_command").GetString());
+        Assert.Contains(data.GetProperty("blockers").EnumerateArray(), blocker =>
+            blocker.GetProperty("name").GetString() == "device_selection");
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "lab_status" &&
+            command.GetProperty("command").GetString() == "luotsi lab status");
+    }
+
+    [Fact]
+    public async Task RunAsync_Doctor_Without_Device_Blocks_When_Device_Inventory_Fails()
+    {
+        var console = new FakeConsole();
+        var host = new FakeDeviceHost
+        {
+            GetDevicesException = new InvalidOperationException("adb failed")
+        };
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            DeviceHostFactory = new FakeDeviceHostFactory(host)
+        });
+
+        var exitCode = await app.RunAsync(["doctor"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(1, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("device_inventory_failed", data.GetProperty("status").GetString());
+        Assert.Equal("luotsi devices", data.GetProperty("next_command").GetString());
+        Assert.Contains(data.GetProperty("blockers").EnumerateArray(), blocker =>
+            blocker.GetProperty("name").GetString() == "device_inventory" &&
+            blocker.GetProperty("recommendation").GetString() == "adb failed");
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "devices" &&
+            command.GetProperty("command").GetString() == "luotsi devices");
+    }
+
+    [Fact]
     public async Task RunAsync_Doctor_Reuses_ViewDoctor_And_PackagePreflight()
     {
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
