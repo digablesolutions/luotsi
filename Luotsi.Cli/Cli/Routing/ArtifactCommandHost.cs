@@ -25,7 +25,8 @@ internal sealed class ArtifactCommandHost(
             "pack" => await PackAsync(options).ConfigureAwait(false),
             "verify" => await VerifyAsync(options).ConfigureAwait(false),
             "unpack" => await UnpackAsync(options).ConfigureAwait(false),
-            _ => throw new UsageException("artifacts command must be one of: list, info, open, pack, verify, unpack.")
+            "intake" => await IntakeAsync(options).ConfigureAwait(false),
+            _ => throw new UsageException("artifacts command must be one of: list, info, open, pack, verify, unpack, intake.")
         };
 
         _envelopeWriter.WriteSuccess(options.Command!, started, data, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
@@ -63,6 +64,12 @@ internal sealed class ArtifactCommandHost(
     {
         var target = RequireTarget(options, "unpack", "<artifact.zip>");
         return _artifactCommandService.UnpackAsync(target, options.Get("output"), options.HasFlag("force"), options.HasFlag("dry-run"), options.HasFlag("require-lab-safe"), options.Get("sha256"));
+    }
+
+    private Task<ArtifactIntakeResult> IntakeAsync(CliOptions options)
+    {
+        var target = RequireTarget(options, "intake", "<artifact.zip>");
+        return _artifactCommandService.IntakeAsync(target, options.Get("output"), options.HasFlag("force"), options.HasFlag("dry-run"), options.HasFlag("require-lab-safe"), options.HasFlag("open"), options.Get("sha256"));
     }
 
     private static string RequireTarget(CliOptions options, string subcommand, string argumentName)

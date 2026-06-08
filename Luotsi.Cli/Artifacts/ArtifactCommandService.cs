@@ -286,6 +286,39 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             ]);
     }
 
+    public async Task<ArtifactIntakeResult> IntakeAsync(string packagePath, string? output, bool force, bool dryRun, bool requireLabSafe, bool open, string? expectedSha256 = null)
+    {
+        if (open && dryRun)
+        {
+            throw new UsageException("artifacts intake --open cannot be combined with --dry-run.");
+        }
+
+        var unpack = await UnpackAsync(packagePath, output, force, dryRun, requireLabSafe, expectedSha256).ConfigureAwait(false);
+        if (open && unpack.IndexPath is not null)
+        {
+            await _artifactOpener.OpenAsync(unpack.IndexPath).ConfigureAwait(false);
+        }
+
+        var shareSafety = ResolveShareSafety(unpack.Manifest);
+        var status = dryRun ? "validated" : "restored";
+        return new ArtifactIntakeResult(
+            unpack.Package,
+            status,
+            unpack.OutputDirectory,
+            unpack.EntryCount,
+            unpack.DryRun,
+            open && !dryRun,
+            unpack.IndexPath,
+            unpack.ManifestPath,
+            unpack.ManifestOutputPath,
+            unpack.Manifest,
+            unpack.Sha256,
+            shareSafety,
+            requireLabSafe,
+            unpack.Verification,
+            CreateIntakeRecommendedCommands(unpack.Package, unpack.OutputDirectory, dryRun, open, requireLabSafe, unpack.Sha256));
+    }
+
     private async Task<string> EnsureIndexAsync(string artifactRoot)
     {
         var htmlIndexPath = Path.Join(artifactRoot, HtmlIndexFileName);
@@ -983,6 +1016,27 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         ];
     }
 
+    private static IReadOnlyList<ArtifactRecommendedCommandResult> CreateIntakeRecommendedCommands(string packagePath, string outputDirectory, bool dryRun, bool opened, bool requireLabSafe, string sha256)
+    {
+        var commands = new List<ArtifactRecommendedCommandResult>
+        {
+            new("info_artifacts", "Inspect the restored artifact root without mutating it.", $"luotsi artifacts info {Quote(outputDirectory)}"),
+            new("replay_open", "Open the replay workbench for the restored artifact root.", $"luotsi replay open --artifacts {Quote(outputDirectory)}")
+        };
+
+        if (dryRun)
+        {
+            var labSafeGate = requireLabSafe ? " --require-lab-safe" : string.Empty;
+            commands.Insert(0, new ArtifactRecommendedCommandResult("intake_artifacts", "Restore this package after the dry-run validation.", $"luotsi artifacts intake {Quote(packagePath)} --output {Quote(outputDirectory)}{labSafeGate} --sha256 {sha256}"));
+        }
+        else if (!opened)
+        {
+            commands.Insert(1, new ArtifactRecommendedCommandResult("open_artifacts", "Open the restored artifact root.", $"luotsi artifacts open {Quote(outputDirectory)}"));
+        }
+
+        return commands;
+    }
+
     private static string ResolveLabSafeOutputPath(string outputPath)
     {
         var separatorIndex = outputPath.LastIndexOfAny(['/', '\\']);
@@ -1126,6 +1180,23 @@ internal sealed record ArtifactUnpackResult(
     string ManifestOutputPath,
     ArtifactPackageManifestResult Manifest,
     string Sha256,
+    ArtifactPackageVerificationResult? Verification,
+    IReadOnlyList<ArtifactRecommendedCommandResult> RecommendedCommands);
+
+internal sealed record ArtifactIntakeResult(
+    string Package,
+    string Status,
+    string OutputDirectory,
+    int EntryCount,
+    bool DryRun,
+    bool Opened,
+    string? IndexPath,
+    string ManifestPath,
+    string ManifestOutputPath,
+    ArtifactPackageManifestResult Manifest,
+    string Sha256,
+    string ShareSafety,
+    bool LabSafeRequired,
     ArtifactPackageVerificationResult? Verification,
     IReadOnlyList<ArtifactRecommendedCommandResult> RecommendedCommands);
 
