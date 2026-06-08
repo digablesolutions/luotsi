@@ -160,7 +160,7 @@ luotsi update --version v0.1.0-rc.4 --channel prerelease --detach
 
 Luotsi does not auto-update silently. Updates are explicit so CI and lab machines stay reproducible. If Luotsi was installed into a custom root and `luotsi version` cannot find its manifest, set `LUOTSI_INSTALL_ROOT` to that install root. On Windows, non-dry-run update requires `--detach` and returns `update_started` after launching a background updater that waits for the current `luotsi.exe` process to exit before replacing the installed `current` directory.
 
-**First run after install.** Start with the structured quickstart plan, then point Luotsi at a connected device and ask it to diagnose or repair the local prerequisites it owns:
+**First run after install.** Start with the structured quickstart plan, then let `doctor` select or explain the target device before running the full selected-device readiness report:
 
 ```bash
 luotsi quickstart
@@ -173,11 +173,11 @@ luotsi doctor --device <serial>
 luotsi doctor --device <serial> --fix
 ```
 
-Without `--device` or `--device-query`, `doctor` lists adb-visible devices and returns exact next commands for the selected-device report. With a selected device, it reuses the existing adb, device preflight, and live-view readiness checks. Its JSON includes a `readiness_plan` with `status`, `blockers`, `next_command`, and `recommended_commands` so humans and agents can continue from the same result. With `--fix`, Luotsi stages FFmpeg native libraries when the selected decoder is missing them, then runs the same helper provisioning flow used by `view setup`. Published Luotsi bundles include the repair assets needed for those fixes, and source checkouts continue to use the repository layout.
+When `quickstart` has no `--device`, its first command is `luotsi doctor`. Without `--device` or `--device-query`, `doctor` lists adb-visible devices and returns exact next commands for the selected-device report. With a selected device, it reuses the existing adb, device preflight, and live-view readiness checks. Its JSON includes a `readiness_plan` with `status`, `blockers`, `next_command`, and `recommended_commands` so humans and agents can continue from the same result. With `--fix`, Luotsi stages FFmpeg native libraries when the selected decoder is missing them, then runs the same helper provisioning flow used by `view setup`. Published Luotsi bundles include the repair assets needed for those fixes, and source checkouts continue to use the repository layout.
 
 ## Workflow quickstart
 
-If you already have a device connected, start from `luotsi quickstart --device <serial> --package <app.id>`. It returns a JSON envelope with `status`, `time_budget`, concrete steps, `recommended_commands`, positioning against similar tools, and an `agent_prompt` for an AI operator. Then choose the workflow that matches what you are trying to do.
+If you already know the target serial, start from `luotsi quickstart --device <serial> --package <app.id>`. If you do not, use bare `luotsi quickstart`; it starts with `luotsi doctor` so the next command comes from live device selection guidance. The quickstart envelope includes `status`, `time_budget`, concrete steps, `recommended_commands`, positioning against similar tools, and an `agent_prompt` for an AI operator. Then choose the workflow that matches what you are trying to do.
 
 1. First-time setup and repair:
 
