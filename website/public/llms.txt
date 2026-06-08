@@ -11,6 +11,7 @@ Luotsi automates and inspects real Android device workflows over ADB from a host
 - Quickstart: https://digablesolutions.github.io/luotsi/docs/getting-started/quickstart/
 - Device readiness: https://digablesolutions.github.io/luotsi/docs/getting-started/device-readiness/
 - AI agent workflows: https://digablesolutions.github.io/luotsi/docs/core-workflows/ai-agent-workflows/
+- Evidence-backed Android Journeys: https://digablesolutions.github.io/luotsi/docs/core-workflows/evidence-backed-android-journeys/
 - Agent loop example: https://digablesolutions.github.io/luotsi/docs/core-workflows/agent-loop-example/
 - Android automation for engineering leads: https://digablesolutions.github.io/luotsi/docs/use-cases/android-automation-for-engineering-leads/
 - When Luotsi fits: https://digablesolutions.github.io/luotsi/docs/use-cases/when-luotsi-fits/
@@ -40,6 +41,7 @@ Luotsi automates and inspects real Android device workflows over ADB from a host
 - Use When Luotsi Fits first when you want the shortest product-fit check before branching into role-specific or workflow-specific pages.
 - Use Luotsi Alternatives And Comparison when the question is how Luotsi differs from browser automation, hosted device farms, recorder-first tools, or ad hoc adb scripting.
 - Use AI Agent Workflows first when you need to decide whether the right control surface is `inspect`, `view`, `run`, or `replay`.
+- Use Evidence-Backed Android Journeys when the query starts from Android CLI Journey-style intent and needs a Luotsi scenario, replay, lab, or CI evidence path.
 - Use Agent Loop Example when you need a minimal host-side adapter that reads `inspect` JSONL and writes JSON commands.
 - Use the use-case landing pages when the query is about fit for CI labs, replay-driven triage, live remote inspection, or scenario-based automation rather than a single command.
 - Use Output Envelopes when you need to distinguish single JSON envelopes from long-lived JSONL sessions.

@@ -1,0 +1,126 @@
+---
+title: Evidence-Backed Android Journeys
+description: Combine Android CLI Journey intent with Luotsi's real-device evidence, replay artifacts, and shared-lab CI workflow.
+---
+
+Android CLI Journeys make natural-language app-flow testing a first-class Android agent workflow. Luotsi complements that by turning reviewed flows into real-device sessions, replayable artifacts, and CI evidence that can be inspected after the device is gone.
+
+Use this workflow when an agent starts from Journey-style intent, but the team still needs explicit scenario files, lab discipline, and durable failure evidence.
+
+Start with the official [Android CLI overview](https://developer.android.com/tools/agents/android-cli) and [Android CLI Journeys guide](https://developer.android.com/tools/agents/android-cli/journeys) when you need the Android-side command and Journey authoring details.
+
+## How the tools fit
+
+| Surface | Owns | Use it for |
+| --- | --- | --- |
+| Android CLI | Official Android command-line tooling, Android skills, Android Studio-backed project intelligence, and Journey authoring. | Ask an agent to understand Android project context, apply Android guidance, draft Journey intent, or run Android CLI-supported Journey flows. |
+| Luotsi | Real-device JSONL control, scenario execution, replay artifacts, shared physical-lab governance, and CI-grade reports. | Prove the flow on adb-visible devices, preserve screenshots/logcat/telemetry/replay data, and hand failures to humans or agents without reconnecting to the device. |
+
+This is a bridge, not a replacement. Android CLI gives agents official Android project and Journey context; Luotsi gives the same agent loop a host-side evidence trail around real devices.
+
+## Recommended flow
+
+### 1. Prove the device path
+
+Start with Luotsi readiness before spending agent time on app behavior.
+
+```bash
+luotsi doctor --device <serial> --fix
+```
+
+Use `doctor` output to resolve adb visibility, helper provisioning, and live-view prerequisites before the Journey or scenario run.
+
+### 2. Draft Journey intent with Android CLI
+
+Use Android CLI and Android skills to help an agent understand the app and describe the core user experience. Keep the output as intent until a human or policy gate has reviewed what the agent plans to do.
+
+For a concrete handoff shape, start from the repository template:
+
+```bash
+cp examples/journey-intake/evidence-backed-journey-intake.template.json journey-intake.json
+luotsi journey-intake validate --file journey-intake.json
+```
+
+The template uses the `luotsi-journey-intake.v1` schema so editors and agents can check that the handoff includes app context, device assumptions, Journey steps, assertions, guardrails, Luotsi commands, and review fields. `journey-intake validate` checks the production-critical handoff fields from the Luotsi CLI and exits non-zero when required guardrails or commands are missing.
+
+Examples of useful Journey intent:
+
+- The app package and starting activity.
+- The user goal, such as signing in, adding an item, or opening a detail screen.
+- Assertions that matter to the business flow.
+- Unsafe actions to avoid, such as destructive account changes or production purchases.
+- Device assumptions, such as orientation, form factor, or account state.
+
+### 3. Explore or map the real device with Luotsi
+
+When the flow is still being learned, use `inspect` for step-by-step JSONL control:
+
+```bash
+luotsi inspect --device <serial> --artifacts artifacts/journey-intake
+```
+
+When the app surface is broader or unknown, use bounded discovery:
+
+```bash
+luotsi discover --device <serial> --package <app.id> --budget 5m --artifacts artifacts/journey-intake
+```
+
+Both paths preserve an artifact root that can be replayed later.
+
+### 4. Promote reviewed behavior into a scenario
+
+Use replay output to turn the explored behavior into a review-required scenario candidate:
+
+```bash
+luotsi artifacts list --artifacts artifacts/journey-intake
+luotsi replay open --last --artifacts artifacts/journey-intake --dry-run
+luotsi replay scenario-draft --artifacts artifacts/journey-intake/<run-id> --output scenarios/from-journey.json --validate --write-markdown
+```
+
+Review the generated JSON before running it unattended. Luotsi scenarios are explicit playbooks, not arbitrary natural-language execution.
+
+### 5. Validate and run with evidence
+
+Run the checked scenario in dry-run mode first, then execute it on a device or claimed lab target.
+
+```bash
+luotsi scenario-validate --path scenarios
+luotsi run --file scenarios/from-journey.json --device <serial> --dry-run
+luotsi run --file scenarios/from-journey.json --device <serial> --output-dir artifacts/from-journey-run --report-junit artifacts/from-journey-run/junit.xml
+```
+
+For shared labs, prefer a claimed run:
+
+```bash
+luotsi run --file scenarios/from-journey.json --device-query "state=online,type=physical,availability=available" --claim-device --claim-wait-sec 60 --output-dir artifacts/from-journey-run --report-junit artifacts/from-journey-run/junit.xml
+```
+
+### 6. Reopen the evidence instead of rerunning
+
+After the run, replay is the handoff point for agents, reviewers, and CI triage.
+
+```bash
+luotsi replay open --artifacts artifacts/from-journey-run --dry-run
+luotsi replay capsule --artifacts artifacts/from-journey-run --write-readme --write-json
+luotsi replay graph --artifacts artifacts/from-journey-run --failed --write-markdown
+luotsi replay search --artifacts artifacts/from-journey-run --contains "error"
+```
+
+Use replay before reconnecting to the device. Screenshots, hierarchy captures, logcat, telemetry, reports, timelines, and graph output are the durable record of what the Journey-style flow actually did.
+
+## Guardrails
+
+- Keep Journey text as intent until it has been converted into a reviewed Luotsi scenario or an explicit `inspect` command sequence.
+- Do not execute arbitrary natural language unattended through Luotsi.
+- Prefer selectors and semantic waits over raw coordinates when the UI hierarchy is reliable.
+- Preserve artifact roots in CI so failures can be reviewed without rerunning the device session.
+- Use lab claims when multiple agents, engineers, or runners can reach the same physical devices.
+
+## Open these next
+
+- [AI Agent Workflows](../ai-agent-workflows/)
+- [Inspect And Scenarios](../inspect-and-scenarios/)
+- [Autonomous Discovery](../autonomous-discovery/)
+- [Replay And Artifacts](../replay-and-artifacts/)
+- [Scenario Playbooks](../../reference/scenario-playbooks/)
+- [Journey intake template](https://github.com/digablesolutions/luotsi/tree/main/examples/journey-intake)

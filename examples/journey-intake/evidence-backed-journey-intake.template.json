@@ -1,0 +1,67 @@
+{
+  "$schema": "./luotsi-journey-intake.schema.json",
+  "schema": "luotsi-journey-intake.v1",
+  "name": "sign-in-smoke",
+  "source": {
+    "kind": "android-cli-journey-intent",
+    "notes": "Paste or summarize the Android CLI Journey-style intent here before converting it into Luotsi exploration or scenario work."
+  },
+  "app": {
+    "package": "com.example.app",
+    "activity": ".MainActivity",
+    "startUri": ""
+  },
+  "device": {
+    "serial": "",
+    "query": "state=online,type=physical,availability=available",
+    "model": "",
+    "androidRelease": "",
+    "sdk": "",
+    "orientation": "portrait"
+  },
+  "journey": {
+    "userGoal": "User can sign in and reach the account home screen.",
+    "startingState": "App is installed, user has valid test credentials, and the device is on the launcher or app start screen.",
+    "steps": [
+      "Start the app.",
+      "Wait for the sign-in action.",
+      "Enter test credentials.",
+      "Submit the form.",
+      "Confirm the account home screen is visible."
+    ],
+    "assertions": [
+      "The expected home or account text is visible after sign-in.",
+      "No error message is visible.",
+      "A screenshot is captured after the successful transition."
+    ]
+  },
+  "guardrails": {
+    "reviewRequired": true,
+    "doNotExecuteAsNaturalLanguage": true,
+    "unsafeActionsToAvoid": [
+      "Do not use production accounts.",
+      "Do not make purchases.",
+      "Do not delete user data unless the test app and account are disposable."
+    ],
+    "preferredSelectors": [
+      "Use exact text matches for short labels.",
+      "Prefer resourceId, contentDescription, className, or region when labels are repeated.",
+      "Prefer semantic waits and assertions over raw coordinates when hierarchy output is reliable."
+    ]
+  },
+  "luotsiHandoff": {
+    "readinessCommand": "luotsi doctor --device <serial> --fix",
+    "exploreCommand": "luotsi inspect --device <serial> --artifacts artifacts/journey-intake",
+    "discoveryCommand": "luotsi discover --device <serial> --package com.example.app --budget 5m --artifacts artifacts/journey-intake",
+    "draftCommand": "luotsi replay scenario-draft --artifacts artifacts/journey-intake/<run-id> --output scenarios/from-journey.json --validate --write-markdown",
+    "dryRunCommand": "luotsi run --file scenarios/from-journey.json --device <serial> --dry-run",
+    "runCommand": "luotsi run --file scenarios/from-journey.json --device <serial> --output-dir artifacts/from-journey-run --report-junit artifacts/from-journey-run/junit.xml",
+    "claimedRunCommand": "luotsi run --file scenarios/from-journey.json --device-query \"state=online,type=physical,availability=available\" --claim-device --claim-wait-sec 60 --output-dir artifacts/from-journey-run --report-junit artifacts/from-journey-run/junit.xml",
+    "replayCommand": "luotsi replay open --artifacts artifacts/from-journey-run --dry-run"
+  },
+  "review": {
+    "owner": "",
+    "approvedAt": "",
+    "notes": ""
+  }
+}

@@ -1,0 +1,231 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://digablesolutions.github.io/luotsi/schemas/luotsi-journey-intake.v1.schema.json",
+  "title": "Luotsi Journey Intake",
+  "description": "A non-executable handoff document for Android CLI Journey-style intent before reviewed Luotsi scenario creation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "name",
+    "source",
+    "app",
+    "device",
+    "journey",
+    "guardrails",
+    "luotsiHandoff",
+    "review"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schema": {
+      "const": "luotsi-journey-intake.v1"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "notes"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "android-cli-journey-intent",
+            "manual-journey-intent",
+            "agent-journey-intent"
+          ]
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "package"
+      ],
+      "properties": {
+        "package": {
+          "type": "string",
+          "minLength": 1
+        },
+        "activity": {
+          "type": "string"
+        },
+        "startUri": {
+          "type": "string"
+        }
+      }
+    },
+    "device": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "serial": {
+          "type": "string"
+        },
+        "query": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "androidRelease": {
+          "type": "string"
+        },
+        "sdk": {
+          "type": "string"
+        },
+        "orientation": {
+          "enum": [
+            "portrait",
+            "landscape",
+            "unknown"
+          ]
+        }
+      }
+    },
+    "journey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "userGoal",
+        "startingState",
+        "steps",
+        "assertions"
+      ],
+      "properties": {
+        "userGoal": {
+          "type": "string",
+          "minLength": 1
+        },
+        "startingState": {
+          "type": "string"
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "assertions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "guardrails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reviewRequired",
+        "doNotExecuteAsNaturalLanguage",
+        "unsafeActionsToAvoid",
+        "preferredSelectors"
+      ],
+      "properties": {
+        "reviewRequired": {
+          "const": true
+        },
+        "doNotExecuteAsNaturalLanguage": {
+          "const": true
+        },
+        "unsafeActionsToAvoid": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "preferredSelectors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "luotsiHandoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "readinessCommand",
+        "exploreCommand",
+        "discoveryCommand",
+        "draftCommand",
+        "dryRunCommand",
+        "runCommand",
+        "claimedRunCommand",
+        "replayCommand"
+      ],
+      "properties": {
+        "readinessCommand": {
+          "type": "string",
+          "pattern": "^luotsi doctor "
+        },
+        "exploreCommand": {
+          "type": "string",
+          "pattern": "^luotsi inspect "
+        },
+        "discoveryCommand": {
+          "type": "string",
+          "pattern": "^luotsi discover "
+        },
+        "draftCommand": {
+          "type": "string",
+          "pattern": "^luotsi replay scenario-draft "
+        },
+        "dryRunCommand": {
+          "type": "string",
+          "pattern": "^luotsi run .+ --dry-run"
+        },
+        "runCommand": {
+          "type": "string",
+          "pattern": "^luotsi run "
+        },
+        "claimedRunCommand": {
+          "type": "string",
+          "pattern": "^luotsi run .+ --claim-device"
+        },
+        "replayCommand": {
+          "type": "string",
+          "pattern": "^luotsi replay open "
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "owner",
+        "approvedAt",
+        "notes"
+      ],
+      "properties": {
+        "owner": {
+          "type": "string"
+        },
+        "approvedAt": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

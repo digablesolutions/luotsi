@@ -138,6 +138,23 @@ Failure modes:
   commands useful where possible; screen-state includes attempted strategies
   and raw output in artifacts when hierarchy capture fails.
 """,
+        ["journey-intake"] = """
+Luotsi help: journey-intake
+
+Usage:
+  luotsi journey-intake validate --file <journey-intake.json>
+
+Examples:
+  luotsi journey-intake validate --file journey-intake.json
+  luotsi journey-intake validate --file examples/journey-intake/evidence-backed-journey-intake.template.json
+
+Notes:
+  journey-intake validates the non-executable luotsi-journey-intake.v1 handoff
+  contract used to turn Android CLI Journey-style intent into reviewed Luotsi
+  exploration, replay scenario drafts, and scenario validation. It does not
+  create scenarios or touch devices; invalid intake files return a non-zero exit
+  code with structured errors so CI can block unsafe handoffs.
+""",
         ["discover"] = """
 Luotsi help: discover
 
@@ -768,6 +785,7 @@ Command groups:
     update [--version <tag>] [--channel stable|prerelease] [--dry-run] [--detach]
 
   Scenarios and CI reports
+    journey-intake validate --file <journey-intake.json>
     scenario-init [--file <scenario.json>] [--name <name>] [--package <app.id>] [--activity <activity>] [--width <px>] [--height <px>] [--orientation <name>] [--force]
     scenario-list --path <scenario-file-or-directory-or-glob> [--include-tag <tag>] [--exclude-tag <tag>] [--name <text>] [--action <action>]
     scenario-validate (--file <scenario.json> | --path <scenario-file-or-directory-or-glob>) [--events-jsonl <file>] [--report-json <file>] [--report-junit <file>]
@@ -831,6 +849,7 @@ Design:
             "replay-summarize" => "replay",
             "version" => "update",
             "view-setup" or "view-doctor" or "reconnect" or "profile-list" or "profile-delete" => "view",
+            "journey-intake" => "journey-intake",
             "scenario-init" or "scenario-list" or "scenario-validate" or "scenario-explain" => "scenario",
             "wireless-scan" or "wireless-pair" or "wireless-connect" => "wireless",
             "forward" or "forward-list" or "forward-remove" or "reverse" or "reverse-list" or "reverse-remove" => "ports",
