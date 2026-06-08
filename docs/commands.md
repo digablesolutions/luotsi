@@ -29,7 +29,7 @@ luotsi update [--version <tag>] [--channel stable|prerelease] [--dry-run] [--det
   - `--require-lab-safe` makes verify, unpack, or intake an enforcing CI/support handoff gate. Verify reports `status: blocked` for unredacted packages; unpack/intake reject them before extraction.
 - Restore workflows:
   - `artifacts unpack` performs the same validation, supports `--sha256 <digest>` before extraction, and refreshes `index.html` for non-dry-run restores.
-  - `luotsi artifacts intake <artifact.zip> [--require-lab-safe] [--write-json] [--write-readme] [--sha256 <digest>]` validates and restores a shared package locally.
+  - `luotsi artifacts intake <package.zip> [--require-lab-safe] [--write-json] [--write-readme] [--sha256 <digest>]` validates and restores a shared package locally.
   - `artifacts intake` also reports received-package status and exact info/open/replay commands, supports `--open` to launch the refreshed index, and can persist `artifact-intake-summary.json` and `artifact-intake.md` with `--write-json --write-readme`.
 - `artifacts pack`, `artifacts unpack`, and `artifacts intake` all support `--dry-run` for safe handoff previews.
 
