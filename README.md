@@ -160,7 +160,12 @@ luotsi update --version v0.1.0-rc.4 --channel prerelease --detach
 
 Luotsi does not auto-update silently. Updates are explicit so CI and lab machines stay reproducible. If Luotsi was installed into a custom root and `luotsi version` cannot find its manifest, set `LUOTSI_INSTALL_ROOT` to that install root. On Windows, non-dry-run update requires `--detach` and returns `update_started` after launching a background updater that waits for the current `luotsi.exe` process to exit before replacing the installed `current` directory.
 
-**First run after install.** Point Luotsi at a connected device and ask it to diagnose or repair the local prerequisites it owns:
+**First run after install.** Start with the structured quickstart plan, then point Luotsi at a connected device and ask it to diagnose or repair the local prerequisites it owns:
+
+```bash
+luotsi quickstart
+luotsi quickstart --device <serial> --package <app.id> --artifacts artifacts/first-run
+```
 
 ```bash
 luotsi doctor --device <serial>
@@ -171,7 +176,7 @@ luotsi doctor --device <serial> --fix
 
 ## Workflow quickstart
 
-If you already have a device connected, start from the workflow that matches what you are trying to do.
+If you already have a device connected, start from `luotsi quickstart --device <serial> --package <app.id>`. It returns a JSON envelope with `status`, `time_budget`, concrete steps, `recommended_commands`, positioning against similar tools, and an `agent_prompt` for an AI operator. Then choose the workflow that matches what you are trying to do.
 
 1. First-time setup and repair:
 

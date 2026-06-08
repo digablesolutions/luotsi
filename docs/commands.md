@@ -4,6 +4,7 @@ All commands run on the host machine and return a single JSON envelope unless no
 
 ```
 luotsi [--device <serial> | --device-query <query>] [--platform android] [--adb <path>] [--adb-timeout-sec <n>] <command> [flags]
+luotsi quickstart [--device <serial>] [--package <app.id>] [--artifacts <directory>]
 luotsi --version
 luotsi version
 luotsi update [--version <tag>] [--channel stable|prerelease] [--dry-run] [--detach]
@@ -21,10 +22,11 @@ luotsi update [--version <tag>] [--channel stable|prerelease] [--dry-run] [--det
 
 Use these entry points when you want the shortest path into a real Luotsi workflow instead of scanning the full command surface.
 
-For the same summary inside the CLI, run `luotsi help quickstart` or jump directly to a command family with `luotsi help <topic>`.
+For a machine-readable five-minute plan, run `luotsi quickstart`. Pass `--device`, `--package`, and `--artifacts` when you want the output to contain concrete commands for a specific app. For the human help topic, run `luotsi help quickstart` or jump directly to a command family with `luotsi help <topic>`.
 
 | Goal | Command |
 |---|---|
+| Get a five-minute first-run plan | `luotsi quickstart --device <serial> --package <app.id> --artifacts artifacts/first-run` |
 | Confirm Luotsi can see your device | `luotsi devices` |
 | Diagnose and repair first-run issues | `luotsi doctor --device <serial>` |
 | Prepare or repair live-view prerequisites | `luotsi view setup --device <serial>` |

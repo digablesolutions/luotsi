@@ -172,6 +172,10 @@ Goal:
   fewest Luotsi commands.
 
 First run:
+  0. Ask Luotsi for a five-minute, machine-readable first-run plan
+     luotsi quickstart
+     luotsi quickstart --device <adb serial> --package <app.id> --artifacts artifacts/first-run
+
   1. Confirm device visibility
      luotsi devices
 
@@ -208,6 +212,9 @@ Common workflows:
     luotsi run --path scenarios --device <adb serial> --report-junit junit.xml
 
 Tips:
+  The quickstart command returns the same path as JSON: status, time_budget,
+  inputs, steps, recommended_commands, differentiators, and an agent_prompt
+  that can be handed to an AI operator.
   Scenario runs write artifacts into the default Luotsi run-artifact home
   unless you override it with --artifacts <directory>. --output-dir <directory>
   is a clearer alias for the same root.
@@ -612,6 +619,7 @@ Usage:
   luotsi --version
 
 Start here:
+  luotsi quickstart
   luotsi help quickstart
 
 Workflow index:
@@ -743,6 +751,7 @@ Command groups:
     replay search --artifacts <artifact-root> --contains <text> [--limit 50]
 
   Install and update
+    quickstart [--device <adb serial>] [--package <app.id>] [--artifacts <directory>]
     version
     update [--version <tag>] [--channel stable|prerelease] [--dry-run] [--detach]
 
