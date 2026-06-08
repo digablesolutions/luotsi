@@ -8,7 +8,8 @@ internal static class QuickstartCommand
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        var device = Normalize(options.Get("device")) ?? "<adb serial>";
+        var suppliedDevice = Normalize(options.Get("device"));
+        var device = suppliedDevice ?? "<adb serial>";
         var package = Normalize(options.Get("package"));
         var packageValue = package ?? "<app.id>";
         var artifacts = Normalize(options.Get("artifacts")) ?? "artifacts/first-run";
@@ -21,7 +22,11 @@ internal static class QuickstartCommand
         var outputDirFlag = $"--output-dir {Quote(artifacts)}";
         var scenarioFileValue = Quote(scenarioFile);
         var scenarioPathValue = Quote(scenarioPath);
-        var firstCommand = $"luotsi doctor {deviceFlag} {packageFlag} --fix";
+        var doctorCommand = suppliedDevice is null
+            ? "luotsi doctor"
+            : $"luotsi doctor {deviceFlag} {packageFlag}";
+        var repairCommand = $"luotsi doctor {deviceFlag} {packageFlag} --fix";
+        var firstCommand = suppliedDevice is null ? doctorCommand : repairCommand;
 
         var steps = new[]
         {
@@ -35,17 +40,21 @@ internal static class QuickstartCommand
                 RequiresPackage: false),
             new QuickstartStepResult(
                 1,
-                "find_device",
-                "Confirm ADB can see the target Android device.",
-                "luotsi devices",
-                "The device appears with a serial you can pass to --device.",
+                "select_device",
+                suppliedDevice is null
+                    ? "Ask Luotsi to select or explain the target Android device."
+                    : "Confirm ADB can see the selected Android device.",
+                suppliedDevice is null ? "luotsi doctor" : "luotsi devices",
+                suppliedDevice is null
+                    ? "The envelope reports next_command for the selected-device doctor report."
+                    : "The device appears with a serial you can pass to --device.",
                 RequiresDevice: false,
                 RequiresPackage: false),
             new QuickstartStepResult(
                 2,
                 "repair_readiness",
                 "Run the onboarding doctor and apply Luotsi-owned setup fixes.",
-                firstCommand,
+                repairCommand,
                 "readiness_plan.status is ready or the next_command explains the blocker.",
                 RequiresDevice: true,
                 RequiresPackage: package is null),
@@ -79,12 +88,14 @@ internal static class QuickstartCommand
         {
             new QuickstartRecommendedCommandResult(
                 "doctor",
-                "Diagnose the local machine, ADB transport, device, target package, and live-view prerequisites.",
-                $"luotsi doctor {deviceFlag} {packageFlag}"),
+                suppliedDevice is null
+                    ? "List adb-visible devices and get the exact selected-device doctor command."
+                    : "Diagnose the local machine, ADB transport, device, target package, and live-view prerequisites.",
+                doctorCommand),
             new QuickstartRecommendedCommandResult(
                 "repair",
                 "Apply Luotsi-owned setup fixes and rerun readiness checks.",
-                $"luotsi doctor {deviceFlag} {packageFlag} --fix"),
+                repairCommand),
             new QuickstartRecommendedCommandResult(
                 "agent_loop",
                 "Start the structured JSONL loop for an AI operator.",
@@ -117,7 +128,7 @@ internal static class QuickstartCommand
             "Get from fresh install to real-device evidence in under five minutes.",
             "5m",
             new QuickstartInputResult(
-                device == "<adb serial>" ? null : device,
+                suppliedDevice,
                 package,
                 artifacts,
                 scenarioPath),
