@@ -18,6 +18,7 @@ public sealed class CliOptions
         "adb",
         "artifacts",
         "help",
+        "quickstart",
         "version",
         "update",
         "devices",

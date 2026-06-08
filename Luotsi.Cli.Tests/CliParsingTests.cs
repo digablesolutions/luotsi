@@ -63,6 +63,16 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public void Parse_Recognizes_Quickstart_Command()
+    {
+        var options = CliOptions.Parse(["--device", "abc", "quickstart", "--package", "dev.luotsi.demo"]);
+
+        Assert.Equal("quickstart", options.Command);
+        Assert.Equal("abc", options.Get("device"));
+        Assert.Equal("dev.luotsi.demo", options.Get("package"));
+    }
+
+    [Fact]
     public void Parse_Normalizes_ViewSetup_Alias_Command_And_Removes_Alias_Argument()
     {
         var options = CliOptions.Parse(["view", "--device", "abc", "setup", "extra"]);
