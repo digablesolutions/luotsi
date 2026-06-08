@@ -5902,6 +5902,56 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ArtifactsIntake_Writes_Audit_Summary_And_Readme()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var replayRoot = "/tmp/luotsi/20260526-120000-run";
+        var packagePath = "/tmp/share/replay-lab-safe.zip";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "index.html"), "<!doctype html>");
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), "{\"token\":\"handoff-secret\"}");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        Assert.Equal(0, await app.RunAsync(["artifacts", "pack", replayRoot, "--output", packagePath, "--redact", "lab-safe"]));
+        using var packEnvelope = console.ParseSingleOutputAsJson();
+        var sha256 = packEnvelope.RootElement.GetProperty("data").GetProperty("sha256").GetString();
+        console.OutputLines.Clear();
+        console.ErrorLines.Clear();
+
+        var exitCode = await app.RunAsync(["artifacts", "intake", packagePath, "--output", "/tmp/intake", "--require-lab-safe", "--write-json", "--write-readme", "--sha256", sha256!]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        var jsonPath = data.GetProperty("json_path").GetString()!;
+        var readmePath = data.GetProperty("readme_path").GetString()!;
+        Assert.Equal(Path.Join("/tmp/intake", "artifact-intake-summary.json"), jsonPath);
+        Assert.Equal(Path.Join("/tmp/intake", "artifact-intake.md"), readmePath);
+        Assert.True(fileSystem.FileExists(jsonPath));
+        Assert.True(fileSystem.FileExists(readmePath));
+
+        using var summary = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(jsonPath));
+        Assert.Equal("restored", summary.RootElement.GetProperty("status").GetString());
+        Assert.Equal("lab_safe", summary.RootElement.GetProperty("shareSafety").GetString());
+        Assert.Equal(sha256, summary.RootElement.GetProperty("sha256").GetString());
+        Assert.True(summary.RootElement.GetProperty("verification").GetProperty("verified").GetBoolean());
+
+        var readme = await fileSystem.ReadAllTextAsync(readmePath);
+        Assert.Contains("# Artifact Intake", readme, StringComparison.Ordinal);
+        Assert.Contains("Share safety: `lab_safe`", readme, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay open --artifacts /tmp/intake", readme, StringComparison.Ordinal);
+
+        var markdownIndex = await fileSystem.ReadAllTextAsync(Path.Join("/tmp/intake", "index.md"));
+        Assert.Contains("artifact-intake-summary.json", markdownIndex, StringComparison.Ordinal);
+        Assert.Contains("artifact-intake.md", markdownIndex, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_ArtifactsIntake_RequireLabSafe_Blocks_Unredacted_Package_Before_Writing()
     {
         var fileSystem = new FakeFileSystem();
@@ -5973,6 +6023,42 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ArtifactsIntake_DryRun_With_WriteFlags_Does_Not_Write_Audit_Files()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var replayRoot = "/tmp/luotsi/20260526-120000-run";
+        var packagePath = "/tmp/share/replay-lab-safe.zip";
+        fileSystem.CreateDirectory(replayRoot);
+        fileSystem.AddFile(Path.Join(replayRoot, "index.html"), "<!doctype html>");
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), "{\"token\":\"handoff-secret\"}");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        Assert.Equal(0, await app.RunAsync(["artifacts", "pack", replayRoot, "--output", packagePath, "--redact", "lab-safe"]));
+        using var packEnvelope = console.ParseSingleOutputAsJson();
+        var sha256 = packEnvelope.RootElement.GetProperty("data").GetProperty("sha256").GetString();
+        console.OutputLines.Clear();
+        console.ErrorLines.Clear();
+
+        var exitCode = await app.RunAsync(["artifacts", "intake", packagePath, "--output", "/tmp/intake", "--require-lab-safe", "--dry-run", "--write-json", "--write-readme", "--sha256", sha256!]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("validated", data.GetProperty("status").GetString());
+        Assert.False(data.TryGetProperty("json_path", out _));
+        Assert.False(data.TryGetProperty("readme_path", out _));
+        Assert.False(fileSystem.DirectoryExists("/tmp/intake"));
+        var intakeCommand = Assert.Single(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "intake_artifacts");
+        Assert.Equal($"luotsi artifacts intake {packagePath} --output /tmp/intake --require-lab-safe --write-json --write-readme --sha256 {sha256}", intakeCommand.GetProperty("command").GetString());
+    }
+
+    [Fact]
     public async Task ArtifactCommandService_IntakeOpen_Opens_Refreshed_Index()
     {
         var fileSystem = new FakeFileSystem();
@@ -5989,7 +6075,7 @@ public sealed partial class AppTests
             new FakeEnvironmentVariables([]));
 
         var pack = await service.PackAsync(replayRoot, null, packagePath, force: false, dryRun: false, redactionMode: "lab-safe");
-        var result = await service.IntakeAsync(packagePath, "/tmp/intake", force: false, dryRun: false, requireLabSafe: true, open: true, pack.Sha256);
+        var result = await service.IntakeAsync(packagePath, "/tmp/intake", force: false, dryRun: false, requireLabSafe: true, open: true, writeJson: false, writeReadme: false, pack.Sha256);
 
         Assert.Equal("restored", result.Status);
         Assert.True(result.Opened);

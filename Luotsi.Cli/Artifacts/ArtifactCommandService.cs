@@ -16,6 +16,8 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
     private const string MarkdownIndexFileName = ArtifactSession.ArtifactIndexFileName;
     private const string HtmlIndexFileName = ArtifactSession.ArtifactHtmlIndexFileName;
     private const string PackageManifestFileName = "luotsi-artifact-package.json";
+    private const string IntakeSummaryFileName = "artifact-intake-summary.json";
+    private const string IntakeReadmeFileName = "artifact-intake.md";
     private const string RedactionModeOff = "off";
     private const string RedactionModeLabSafe = "lab-safe";
 
@@ -286,7 +288,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             ]);
     }
 
-    public async Task<ArtifactIntakeResult> IntakeAsync(string packagePath, string? output, bool force, bool dryRun, bool requireLabSafe, bool open, string? expectedSha256 = null)
+    public async Task<ArtifactIntakeResult> IntakeAsync(string packagePath, string? output, bool force, bool dryRun, bool requireLabSafe, bool open, bool writeJson, bool writeReadme, string? expectedSha256 = null)
     {
         if (open && dryRun)
         {
@@ -294,14 +296,11 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         }
 
         var unpack = await UnpackAsync(packagePath, output, force, dryRun, requireLabSafe, expectedSha256).ConfigureAwait(false);
-        if (open && unpack.IndexPath is not null)
-        {
-            await _artifactOpener.OpenAsync(unpack.IndexPath).ConfigureAwait(false);
-        }
-
         var shareSafety = ResolveShareSafety(unpack.Manifest);
         var status = dryRun ? "validated" : "restored";
-        return new ArtifactIntakeResult(
+        var jsonPath = writeJson && !dryRun ? Path.Join(unpack.OutputDirectory, IntakeSummaryFileName) : null;
+        var readmePath = writeReadme && !dryRun ? Path.Join(unpack.OutputDirectory, IntakeReadmeFileName) : null;
+        var result = new ArtifactIntakeResult(
             unpack.Package,
             status,
             unpack.OutputDirectory,
@@ -311,12 +310,35 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             unpack.IndexPath,
             unpack.ManifestPath,
             unpack.ManifestOutputPath,
+            jsonPath,
+            readmePath,
             unpack.Manifest,
             unpack.Sha256,
             shareSafety,
             requireLabSafe,
             unpack.Verification,
-            CreateIntakeRecommendedCommands(unpack.Package, unpack.OutputDirectory, dryRun, open, requireLabSafe, unpack.Sha256));
+            CreateIntakeRecommendedCommands(unpack.Package, unpack.OutputDirectory, dryRun, open, requireLabSafe, writeJson, writeReadme, unpack.Sha256));
+
+        if (!dryRun && (writeJson || writeReadme))
+        {
+            var artifacts = ArtifactSession.AttachExisting(unpack.OutputDirectory, _fileSystem);
+            if (writeJson)
+            {
+                await artifacts.WriteJsonAsync(IntakeSummaryFileName, result).ConfigureAwait(false);
+            }
+
+            if (writeReadme)
+            {
+                await artifacts.WriteTextAsync(IntakeReadmeFileName, BuildIntakeReadme(result)).ConfigureAwait(false);
+            }
+        }
+
+        if (open && !dryRun && unpack.IndexPath is not null)
+        {
+            await _artifactOpener.OpenAsync(unpack.IndexPath).ConfigureAwait(false);
+        }
+
+        return result;
     }
 
     private async Task<string> EnsureIndexAsync(string artifactRoot)
@@ -1016,7 +1038,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         ];
     }
 
-    private static IReadOnlyList<ArtifactRecommendedCommandResult> CreateIntakeRecommendedCommands(string packagePath, string outputDirectory, bool dryRun, bool opened, bool requireLabSafe, string sha256)
+    private static IReadOnlyList<ArtifactRecommendedCommandResult> CreateIntakeRecommendedCommands(string packagePath, string outputDirectory, bool dryRun, bool opened, bool requireLabSafe, bool writeJson, bool writeReadme, string sha256)
     {
         var commands = new List<ArtifactRecommendedCommandResult>
         {
@@ -1027,7 +1049,9 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         if (dryRun)
         {
             var labSafeGate = requireLabSafe ? " --require-lab-safe" : string.Empty;
-            commands.Insert(0, new ArtifactRecommendedCommandResult("intake_artifacts", "Restore this package after the dry-run validation.", $"luotsi artifacts intake {Quote(packagePath)} --output {Quote(outputDirectory)}{labSafeGate} --sha256 {sha256}"));
+            var jsonFlag = writeJson ? " --write-json" : string.Empty;
+            var readmeFlag = writeReadme ? " --write-readme" : string.Empty;
+            commands.Insert(0, new ArtifactRecommendedCommandResult("intake_artifacts", "Restore this package after the dry-run validation.", $"luotsi artifacts intake {Quote(packagePath)} --output {Quote(outputDirectory)}{labSafeGate}{jsonFlag}{readmeFlag} --sha256 {sha256}"));
         }
         else if (!opened)
         {
@@ -1035,6 +1059,33 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         }
 
         return commands;
+    }
+
+    private static string BuildIntakeReadme(ArtifactIntakeResult result)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("# Artifact Intake");
+        builder.AppendLine();
+        builder.AppendLine($"- Status: `{EscapeMarkdown(result.Status)}`");
+        builder.AppendLine($"- Package: `{EscapeMarkdown(result.Package)}`");
+        builder.AppendLine($"- Output: `{EscapeMarkdown(result.OutputDirectory)}`");
+        builder.AppendLine($"- Share safety: `{EscapeMarkdown(result.ShareSafety)}`");
+        builder.AppendLine($"- Lab-safe required: `{result.LabSafeRequired.ToString().ToLowerInvariant()}`");
+        builder.AppendLine($"- SHA-256: `{EscapeMarkdown(result.Sha256)}`");
+        if (result.Verification is not null)
+        {
+            builder.AppendLine($"- SHA verified: `{result.Verification.Verified.ToString().ToLowerInvariant()}`");
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("## Next Commands");
+        foreach (var command in result.RecommendedCommands)
+        {
+            builder.AppendLine($"- **{EscapeMarkdown(command.Summary)}** (`{EscapeMarkdown(command.Kind)}`)");
+            builder.AppendLine($"  `{EscapeMarkdown(command.Command)}`");
+        }
+
+        return builder.ToString();
     }
 
     private static string ResolveLabSafeOutputPath(string outputPath)
@@ -1082,6 +1133,12 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         value.Any(static ch => char.IsWhiteSpace(ch) || ch == '"')
             ? $"\"{value.Replace("\"", "\\\"", StringComparison.Ordinal)}\""
             : value;
+
+    private static string EscapeMarkdown(string value) =>
+        value.Replace("`", "\\`", StringComparison.Ordinal)
+            .Replace("|", "\\|", StringComparison.Ordinal)
+            .Replace("\r", " ", StringComparison.Ordinal)
+            .Replace("\n", " ", StringComparison.Ordinal);
 
     private async Task<string> ComputeSha256Async(string path)
     {
@@ -1193,6 +1250,8 @@ internal sealed record ArtifactIntakeResult(
     string? IndexPath,
     string ManifestPath,
     string ManifestOutputPath,
+    string? JsonPath,
+    string? ReadmePath,
     ArtifactPackageManifestResult Manifest,
     string Sha256,
     string ShareSafety,
