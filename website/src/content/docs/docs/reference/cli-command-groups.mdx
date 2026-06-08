@@ -139,7 +139,7 @@ luotsi replay open --artifacts ./artifacts/my-run
 luotsi replay open --last --artifacts ./artifacts
 ```
 
-Use `journey-intake validate` when Android CLI Journey-style intent needs a CI-friendly contract check before Luotsi scenario drafting. Use `journey-intake draft-scenario` when that valid intake should become a review-required evidence skeleton without touching a device.
+Use `journey-intake validate` when Android CLI Journey-style intent (a Journey objective; not an Android `Intent` object) needs a CI-friendly contract check before Luotsi scenario drafting. Use `journey-intake draft-scenario` when that valid intake should become a review-required evidence skeleton without touching a device.
 
 Use `discover` when the app surface is not fully known yet and you want a real-device state map plus review-required JSON scenario candidates. Bound traversal with `--budget`, `--max-actions`, and `--max-depth`. Constrain tap selection with `--allow-text`, `--deny-text`, `--deny-resource-id`, and `--deny-class`. Discovery records the backtracks it uses to return through explored branches.
 
