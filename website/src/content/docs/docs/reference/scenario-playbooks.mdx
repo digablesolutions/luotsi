@@ -51,7 +51,7 @@ This matters most for coordinate-heavy steps where the wrong device or orientati
 
 ## Action families
 
-- Interaction: `waitVisible`, `waitElement`, `waitNotVisible`, `tapText`, `tapElement`, `tapPoint`, `doubleTapHeaderLogo`, `doubleTap`, `typeText`, `typePin`, `keyevent`
+- Interaction: `waitVisible`, `waitElement`, `waitNotVisible`, `tapText`, `tapElement`, `tapPoint`, `doubleTapHeaderLogo` (preferred), `doubleTap` (compatibility alias; header logo only), `typeText`, `typePin`, `keyevent`
 - Waits and assertions: `waitLog`, `waitStep`, `waitActionReady`, `resetLog`, `assertEvent`, `assertScreenshot`, `assertTextInputReady`, `assertBelow`, `assertAligned`, `assertAppVersion`
 - App and package: `startApp`, `startUri`, `forceStop`, `clear`, `clearApp`, `waitForActivity`, `waitForNotActivity`, `isAppInstalled`, `listInstalledPackages`, `grantPermission`, `revokePermission`
 - Artifacts and utility: `takeScreenshot`, `captureArtifacts`, `screenState`, `sleep`
@@ -95,8 +95,8 @@ On older Android builds or screens with weak hierarchy output, prefer explicit `
 
 ## Authoring flow
 
-When the starting point is Android CLI Journey-style intent, capture that intent
-first with the repository's journey intake template, then promote reviewed
+When the starting point is an Android CLI Journey-style intent (a Journey objective; not an Android `Intent` object),
+capture that intent first with the repository's journey intake template, then promote reviewed
 behavior into an executable scenario:
 
 ```bash
