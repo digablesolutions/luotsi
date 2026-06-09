@@ -9,11 +9,13 @@ This is the shortest path from a connected Android device to a meaningful Luotsi
 
 ```bash
 luotsi quickstart
+luotsi quickstart --human
 luotsi quickstart --device <serial> --package <app.id> --artifacts artifacts/first-run
 luotsi quickstart --artifacts artifacts/first-run --write-json --write-markdown
 ```
 
 The command returns a JSON envelope with a five-minute path, concrete commands, an AI-agent prompt, and the local-first/artifact-first boundary that explains where Luotsi fits beside automation frameworks and hosted device services.
+Use `--human` when you want the same plan as compact terminal text while you are getting oriented.
 Use `--write-json --write-markdown` to persist `quickstart-plan.json` and `quickstart-plan.md` in the artifact root when a human or AI operator needs a durable handoff.
 If you do not pass `--device`, the first command is `luotsi doctor`.
 This allows Luotsi to list adb-visible devices and return the exact selected-device next command.

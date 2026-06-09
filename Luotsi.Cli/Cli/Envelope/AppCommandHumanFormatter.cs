@@ -160,6 +160,12 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
 
     private static bool TryBuildCapsuleSummary(JsonElement value, ArtifactData artifacts, out IReadOnlyList<string> lines)
     {
+        if (IsSchema(value, ResultSchemas.Quickstart))
+        {
+            lines = BuildQuickstartSummary(value);
+            return true;
+        }
+
         if (IsSchema(value, ResultSchemas.ReplayOpen))
         {
             lines = BuildReplayOpenSummary(value, artifacts);
@@ -192,6 +198,61 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
 
         lines = Array.Empty<string>();
         return false;
+    }
+
+    private static IReadOnlyList<string> BuildQuickstartSummary(JsonElement value)
+    {
+        var lines = new List<string>();
+        AddScalar(lines, value, "status");
+        AddScalar(lines, value, "time_budget");
+        AddScalar(lines, value, "goal");
+        AddScalar(lines, value, "first_command");
+
+        if (value.TryGetProperty("inputs", out var inputs) && inputs.ValueKind == JsonValueKind.Object)
+        {
+            var inputParts = new List<string>();
+            AddPart(inputParts, inputs, "device");
+            AddPart(inputParts, inputs, "package");
+            AddPart(inputParts, inputs, "artifacts");
+            AddPart(inputParts, inputs, "scenario_path");
+            if (inputParts.Count > 0)
+            {
+                lines.Add("inputs: " + string.Join("; ", inputParts));
+            }
+        }
+
+        AddQuickstartStepSummary(lines, value);
+        AddRecommendedCommand(lines, value);
+        AddScalar(lines, value, "agent_prompt");
+        return lines;
+    }
+
+    private static void AddQuickstartStepSummary(List<string> lines, JsonElement value)
+    {
+        if (!value.TryGetProperty("steps", out var steps) || steps.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        var items = steps.EnumerateArray().ToArray();
+        lines.Add($"steps: {items.Length}");
+        foreach (var step in items.Take(MaxArrayItems))
+        {
+            if (step.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            var minute = TryGetInt32(step, "minute", out var valueMinute) ? $"minute {valueMinute}" : null;
+            var title = TryGetString(step, "title");
+            var command = TryGetString(step, "command");
+            var summary = string.Join("; ", new[] { minute, title, command is null ? null : $"command={command}" }
+                .Where(static part => !string.IsNullOrWhiteSpace(part)));
+            if (!string.IsNullOrWhiteSpace(summary))
+            {
+                lines.Add($"  - {summary}");
+            }
+        }
     }
 
     private static IReadOnlyList<string> BuildReplayOpenSummary(JsonElement value, ArtifactData artifacts)
