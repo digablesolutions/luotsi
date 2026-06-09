@@ -839,4 +839,35 @@ public sealed partial class AppTests
         Assert.Equal("confidence=medium | source_summaries=1 | steps=2 | warnings=1 | review_items=1 | next_actions=1 | normalizations=1", detail);
     }
 
+    [Fact]
+    public void ArtifactEvidenceDetailReader_Summarizes_Artifact_Intake_Audit_Surface()
+    {
+        var fileSystem = new FakeFileSystem();
+        fileSystem.AddFile(
+            Path.Join("/tmp/replay", "artifact-intake-summary.json"),
+            """
+            {
+              "status": "restored",
+              "entryCount": 7,
+              "shareSafety": "lab_safe",
+              "labSafeRequired": true,
+              "sha256": "abc123",
+              "verification": {
+                "verified": true
+              },
+              "recommendedCommands": [
+                {
+                  "kind": "replay_open"
+                }
+              ]
+            }
+            """);
+        var reader = new ArtifactEvidenceDetailReader("/tmp/replay", fileSystem);
+
+        var detail = reader.TryBuild("artifact-intake-summary.json");
+
+        Assert.NotNull(detail);
+        Assert.Equal("status=restored | entries=7 | share_safety=lab_safe | lab_safe_required=true | sha256=abc123 | sha_verified=true | recommended_commands=1", detail);
+    }
+
 }

@@ -19,6 +19,7 @@ public static class ResultSchemas
     public const string SessionReplay = "luotsi-session-replay.v1";
     public const string SessionReplaySummary = "luotsi-session-replay-summary.v1";
     public const string ArtifactPackage = "luotsi-artifact-package.v1";
+    public const string ArtifactIntake = "luotsi-artifact-intake.v1";
     public const string FailureBundle = "luotsi-failure-bundle.v1";
     public const string FailureCapsule = "luotsi-failure-capsule.v1";
     public const string ReplayOpen = "luotsi-replay-open.v1";

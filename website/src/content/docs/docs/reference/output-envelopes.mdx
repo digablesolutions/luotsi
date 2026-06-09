@@ -23,6 +23,8 @@ This is the default contract for CLI commands, including scenario execution unle
 
 For local terminal readability, one-shot commands also accept `--human` or `--console-output human`. That mode prints a concise text summary and artifact path, while the default and `--json` keep the full machine-readable envelope. Use `--quiet` or `--console-output quiet` to suppress successful command output while still printing failure envelopes. Luotsi does not use a global `--output` switch for this because some commands already use `--output` for file paths.
 
+When an artifact root has a persisted package intake audit, human output for `artifacts info` and `replay capsule` includes a compact `intake:` line with status, share-safety, SHA verification, and package path.
+
 ## Long-lived session mode
 
 `inspect` is a JSONL session instead of one final object. `view` prints human startup/runtime progress by default, can stream raw JSONL events with `view -o jsonl`, `view --output jsonl`, or `view --json`, and always writes its JSONL timeline artifact for replay.
@@ -65,9 +67,10 @@ Not every session emits every event family. Startup diagnostics appear during br
 
 Raw replay `--format` modes cannot be combined with `--human`, `--quiet`, `--json`, or `--console-output` because those flags control envelope presentation, while `--format` replaces the envelope entirely.
 
-Replay commands that keep the normal envelope put their command-specific contract under `data`:
+Artifact and replay commands that keep the normal envelope put their command-specific contract under `data`:
 
-- `replay capsule` returns a failure-capsule summary with `primary_failure`, `failure_timeline`, `artifact_manifest`, optional scenario draft summary fields including bounded `next_actions` and `run_handoff`, draft-led `recommended_next_steps` that promote ready dry-run/preflight/claimed-run/direct-run commands first, and `suggested_commands`.
+- `artifacts info` returns root/package metadata. For artifact roots, persisted intake audits appear as `has_artifact_intake_summary` plus optional `artifact_intake_summary` fields for restored package status, share safety, SHA-256, verification, and persisted audit paths.
+- `replay capsule` returns a failure-capsule summary with `primary_failure`, `failure_timeline`, `artifact_manifest`, optional `artifact_intake_artifacts` / `artifact_intake_summary` fields for restored package audit status, optional scenario draft summary fields including bounded `next_actions` and `run_handoff`, draft-led `recommended_next_steps` that promote ready dry-run/preflight/claimed-run/direct-run commands first, and `suggested_commands`.
 - `replay summarize` returns session summaries plus `commands` that route into capsule, open, scrub, graph, and clustering when failures are present.
 - `replay timeline` returns ordered events plus `commands` that route into capsule, open, scrub, and graph when selected events include failures.
 - `replay search` returns text matches plus `commands` back into capsule, open, scrub, and graph when matches are replay-relevant.

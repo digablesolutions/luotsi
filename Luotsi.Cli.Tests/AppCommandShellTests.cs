@@ -283,6 +283,40 @@ public sealed class AppCommandShellTests
     }
 
     [Fact]
+    public void WriteSuccess_HumanOutput_Shows_Artifact_Intake_Audit()
+    {
+        var console = new FakeConsole();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-18T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var writer = new AppCommandEnvelopeWriter(console, timeProvider, CreateProvenance());
+
+        writer.WriteSuccess(
+            "artifacts",
+            DateTimeOffset.Parse("2026-05-18T09:59:59Z", null, System.Globalization.DateTimeStyles.RoundtripKind),
+            new
+            {
+                run_id = "20260526-120000-run",
+                artifact_root = "/tmp/replay-root",
+                has_artifact_intake_summary = true,
+                artifact_intake_summary = new
+                {
+                    status = "restored",
+                    share_safety = "lab_safe",
+                    sha_verified = true,
+                    package = "/tmp/share/replay-lab-safe.zip"
+                },
+                recommended_commands = new[]
+                {
+                    new { kind = "replay_open", summary = "Open replay.", command = "luotsi replay open --artifacts /tmp/replay-root" }
+                }
+            },
+            new ArtifactData("/tmp/replay-root", "final"),
+            AppCommandConsoleOutputMode.Human);
+
+        Assert.Contains("  intake: status=restored; share_safety=lab_safe; sha_verified=true; package=/tmp/share/replay-lab-safe.zip", console.OutputLines);
+        Assert.Contains("  next: luotsi replay open --artifacts /tmp/replay-root", console.OutputLines);
+    }
+
+    [Fact]
     public void WriteSuccess_HumanOutput_Shows_Run_Failure_Capsule()
     {
         var console = new FakeConsole();
@@ -429,6 +463,17 @@ public sealed class AppCommandShellTests
             "Found replay action history for scenario drafting.",
             new ReplayCapsuleScenarioDraftArtifacts("scenario-draft-summary.json", "scenario-draft.md", "draft-scenario.json"),
             null,
+            new ReplayCapsuleArtifactIntakeArtifacts("artifact-intake-summary.json", "artifact-intake.md"),
+            new ReplayCapsuleArtifactIntakeSummary(
+                "restored",
+                "/tmp/share/replay-lab-safe.zip",
+                "/tmp/replay-root",
+                7,
+                "lab_safe",
+                true,
+                "abc123",
+                true,
+                2),
             null,
             null,
             new ReplayCapsulePrimaryFailureResult(
@@ -466,6 +511,7 @@ public sealed class AppCommandShellTests
         Assert.Contains("  triage: 1 failure signal across 1 session", console.OutputLines);
         Assert.Contains("  primary_failure: login smoke / wait login button (waitVisible) / button not visible", console.OutputLines);
         Assert.Contains("  evidence: screenshots=1; logs=1; hierarchies=1; screen_states=1; reports=1; timelines=1", console.OutputLines);
+        Assert.Contains("  intake: status=restored; share_safety=lab_safe; sha_verified=true; package=/tmp/share/replay-lab-safe.zip", console.OutputLines);
         Assert.Contains("  next_step: Scrub the failure window", console.OutputLines);
         Assert.Contains("  next: luotsi replay scrub --artifacts /tmp/replay-root --failures --context 3 --write-markdown", console.OutputLines);
         Assert.Contains("  recommended_next_steps: 1", console.OutputLines);
