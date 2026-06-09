@@ -224,7 +224,7 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
 
         AddQuickstartStepSummary(lines, value);
         AddRecommendedCommand(lines, value);
-        AddScalar(lines, value, "agent_prompt");
+        AddMultilineScalar(lines, value, "agent_prompt");
         return lines;
     }
 
@@ -235,9 +235,8 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
             return;
         }
 
-        var items = steps.EnumerateArray().ToArray();
-        lines.Add($"steps: {items.Length}");
-        foreach (var step in items.Take(MaxArrayItems))
+        lines.Add($"steps: {steps.GetArrayLength()}");
+        foreach (var step in steps.EnumerateArray().Take(MaxArrayItems))
         {
             if (step.ValueKind != JsonValueKind.Object)
             {
@@ -437,6 +436,20 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
         }
 
         lines.Add($"{propertyName}: {FormatScalar(property)}");
+    }
+
+    private static void AddMultilineScalar(List<string> lines, JsonElement value, string propertyName)
+    {
+        var scalar = TryGetString(value, propertyName);
+        if (string.IsNullOrWhiteSpace(scalar))
+        {
+            return;
+        }
+
+        foreach (var scalarLine in scalar.Split(["\r\n", "\n"], StringSplitOptions.None).Where(static line => !string.IsNullOrWhiteSpace(line)))
+        {
+            lines.Add($"{propertyName}: {scalarLine.Trim()}");
+        }
     }
 
     private static void AddArraySummary(List<string> lines, JsonElement value, string propertyName)

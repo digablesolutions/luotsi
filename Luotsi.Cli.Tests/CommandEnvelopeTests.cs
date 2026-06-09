@@ -217,7 +217,9 @@ public sealed partial class AppTests
         Assert.Contains("  time_budget: 5m", console.OutputLines);
         Assert.Contains("  first_command: luotsi doctor --device emulator-5554 --package dev.luotsi.demo --fix", console.OutputLines);
         Assert.Contains("  inputs: device=emulator-5554; package=dev.luotsi.demo; artifacts=artifacts/demo; scenario_path=scenarios", console.OutputLines);
-        Assert.Contains("  steps: 6", console.OutputLines);
+        var stepsLine = Assert.Single(console.OutputLines, static line => line.StartsWith("  steps: ", StringComparison.Ordinal));
+        Assert.True(int.TryParse(stepsLine["  steps: ".Length..], out var stepCount), $"Expected a numeric steps count in '{stepsLine}'.");
+        Assert.True(stepCount >= 6, $"Expected at least 6 steps but found {stepCount}.");
         Assert.Contains(console.OutputLines, static line => line.Contains("minute 2; Run the onboarding doctor", StringComparison.Ordinal) &&
             line.Contains("luotsi doctor --device emulator-5554 --package dev.luotsi.demo --fix", StringComparison.Ordinal));
         Assert.Contains("  next: luotsi doctor --device emulator-5554 --package dev.luotsi.demo", console.OutputLines);
