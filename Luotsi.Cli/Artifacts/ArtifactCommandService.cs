@@ -125,6 +125,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             ? ArtifactRootResolver.ResolveLatestArtifactRoot(_fileSystem, searchRoot, _environment, preferWorkspaceHome: true)
             : ArtifactRootResolver.ResolveArtifactRoot(_fileSystem, target!, searchRoot, _environment, preferWorkspaceHome: true);
         var files = GetArtifactFiles(artifactRoot);
+        var hasArtifactIntakeSummary = _fileSystem.FileExists(Path.Join(artifactRoot, IntakeSummaryFileName));
         var artifactIntakeSummary = await ReadArtifactInfoIntakeSummaryAsync(artifactRoot).ConfigureAwait(false);
         return new ArtifactInfoResult(
             Path.GetFileName(Path.GetFullPath(artifactRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
@@ -135,7 +136,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             _fileSystem.FileExists(Path.Join(artifactRoot, PackageManifestFileName)),
             files.Any(static file => string.Equals(Path.GetFileName(file), "session-timeline.jsonl", StringComparison.OrdinalIgnoreCase)),
             files.Any(static file => string.Equals(Path.GetFileName(file), "session-replay.json", StringComparison.OrdinalIgnoreCase)),
-            artifactIntakeSummary is not null,
+            hasArtifactIntakeSummary,
             artifactIntakeSummary,
             CreateCategoryCounts(files),
             [

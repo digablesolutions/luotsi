@@ -385,7 +385,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
                 ReadNextActions(root, 5),
                 ReadReviewItems(root, 5));
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or NotSupportedException or PathTooLongException)
         {
             return null;
         }
@@ -433,7 +433,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
                 shaVerified,
                 CountArray(root, "recommendedCommands"));
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or NotSupportedException or PathTooLongException)
         {
             return null;
         }

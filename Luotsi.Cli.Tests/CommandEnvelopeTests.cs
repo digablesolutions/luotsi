@@ -2239,7 +2239,31 @@ public sealed partial class AppTests
         Assert.Contains("Artifact intake share safety: `lab_safe`", readme, StringComparison.Ordinal);
         Assert.Contains("Artifact intake SHA verified: `true`", readme, StringComparison.Ordinal);
         using var jsonSummary = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-capsule-summary.json")));
-        Assert.Equal("lab_safe", jsonSummary.RootElement.GetProperty("artifact_intake_summary").GetProperty("share_safety").GetString());
+        Assert.Equal("lab_safe", jsonSummary.RootElement.GetProperty("artifactIntakeSummary").GetProperty("shareSafety").GetString());
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayCapsule_Ignores_Unreadable_Artifact_Intake_Audit_Summary()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        fileSystem.AddFile(Path.Join(replayRoot, "artifact-intake-summary.json"), "{not valid json");
+        fileSystem.AddFile(Path.Join(replayRoot, "artifact-intake.md"), "# Artifact Intake\n");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "capsule", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("artifact-intake-summary.json", data.GetProperty("artifact_intake_artifacts").GetProperty("summary_path").GetString());
+        Assert.False(data.TryGetProperty("artifact_intake_summary", out _));
     }
 
     [Fact]
@@ -4849,6 +4873,29 @@ public sealed partial class AppTests
         Assert.Equal("/tmp/artifacts/20260526-120000-run/artifact-intake-summary.json", intakeSummary.GetProperty("json_path").GetString());
         Assert.Equal("/tmp/artifacts/20260526-120000-run/artifact-intake.md", intakeSummary.GetProperty("readme_path").GetString());
         Assert.Equal(2, intakeSummary.GetProperty("recommended_command_count").GetInt32());
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsInfo_Flags_Unreadable_Intake_Audit_Without_Summary()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var replayRoot = Path.Join("/tmp", "artifacts", "20260526-120000-run");
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), "{\"type\":\"session_started\"}");
+        fileSystem.AddFile(Path.Join(replayRoot, "artifact-intake-summary.json"), "{not valid json");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "info", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.True(data.GetProperty("has_artifact_intake_summary").GetBoolean());
+        Assert.False(data.TryGetProperty("artifact_intake_summary", out _));
     }
 
     [Fact]
