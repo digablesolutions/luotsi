@@ -65,7 +65,7 @@ internal sealed class AppCommandDispatcher(
         return command switch
         {
             "adb" => await AdbSubcommandDispatcher.ExecuteAsync(options, RequireAdbCommandHost(runner, command)).ConfigureAwait(false),
-            "quickstart" => QuickstartCommand.Build(options),
+            "quickstart" => await QuickstartCommand.RunAsync(options, artifacts).ConfigureAwait(false),
             "version" => await _selfUpdateService.GetVersionInfoAsync().ConfigureAwait(false),
             "update" => await _selfUpdateService.UpdateAsync(options, artifacts.Root).ConfigureAwait(false),
             "devices" => DeviceInventory.FromDeviceList(await RequireRunner(runner, command).GetDevicesAsync().ConfigureAwait(false)),

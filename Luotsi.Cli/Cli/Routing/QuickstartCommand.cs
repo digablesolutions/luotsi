@@ -1,9 +1,56 @@
+using System.Text;
+using System.Text.Json;
+using Luotsi.Cli.Artifacts;
+using Luotsi.Cli.Cli.Envelope;
 using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Cli.Routing;
 
 internal static class QuickstartCommand
 {
+    private const string JsonFileName = "quickstart-plan.json";
+    private const string MarkdownFileName = "quickstart-plan.md";
+    private static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
+
+    public static async Task<QuickstartResult> RunAsync(CliOptions options, ArtifactSession artifacts)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(artifacts);
+
+        var result = Build(options);
+        var jsonPath = options.HasFlag("write-json") ? Path.Join(artifacts.Root, JsonFileName) : null;
+        var markdownPath = options.HasFlag("write-markdown") ? Path.Join(artifacts.Root, MarkdownFileName) : null;
+
+        if (jsonPath is null && markdownPath is null)
+        {
+            return result;
+        }
+
+        var resultWithHandoff = result with
+        {
+            Handoff = new QuickstartHandoffResult(
+                artifacts.Root,
+                jsonPath,
+                markdownPath,
+                jsonPath is null && markdownPath is not null
+                    ? $"luotsi quickstart {BuildCurrentOptionFlags(result)} --write-json --write-markdown".Replace("  ", " ", StringComparison.Ordinal).Trim()
+                    : null)
+        };
+
+        if (jsonPath is not null)
+        {
+            await WriteTextArtifactAsync(artifacts, JsonFileName, JsonSerializer.Serialize(resultWithHandoff, AppCommandJson.Options) + Environment.NewLine).ConfigureAwait(false);
+        }
+
+        if (markdownPath is not null)
+        {
+            await WriteTextArtifactAsync(artifacts, MarkdownFileName, BuildMarkdown(resultWithHandoff)).ConfigureAwait(false);
+        }
+
+        await artifacts.RefreshIndexAsync().ConfigureAwait(false);
+        return resultWithHandoff;
+    }
+
     public static QuickstartResult Build(CliOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -146,7 +193,85 @@ internal static class QuickstartCommand
                 "automation_frameworks: Appium, Maestro, Detox",
                 "cloud_device_infrastructure: Firebase Test Lab, BrowserStack App Automate",
                 "ai_test_authoring: BrowserStack Test Companion, LambdaTest KaneAI"
-            ]);
+            ],
+            Handoff: null);
+    }
+
+    private static string BuildMarkdown(QuickstartResult result)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("# Luotsi quickstart handoff");
+        builder.AppendLine();
+        builder.AppendLine(result.Goal);
+        builder.AppendLine();
+        builder.AppendLine("## First command");
+        builder.AppendLine();
+        builder.AppendLine("```bash");
+        builder.AppendLine(result.FirstCommand);
+        builder.AppendLine("```");
+        builder.AppendLine();
+        builder.AppendLine("## Inputs");
+        builder.AppendLine();
+        builder.AppendLine($"- Device: {result.Inputs.Device ?? "<select with luotsi doctor>"}");
+        builder.AppendLine($"- Package: {result.Inputs.Package ?? "<app.id>"}");
+        builder.AppendLine($"- Artifacts: {result.Inputs.Artifacts}");
+        builder.AppendLine($"- Scenario path: {result.Inputs.ScenarioPath}");
+        builder.AppendLine();
+        builder.AppendLine("## Five-minute path");
+        builder.AppendLine();
+        foreach (var step in result.Steps)
+        {
+            builder.AppendLine($"### Minute {step.Minute}: {step.Title}");
+            builder.AppendLine();
+            builder.AppendLine("```bash");
+            builder.AppendLine(step.Command);
+            builder.AppendLine("```");
+            builder.AppendLine();
+            builder.AppendLine($"Success signal: {step.SuccessSignal}");
+            builder.AppendLine();
+        }
+
+        builder.AppendLine("## Recommended commands");
+        builder.AppendLine();
+        foreach (var command in result.RecommendedCommands)
+        {
+            builder.AppendLine($"- {command.Kind}: `{command.Command}`");
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("## Agent prompt");
+        builder.AppendLine();
+        builder.AppendLine(result.AgentPrompt);
+        builder.AppendLine();
+        return builder.ToString();
+    }
+
+    private static async Task WriteTextArtifactAsync(ArtifactSession artifacts, string name, string text)
+    {
+        await using var stream = artifacts.OpenArtifactWrite(name);
+        var bytes = Utf8NoBom.GetBytes(text);
+        await stream.WriteAsync(bytes).ConfigureAwait(false);
+    }
+
+    private static string BuildCurrentOptionFlags(QuickstartResult result)
+    {
+        var builder = new StringBuilder();
+        if (!string.IsNullOrWhiteSpace(result.Inputs.Device))
+        {
+            builder.Append(" --device ").Append(Quote(result.Inputs.Device));
+        }
+
+        if (!string.IsNullOrWhiteSpace(result.Inputs.Package))
+        {
+            builder.Append(" --package ").Append(Quote(result.Inputs.Package));
+        }
+
+        if (!string.IsNullOrWhiteSpace(result.Inputs.Artifacts))
+        {
+            builder.Append(" --artifacts ").Append(Quote(result.Inputs.Artifacts));
+        }
+
+        return builder.ToString();
     }
 
     private static string? Normalize(string? value) =>
@@ -179,7 +304,14 @@ internal sealed record QuickstartResult(
     string FirstCommand,
     string AgentPrompt,
     IReadOnlyList<string> Differentiators,
-    IReadOnlyList<string> SimilarToolCategories);
+    IReadOnlyList<string> SimilarToolCategories,
+    QuickstartHandoffResult? Handoff);
+
+internal sealed record QuickstartHandoffResult(
+    string ArtifactRoot,
+    string? JsonPath,
+    string? MarkdownPath,
+    string? RecommendedCommand);
 
 internal sealed record QuickstartInputResult(
     string? Device,
