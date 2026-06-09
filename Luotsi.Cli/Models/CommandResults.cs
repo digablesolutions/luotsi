@@ -619,6 +619,8 @@ public sealed record ReplayCapsuleResult(
     string ScenarioDraftReason,
     ReplayCapsuleScenarioDraftArtifacts ScenarioDraftArtifacts,
     ReplayCapsuleScenarioDraftSummary? ScenarioDraftSummary,
+    ReplayCapsuleArtifactIntakeArtifacts ArtifactIntakeArtifacts,
+    ReplayCapsuleArtifactIntakeSummary? ArtifactIntakeSummary,
     string? ReadmePath,
     string? JsonPath,
     ReplayCapsulePrimaryFailureResult? PrimaryFailure,
@@ -660,6 +662,21 @@ public sealed record ReplayCapsuleScenarioDraftSummary(
     IReadOnlyList<string> Warnings,
     IReadOnlyList<ReplayScenarioDraftNextAction> NextActions,
     IReadOnlyList<ReplayScenarioDraftReviewItem> ReviewItems);
+
+public sealed record ReplayCapsuleArtifactIntakeArtifacts(
+    string? SummaryPath,
+    string? MarkdownPath);
+
+public sealed record ReplayCapsuleArtifactIntakeSummary(
+    string? Status,
+    string? Package,
+    string? OutputDirectory,
+    int EntryCount,
+    string? ShareSafety,
+    bool LabSafeRequired,
+    string? Sha256,
+    bool? ShaVerified,
+    int RecommendedCommandCount);
 
 public sealed record ReplayCapsuleArtifactCounts(
     int Screenshots,

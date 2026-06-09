@@ -2152,6 +2152,97 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayCapsule_Links_Existing_Artifact_Intake_Audit()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        fileSystem.AddFile(Path.Join(replayRoot, "artifact-intake-summary.json"), """
+        {
+          "status": "restored",
+          "package": "/tmp/share/replay-lab-safe.zip",
+          "outputDirectory": "/tmp/replay-capsule-root",
+          "entryCount": 7,
+          "dryRun": false,
+          "opened": false,
+          "indexPath": "/tmp/replay-capsule-root/index.html",
+          "manifestPath": "luotsi-artifact-package.json",
+          "manifestOutputPath": "/tmp/replay-capsule-root/luotsi-artifact-package.json",
+          "jsonPath": "/tmp/replay-capsule-root/artifact-intake-summary.json",
+          "readmePath": "/tmp/replay-capsule-root/artifact-intake.md",
+          "manifest": {
+            "schema": "luotsi-artifact-package.v1",
+            "runId": "run-1",
+            "createdAt": "2026-06-09T09:00:00Z",
+            "artifactRoot": "/tmp/source",
+            "entryCount": 7,
+            "entries": [],
+            "shareSafety": "lab_safe"
+          },
+          "sha256": "abc123",
+          "shareSafety": "lab_safe",
+          "labSafeRequired": true,
+          "verification": {
+            "algorithm": "sha256",
+            "expected": "abc123",
+            "actual": "abc123",
+            "verified": true
+          },
+          "recommendedCommands": [
+            {
+              "kind": "replay_open",
+              "summary": "Open the restored replay workbench.",
+              "command": "luotsi replay open --artifacts /tmp/replay-capsule-root"
+            }
+          ]
+        }
+        """);
+        fileSystem.AddFile(Path.Join(replayRoot, "artifact-intake.md"), "# Artifact Intake\n");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "capsule", "--artifacts", replayRoot, "--write-readme", "--write-json"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        var intakeArtifacts = data.GetProperty("artifact_intake_artifacts");
+        Assert.Equal("artifact-intake-summary.json", intakeArtifacts.GetProperty("summary_path").GetString());
+        Assert.Equal("artifact-intake.md", intakeArtifacts.GetProperty("markdown_path").GetString());
+        var intakeSummary = data.GetProperty("artifact_intake_summary");
+        Assert.Equal("restored", intakeSummary.GetProperty("status").GetString());
+        Assert.Equal("/tmp/share/replay-lab-safe.zip", intakeSummary.GetProperty("package").GetString());
+        Assert.Equal("/tmp/replay-capsule-root", intakeSummary.GetProperty("output_directory").GetString());
+        Assert.Equal(7, intakeSummary.GetProperty("entry_count").GetInt32());
+        Assert.Equal("lab_safe", intakeSummary.GetProperty("share_safety").GetString());
+        Assert.True(intakeSummary.GetProperty("lab_safe_required").GetBoolean());
+        Assert.Equal("abc123", intakeSummary.GetProperty("sha256").GetString());
+        Assert.True(intakeSummary.GetProperty("sha_verified").GetBoolean());
+        Assert.Equal(1, intakeSummary.GetProperty("recommended_command_count").GetInt32());
+        var manifest = data.GetProperty("artifact_manifest").EnumerateArray().ToArray();
+        Assert.Contains(manifest, artifact =>
+            artifact.GetProperty("path").GetString() == "artifact-intake-summary.json" &&
+            artifact.GetProperty("kind").GetString() == "artifact_intake" &&
+            artifact.GetProperty("role").GetString() == "artifact_handoff");
+        Assert.Contains(manifest, artifact =>
+            artifact.GetProperty("path").GetString() == "artifact-intake.md" &&
+            artifact.GetProperty("kind").GetString() == "artifact_intake" &&
+            artifact.GetProperty("role").GetString() == "artifact_handoff");
+        var readme = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-capsule.md"));
+        Assert.Contains("Artifact intake summary: `artifact-intake-summary.json`", readme, StringComparison.Ordinal);
+        Assert.Contains("Artifact intake README: `artifact-intake.md`", readme, StringComparison.Ordinal);
+        Assert.Contains("Artifact intake status: `restored`", readme, StringComparison.Ordinal);
+        Assert.Contains("Artifact intake share safety: `lab_safe`", readme, StringComparison.Ordinal);
+        Assert.Contains("Artifact intake SHA verified: `true`", readme, StringComparison.Ordinal);
+        using var jsonSummary = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-capsule-summary.json")));
+        Assert.Equal("lab_safe", jsonSummary.RootElement.GetProperty("artifact_intake_summary").GetProperty("share_safety").GetString());
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayCapsule_Promotes_Ready_Scenario_Draft_Run_Handoff()
     {
         var console = new FakeConsole();
@@ -4687,6 +4778,8 @@ public sealed partial class AppTests
         Assert.False(fileSystem.FileExists(Path.Join(replayRoot, "index.html")));
         Assert.True(data.GetProperty("has_timeline").GetBoolean());
         Assert.True(data.GetProperty("has_replay_metadata").GetBoolean());
+        Assert.False(data.GetProperty("has_artifact_intake_summary").GetBoolean());
+        Assert.False(data.TryGetProperty("artifact_intake_summary", out _));
         var counts = data.GetProperty("category_counts");
         Assert.Equal(1, counts.GetProperty("screenshots").GetInt32());
         Assert.Equal(1, counts.GetProperty("videos").GetInt32());
@@ -4695,6 +4788,67 @@ public sealed partial class AppTests
         Assert.Equal(1, counts.GetProperty("timelines").GetInt32());
         Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
             command.GetProperty("kind").GetString() == "replay_open");
+    }
+
+    [Fact]
+    public async Task RunAsync_ArtifactsInfo_Surfaces_Restored_Package_Intake_Audit()
+    {
+        var fileSystem = new FakeFileSystem();
+        var console = new FakeConsole();
+        var replayRoot = Path.Join("/tmp", "artifacts", "20260526-120000-run");
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), "{\"type\":\"session_started\"}");
+        fileSystem.AddFile(Path.Join(replayRoot, "artifact-intake-summary.json"), """
+        {
+          "schema": "luotsi-artifact-intake.v1",
+          "status": "restored",
+          "package": "/tmp/share/replay-lab-safe.zip",
+          "outputDirectory": "/tmp/artifacts/20260526-120000-run",
+          "entryCount": 7,
+          "jsonPath": "/tmp/artifacts/20260526-120000-run/artifact-intake-summary.json",
+          "readmePath": "/tmp/artifacts/20260526-120000-run/artifact-intake.md",
+          "sha256": "abc123",
+          "shareSafety": "lab_safe",
+          "labSafeRequired": true,
+          "verification": {
+            "verified": true
+          },
+          "recommendedCommands": [
+            {
+              "kind": "replay_open",
+              "summary": "Open replay.",
+              "command": "luotsi replay open --artifacts /tmp/artifacts/20260526-120000-run"
+            },
+            {
+              "kind": "info_artifacts",
+              "summary": "Inspect replay.",
+              "command": "luotsi artifacts info /tmp/artifacts/20260526-120000-run"
+            }
+          ]
+        }
+        """);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem
+        });
+
+        var exitCode = await app.RunAsync(["artifacts", "info", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.True(data.GetProperty("has_artifact_intake_summary").GetBoolean());
+        var intakeSummary = data.GetProperty("artifact_intake_summary");
+        Assert.Equal("restored", intakeSummary.GetProperty("status").GetString());
+        Assert.Equal("/tmp/share/replay-lab-safe.zip", intakeSummary.GetProperty("package").GetString());
+        Assert.Equal(7, intakeSummary.GetProperty("entry_count").GetInt32());
+        Assert.Equal("lab_safe", intakeSummary.GetProperty("share_safety").GetString());
+        Assert.True(intakeSummary.GetProperty("lab_safe_required").GetBoolean());
+        Assert.Equal("abc123", intakeSummary.GetProperty("sha256").GetString());
+        Assert.True(intakeSummary.GetProperty("sha_verified").GetBoolean());
+        Assert.Equal("/tmp/artifacts/20260526-120000-run/artifact-intake-summary.json", intakeSummary.GetProperty("json_path").GetString());
+        Assert.Equal("/tmp/artifacts/20260526-120000-run/artifact-intake.md", intakeSummary.GetProperty("readme_path").GetString());
+        Assert.Equal(2, intakeSummary.GetProperty("recommended_command_count").GetInt32());
     }
 
     [Fact]
@@ -5936,6 +6090,7 @@ public sealed partial class AppTests
         Assert.True(fileSystem.FileExists(readmePath));
 
         using var summary = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(jsonPath));
+        Assert.Equal(ResultSchemas.ArtifactIntake, summary.RootElement.GetProperty("schema").GetString());
         Assert.Equal("restored", summary.RootElement.GetProperty("status").GetString());
         Assert.Equal("lab_safe", summary.RootElement.GetProperty("shareSafety").GetString());
         Assert.Equal(sha256, summary.RootElement.GetProperty("sha256").GetString());

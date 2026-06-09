@@ -45,16 +45,23 @@ internal sealed class ArtifactEvidenceDetailReader(string root, IFileSystem file
         using var stream = _fileSystem.OpenRead(ResolveArtifactPath(path));
         using var document = JsonDocument.Parse(stream);
         var root = document.RootElement;
-        if (root.ValueKind != JsonValueKind.Object ||
-            !root.TryGetProperty("schema", out var schema) ||
-            schema.ValueKind != JsonValueKind.String)
+        if (root.ValueKind != JsonValueKind.Object)
         {
             return null;
+        }
+
+        if (!root.TryGetProperty("schema", out var schema) ||
+            schema.ValueKind != JsonValueKind.String)
+        {
+            return Path.GetFileName(path).Equals("artifact-intake-summary.json", StringComparison.OrdinalIgnoreCase)
+                ? BuildArtifactIntakeSummary(root)
+                : null;
         }
 
         var schemaName = schema.GetString();
         return schemaName switch
         {
+            ResultSchemas.ArtifactIntake => BuildArtifactIntakeSummary(root),
             ResultSchemas.FailureCapsule => BuildFailureCapsuleSummary(root),
             "luotsi-scenario-run-report.v1" => BuildScenarioRunReportSummary(root),
             ResultSchemas.ReplayOpen => BuildReplayOpenSummary(root),
@@ -214,6 +221,23 @@ internal sealed class ArtifactEvidenceDetailReader(string root, IFileSystem file
         AddJsonProperty(parts, root, "failed");
         AddJsonProperty(parts, root, "skipped");
         AddJsonProperty(parts, root, "durationMs", "duration_ms");
+        return parts.Count == 0 ? null : string.Join(" | ", parts);
+    }
+
+    private static string? BuildArtifactIntakeSummary(JsonElement root)
+    {
+        var parts = new List<string>();
+        AddJsonProperty(parts, root, "status");
+        AddJsonProperty(parts, root, "entryCount", "entries");
+        AddJsonProperty(parts, root, "shareSafety", "share_safety");
+        AddJsonProperty(parts, root, "labSafeRequired", "lab_safe_required");
+        AddJsonProperty(parts, root, "sha256");
+        if (root.TryGetProperty("verification", out var verification) && verification.ValueKind == JsonValueKind.Object)
+        {
+            AddJsonProperty(parts, verification, "verified", "sha_verified");
+        }
+
+        AddArrayCount(parts, root, "recommendedCommands", "recommended_commands");
         return parts.Count == 0 ? null : string.Join(" | ", parts);
     }
 

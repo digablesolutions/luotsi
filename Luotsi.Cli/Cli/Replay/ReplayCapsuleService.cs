@@ -41,6 +41,8 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         var scenarioDraft = InspectScenarioDraftReadiness(artifacts.Root, files);
         var scenarioDraftArtifacts = FindScenarioDraftArtifacts(files);
         var scenarioDraftSummary = ReadScenarioDraftSummary(artifacts.Root, scenarioDraftArtifacts.SummaryPath);
+        var artifactIntakeArtifacts = FindArtifactIntakeArtifacts(files);
+        var artifactIntakeSummary = ReadArtifactIntakeSummary(artifacts.Root, artifactIntakeArtifacts.SummaryPath);
         var commandHints = BuildCommandHints(artifacts.Root, primaryFailure, scenarioDraft.Available, scenarioDraftArtifacts).ToArray();
         var nextSteps = BuildRecommendedNextSteps(artifacts.Root, primaryFailure, scenarioDraft.Available, scenarioDraftSummary).ToArray();
         var readmePath = options.HasFlag("write-readme")
@@ -59,6 +61,8 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             scenarioDraft.Reason,
             scenarioDraftArtifacts,
             scenarioDraftSummary,
+            artifactIntakeArtifacts,
+            artifactIntakeSummary,
             readmePath,
             jsonPath,
             primaryFailure,
@@ -75,7 +79,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
 
         if (readmePath is not null)
         {
-            await artifacts.WriteTextAsync(CapsuleReadmeFileName, BuildReadme(artifacts.Root, summaries.Count, failureSessions.Length, scenarioDraft, scenarioDraftArtifacts, scenarioDraftSummary, primaryFailure, artifactCounts, artifactManifest, failureTimeline, nextSteps, commandHints)).ConfigureAwait(false);
+            await artifacts.WriteTextAsync(CapsuleReadmeFileName, BuildReadme(artifacts.Root, summaries.Count, failureSessions.Length, scenarioDraft, scenarioDraftArtifacts, scenarioDraftSummary, artifactIntakeArtifacts, artifactIntakeSummary, primaryFailure, artifactCounts, artifactManifest, failureTimeline, nextSteps, commandHints)).ConfigureAwait(false);
         }
 
         return result;
@@ -338,6 +342,13 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         return new ReplayCapsuleScenarioDraftArtifacts(summary, markdown, scenario);
     }
 
+    private static ReplayCapsuleArtifactIntakeArtifacts FindArtifactIntakeArtifacts(IReadOnlyList<string> files)
+    {
+        var summary = files.FirstOrDefault(static file => Path.GetFileName(file).Equals("artifact-intake-summary.json", StringComparison.OrdinalIgnoreCase));
+        var markdown = files.FirstOrDefault(static file => Path.GetFileName(file).Equals("artifact-intake.md", StringComparison.OrdinalIgnoreCase));
+        return new ReplayCapsuleArtifactIntakeArtifacts(summary, markdown);
+    }
+
     private static bool IsDraftScenarioFile(string file)
     {
         var fileName = Path.GetFileName(file);
@@ -373,6 +384,54 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
                 ReadStringArray(root, "warnings", 5),
                 ReadNextActions(root, 5),
                 ReadReviewItems(root, 5));
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private ReplayCapsuleArtifactIntakeSummary? ReadArtifactIntakeSummary(string artifactRoot, string? summaryPath)
+    {
+        if (string.IsNullOrWhiteSpace(summaryPath))
+        {
+            return null;
+        }
+
+        var fullPath = Path.Join(artifactRoot, summaryPath.Replace('/', Path.DirectorySeparatorChar));
+        try
+        {
+            using var stream = _fileSystem.OpenRead(fullPath);
+            using var document = JsonDocument.Parse(stream);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            bool? shaVerified = null;
+            if (root.TryGetProperty("verification", out var verification) &&
+                verification.ValueKind == JsonValueKind.Object &&
+                verification.TryGetProperty("verified", out var verified))
+            {
+                shaVerified = verified.ValueKind switch
+                {
+                    JsonValueKind.True => true,
+                    JsonValueKind.False => false,
+                    _ => null
+                };
+            }
+
+            return new ReplayCapsuleArtifactIntakeSummary(
+                TryGetString(root, "status", out var status) ? status : null,
+                TryGetString(root, "package", out var package) ? package : null,
+                TryGetString(root, "outputDirectory", out var outputDirectory) ? outputDirectory : null,
+                TryGetInt(root, "entryCount", out var entryCount) ? entryCount : 0,
+                TryGetString(root, "shareSafety", out var shareSafety) ? shareSafety : null,
+                TryGetBool(root, "labSafeRequired", out var labSafeRequired) && labSafeRequired,
+                TryGetString(root, "sha256", out var sha256) ? sha256 : null,
+                shaVerified,
+                CountArray(root, "recommendedCommands"));
         }
         catch (JsonException)
         {
@@ -453,6 +512,8 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         ReplayCapsuleScenarioDraftReadiness scenarioDraft,
         ReplayCapsuleScenarioDraftArtifacts scenarioDraftArtifacts,
         ReplayCapsuleScenarioDraftSummary? scenarioDraftSummary,
+        ReplayCapsuleArtifactIntakeArtifacts artifactIntakeArtifacts,
+        ReplayCapsuleArtifactIntakeSummary? artifactIntakeSummary,
         ReplayCapsulePrimaryFailureResult? primaryFailure,
         ReplayCapsuleArtifactCounts artifactCounts,
         IReadOnlyList<ReplayCapsuleArtifactManifestEntry> artifactManifest,
@@ -471,6 +532,25 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         AppendField(builder, "Scenario draft summary", scenarioDraftArtifacts.SummaryPath);
         AppendField(builder, "Scenario draft review", scenarioDraftArtifacts.MarkdownPath);
         AppendField(builder, "Scenario draft file", scenarioDraftArtifacts.ScenarioPath);
+        AppendField(builder, "Artifact intake summary", artifactIntakeArtifacts.SummaryPath);
+        AppendField(builder, "Artifact intake README", artifactIntakeArtifacts.MarkdownPath);
+        if (artifactIntakeSummary is not null)
+        {
+            AppendField(builder, "Artifact intake status", artifactIntakeSummary.Status);
+            AppendField(builder, "Artifact intake package", artifactIntakeSummary.Package);
+            AppendField(builder, "Artifact intake output", artifactIntakeSummary.OutputDirectory);
+            AppendField(builder, "Artifact intake share safety", artifactIntakeSummary.ShareSafety);
+            AppendField(builder, "Artifact intake SHA-256", artifactIntakeSummary.Sha256);
+            if (artifactIntakeSummary.ShaVerified is not null)
+            {
+                builder.AppendLine($"- Artifact intake SHA verified: `{artifactIntakeSummary.ShaVerified.Value.ToString().ToLowerInvariant()}`");
+            }
+
+            builder.AppendLine($"- Artifact intake entries: `{artifactIntakeSummary.EntryCount}`");
+            builder.AppendLine($"- Artifact intake lab-safe required: `{artifactIntakeSummary.LabSafeRequired.ToString().ToLowerInvariant()}`");
+            builder.AppendLine($"- Artifact intake recommended commands: `{artifactIntakeSummary.RecommendedCommandCount}`");
+        }
+
         if (scenarioDraftSummary is not null)
         {
             AppendField(builder, "Scenario draft confidence", scenarioDraftSummary.Confidence);
@@ -919,6 +999,28 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         return root.TryGetProperty(name, out var property) &&
             property.ValueKind == JsonValueKind.Number &&
             property.TryGetInt32(out value);
+    }
+
+    private static bool TryGetBool(JsonElement root, string name, out bool value)
+    {
+        value = false;
+        if (!root.TryGetProperty(name, out var property))
+        {
+            return false;
+        }
+
+        if (property.ValueKind == JsonValueKind.True)
+        {
+            value = true;
+            return true;
+        }
+
+        if (property.ValueKind == JsonValueKind.False)
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private static bool TryGetDateTimeOffset(JsonElement root, string name, out DateTimeOffset value)

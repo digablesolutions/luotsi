@@ -125,6 +125,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             ? ArtifactRootResolver.ResolveLatestArtifactRoot(_fileSystem, searchRoot, _environment, preferWorkspaceHome: true)
             : ArtifactRootResolver.ResolveArtifactRoot(_fileSystem, target!, searchRoot, _environment, preferWorkspaceHome: true);
         var files = GetArtifactFiles(artifactRoot);
+        var artifactIntakeSummary = await ReadArtifactInfoIntakeSummaryAsync(artifactRoot).ConfigureAwait(false);
         return new ArtifactInfoResult(
             Path.GetFileName(Path.GetFullPath(artifactRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
             artifactRoot,
@@ -134,6 +135,8 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             _fileSystem.FileExists(Path.Join(artifactRoot, PackageManifestFileName)),
             files.Any(static file => string.Equals(Path.GetFileName(file), "session-timeline.jsonl", StringComparison.OrdinalIgnoreCase)),
             files.Any(static file => string.Equals(Path.GetFileName(file), "session-replay.json", StringComparison.OrdinalIgnoreCase)),
+            artifactIntakeSummary is not null,
+            artifactIntakeSummary,
             CreateCategoryCounts(files),
             [
                 new ArtifactRecommendedCommandResult("open_artifacts", "Open this artifact root in the local artifact browser.", $"luotsi artifacts open {Quote(artifactRoot)}"),
@@ -141,6 +144,54 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
                 new ArtifactRecommendedCommandResult("pack_artifacts_lab_safe", "Pack a lab-safe redacted copy for support, CI, or agents.", $"luotsi artifacts pack {Quote(artifactRoot)} --redact lab-safe"),
                 new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench for this artifact root.", $"luotsi replay open --artifacts {Quote(artifactRoot)}")
             ]);
+    }
+
+    private async Task<ArtifactInfoIntakeSummaryResult?> ReadArtifactInfoIntakeSummaryAsync(string artifactRoot)
+    {
+        var path = Path.Join(artifactRoot, IntakeSummaryFileName);
+        if (!_fileSystem.FileExists(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(await _fileSystem.ReadAllTextAsync(path).ConfigureAwait(false));
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            bool? shaVerified = null;
+            if (root.TryGetProperty("verification", out var verification) &&
+                verification.ValueKind == JsonValueKind.Object &&
+                verification.TryGetProperty("verified", out var verified))
+            {
+                shaVerified = verified.ValueKind switch
+                {
+                    JsonValueKind.True => true,
+                    JsonValueKind.False => false,
+                    _ => null
+                };
+            }
+
+            return new ArtifactInfoIntakeSummaryResult(
+                TryGetOptionalString(root, "status"),
+                TryGetOptionalString(root, "package"),
+                GetOptionalInt(root, "entryCount"),
+                TryGetOptionalString(root, "shareSafety"),
+                GetOptionalBool(root, "labSafeRequired") ?? false,
+                TryGetOptionalString(root, "sha256"),
+                shaVerified,
+                TryGetOptionalString(root, "jsonPath"),
+                TryGetOptionalString(root, "readmePath"),
+                CountOptionalArray(root, "recommendedCommands"));
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     public async Task<ArtifactPackResult> PackAsync(string target, string? searchRoot, string? output, bool force, bool dryRun, string? redactionMode)
@@ -301,6 +352,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         var jsonPath = writeJson && !dryRun ? Path.Join(unpack.OutputDirectory, IntakeSummaryFileName) : null;
         var readmePath = writeReadme && !dryRun ? Path.Join(unpack.OutputDirectory, IntakeReadmeFileName) : null;
         var result = new ArtifactIntakeResult(
+            ResultSchemas.ArtifactIntake,
             unpack.Package,
             status,
             unpack.OutputDirectory,
@@ -605,6 +657,31 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
     private static int GetOptionalInt(JsonElement root, string propertyName) =>
         root.TryGetProperty(propertyName, out var value) && value.TryGetInt32(out var parsed)
             ? parsed
+            : 0;
+
+    private static bool? GetOptionalBool(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out var value))
+        {
+            return null;
+        }
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => null
+        };
+    }
+
+    private static string? TryGetOptionalString(JsonElement root, string propertyName) =>
+        root.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+
+    private static int CountOptionalArray(JsonElement root, string propertyName) =>
+        root.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.Array
+            ? value.GetArrayLength()
             : 0;
 
     private static ArtifactPackageRedactionResult? ReadOptionalRedaction(JsonElement root, string manifestPath)
@@ -1183,8 +1260,22 @@ internal sealed record ArtifactInfoResult(
     bool HasPackageManifest,
     bool HasTimeline,
     bool HasReplayMetadata,
+    bool HasArtifactIntakeSummary,
+    ArtifactInfoIntakeSummaryResult? ArtifactIntakeSummary,
     ArtifactCategoryCountsResult CategoryCounts,
     IReadOnlyList<ArtifactRecommendedCommandResult> RecommendedCommands);
+
+internal sealed record ArtifactInfoIntakeSummaryResult(
+    string? Status,
+    string? Package,
+    int EntryCount,
+    string? ShareSafety,
+    bool LabSafeRequired,
+    string? Sha256,
+    bool? ShaVerified,
+    string? JsonPath,
+    string? ReadmePath,
+    int RecommendedCommandCount);
 
 internal sealed record ArtifactPackageInfoResult(
     string Package,
@@ -1241,6 +1332,7 @@ internal sealed record ArtifactUnpackResult(
     IReadOnlyList<ArtifactRecommendedCommandResult> RecommendedCommands);
 
 internal sealed record ArtifactIntakeResult(
+    string Schema,
     string Package,
     string Status,
     string OutputDirectory,
