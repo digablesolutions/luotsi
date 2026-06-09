@@ -206,6 +206,7 @@ First run:
   0. Ask Luotsi for a five-minute, machine-readable first-run plan
      luotsi quickstart
      luotsi quickstart --device <adb serial> --package <app.id> --artifacts artifacts/first-run
+     luotsi quickstart --artifacts artifacts/first-run --write-json --write-markdown
 
   1. Select or explain the target device
      luotsi doctor
@@ -248,7 +249,8 @@ Common workflows:
 Tips:
   The quickstart command returns the same path as JSON: status, time_budget,
   inputs, steps, recommended_commands, differentiators, and an agent_prompt
-  that can be handed to an AI operator.
+  that can be handed to an AI operator. Add --write-json and --write-markdown
+  to persist quickstart-plan.json and quickstart-plan.md in the artifact root.
   Scenario runs write artifacts into the default Luotsi run-artifact home
   unless you override it with --artifacts <directory>. --output-dir <directory>
   is a clearer alias for the same root.
@@ -788,7 +790,7 @@ Command groups:
     replay search --artifacts <artifact-root> --contains <text> [--limit 50]
 
   Install and update
-    quickstart [--device <adb serial>] [--package <app.id>] [--artifacts <directory>]
+    quickstart [--device <adb serial>] [--package <app.id>] [--artifacts <directory>] [--write-json] [--write-markdown]
     version
     update [--version <tag>] [--channel stable|prerelease] [--dry-run] [--detach]
 

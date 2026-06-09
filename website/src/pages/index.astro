@@ -165,9 +165,9 @@ const docsBuckets = [
 ];
 
 const proofStatus = [
+	{ label: 'Mode', value: 'Host-driven' },
 	{ label: 'Device', value: 'Physical Android' },
-	{ label: 'Transport', value: 'ADB + JSONL' },
-	{ label: 'Artifacts', value: 'Replay-ready' },
+	{ label: 'Evidence', value: 'Replay-ready' },
 ];
 
 const utilityLinks = [
@@ -185,6 +185,13 @@ const proofBadges = [
 	{ title: 'Real device', copy: 'A physical Android screen under test, not a browser mock.' },
 	{ title: 'Structured sessions', copy: 'Inspect and view emit machine-readable state instead of terminal prose.' },
 	{ title: 'Replay artifacts', copy: 'Every run leaves behind a trail you can inspect after the session ends.' },
+];
+
+const trustSignals = [
+	'Open source CLI',
+	'ADB-first',
+	'JSONL control plane',
+	'CI artifact trail',
 ];
 
 const inspectSnippet = [
@@ -247,28 +254,45 @@ const replaySnippet = [
 
 				<section class="hero">
 					<div class="hero-copy">
-						<div class="eyebrow">Android device automation and replay for agents and CI</div>
-						<h1 class="display">Inspect the device. Run the scenario. Replay the failure.</h1>
+						<div class="eyebrow">Real-device Android automation for agents and CI</div>
+						<h1 class="display">The control plane for Android work that has to leave evidence.</h1>
 						<p class="lede">
-							Luotsi keeps orchestration, policy, and diagnostics on the host while the Android helper stays thin. Use it when an agent, engineer, or CI runner needs real-device Android state, lab-coordinated execution, and post-run evidence instead of a browser mock or a heavyweight device farm.
+							Luotsi gives agents, engineers, and CI runners a host-driven way to inspect physical devices, run governed scenarios, and replay failures from durable artifacts after the device session is gone.
 						</p>
 						<div class="hero-actions">
 							<a class="button-link button-link--primary" href={installHref}>Install Luotsi</a>
 							<a class="button-link button-link--secondary" href={agentLoopHref}>See the agent loop</a>
 						</div>
+						<div class="trust-strip" role="list" aria-label="Luotsi product signals">
+							{trustSignals.map((signal) => (
+								<span role="listitem">{signal}</span>
+							))}
+						</div>
 						<div class="hero-support">
 							<div class="support-card">
-								<strong>Not a scrcpy clone</strong>
+								<strong>Beyond screen sharing</strong>
 								<span>Live view is one surface in a workflow that also emits state, reports, and replay artifacts.</span>
 							</div>
 							<div class="support-card">
-								<strong>Not an Appium replacement</strong>
+								<strong>Evidence layer, not another farm</strong>
 								<span>Luotsi is the host-side evidence and control layer around real Android device runs.</span>
 							</div>
 						</div>
 					</div>
 
 					<div class="proof-composite">
+						<div class="proof-command">
+							<div class="proof-command__header">
+								<span>operator console</span>
+								<strong>ready</strong>
+							</div>
+							<pre><code>{`$ luotsi inspect --device pixel-lab-3
+session: real-device JSONL
+actions: tap_text, wait_visible, screenshot
+
+$ luotsi replay open --artifacts ./artifacts/smoke-run
+capsule: screenshots, hierarchy, logcat, junit`}</code></pre>
+						</div>
 						<div class="proof-device">
 							<div class="proof-window-bar">
 								<span>Live mirror</span>

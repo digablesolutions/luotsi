@@ -165,6 +165,44 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_Quickstart_WriteArtifacts_Persists_Handoff_Files()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            TimeProvider = timeProvider
+        });
+
+        var exitCode = await app.RunAsync(["quickstart", "--device", "emulator-5554", "--package", "dev.luotsi.demo", "--artifacts", "/tmp/luotsi-first-run", "--write-json", "--write-markdown"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        var artifactRoot = envelope.RootElement.GetProperty("artifacts").GetProperty("artifact_root").GetString();
+        var handoff = data.GetProperty("handoff");
+        var jsonPath = Path.Join(artifactRoot, "quickstart-plan.json");
+        var markdownPath = Path.Join(artifactRoot, "quickstart-plan.md");
+        Assert.Equal(Path.Join("/tmp/luotsi-first-run", "20260515-120000-quickstart"), artifactRoot);
+        Assert.Equal(jsonPath, handoff.GetProperty("json_path").GetString());
+        Assert.Equal(markdownPath, handoff.GetProperty("markdown_path").GetString());
+        Assert.True(fileSystem.FileExists(jsonPath));
+        Assert.True(fileSystem.FileExists(markdownPath));
+        Assert.True(fileSystem.FileExists(Path.Join(artifactRoot, ArtifactSession.ArtifactIndexFileName)));
+
+        using var persistedJson = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(jsonPath));
+        Assert.Equal("luotsi-quickstart.v1", persistedJson.RootElement.GetProperty("schema").GetString());
+        Assert.Equal("luotsi doctor --device emulator-5554 --package dev.luotsi.demo --fix", persistedJson.RootElement.GetProperty("first_command").GetString());
+
+        var markdown = await fileSystem.ReadAllTextAsync(markdownPath);
+        Assert.Contains("# Luotsi quickstart handoff", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi inspect --device emulator-5554 --artifacts /tmp/luotsi-first-run", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_Help_Command_Writes_Replay_Topic()
     {
         var console = new FakeConsole();
