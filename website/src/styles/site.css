@@ -6,12 +6,15 @@
 @import "@fontsource/jetbrains-mono/600.css";
 
 :root {
-	--luotsi-ink: #08111f;
-	--luotsi-navy: #0f172a;
-	--luotsi-sky: #38bdf8;
-	--luotsi-cyan: #67e8f9;
-	--luotsi-fog: rgba(248, 250, 252, 0.76);
-	--luotsi-shadow: 0 24px 70px rgba(8, 17, 31, 0.18);
+	--luotsi-ink: #101820;
+	--luotsi-navy: #111827;
+	--luotsi-panel: #ffffff;
+	--luotsi-panel-muted: #f4f7f9;
+	--luotsi-line: #d8e0e7;
+	--luotsi-green: #16856b;
+	--luotsi-blue: #2563eb;
+	--luotsi-amber: #b45309;
+	--luotsi-shadow: 0 18px 45px rgba(17, 24, 39, 0.12);
 
 	--sl-color-accent-low: #082f49;
 	--sl-color-accent: #0ea5e9;
@@ -28,7 +31,10 @@
 
 html {
 	font-family: "Manrope", "Segoe UI", sans-serif;
-	background: linear-gradient(180deg, #f8fafc 0%, #eef6ff 48%, #f8fafc 100%);
+	background:
+		linear-gradient(90deg, rgba(17, 24, 39, 0.04) 1px, transparent 1px),
+		linear-gradient(180deg, #f7f8f4 0%, #eef4f8 45%, #f7f8f4 100%);
+	background-size: 36px 36px, auto;
 	color: var(--luotsi-ink);
 }
 
@@ -67,8 +73,8 @@ html .sl-markdown-content :is(p, li, td, th) code {
 		position: absolute;
 		inset: 0;
 		background:
-			radial-gradient(circle at top left, rgba(56, 189, 248, 0.16), transparent 32%),
-			radial-gradient(circle at top right, rgba(103, 232, 249, 0.2), transparent 24%);
+			linear-gradient(135deg, rgba(37, 99, 235, 0.1), transparent 34%),
+			linear-gradient(315deg, rgba(180, 83, 9, 0.09), transparent 30%);
 		pointer-events: none;
 	}
 
@@ -85,11 +91,11 @@ html .sl-markdown-content :is(p, li, td, th) code {
 		align-items: center;
 		gap: 1rem;
 		padding: 0.85rem 1rem;
-		border: 1px solid rgba(15, 23, 42, 0.08);
-		border-radius: 1.6rem;
-		background: rgba(248, 250, 252, 0.72);
+		border: 1px solid var(--luotsi-line);
+		border-radius: 8px;
+		background: rgba(255, 255, 255, 0.86);
 		backdrop-filter: blur(14px);
-		box-shadow: 0 18px 48px rgba(8, 17, 31, 0.08);
+		box-shadow: 0 12px 30px rgba(17, 24, 39, 0.08);
 	}
 
 	.landing-page .brand {
@@ -104,8 +110,9 @@ html .sl-markdown-content :is(p, li, td, th) code {
 		width: 2.9rem;
 		height: 2.9rem;
 		padding: 0.45rem;
-		border-radius: 1rem;
-		background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(224, 242, 254, 0.92));
+		border-radius: 8px;
+		background: #f8fafc;
+		border: 1px solid var(--luotsi-line);
 		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
 	}
 
@@ -141,27 +148,27 @@ html .sl-markdown-content :is(p, li, td, th) code {
 		align-items: center;
 		justify-content: center;
 		padding: 0.78rem 1rem;
-		border-radius: 999px;
-		border: 1px solid rgba(15, 23, 42, 0.08);
+		border-radius: 8px;
+		border: 1px solid var(--luotsi-line);
 		font-weight: 700;
 		text-decoration: none;
 		transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, background 180ms ease;
 	}
 
 	.landing-page .nav-links a {
-		background: rgba(255, 255, 255, 0.74);
+		background: rgba(255, 255, 255, 0.72);
 		color: var(--luotsi-navy);
 	}
 
 	.landing-page .button-link--primary {
-		border-color: transparent;
-		background: linear-gradient(135deg, #0284c7, #0f172a);
+		border-color: #111827;
+		background: #111827;
 		color: #f8fafc;
-		box-shadow: 0 20px 40px rgba(2, 132, 199, 0.22);
+		box-shadow: 0 16px 34px rgba(17, 24, 39, 0.2);
 	}
 
 	.landing-page .button-link--secondary {
-		background: rgba(248, 250, 252, 0.84);
+		background: rgba(255, 255, 255, 0.84);
 		color: var(--luotsi-navy);
 	}
 
@@ -169,7 +176,12 @@ html .sl-markdown-content :is(p, li, td, th) code {
 	.landing-page .button-link:hover {
 		transform: translateY(-1px);
 		box-shadow: 0 18px 36px rgba(15, 23, 42, 0.12);
-		border-color: rgba(14, 165, 233, 0.3);
+		border-color: rgba(37, 99, 235, 0.36);
+	}
+
+	.landing-page :is(a, button):focus-visible {
+		outline: 3px solid rgba(37, 99, 235, 0.72);
+		outline-offset: 3px;
 	}
 
 	.landing-page .hero-copy,
@@ -198,10 +210,10 @@ html .sl-markdown-content :is(p, li, td, th) code {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.55rem;
-		padding: 0.42rem 0.75rem;
-		border-radius: 999px;
-		background: rgba(15, 23, 42, 0.9);
-		color: #e2e8f0;
+		padding: 0.46rem 0.7rem;
+		border-radius: 8px;
+		background: #e8f2ee;
+		color: #145f4f;
 		font-size: 0.74rem;
 		letter-spacing: 0.1em;
 		text-transform: uppercase;
@@ -209,8 +221,8 @@ html .sl-markdown-content :is(p, li, td, th) code {
 
 	.landing-page .hero .display {
 		margin: 1rem 0;
-		font-size: clamp(2.9rem, 6vw, 5.1rem);
-		line-height: 0.94;
+		font-size: 4.6rem;
+		line-height: 0.96;
 		color: var(--luotsi-navy);
 	}
 
@@ -226,6 +238,26 @@ html .sl-markdown-content :is(p, li, td, th) code {
 		flex-wrap: wrap;
 		gap: 0.75rem;
 		margin: 0.35rem 0 0.15rem;
+	}
+
+	.landing-page .trust-strip {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.55rem;
+		margin: 0.25rem 0 0.15rem;
+	}
+
+	.landing-page .trust-strip span {
+		display: inline-flex;
+		align-items: center;
+		min-height: 2.15rem;
+		padding: 0.45rem 0.7rem;
+		border: 1px solid rgba(22, 133, 107, 0.22);
+		border-radius: 8px;
+		background: rgba(255, 255, 255, 0.68);
+		color: #145f4f;
+		font-size: 0.82rem;
+		font-weight: 700;
 	}
 
 	.landing-page .hero-support,
@@ -251,10 +283,10 @@ html .sl-markdown-content :is(p, li, td, th) code {
 	.landing-page .launch-card,
 	.landing-page .route-card,
 	.landing-page .bucket-card {
-		border: 1px solid rgba(15, 23, 42, 0.08);
-		border-radius: 1.4rem;
-		background: var(--luotsi-fog);
-		backdrop-filter: blur(12px);
+		border: 1px solid var(--luotsi-line);
+		border-radius: 8px;
+		background: rgba(255, 255, 255, 0.82);
+		backdrop-filter: blur(10px);
 		box-shadow: var(--luotsi-shadow);
 	}
 
@@ -276,24 +308,56 @@ html .sl-markdown-content :is(p, li, td, th) code {
 	}
 
 	.landing-page .proof-composite::before {
-		content: "";
-		position: absolute;
-		inset: -1rem -0.75rem auto 25%;
-		height: 14rem;
-		border-radius: 999px;
-		background: radial-gradient(circle, rgba(56, 189, 248, 0.22), rgba(56, 189, 248, 0));
-		filter: blur(12px);
-		pointer-events: none;
-		z-index: -1;
+		content: none;
+	}
+
+	.landing-page .proof-command {
+		overflow: hidden;
+		border-radius: 8px;
+		border: 1px solid rgba(15, 23, 42, 0.18);
+		background: #0b1220;
+		box-shadow: 0 24px 58px rgba(17, 24, 39, 0.22);
+	}
+
+	.landing-page .proof-command__header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 0.7rem 0.85rem;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+		background: rgba(255, 255, 255, 0.05);
+		color: #dbeafe;
+		font-size: 0.72rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+
+	.landing-page .proof-command__header strong {
+		color: #9ae6b4;
+	}
+
+	.landing-page .proof-command pre {
+		margin: 0;
+		padding: 1rem;
+		overflow-x: auto;
+		color: #d1fae5;
+	}
+
+	.landing-page .proof-command code {
+		background: transparent;
+		padding: 0;
+		color: inherit;
 	}
 
 	.landing-page .proof-device {
 		position: relative;
 		overflow: hidden;
 		padding: 1rem;
-		border-radius: 1.9rem;
+		border-radius: 8px;
 		border: 1px solid rgba(148, 163, 184, 0.18);
-		background: linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(15, 23, 42, 0.8));
+		background: #111827;
 		box-shadow: 0 28px 70px rgba(8, 17, 31, 0.28);
 	}
 
@@ -312,7 +376,7 @@ html .sl-markdown-content :is(p, li, td, th) code {
 		align-items: center;
 		margin-bottom: 0.75rem;
 		padding: 0.45rem 0.7rem;
-		border-radius: 999px;
+		border-radius: 8px;
 		background: rgba(248, 250, 252, 0.08);
 		color: #dbeafe;
 		font-size: 0.72rem;
@@ -324,7 +388,7 @@ html .sl-markdown-content :is(p, li, td, th) code {
 	.landing-page .proof-device img {
 		display: block;
 		width: 100%;
-		border-radius: 1.2rem;
+		border-radius: 8px;
 		border: 1px solid rgba(148, 163, 184, 0.28);
 	}
 
@@ -341,8 +405,8 @@ html .sl-markdown-content :is(p, li, td, th) code {
 
 	.landing-page .proof-status-pill {
 		padding: 0.85rem 0.95rem;
-		border: 1px solid rgba(15, 23, 42, 0.08);
-		border-radius: 1rem;
+		border: 1px solid var(--luotsi-line);
+		border-radius: 8px;
 		background: rgba(255, 255, 255, 0.76);
 		backdrop-filter: blur(12px);
 		box-shadow: 0 18px 36px rgba(8, 17, 31, 0.1);
@@ -355,7 +419,7 @@ html .sl-markdown-content :is(p, li, td, th) code {
 		font-weight: 700;
 		letter-spacing: 0.12em;
 		text-transform: uppercase;
-		color: #0f766e;
+		color: var(--luotsi-green);
 	}
 
 	.landing-page .proof-status-pill strong {
@@ -370,19 +434,15 @@ html .sl-markdown-content :is(p, li, td, th) code {
 		flex-direction: column;
 		overflow: hidden;
 		padding: 1rem 1rem 1.05rem;
-		background: rgba(248, 250, 252, 0.86);
+		background: rgba(255, 255, 255, 0.86);
 	}
 
 	.landing-page .proof-card::before {
-		content: "";
-		position: absolute;
-		inset: 0;
-		background: linear-gradient(150deg, rgba(14, 165, 233, 0.08), transparent 48%);
-		pointer-events: none;
+		content: none;
 	}
 
 	.landing-page .proof-card--replay {
-		background: linear-gradient(160deg, rgba(224, 242, 254, 0.92), rgba(248, 250, 252, 0.96));
+		background: #f8f3e9;
 	}
 
 	.landing-page .proof-card__label,
@@ -394,7 +454,7 @@ html .sl-markdown-content :is(p, li, td, th) code {
 		font-weight: 700;
 		letter-spacing: 0.12em;
 		text-transform: uppercase;
-		color: #0f766e;
+		color: var(--luotsi-green);
 	}
 
 	.landing-page .proof-card pre,
@@ -403,9 +463,9 @@ html .sl-markdown-content :is(p, li, td, th) code {
 		position: relative;
 		flex: 1;
 		padding: 0.95rem 1rem;
-		border-radius: 1rem;
+		border-radius: 8px;
 		overflow-x: auto;
-		background: linear-gradient(180deg, rgba(2, 6, 23, 0.98), rgba(15, 23, 42, 0.94));
+		background: #0b1220;
 		color: #dbeafe;
 		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 	}
@@ -425,7 +485,7 @@ html .sl-markdown-content :is(p, li, td, th) code {
 
 	.landing-page .proof-badge {
 		padding: 1rem;
-		background: linear-gradient(180deg, rgba(248, 250, 252, 0.88), rgba(255, 255, 255, 0.72));
+		background: rgba(255, 255, 255, 0.82);
 	}
 
 	.landing-page .proof-badge strong {
@@ -451,12 +511,12 @@ html .sl-markdown-content :is(p, li, td, th) code {
 		font-weight: 700;
 		letter-spacing: 0.12em;
 		text-transform: uppercase;
-		color: #0f766e;
+		color: var(--luotsi-green);
 	}
 
 	.landing-page .section-title {
 		margin: 0.35rem 0 0.55rem;
-		font-size: clamp(2rem, 4vw, 3rem);
+		font-size: 2.8rem;
 		line-height: 1;
 		color: var(--luotsi-navy);
 	}
@@ -497,8 +557,8 @@ html .sl-markdown-content :is(p, li, td, th) code {
 		display: block;
 		margin-top: auto;
 		padding: 0.75rem 0.85rem;
-		border-radius: 0.9rem;
-		background: rgba(15, 23, 42, 0.08);
+		border-radius: 8px;
+		background: rgba(17, 24, 39, 0.08);
 		color: #0f172a;
 		overflow-wrap: anywhere;
 	}
@@ -523,7 +583,7 @@ html .sl-markdown-content :is(p, li, td, th) code {
 	}
 
 	.landing-page .launch-card--command {
-		background: linear-gradient(180deg, rgba(248, 250, 252, 0.92), rgba(224, 242, 254, 0.88));
+		background: #eef6f2;
 	}
 
 	.landing-page .launch-card ul {
@@ -537,7 +597,7 @@ html .sl-markdown-content :is(p, li, td, th) code {
 		display: inline-flex;
 		margin-top: 0.9rem;
 		font-weight: 700;
-		color: #0369a1;
+		color: var(--luotsi-blue);
 		text-decoration: none;
 	}
 
@@ -559,7 +619,7 @@ html .sl-markdown-content :is(p, li, td, th) code {
 	.landing-page .bucket-list a:hover {
 		transform: translateY(-1px);
 		box-shadow: 0 18px 36px rgba(15, 23, 42, 0.1);
-		border-color: rgba(14, 165, 233, 0.35);
+		border-color: rgba(37, 99, 235, 0.35);
 	}
 
 	.landing-page .route-card strong {
@@ -571,7 +631,7 @@ html .sl-markdown-content :is(p, li, td, th) code {
 	.landing-page .route-card code {
 		margin-top: auto;
 		padding: 0.75rem 0.85rem;
-		border-radius: 0.9rem;
+		border-radius: 8px;
 		background: rgba(15, 23, 42, 0.08);
 		color: #0f172a;
 		font-size: 0.9rem;
@@ -600,7 +660,7 @@ html .sl-markdown-content :is(p, li, td, th) code {
 		justify-content: space-between;
 		align-items: center;
 		padding: 0.88rem 0.95rem;
-		border-radius: 1rem;
+		border-radius: 8px;
 		border: 1px solid transparent;
 		background: rgba(15, 23, 42, 0.06);
 		color: var(--luotsi-navy);
@@ -611,7 +671,7 @@ html .sl-markdown-content :is(p, li, td, th) code {
 
 	.landing-page .bucket-list a::after {
 		content: "->";
-		color: #0369a1;
+		color: var(--luotsi-blue);
 	}
 
 	.landing-page .utility-strip {
@@ -626,8 +686,8 @@ html .sl-markdown-content :is(p, li, td, th) code {
 		align-items: center;
 		justify-content: center;
 		padding: 0.78rem 1rem;
-		border-radius: 999px;
-		border: 1px solid rgba(15, 23, 42, 0.08);
+		border-radius: 8px;
+		border: 1px solid var(--luotsi-line);
 		background: rgba(248, 250, 252, 0.74);
 		color: var(--luotsi-navy);
 		font-weight: 700;
@@ -677,6 +737,14 @@ html .sl-markdown-content :is(p, li, td, th) code {
 		padding-top: 3rem;
 	}
 
+	.landing-page .hero .display {
+		font-size: 3.8rem;
+	}
+
+	.landing-page .section-title {
+		font-size: 2.4rem;
+	}
+
 	.landing-page .section-header {
 		align-items: start;
 		flex-direction: column;
@@ -722,7 +790,7 @@ html .sl-markdown-content :is(p, li, td, th) code {
 	}
 
 	.landing-page .topbar {
-		border-radius: 1.4rem;
+		border-radius: 8px;
 		padding: 0.85rem;
 		flex-direction: column;
 		align-items: stretch;
@@ -733,7 +801,7 @@ html .sl-markdown-content :is(p, li, td, th) code {
 	}
 
 	.landing-page .hero .display {
-		font-size: clamp(2.6rem, 14vw, 4rem);
+		font-size: 3rem;
 	}
 
 	.landing-page .nav-links a,
