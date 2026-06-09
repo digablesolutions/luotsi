@@ -263,9 +263,9 @@ const replaySnippet = [
 							<a class="button-link button-link--primary" href={installHref}>Install Luotsi</a>
 							<a class="button-link button-link--secondary" href={agentLoopHref}>See the agent loop</a>
 						</div>
-						<div class="trust-strip" aria-label="Luotsi product signals">
+						<div class="trust-strip" role="list" aria-label="Luotsi product signals">
 							{trustSignals.map((signal) => (
-								<span>{signal}</span>
+								<span role="listitem">{signal}</span>
 							))}
 						</div>
 						<div class="hero-support">
