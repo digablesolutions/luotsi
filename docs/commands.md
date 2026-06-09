@@ -39,11 +39,12 @@ luotsi update [--version <tag>] [--channel stable|prerelease] [--dry-run] [--det
 
 Use these entry points when you want the shortest path into a real Luotsi workflow instead of scanning the full command surface.
 
-For a machine-readable five-minute plan, run `luotsi quickstart`. Without `--device`, the plan starts with `luotsi doctor` so device selection and the exact selected-device next command come from live guidance. Pass `--device`, `--package`, and `--artifacts` when you already know the target and want the output to contain concrete commands for a specific app. Add `--write-json --write-markdown` to persist `quickstart-plan.json` and `quickstart-plan.md` in the artifact root for a copy-paste handoff. For the human help topic, run `luotsi help quickstart` or jump directly to a command family with `luotsi help <topic>`.
+For a machine-readable five-minute plan, run `luotsi quickstart`. Add `--human` when you want the same plan as compact terminal text. Without `--device`, the plan starts with `luotsi doctor` so device selection and the exact selected-device next command come from live guidance. Pass `--device`, `--package`, and `--artifacts` when you already know the target and want the output to contain concrete commands for a specific app. Add `--write-json --write-markdown` to persist `quickstart-plan.json` and `quickstart-plan.md` in the artifact root for a copy-paste handoff. For the human help topic, run `luotsi help quickstart` or jump directly to a command family with `luotsi help <topic>`.
 
 | Goal | Command |
 |---|---|
 | Get a five-minute first-run plan | `luotsi quickstart` or `luotsi quickstart --device <serial> --package <app.id> --artifacts artifacts/first-run` |
+| Read the first-run plan in the terminal | `luotsi quickstart --human` |
 | Persist a first-run handoff | `luotsi quickstart --artifacts artifacts/first-run --write-json --write-markdown` |
 | Confirm Luotsi can see your device | `luotsi devices` |
 | Choose a device and diagnose first-run issues | `luotsi doctor` then `luotsi doctor --device <serial>` |

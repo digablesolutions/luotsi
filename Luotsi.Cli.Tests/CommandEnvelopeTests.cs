@@ -203,6 +203,31 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_Quickstart_Human_Writes_First_Run_Plan()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["quickstart", "--human", "--device", "emulator-5554", "--package", "dev.luotsi.demo", "--artifacts", "artifacts/demo"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(console.ErrorLines);
+        Assert.Contains(console.OutputLines, static line => line.StartsWith("OK  quickstart completed", StringComparison.Ordinal));
+        Assert.Contains("  status: ready_to_start", console.OutputLines);
+        Assert.Contains("  time_budget: 5m", console.OutputLines);
+        Assert.Contains("  first_command: luotsi doctor --device emulator-5554 --package dev.luotsi.demo --fix", console.OutputLines);
+        Assert.Contains("  inputs: device=emulator-5554; package=dev.luotsi.demo; artifacts=artifacts/demo; scenario_path=scenarios", console.OutputLines);
+        var stepsLine = Assert.Single(console.OutputLines, static line => line.StartsWith("  steps: ", StringComparison.Ordinal));
+        Assert.True(int.TryParse(stepsLine["  steps: ".Length..], out var stepCount), $"Expected a numeric steps count in '{stepsLine}'.");
+        Assert.True(stepCount >= 6, $"Expected at least 6 steps but found {stepCount}.");
+        Assert.Contains(console.OutputLines, static line => line.Contains("minute 2; Run the onboarding doctor", StringComparison.Ordinal) &&
+            line.Contains("luotsi doctor --device emulator-5554 --package dev.luotsi.demo --fix", StringComparison.Ordinal));
+        Assert.Contains("  next: luotsi doctor --device emulator-5554 --package dev.luotsi.demo", console.OutputLines);
+        Assert.Contains(console.OutputLines, static line => line.Contains("agent_prompt: Run Luotsi commands", StringComparison.Ordinal));
+        Assert.DoesNotContain(console.OutputLines, static line => line.StartsWith("{", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task RunAsync_Help_Command_Writes_Replay_Topic()
     {
         var console = new FakeConsole();
