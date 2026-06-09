@@ -165,6 +165,7 @@ Luotsi does not auto-update silently. Updates are explicit so CI and lab machine
 ```bash
 luotsi quickstart
 luotsi quickstart --device <serial> --package <app.id> --artifacts artifacts/first-run
+luotsi quickstart --artifacts artifacts/first-run --write-json --write-markdown
 ```
 
 ```bash
@@ -177,7 +178,7 @@ When `quickstart` has no `--device`, its first command is `luotsi doctor`. Witho
 
 ## Workflow quickstart
 
-If you already know the target serial, start from `luotsi quickstart --device <serial> --package <app.id>`. If you do not, use bare `luotsi quickstart`; it starts with `luotsi doctor` so the next command comes from live device selection guidance. The quickstart envelope includes `status`, `time_budget`, concrete steps, `recommended_commands`, positioning against similar tools, and an `agent_prompt` for an AI operator. Then choose the workflow that matches what you are trying to do.
+If you already know the target serial, start from `luotsi quickstart --device <serial> --package <app.id>`. If you do not, use bare `luotsi quickstart`; it starts with `luotsi doctor` so the next command comes from live device selection guidance. Add `--write-json --write-markdown` when you want `quickstart-plan.json` and `quickstart-plan.md` persisted in the artifact root for a human or AI operator handoff. The quickstart envelope includes `status`, `time_budget`, concrete steps, `recommended_commands`, positioning against similar tools, and an `agent_prompt` for an AI operator. Then choose the workflow that matches what you are trying to do.
 
 1. First-time setup and repair:
 
