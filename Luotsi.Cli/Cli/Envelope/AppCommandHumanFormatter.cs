@@ -132,6 +132,7 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
         AddScalar(lines, value, "installed_tag");
         AddScalar(lines, value, "view_extras");
 
+        AddArtifactIntakeSummary(lines, value);
         AddRecommendedCommand(lines, value);
         AddArraySummary(lines, value, "artifact_commands");
         AddArraySummary(lines, value, "recommended_commands");
@@ -276,6 +277,7 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
             lines.Add($"evidence: {evidence}");
         }
 
+        AddArtifactIntakeSummary(lines, value);
         AddNextStepTitle(lines, value);
         AddRecommendedCommandWithFallback(lines, value, artifacts);
         AddArraySummary(lines, value, "recommended_next_steps");
@@ -523,6 +525,33 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
         if (TryGetScalarProperty(item, "purpose", out var purpose))
         {
             parts.Add($"summary={FormatScalar(purpose)}");
+        }
+    }
+
+    private static void AddArtifactIntakeSummary(List<string> lines, JsonElement value)
+    {
+        if (!value.TryGetProperty("artifact_intake_summary", out var summary) ||
+            summary.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        var parts = new List<string>();
+        AddIntakePart(parts, summary, "status");
+        AddIntakePart(parts, summary, "share_safety");
+        AddIntakePart(parts, summary, "sha_verified");
+        AddIntakePart(parts, summary, "package");
+        if (parts.Count > 0)
+        {
+            lines.Add("intake: " + string.Join("; ", parts));
+        }
+    }
+
+    private static void AddIntakePart(List<string> parts, JsonElement summary, string propertyName)
+    {
+        if (TryGetScalarProperty(summary, propertyName, out var property))
+        {
+            parts.Add($"{propertyName}={FormatScalar(property)}");
         }
     }
 

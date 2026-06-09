@@ -38,6 +38,12 @@ internal static class ReplayCapsuleArtifactManifestBuilder
             return "scenario_draft";
         }
 
+        if (fileName.Equals("artifact-intake-summary.json", StringComparison.OrdinalIgnoreCase) ||
+            fileName.Equals("artifact-intake.md", StringComparison.OrdinalIgnoreCase))
+        {
+            return "artifact_intake";
+        }
+
         if (IsScreenshot(path))
         {
             return "screenshot";
@@ -91,6 +97,12 @@ internal static class ReplayCapsuleArtifactManifestBuilder
         if (fileName.Contains("scenario-draft", StringComparison.OrdinalIgnoreCase))
         {
             return "scenario_authoring";
+        }
+
+        if (fileName.Equals("artifact-intake-summary.json", StringComparison.OrdinalIgnoreCase) ||
+            fileName.Equals("artifact-intake.md", StringComparison.OrdinalIgnoreCase))
+        {
+            return "artifact_handoff";
         }
 
         if (IsReport(path))

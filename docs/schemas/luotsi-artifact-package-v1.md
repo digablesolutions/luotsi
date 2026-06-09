@@ -96,7 +96,8 @@ Each `recommended_commands` item is an object with:
 - Missing `redaction` means the package was created before redaction metadata existed or with the default exact-copy policy.
 - `artifacts verify --require-lab-safe` treats missing `redaction` or any non-`lab-safe` mode as a blocked handoff gate and exits non-zero while still reporting manifest/SHA details.
 - `artifacts unpack --require-lab-safe` treats missing `redaction` or any non-`lab-safe` mode as a usage error before files are extracted.
-- `artifacts intake --require-lab-safe` uses the same extraction-time gate as unpack, then reports whether the package was only `validated` (`--dry-run`) or `restored`; when `--write-json` or `--write-readme` is used on a restore, Luotsi writes `artifact-intake-summary.json` or `artifact-intake.md` into the restored root and refreshes the artifact index.
+- `artifacts intake --require-lab-safe` uses the same extraction-time gate as unpack, then reports whether the package was only `validated` (`--dry-run`) or `restored`; when `--write-json` or `--write-readme` is used on a restore, Luotsi writes `artifact-intake-summary.json` with schema `luotsi-artifact-intake.v1` or `artifact-intake.md` into the restored root and refreshes the artifact index.
+- Older `artifact-intake-summary.json` files without a top-level schema remain readable by artifact indexes and replay capsules when the filename matches the persisted intake summary.
 - Missing `luotsi-artifact-package.json` is invalid for supported packages and `artifacts info` / `artifacts verify` / `artifacts unpack` / `artifacts intake` fail with a usage error.
 - Invalid manifest JSON or missing required fields must fail info/verify/unpack/intake validation early with a clear usage error.
 - New manifest revisions should use a new `schema` value rather than changing the meaning of existing required fields in place.

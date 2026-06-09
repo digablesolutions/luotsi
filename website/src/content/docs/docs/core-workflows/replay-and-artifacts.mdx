@@ -52,7 +52,7 @@ luotsi replay open --last --artifacts ./artifacts
 - `replay scrub`: local previous/focused/next event view with exact commands to move through replay evidence, open the capsule, search, or graph the focused failure
 - `replay search`: text search across timelines and text-like artifacts with follow-up commands when matches are replay-relevant
 - `replay open`: regenerate and open the artifact browser locally
-- `replay capsule`: compact manifest with primary failure reopen command, failure timeline with exact reopen commands, existing scenario draft artifacts and summary counts, ready draft run handoff, artifact manifest, and suggested next commands
+- `replay capsule`: compact manifest with primary failure reopen command, failure timeline with exact reopen commands, restored package intake audit when present, existing scenario draft artifacts and summary counts, ready draft run handoff, artifact manifest, and suggested next commands
 - `replay scenario-draft`: turn inspect or replay actions into a conservative starter scenario
 
 `artifacts pack` writes `luotsi-artifact-package.json` into the zip with the run id, created timestamp, category counts, and recommended reopen commands. By default, the package is an exact copy. `--redact lab-safe` redacts obvious secrets from text-like zip entries, leaves source artifacts and binary media unchanged, and records redaction counts in the manifest. Successful pack results recommend unpacking with `--sha256`. Lab-safe packages also carry `--require-lab-safe` into handoff commands.
@@ -63,7 +63,7 @@ luotsi replay open --last --artifacts ./artifacts
 
 `artifacts unpack` requires that manifest and rejects `--require-lab-safe` failures and `--sha256` mismatches before writing files. It reports the manifest back in the result. Both pack and unpack support `--dry-run` when you want to validate the handoff without writing files yet.
 
-`artifacts intake` wraps that safe restore for received packages, returning `status`, `share_safety`, checksum verification, and exact info/open/replay commands. Add `--write-json --write-readme` to leave `artifact-intake-summary.json` and `artifact-intake.md` in the restored root, or `--open` to launch the refreshed index after a successful restore.
+`artifacts intake` wraps that safe restore for received packages, returning `status`, `share_safety`, checksum verification, and exact info/open/replay commands. Add `--write-json --write-readme` to leave schema-backed `artifact-intake-summary.json` and `artifact-intake.md` in the restored root, or `--open` to launch the refreshed index after a successful restore. `replay capsule` surfaces those intake files plus compact status/share-safety/SHA verification fields when reopening a restored bundle.
 
 ## Newer semantic triage helpers
 
