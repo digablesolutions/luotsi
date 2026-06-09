@@ -32,7 +32,7 @@ internal static class QuickstartCommand
                 artifacts.Root,
                 jsonPath,
                 markdownPath,
-                jsonPath is null && markdownPath is not null
+                jsonPath is null || markdownPath is null
                     ? $"luotsi quickstart {BuildCurrentOptionFlags(result)} --write-json --write-markdown".Replace("  ", " ", StringComparison.Ordinal).Trim()
                     : null)
         };
@@ -269,6 +269,11 @@ internal static class QuickstartCommand
         if (!string.IsNullOrWhiteSpace(result.Inputs.Artifacts))
         {
             builder.Append(" --artifacts ").Append(Quote(result.Inputs.Artifacts));
+        }
+
+        if (!string.IsNullOrWhiteSpace(result.Inputs.ScenarioPath))
+        {
+            builder.Append(" --path ").Append(Quote(result.Inputs.ScenarioPath));
         }
 
         return builder.ToString();
