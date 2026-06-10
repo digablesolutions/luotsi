@@ -279,6 +279,7 @@ internal static class QuickstartCommand
         foreach (var check in result.ProofChecks)
         {
             builder.AppendLine($"- {check.Kind}: `{check.Command}`");
+            builder.AppendLine($"  - Summary: {check.Summary}");
             builder.AppendLine($"  - Evidence: {check.Evidence}");
         }
 

@@ -253,7 +253,7 @@ Tips:
   The quickstart command returns the same path as JSON: status, time_budget,
   inputs, steps, recommended_commands, proof_checks, differentiators, and an
   agent_prompt that can be handed to an AI operator. proof_checks is the
-  install/device/artifact/replay checklist for deciding whether the first
+  install/device/artifact/device-truth/replay checklist for deciding whether the first
   five minutes produced usable evidence. Add --human when you want a compact
   terminal plan with the first command, selected inputs, minute-by-minute next
   steps, and the handoff proof command. Add --write-json and --write-markdown
