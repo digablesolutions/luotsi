@@ -20,6 +20,8 @@ Use `artifacts list` when you need to rediscover a recent run id or temp-root ar
 ```bash
 luotsi artifacts list --artifacts ./artifacts
 luotsi artifacts info ./artifacts/my-run
+luotsi replay open --artifacts ./artifacts/my-run --dry-run
+luotsi replay open --last --artifacts ./artifacts --dry-run
 luotsi artifacts open ./artifacts/my-run
 luotsi artifacts open --last --artifacts ./artifacts
 luotsi artifacts pack ./artifacts/my-run --output my-run.zip --dry-run
@@ -35,8 +37,6 @@ luotsi replay timeline --artifacts ./artifacts/my-run --failures
 luotsi replay timeline --artifacts ./artifacts/my-run --source-path session-timeline.jsonl --sequence 1
 luotsi replay scrub --artifacts ./artifacts/my-run --failures --context 3 --write-markdown
 luotsi replay search --artifacts ./artifacts/my-run --contains "timeout"
-luotsi replay open --artifacts ./artifacts/my-run
-luotsi replay open --last --artifacts ./artifacts
 ```
 
 ## What each command is for
@@ -51,8 +51,8 @@ luotsi replay open --last --artifacts ./artifacts
 - `replay timeline`: ordered timeline events with type, timestamps, detail text, filters, and follow-up commands when failures are selected
 - `replay scrub`: local previous/focused/next event view with exact commands to move through replay evidence, open the capsule, search, or graph the focused failure
 - `replay search`: text search across timelines and text-like artifacts with follow-up commands when matches are replay-relevant
-- `replay open`: regenerate and open the artifact browser locally
-- `replay capsule`: compact manifest with primary failure reopen command, failure timeline with exact reopen commands, restored package intake audit when present, existing scenario draft artifacts and summary counts, ready draft run handoff, artifact manifest, and suggested next commands
+- `replay open`: `replay open` is the canonical first stop for one artifact root; returns session counts, primary failure, recommended next action, and follow-up commands before raw artifact browsing, then opens the browser only when `--dry-run` is not supplied
+- `replay capsule`: `replay capsule` is the shareable CI-triage summary after the replay front door, with primary failure reopen command, failure timeline with exact reopen commands, restored package intake audit when present, existing scenario draft artifacts and summary counts, ready draft run handoff, artifact manifest, and suggested next commands
 - `replay scenario-draft`: turn inspect or replay actions into a conservative starter scenario
 
 `artifacts pack` writes `luotsi-artifact-package.json` into the zip with the run id, created timestamp, category counts, and recommended reopen commands. By default, the package is an exact copy. `--redact lab-safe` redacts obvious secrets from text-like zip entries, leaves source artifacts and binary media unchanged, and records redaction counts in the manifest. Successful pack results recommend unpacking with `--sha256`. Lab-safe packages also carry `--require-lab-safe` into handoff commands.
@@ -76,7 +76,8 @@ Use `replay graph` when you want a stable node or edge model across sessions, fa
 
 The public distinction that matters is:
 
-- `replay capsule` is the operator-facing entry point for one failing artifact root
+- `replay open` is the canonical first stop for one failing artifact root
+- `replay capsule` is the deeper operator and CI handoff after the replay front door
 - `replay graph` is the agent- and debugger-facing node/edge model for that same root
 - `replay cluster` is the cross-run grouping view when the same failure shape keeps returning in CI
 
@@ -112,7 +113,7 @@ When you persist draft review artifacts, Luotsi currently writes:
 ## Practical workflow
 
 1. Run the command or scenario with an explicit artifact root if you want a stable location.
-2. Use `artifacts list` if you need to rediscover the run id or exact artifact root, then use `artifacts info` for a non-mutating root or package summary, `artifacts open --last` for the latest generic browser, or `replay open --last` for the latest replay-specific next actions.
+2. Use `artifacts list` if you need to rediscover the run id or exact artifact root, then use `replay open --last` for the latest replay-specific next actions, `artifacts info` for a non-mutating root or package summary, and `artifacts open --last` only when you specifically need the latest generic browser.
 3. Use `replay summarize` to confirm what happened at the session level.
 4. Move to `replay timeline` or `replay search` to narrow the failure window.
 5. Use `replay graph` when you need promoted selectors/actions/telemetry, facts, causal chains, or hypotheses; use `replay cluster` when the question is whether the same failure shape is repeating across runs.
@@ -134,7 +135,7 @@ Timeline events are still evidence, not assertions. They preserve what Luotsi ob
 
 ### Failure replay capsule
 
-`replay capsule` is the CI-triage entry point. A credible capsule includes:
+`replay capsule` is the shareable CI-triage summary after the replay front door. A credible capsule includes:
 
 - `primary_failure` with an exact `source_command` that reopens the failing event.
 - `failure_timeline` entries with their own exact `replay timeline` commands.
@@ -159,11 +160,11 @@ This is enough for the near-term authoring loop: explore a flow, generate a draf
 ## CI triage recipe
 
 ```bash
+luotsi replay open --artifacts ./artifacts/failing-run --dry-run
 luotsi replay capsule --artifacts ./artifacts/failing-run --write-readme --write-json
 luotsi replay timeline --artifacts ./artifacts/failing-run --failures --context 3 --write-markdown
 luotsi replay scrub --artifacts ./artifacts/failing-run --failures --context 3 --write-markdown
 luotsi replay scenario-draft --artifacts ./artifacts/failing-run --output ./scenarios/recovered-draft.json --validate --write-json --write-markdown
-luotsi replay open --artifacts ./artifacts/failing-run
 ```
 
 ## Related pages

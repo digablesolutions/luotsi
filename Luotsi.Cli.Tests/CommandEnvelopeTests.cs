@@ -42,6 +42,7 @@ public sealed partial class AppTests
         Assert.Equal(Help.Text, console.ErrorLines[0]);
         Assert.Contains("Workflow index:", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi help quickstart", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("luotsi help output", console.ErrorLines[0], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -90,6 +91,50 @@ public sealed partial class AppTests
         Assert.Contains("luotsi doctor --device <adb serial>", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi scenario-init --file scenarios/smoke.json", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --last --artifacts artifacts --dry-run", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("run luotsi help output", console.ErrorLines[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_Help_Command_Writes_Output_Topic()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["help", "output"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(console.OutputLines);
+        Assert.Single(console.ErrorLines);
+        Assert.Contains("Luotsi help: output", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("command -> structured output -> artifact root -> replay command -> next action", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("One-shot JSON envelope", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("JSONL session stream", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("Replay artifact root", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("Next-action fields:", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("data.recommended_next_action.command", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("artifact_commands", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("Parser examples:", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("examples/agents/extract-next-command.py", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("examples/agents/extract-next-command.mjs", console.ErrorLines[0], StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("outputs")]
+    [InlineData("envelope")]
+    [InlineData("envelopes")]
+    [InlineData("json")]
+    [InlineData("jsonl")]
+    public async Task RunAsync_Help_Command_Normalizes_Output_Aliases(string alias)
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["help", alias]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(console.OutputLines);
+        Assert.Single(console.ErrorLines);
+        Assert.Contains("Luotsi help: output", console.ErrorLines[0], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2007,7 +2052,14 @@ public sealed partial class AppTests
             step.GetProperty("kind").GetString() == "cluster_similar_failures" &&
             step.GetProperty("command").GetString()!.Contains("replay cluster", StringComparison.Ordinal) &&
             step.GetProperty("command").GetString()!.Contains("--min-count 2", StringComparison.Ordinal));
-        Assert.Contains(nextSteps, step => step.GetProperty("kind").GetString() == "open_artifacts");
+        Assert.Contains(nextSteps, step =>
+            step.GetProperty("kind").GetString() == "replay_open" &&
+            step.GetProperty("command").GetString()!.Contains("replay open", StringComparison.Ordinal) &&
+            step.GetProperty("reason").GetString()!.Contains("before raw artifact browsing", StringComparison.Ordinal));
+        Assert.DoesNotContain(nextSteps, step =>
+            step.TryGetProperty("reason", out var reason) &&
+            reason.GetString()!.Contains("browser index", StringComparison.Ordinal));
+        Assert.DoesNotContain(nextSteps, step => step.GetProperty("kind").GetString() == "open_artifacts");
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-capsule.md")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "replay-capsule-summary.json")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.md")));

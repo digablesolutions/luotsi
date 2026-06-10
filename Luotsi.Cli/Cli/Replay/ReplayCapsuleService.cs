@@ -142,7 +142,7 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         bool scenarioDraftAvailable,
         ReplayCapsuleScenarioDraftArtifacts scenarioDraftArtifacts)
     {
-        yield return new ReplayCapsuleCommandHint($"luotsi replay open --artifacts {Quote(artifactRoot)}", "Open the replay front door and local artifact browser.");
+        yield return new ReplayCapsuleCommandHint($"luotsi replay open --artifacts {Quote(artifactRoot)}", "Open the replay front door with primary failure, next action, and follow-up commands.");
         yield return new ReplayCapsuleCommandHint($"luotsi replay summarize --artifacts {Quote(artifactRoot)}", "Read session summaries and failure capsule links.");
         yield return new ReplayCapsuleCommandHint(
             $"luotsi replay timeline --artifacts {Quote(artifactRoot)} --failures --context 3 --write-json --write-markdown",
@@ -251,9 +251,9 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         }
 
         var open = new ReplayCapsuleNextStep(
-            "open_artifacts",
-            "Open the artifact browser",
-            "Use this when screenshots, videos, logs, and generated replay artifacts need human inspection.",
+            "replay_open",
+            "Open the replay front door",
+            "Use this when you need the primary failure, recommended next action, and longer follow-up command set before raw artifact browsing.",
             $"luotsi replay open --artifacts {Quote(artifactRoot)}");
         if (TryMarkRecommendedStep(open, emittedKinds, emittedCommands))
         {

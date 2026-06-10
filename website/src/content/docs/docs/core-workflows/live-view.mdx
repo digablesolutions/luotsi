@@ -61,7 +61,7 @@ Every `view` session is both a local operator loop and a replayable artifact sou
 - `session-timeline.jsonl` mirrors the session event stream into the artifact root
 - `session-replay.json` gives replay-oriented metadata for later `replay summarize`, `replay capsule`, `replay timeline`, or `replay open` commands
 - Screenshot, recording, share, and file-transfer actions emit their own JSONL events so CI or agents can track behavior without scraping terminal text
-- `artifacts open` and `replay open` both work against that same root after the session ends, depending on whether you want the generic artifact browser or the replay-specific front door
+- `replay open` and `artifacts open` both work against that same root after the session ends; start with `replay open` for replay-specific next actions, and use `artifacts open` when you specifically need the generic artifact browser
 
 The higher-signal event families to watch are:
 
