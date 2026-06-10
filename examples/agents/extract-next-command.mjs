@@ -83,7 +83,7 @@ export function extractNextCommand(envelope) {
 
   const artifactRoot = cleanCommand(envelope?.artifacts?.artifact_root);
   if (artifactRoot) {
-    return `luotsi replay open --artifacts ${quoteShellArg(artifactRoot)} --dry-run`;
+    return `luotsi replay packet --artifacts ${quoteShellArg(artifactRoot)}`;
   }
 
   return null;

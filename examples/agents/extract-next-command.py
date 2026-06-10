@@ -93,7 +93,7 @@ def extract_next_command(envelope: dict[str, Any]) -> str | None:
     if isinstance(artifacts, dict):
         artifact_root = clean_command(artifacts.get("artifact_root"))
         if artifact_root:
-            return f"luotsi replay open --artifacts {quote_shell_arg(artifact_root)} --dry-run"
+            return f"luotsi replay packet --artifacts {quote_shell_arg(artifact_root)}"
 
     return None
 

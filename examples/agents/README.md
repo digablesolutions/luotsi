@@ -35,7 +35,7 @@ For one-shot commands and replay follow-ups, parse the standard envelope before 
 1. `data.recommended_next_action.command`
 2. Ordered handoff arrays: `data.recommended_next_steps`, `data.next_actions`, `data.suggested_commands`
 3. Command arrays: `data.commands`, `data.artifact_commands`, `data.recommended_commands`
-4. Fallback evidence pointer: `artifacts.artifact_root`, then run `luotsi replay open --artifacts <artifact-root> --dry-run`
+4. Fallback evidence pointer: `artifacts.artifact_root`, then run `luotsi replay packet --artifacts <artifact-root>`
 
 Command arrays are not always ordered by the human-friendly first move, so the parser examples prefer a `replay_open` item when one appears in `data.commands`, `data.artifact_commands`, or `data.recommended_commands`. Use `open_artifacts` only when the next task is specifically browsing raw files.
 
@@ -51,7 +51,7 @@ luotsi run --file scenarios/smoke.json --device <serial> --artifacts artifacts/s
 
 The parsers accept either one normal Luotsi JSON envelope or a saved JSONL-style log with multiple one-line JSON objects; in JSONL mode they use the last Luotsi command envelope they find. Bad input exits non-zero with an `extract-next-command:` message and no language runtime stack trace.
 
-They also accept the persisted `run-summary.json` packet written by `luotsi replay packet`. That packet uses the artifact JSON schema `luotsi-run-summary.v1` and camelCase fields such as `recommendedNextAction.command`, so an agent can download a CI artifact, feed `run-summary.json` into the same parser, and continue with the recommended replay command without scraping Markdown. Run `luotsi replay packet --artifacts <artifact-root> --check` as the pass/fail gate when you receive an existing packet. The source-tree contract lives at `docs/schemas/luotsi-run-summary-v1.md`.
+They also accept the persisted `run-summary.json` packet written by `luotsi replay packet`. That packet uses the artifact JSON schema `luotsi-run-summary.v1` and camelCase fields such as `recommendedNextAction.command`, so an agent can download a CI artifact, feed `run-summary.json` into the same parser, and continue with the recommended replay command without scraping Markdown. The fallback `artifact_root` command writes that same durable packet before the loop tries broader replay exploration; use `luotsi replay open --artifacts <artifact-root> --dry-run` when a human needs the replay front door response. Run `luotsi replay packet --artifacts <artifact-root> --check` as the pass/fail gate when you receive an existing packet. The source-tree contract lives at `docs/schemas/luotsi-run-summary-v1.md`.
 
 If Luotsi reports a protocol, session, wait, tap, screenshot, post-action state, or inspect-process failure, the scripts exit non-zero and leave the artifact directory behind for replay.
 

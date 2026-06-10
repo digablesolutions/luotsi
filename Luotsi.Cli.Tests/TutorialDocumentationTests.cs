@@ -268,6 +268,8 @@ public sealed partial class AppTests
         Assert.Contains("data.recommended_next_action.command", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("data.artifact_commands", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("artifacts.artifact_root", aiAgentWorkflows, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --artifacts <artifact-root>", aiAgentWorkflows, StringComparison.Ordinal);
+        Assert.Contains("run-summary.json", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --last --artifacts", nodeExample, StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --last --artifacts", pythonExample, StringComparison.Ordinal);
@@ -281,8 +283,8 @@ public sealed partial class AppTests
         Assert.Contains("recommendedNextAction", pythonNextCommandExample, StringComparison.Ordinal);
         Assert.Contains("artifact_commands", nodeNextCommandExample, StringComparison.Ordinal);
         Assert.Contains("artifact_commands", pythonNextCommandExample, StringComparison.Ordinal);
-        Assert.Contains("luotsi replay open --artifacts", nodeNextCommandExample, StringComparison.Ordinal);
-        Assert.Contains("luotsi replay open --artifacts", pythonNextCommandExample, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --artifacts", nodeNextCommandExample, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --artifacts", pythonNextCommandExample, StringComparison.Ordinal);
         Assert.Contains("luotsi help output", agentGuide, StringComparison.Ordinal);
         Assert.Contains("Do not treat model confidence as validation", agentGuide, StringComparison.Ordinal);
         Assert.Contains("data.recommended_next_action.command", agentGuide, StringComparison.Ordinal);
@@ -615,9 +617,9 @@ public sealed partial class AppTests
         const string directNextActionJson = """{"schema":"luotsi-command.v1","ok":true,"data":{"recommended_next_action":{"kind":"run_dry_run","command":"luotsi run --path scenarios/smoke.json --dry-run"},"artifact_commands":[{"kind":"replay_open","command":"luotsi replay open --artifacts /tmp/direct-root --dry-run"}]},"artifacts":{"artifact_root":"/tmp/direct-root"}}""";
         const string expectedFromDirectNextAction = "luotsi run --path scenarios/smoke.json --dry-run";
         const string fallbackJson = """{"ok":true,"data":{},"artifacts":{"artifact_root":"/tmp/only-root"}}""";
-        const string expectedFallback = "luotsi replay open --artifacts /tmp/only-root --dry-run";
+        const string expectedFallback = "luotsi replay packet --artifacts /tmp/only-root";
         const string spacedFallbackJson = """{"ok":true,"data":{},"artifacts":{"artifact_root":"/tmp/only root"}}""";
-        const string expectedSpacedFallback = "luotsi replay open --artifacts '/tmp/only root' --dry-run";
+        const string expectedSpacedFallback = "luotsi replay packet --artifacts '/tmp/only root'";
         var jsonlLog = string.Join(Environment.NewLine, [
             """{"type":"session_started","session_id":"inspect-session"}""",
             """{"schema":"luotsi-command.v1","ok":true,"data":{},"artifacts":{"artifact_root":"/tmp/first-root"}}""",
