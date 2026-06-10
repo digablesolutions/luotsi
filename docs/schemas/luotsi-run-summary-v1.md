@@ -32,6 +32,7 @@ artifact index entry points exist and that `run-summary.md` contains both the
 | `verdict` | string | yes | One-sentence human-readable interpretation of the status. |
 | `sessionCount` | integer | yes | Number of replay sessions found in the artifact index. |
 | `failureCount` | integer | yes | Number of replay sessions with failure signals. |
+| `triageChecklist` | array | yes | Ordered machine-readable version of the 60-second triage checklist. |
 | `primaryFailure` | object or null | yes | Best first failure to inspect, or `null` when no primary failure was found. |
 | `recommendedNextAction` | object | yes | One best next command for the first minute of triage. |
 | `entryPoints` | object | yes | Durable files written for this artifact root. |
@@ -47,6 +48,23 @@ artifact index entry points exist and that `run-summary.md` contains both the
 
 Treat unknown future values as "read `verdict`, then fall back to `commands[]`
 or `entryPoints.indexHtmlPath`."
+
+## `triageChecklist`
+
+`triageChecklist` is the structured form of the first Markdown section in
+`run-summary.md`. It exists so agents do not need to parse Markdown to follow
+the same 60-second path as humans.
+
+Each checklist item uses:
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `step` | integer | yes | One-based checklist order. |
+| `action` | string | yes | Human-readable action for this step. |
+| `command` | string or null | yes | Exact command for this step when one exists. |
+| `rationale` | string | yes | Why this step belongs in the first minute. |
+
+The first item must use `recommendedNextAction.command` as its `command`.
 
 ## `primaryFailure`
 
@@ -125,6 +143,26 @@ belongs in the broader command list. Consumers should still prefer
   "verdict": "Failure signals found. Start with the recommended next action before broad artifact browsing.",
   "sessionCount": 1,
   "failureCount": 1,
+  "triageChecklist": [
+    {
+      "step": 1,
+      "action": "Run the recommended packet command",
+      "command": "luotsi replay scrub --artifacts artifacts/luotsi-lab --failures --context 3 --write-markdown",
+      "rationale": "This is the highest-signal next command computed from replay metadata."
+    },
+    {
+      "step": 2,
+      "action": "Read the primary failure fields before opening broad artifacts",
+      "command": "luotsi replay scrub --source-path session-timeline.jsonl --sequence 42 --context 3",
+      "rationale": "Session identity and focused timeline evidence should be understood before broad artifact browsing."
+    },
+    {
+      "step": 3,
+      "action": "Use the commands section only after the focused failure window is understood",
+      "command": null,
+      "rationale": "Follow-up commands are useful after the first failure window is clear."
+    }
+  ],
   "primaryFailure": {
     "sessionKind": "scenario",
     "sessionId": "checkout-20260610",
@@ -178,4 +216,4 @@ belongs in the broader command list. Consumers should still prefer
 - Consumers should check `schema` first, then use `recommendedNextAction.command` / `recommended_next_action.command` as the first next command.
 - If `primaryFailure` is `null`, do not assume the run passed. Check `status`, `verdict`, and `sessionCount`.
 - If `runSummaryJsonPath` or `runSummaryMarkdownPath` is `null`, the packet was returned in-memory by a command path that did not persist both files. Run `luotsi replay packet --artifacts <artifact-root>` to write them.
-- `replay packet --check` is the contract gate for an existing packet. It must exit non-zero for missing JSON, invalid JSON, unsupported schema, stale `artifactRoot`, missing index entry points, missing `recommendedNextAction.command`, missing `entryPoints.runSummaryJsonPath`, missing `entryPoints.runSummaryMarkdownPath`, a missing Markdown companion, Markdown without the 60-second triage checklist, or Markdown that omits the JSON packet's recommended command.
+- `replay packet --check` is the contract gate for an existing packet. It must exit non-zero for missing JSON, invalid JSON, unsupported schema, stale `artifactRoot`, missing index entry points, missing `triageChecklist`, a first checklist item that does not point at `recommendedNextAction.command`, missing `recommendedNextAction.command`, missing `entryPoints.runSummaryJsonPath`, missing `entryPoints.runSummaryMarkdownPath`, a missing Markdown companion, Markdown without the 60-second triage checklist, or Markdown that omits the JSON packet's recommended command.

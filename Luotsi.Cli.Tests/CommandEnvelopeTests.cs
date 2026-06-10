@@ -945,8 +945,8 @@ public sealed partial class AppTests
         Assert.Contains("# Luotsi Run Summary", runSummaryMarkdown, StringComparison.Ordinal);
         Assert.Contains("Status: `needs_triage`", runSummaryMarkdown, StringComparison.Ordinal);
         Assert.Contains("## 60-Second Triage Checklist", runSummaryMarkdown, StringComparison.Ordinal);
-        Assert.Contains("1. Run `luotsi replay scrub", runSummaryMarkdown, StringComparison.Ordinal);
-        Assert.Contains("2. Read the primary failure fields below before opening broad artifacts.", runSummaryMarkdown, StringComparison.Ordinal);
+        Assert.Contains("1. Run the recommended packet command `luotsi replay scrub", runSummaryMarkdown, StringComparison.Ordinal);
+        Assert.Contains("2. Read the primary failure fields before opening broad artifacts", runSummaryMarkdown, StringComparison.Ordinal);
         Assert.Contains("## First Action", runSummaryMarkdown, StringComparison.Ordinal);
         var indexMarkdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "index.md"));
         Assert.Contains("[replay-open.md](replay-open.md)", indexMarkdown, StringComparison.Ordinal);
@@ -981,6 +981,11 @@ public sealed partial class AppTests
         Assert.Equal(Path.Join(replayRoot, "run-summary.json"), data.GetProperty("entry_points").GetProperty("run_summary_json_path").GetString());
         Assert.Equal(Path.Join(replayRoot, "run-summary.md"), data.GetProperty("entry_points").GetProperty("run_summary_markdown_path").GetString());
         Assert.Equal("scrub_failure", data.GetProperty("recommended_next_action").GetProperty("kind").GetString());
+        var checklist = data.GetProperty("triage_checklist").EnumerateArray().ToArray();
+        Assert.Equal(3, checklist.Length);
+        Assert.Equal(1, checklist[0].GetProperty("step").GetInt32());
+        Assert.Equal("Run the recommended packet command", checklist[0].GetProperty("action").GetString());
+        Assert.Equal(data.GetProperty("recommended_next_action").GetProperty("command").GetString(), checklist[0].GetProperty("command").GetString());
         var primaryFailure = data.GetProperty("primary_failure");
         Assert.Equal("view", primaryFailure.GetProperty("session_kind").GetString());
         Assert.Equal("view-session", primaryFailure.GetProperty("session_id").GetString());
@@ -993,6 +998,9 @@ public sealed partial class AppTests
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.html")));
         using var runSummaryJson = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "run-summary.json")));
         var persistedPrimaryFailure = runSummaryJson.RootElement.GetProperty("primaryFailure");
+        var persistedChecklist = runSummaryJson.RootElement.GetProperty("triageChecklist").EnumerateArray().ToArray();
+        Assert.Equal(3, persistedChecklist.Length);
+        Assert.Equal(runSummaryJson.RootElement.GetProperty("recommendedNextAction").GetProperty("command").GetString(), persistedChecklist[0].GetProperty("command").GetString());
         Assert.Equal("view", persistedPrimaryFailure.GetProperty("sessionKind").GetString());
         Assert.Equal("view-session", persistedPrimaryFailure.GetProperty("sessionId").GetString());
         Assert.Equal("192.168.0.134:5555", persistedPrimaryFailure.GetProperty("target").GetString());
@@ -1000,7 +1008,7 @@ public sealed partial class AppTests
         var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "run-summary.md"));
         Assert.Contains("# Luotsi Run Summary", markdown, StringComparison.Ordinal);
         Assert.Contains("## 60-Second Triage Checklist", markdown, StringComparison.Ordinal);
-        Assert.Contains("3. Use the commands section only after the focused failure window is understood.", markdown, StringComparison.Ordinal);
+        Assert.Contains("3. Use the commands section only after the focused failure window is understood", markdown, StringComparison.Ordinal);
         Assert.Contains("Session ID", markdown, StringComparison.Ordinal);
         Assert.Contains("view-session", markdown, StringComparison.Ordinal);
         Assert.Contains("Reopen", markdown, StringComparison.Ordinal);
@@ -1181,6 +1189,60 @@ public sealed partial class AppTests
         Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
         Assert.Contains("does not include the recommended next action command", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
         Assert.Contains("run-summary.json", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayPacket_Check_MissingStructuredChecklist_ReturnsUsageError()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplaySummaryArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = new FakeProcessRunner(),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var writeExitCode = await app.RunAsync(["replay", "packet", "--artifacts", replayRoot]);
+        fileSystem.AddFile(Path.Join(replayRoot, "run-summary.json"), JsonSerializer.Serialize(new
+        {
+            schema = "luotsi-run-summary.v1",
+            generatedAt = "2026-06-10T12:00:00Z",
+            artifactRoot = replayRoot,
+            status = "needs_triage",
+            verdict = "Failure signals found.",
+            sessionCount = 1,
+            failureCount = 1,
+            primaryFailure = (object?)null,
+            recommendedNextAction = new
+            {
+                kind = "scrub_failure",
+                title = "Scrub",
+                reason = "Failure",
+                command = $"luotsi replay scrub --artifacts {replayRoot} --failures"
+            },
+            entryPoints = new
+            {
+                indexHtmlPath = Path.Join(replayRoot, "index.html"),
+                indexMarkdownPath = Path.Join(replayRoot, "index.md"),
+                replayOpenJsonPath = (string?)null,
+                replayOpenMarkdownPath = (string?)null,
+                runSummaryJsonPath = Path.Join(replayRoot, "run-summary.json"),
+                runSummaryMarkdownPath = Path.Join(replayRoot, "run-summary.md")
+            },
+            commands = Array.Empty<object>()
+        }));
+        console.OutputLines.Clear();
+        var checkExitCode = await app.RunAsync(["replay", "packet", "--check", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, writeExitCode);
+        Assert.Equal(2, checkExitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("triageChecklist", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]

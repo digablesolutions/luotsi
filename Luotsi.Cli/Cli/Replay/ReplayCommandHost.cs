@@ -231,6 +231,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             var failureCount = RequireInt32(root, "failureCount", packetPath);
             var recommendedNextAction = RequireObject(root, "recommendedNextAction", packetPath);
             var recommendedCommand = RequireString(recommendedNextAction, "command", packetPath);
+            ValidateTriageChecklist(root, recommendedCommand, packetPath);
             var entryPoints = RequireObject(root, "entryPoints", packetPath);
             var indexHtmlPath = RequireString(entryPoints, "indexHtmlPath", packetPath);
             if (!_dependencies.FileSystem.FileExists(indexHtmlPath))
@@ -361,6 +362,8 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
                 ? "No failure signals found in replay metadata. Write a capsule or inspect the timeline for context."
                 : "No replay metadata found. Inspect the artifact index and verify the run wrote session replay files.";
 
+        var triageChecklist = BuildTriageChecklist(primaryFailure, recommendedNextAction);
+
         return new RunSummaryResult(
             ResultSchemas.RunSummary,
             generatedAt,
@@ -369,6 +372,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             verdict,
             sessionCount,
             failureCount,
+            triageChecklist,
             primaryFailure,
             recommendedNextAction,
             new RunSummaryEntryPoints(
@@ -451,16 +455,16 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         builder.AppendLine();
         builder.AppendLine("## 60-Second Triage Checklist");
         builder.AppendLine();
-        builder.AppendLine($"1. Run `{EscapeMarkdown(result.RecommendedNextAction.Command)}`");
-        if (result.PrimaryFailure is null)
+        foreach (var item in result.TriageChecklist.OrderBy(static item => item.Step))
         {
-            builder.AppendLine("2. Confirm whether the run passed, is incomplete, or lacks replay metadata.");
-            builder.AppendLine("3. Use the artifact index only after the packet command and replay metadata have been checked.");
-        }
-        else
-        {
-            builder.AppendLine("2. Read the primary failure fields below before opening broad artifacts.");
-            builder.AppendLine("3. Use the commands section only after the focused failure window is understood.");
+            if (string.IsNullOrWhiteSpace(item.Command))
+            {
+                builder.AppendLine($"{item.Step}. {EscapeMarkdown(item.Action)}");
+            }
+            else
+            {
+                builder.AppendLine($"{item.Step}. {EscapeMarkdown(item.Action)} `{EscapeMarkdown(item.Command)}`");
+            }
         }
 
         builder.AppendLine();
@@ -554,6 +558,50 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             summary.TimelinePath,
             summary.FailureCapsulePath,
             failureHighlight is null ? null : BuildTimelineSourceCommand(summary.TimelinePath, failureHighlight.Sequence));
+    }
+
+    private static IReadOnlyList<RunSummaryChecklistItemResult> BuildTriageChecklist(
+        ReplayOpenPrimaryFailureResult? primaryFailure,
+        ReplayOpenNextActionResult recommendedNextAction)
+    {
+        if (primaryFailure is null)
+        {
+            return [
+                new RunSummaryChecklistItemResult(
+                    1,
+                    "Run the recommended packet command",
+                    recommendedNextAction.Command,
+                    "This is the highest-signal next command computed from replay metadata."),
+                new RunSummaryChecklistItemResult(
+                    2,
+                    "Confirm whether the run passed, is incomplete, or lacks replay metadata",
+                    null,
+                    "A missing primary failure is not the same as a pass."),
+                new RunSummaryChecklistItemResult(
+                    3,
+                    "Use the artifact index only after the packet command and replay metadata have been checked",
+                    null,
+                    "The index is broader and less focused than the packet.")
+            ];
+        }
+
+        return [
+            new RunSummaryChecklistItemResult(
+                1,
+                "Run the recommended packet command",
+                recommendedNextAction.Command,
+                "This is the highest-signal next command computed from replay metadata."),
+            new RunSummaryChecklistItemResult(
+                2,
+                "Read the primary failure fields before opening broad artifacts",
+                primaryFailure.SourceCommand,
+                "Session identity and focused timeline evidence should be understood before broad artifact browsing."),
+            new RunSummaryChecklistItemResult(
+                3,
+                "Use the commands section only after the focused failure window is understood",
+                null,
+                "Follow-up commands are useful after the first failure window is clear.")
+        ];
     }
 
     private static IEnumerable<ReplayOpenCommandHintResult> BuildOpenCommandHints(
@@ -697,6 +745,34 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         }
 
         return property;
+    }
+
+    private static void ValidateTriageChecklist(JsonElement root, string recommendedCommand, string sourcePath)
+    {
+        if (!root.TryGetProperty("triageChecklist", out var checklist) ||
+            checklist.ValueKind != JsonValueKind.Array ||
+            checklist.GetArrayLength() == 0)
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} is missing non-empty array property 'triageChecklist'.");
+        }
+
+        var firstStep = checklist.EnumerateArray().FirstOrDefault();
+        if (firstStep.ValueKind != JsonValueKind.Object)
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} triageChecklist[0] must be an object.");
+        }
+
+        var step = RequireInt32(firstStep, "step", sourcePath);
+        if (step != 1)
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} triageChecklist[0].step must be 1.");
+        }
+
+        var checklistCommand = RequireString(firstStep, "command", sourcePath);
+        if (!string.Equals(checklistCommand, recommendedCommand, StringComparison.Ordinal))
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} triageChecklist[0].command must match recommendedNextAction.command.");
+        }
     }
 
     private static ReplayOutputMode ParseOutputMode(CliOptions options, string commandName)

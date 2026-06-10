@@ -482,10 +482,17 @@ public sealed record RunSummaryResult(
     string Verdict,
     int SessionCount,
     int FailureCount,
+    IReadOnlyList<RunSummaryChecklistItemResult> TriageChecklist,
     ReplayOpenPrimaryFailureResult? PrimaryFailure,
     ReplayOpenNextActionResult RecommendedNextAction,
     RunSummaryEntryPoints EntryPoints,
     IReadOnlyList<ReplayOpenCommandHintResult> Commands);
+
+public sealed record RunSummaryChecklistItemResult(
+    int Step,
+    string Action,
+    string? Command,
+    string Rationale);
 
 public sealed record RunSummaryEntryPoints(
     string IndexHtmlPath,
