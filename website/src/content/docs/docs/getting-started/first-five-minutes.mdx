@@ -1,7 +1,33 @@
 ---
 title: First Five Minutes
-description: Learn Luotsi's output model quickly so humans, scripts, CI jobs, and AI agents know what happened and what to run next.
+description: "Create a first-run plan, prove a real device is ready, understand Luotsi output, and keep replayable evidence."
 ---
+
+This page is the product path for a new Luotsi evaluator. It keeps the first session focused on four proofs:
+
+- Luotsi can see the Android device.
+- Luotsi can explain readiness before you debug the app.
+- You can choose the right workflow without reading the whole manual.
+- The session leaves artifacts a teammate, CI job, or AI agent can inspect later.
+
+## Before Minute 1: Create The First-Run Plan
+
+```bash
+luotsi quickstart --human
+luotsi quickstart --artifacts artifacts/first-run --write-json --write-markdown
+luotsi doctor
+luotsi doctor --device <serial> --fix
+```
+
+Use `--human` while you are getting oriented in the terminal. Use `--write-json --write-markdown` when the evaluation needs a durable handoff: `quickstart-plan.json` for agents and scripts, `quickstart-plan.md` for humans.
+
+If you already know the target, make the plan concrete:
+
+```bash
+luotsi quickstart --device <serial> --package <app.id> --artifacts artifacts/first-run --write-json --write-markdown
+```
+
+Stop at `doctor` if readiness is blocked. Fix the reported device, adb, helper, decoder, or package issue before moving to workflow commands.
 
 Luotsi is easiest to reason about when you treat every workflow as a loop:
 
@@ -125,6 +151,17 @@ For agents, the practical loop is:
 4. If the command changes state, wait for the matching `screen_delta`.
 5. Capture artifacts before exiting or when a command fails.
 
+## Choose One Workflow
+
+| Job | Command | Continue |
+| --- | --- | --- |
+| Human operator needs a screen | `luotsi view --device <serial> --artifacts artifacts/live-view` | [Live View](../core-workflows/live-view/) |
+| Agent needs structured device state | `luotsi inspect --device <serial> --artifacts artifacts/inspect` | [AI Agent Workflows](../core-workflows/ai-agent-workflows/) |
+| CI needs a repeatable flow | `luotsi scenario-init --file scenarios/smoke.json --name smoke` | [Scenario Playbooks](../reference/scenario-playbooks/) |
+| Failure needs later review | `luotsi replay open --artifacts artifacts/<run-id>` | [Replay And Artifacts](../core-workflows/replay-and-artifacts/) |
+
+Pick one path. A strong first Luotsi evaluation is one working workflow with an artifact trail, not a tour of every command.
+
 ## Failed Runs
 
 When a scenario fails, do not start by rerunning blindly. Start from the artifact root:
@@ -145,6 +182,22 @@ Use this sequence to answer:
 
 `replay open --dry-run` returns the primary failure, recommended next action, and follow-up commands without launching the local artifact browser.
 
+## Keep The Proof
+
+Before you close the session, make sure the artifact root contains the evidence you would send to a teammate:
+
+```bash
+luotsi artifacts info artifacts/first-run
+luotsi artifacts open artifacts/first-run --dry-run
+```
+
+For CI or shared-lab review, package and verify the artifact root:
+
+```bash
+luotsi artifacts pack artifacts/first-run --output artifacts/first-run.zip
+luotsi artifacts verify artifacts/first-run.zip
+```
+
 ## Pick The Reader
 
 | Reader | Preferred Surface | First Question |
@@ -159,6 +212,10 @@ Use this sequence to answer:
 Start with these commands when you are oriented by output shape:
 
 ```bash
+# Create a first-run handoff.
+luotsi quickstart --human
+luotsi quickstart --artifacts artifacts/first-run --write-json --write-markdown
+
 # Find a device and verify host/device readiness.
 luotsi devices
 luotsi doctor --device <serial>
@@ -180,6 +237,7 @@ luotsi replay graph --artifacts ./artifacts/smoke-run/<run-id> --failed
 ## Related Pages
 
 - [Quickstart](./quickstart/)
+- [Device Readiness](./device-readiness/)
 - [Output Envelopes](../reference/output-envelopes/)
 - [Agent Loop Example](../core-workflows/agent-loop-example/)
 - [Replay And Artifacts](../core-workflows/replay-and-artifacts/)

@@ -212,9 +212,13 @@ public sealed partial class AppTests
         Assert.Contains("examples/agents/extract-next-command.py", readme, StringComparison.Ordinal);
         Assert.Contains("examples/agents/extract-next-command.mjs", readme, StringComparison.Ordinal);
         Assert.Contains("saved JSONL-style log", readme, StringComparison.Ordinal);
-        AssertContainsBefore(docsHub, "<Card title=\"First five minutes\">", "<Card title=\"Device readiness\">");
-        AssertContainsBefore(docsHub, "<Card title=\"First five minutes\">", "<Card title=\"Installation\">");
-        AssertContainsBefore(docsHub, "<Card title=\"First five minutes\">", "<Card title=\"Quickstart\">");
+        AssertContainsBefore(docsHub, "<Card title=\"First Five Minutes\">", "<Card title=\"Installation\">");
+        AssertContainsBefore(docsHub, "<Card title=\"First Five Minutes\">", "<Card title=\"Device Readiness\">");
+        AssertContainsBefore(docsHub, "## Start With The Product Path", "## Choose The First Workflow");
+        AssertContainsBefore(docsHub, "## Choose The First Workflow", "## Evaluate Fit");
+        Assert.Contains("luotsi quickstart --artifacts artifacts/first-run --write-json --write-markdown", docsHub, StringComparison.Ordinal);
+        Assert.Contains("<Card title=\"I need an agent loop\">", docsHub, StringComparison.Ordinal);
+        Assert.Contains("<Card title=\"I need repeatable CI\">", docsHub, StringComparison.Ordinal);
         Assert.Contains("guide: artifact root is durable evidence; replay open explains failures and next actions", markdown, StringComparison.Ordinal);
         Assert.Contains("leads with the artifact path", markdown, StringComparison.Ordinal);
         AssertWebsiteReplayOpenIsFirstReplayTriageCommand(markdown);
