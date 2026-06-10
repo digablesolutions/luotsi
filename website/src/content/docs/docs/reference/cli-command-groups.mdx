@@ -18,7 +18,7 @@ luotsi adb version
 luotsi doctor --device <serial>
 ```
 
-Without a selected device, `doctor` lists adb-visible devices and returns exact next commands. With `--device` or `--device-query`, it returns a `readiness_plan` with status, blockers, `next_command`, and `recommended_commands`, so the first-run report doubles as an operator/agent handoff.
+Without a selected device, `doctor` lists adb-visible devices and returns exact next commands. With `--device` or `--device-query`, it returns a `readiness_plan` with status, blockers, `next_command`, and `recommended_commands`, so the first-run report doubles as an operator/agent handoff. When a package-aware report is ready, `next_command` routes to `discover` first, followed by package preflight, inspect, screen-state, persisted quickstart handoff, scenario validation, run, and live view commands.
 
 Also in this family:
 
