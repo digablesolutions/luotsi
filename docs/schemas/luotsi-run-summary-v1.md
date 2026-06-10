@@ -88,7 +88,7 @@ failure evidence:
 | `message` | Failure message or condensed reason. |
 | `timelinePath` | Timeline file containing the failure evidence. |
 | `failureCapsulePath` | Failure capsule JSON path when the run captured one. |
-| `sourceCommand` | Exact command to reopen the focused timeline event when one is available. |
+| `sourceCommand` | Best available command to reopen the focused evidence. Prefer an exact timeline event command when available; otherwise Luotsi falls back to a capsule or timeline command so the primary failure remains actionable. |
 
 ## `recommendedNextAction`
 
@@ -217,6 +217,7 @@ belongs in the broader command list. Consumers should still prefer
 - Consumers should accept both camelCase artifact JSON fields and snake_case command-envelope fields when they parse either persisted `run-summary.json` or the `data` object returned by `luotsi replay packet`.
 - Consumers should check `schema` first, then use `recommendedNextAction.command` / `recommended_next_action.command` as the first next command.
 - If `primaryFailure` is `null`, do not assume the run passed. Check `status`, `verdict`, and `sessionCount`.
+- If `primaryFailure.sourceCommand` is present, use it as the focused evidence command after `recommendedNextAction.command`. It should not be treated as broad artifact browsing; it is the packet's best path back to the failure evidence.
 - If `runSummaryJsonPath` or `runSummaryMarkdownPath` is `null`, the packet was returned in-memory by a command path that did not persist both files. Run `luotsi replay packet --artifacts <artifact-root>` to write them.
 - A successful `luotsi-run-summary-check.v1` result repeats `recommendedNextAction`, `triageChecklist`, and `primaryFailure` from the packet so consumers can continue from the check envelope without reopening `run-summary.json`.
 - `replay packet --check` is the contract gate for an existing packet. It must exit non-zero for missing JSON, invalid JSON, unsupported schema, stale `artifactRoot`, missing index entry points, missing `triageChecklist`, a first checklist item that does not point at `recommendedNextAction.command`, missing `recommendedNextAction.command`, missing `entryPoints.runSummaryJsonPath`, missing `entryPoints.runSummaryMarkdownPath`, a missing Markdown companion, Markdown without the 60-second triage checklist, or Markdown that omits the JSON packet's recommended command.

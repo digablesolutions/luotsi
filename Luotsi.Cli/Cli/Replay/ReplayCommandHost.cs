@@ -310,7 +310,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             ? Path.Join(artifacts.Root, RunSummaryMarkdownFileName)
             : null;
         var summaries = snapshot.ReplaySummaries;
-        var primaryFailure = CreatePrimaryFailure(summaries);
+        var primaryFailure = CreatePrimaryFailure(artifacts.Root, summaries);
         var commands = BuildOpenCommandHints(artifacts.Root, summaries, primaryFailure).ToArray();
         var nextAction = BuildRecommendedNextAction(artifacts.Root, summaries, primaryFailure, commands);
         var runSummary = BuildRunSummary(
@@ -537,7 +537,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             .Replace("\r", " ", StringComparison.Ordinal)
             .Replace("\n", " ", StringComparison.Ordinal);
 
-    private static ReplayOpenPrimaryFailureResult? CreatePrimaryFailure(IReadOnlyList<SessionReplaySummary> summaries)
+    private static ReplayOpenPrimaryFailureResult? CreatePrimaryFailure(string artifactRoot, IReadOnlyList<SessionReplaySummary> summaries)
     {
         var summary = summaries.FirstOrDefault(static item => item.HasFailureSignals);
         if (summary is null)
@@ -562,7 +562,30 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             failedScenario?.Error?.Message ?? failureHighlight?.Detail,
             summary.TimelinePath,
             summary.FailureCapsulePath,
-            failureHighlight is null ? null : BuildTimelineSourceCommand(summary.TimelinePath, failureHighlight.Sequence));
+            BuildPrimaryFailureSourceCommand(artifactRoot, summary, failureHighlight));
+    }
+
+    private static string? BuildPrimaryFailureSourceCommand(
+        string artifactRoot,
+        SessionReplaySummary summary,
+        SessionReplayTimelineEntry? failureHighlight)
+    {
+        if (failureHighlight is not null && !string.IsNullOrWhiteSpace(summary.TimelinePath))
+        {
+            return BuildTimelineSourceCommand(summary.TimelinePath, failureHighlight.Sequence);
+        }
+
+        if (!string.IsNullOrWhiteSpace(summary.FailureCapsulePath))
+        {
+            return $"luotsi replay capsule --artifacts {Quote(artifactRoot)} --write-readme --write-json";
+        }
+
+        if (!string.IsNullOrWhiteSpace(summary.TimelinePath))
+        {
+            return $"luotsi replay timeline --artifacts {Quote(artifactRoot)} --context 3 --write-markdown";
+        }
+
+        return null;
     }
 
     private static IReadOnlyList<RunSummaryChecklistItemResult> BuildTriageChecklist(

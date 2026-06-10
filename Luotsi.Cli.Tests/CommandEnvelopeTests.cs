@@ -1016,6 +1016,49 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayPacket_PrimaryFailureKeepsEvidenceCommandWhenTimelineHasNoFailureHighlight()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var processRunner = new FakeProcessRunner();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), """
+        {"type":"scenario_run_started","started_at":"2026-05-18T10:00:00Z"}
+        {"type":"scenario_run_ended","ended_at":"2026-05-18T10:00:03Z","status":"failed"}
+        """);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = processRunner,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "packet", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(processRunner.Calls);
+        var data = envelope.RootElement.GetProperty("data");
+        var primaryFailure = data.GetProperty("primary_failure");
+        Assert.Equal("login smoke", primaryFailure.GetProperty("scenario").GetString());
+        Assert.Equal("wait login button", primaryFailure.GetProperty("step").GetString());
+        Assert.Equal("not visible", primaryFailure.GetProperty("message").GetString());
+        Assert.Equal(
+            $"luotsi replay capsule --artifacts {replayRoot} --write-readme --write-json",
+            primaryFailure.GetProperty("source_command").GetString());
+        var checklist = data.GetProperty("triage_checklist").EnumerateArray().ToArray();
+        Assert.Equal(primaryFailure.GetProperty("source_command").GetString(), checklist[1].GetProperty("command").GetString());
+
+        using var runSummaryJson = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "run-summary.json")));
+        Assert.Equal(
+            $"luotsi replay capsule --artifacts {replayRoot} --write-readme --write-json",
+            runSummaryJson.RootElement.GetProperty("primaryFailure").GetProperty("sourceCommand").GetString());
+        var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "run-summary.md"));
+        Assert.Contains("2. Read the primary failure fields before opening broad artifacts `luotsi replay capsule", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayPacket_Check_ValidatesExistingRunSummary()
     {
         var console = new FakeConsole();
