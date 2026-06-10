@@ -45,8 +45,8 @@ luotsi replay search --artifacts ./artifacts/my-run --contains "timeout"
 - `artifacts info`: non-mutating summary of one artifact root or package zip before you open, pack, share, or unpack it
 - `artifacts open`: generic artifact browser and index refresh when you do not need replay-specific recommendations yet
 - `artifacts pack`: zip an artifact root for sharing, upload, or CI handoff
-- `artifacts verify`: validate a received package manifest, SHA-256, redaction status, and exact unpack commands without writing files; add `--require-lab-safe` when CI or support must reject unredacted packages before unpacking
-- `artifacts intake`: validate, restore, optionally persist intake JSON/Markdown, refresh the index, and return info/open/replay commands for a received package in one step
+- `artifacts verify`: validate a received package manifest, SHA-256, redaction status, and exact unpack/replay/capsule commands without writing files; add `--require-lab-safe` when CI or support must reject unredacted packages before unpacking
+- `artifacts intake`: validate, restore, optionally persist intake JSON/Markdown, refresh the index, and return info/open/replay/capsule commands for a received package in one step
 - `replay summarize`: condensed session-level overview with commands into capsule, open, scrub, graph, and clustering
 - `replay timeline`: ordered timeline events with type, timestamps, detail text, filters, and follow-up commands when failures are selected
 - `replay scrub`: local previous/focused/next event view with exact commands to move through replay evidence, open the capsule, search, or graph the focused failure

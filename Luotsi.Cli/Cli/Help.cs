@@ -71,13 +71,13 @@ Artifacts:
   refreshes the index if needed and opens the local browser or file manager.
   artifacts info summarizes one artifact root without opening or changing it.
   When the target is a packed artifact zip, it validates the package manifest,
-  reports redaction metadata and SHA-256, and suggests unpack/replay commands
-  without extracting files.
+  reports redaction metadata and SHA-256, and suggests unpack/replay/capsule
+  commands without extracting files.
   artifacts pack writes a zip suitable for sharing or CI upload, embeds
   luotsi-artifact-package.json, and reports SHA-256 for handoff verification.
   artifacts verify validates a package manifest and archive entries, reports
-  SHA-256 and lab-safe redaction status, and returns exact unpack commands
-  without writing files.
+  SHA-256 and lab-safe redaction status, and returns exact unpack/replay/capsule
+  commands without writing files.
   Add --require-lab-safe to make verify, unpack, or intake an enforcing handoff gate:
   packages that were not packed with --redact lab-safe return blocked status
   for verify or a usage error for unpack/intake before any files are extracted.
@@ -94,9 +94,9 @@ Artifacts:
   are extracted.
   artifacts intake is the received-package shortcut for support, CI, and
   agents: it applies the same unpack validation, restores the package, returns
-  exact info/open/replay commands, and can --open the refreshed index after a
-  successful restore. Add --write-json and --write-readme to persist an intake
-  audit summary beside the restored package. Use --dry-run for the same
+  exact info/open/replay/capsule commands, and can --open the refreshed index
+  after a successful restore. Add --write-json and --write-readme to persist an
+  intake audit summary beside the restored package. Use --dry-run for the same
   validation without writing.
   artifacts info/open also accept --last so you can jump straight back to the
   latest run artifact root under the default Luotsi run-artifact home or
