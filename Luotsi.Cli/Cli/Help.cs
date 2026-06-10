@@ -57,7 +57,7 @@ Usage:
   luotsi artifacts info (<artifact-root-or-run-id-or-package.zip> | --last [--artifacts <directory>])
   luotsi artifacts open (<artifact-root-or-run-id> | --last [--artifacts <directory>]) [--dry-run]
   luotsi artifacts pack <artifact-root-or-run-id> [--output <file.zip>] [--force] [--dry-run] [--redact lab-safe|off]
-  luotsi artifacts verify <artifact.zip> [--output <directory>] [--require-lab-safe]
+  luotsi artifacts verify <artifact.zip> [--output <directory>] [--require-lab-safe] [--sha256 <digest>]
   luotsi artifacts unpack <artifact.zip> [--output <directory>] [--force] [--dry-run] [--require-lab-safe] [--sha256 <digest>]
   luotsi artifacts intake <artifact.zip> [--output <directory>] [--force] [--dry-run] [--require-lab-safe] [--sha256 <digest>] [--write-json] [--write-readme] [--open]
   luotsi run --path scenarios --report-json results.json --report-junit junit.xml
@@ -77,7 +77,8 @@ Artifacts:
   luotsi-artifact-package.json, and reports SHA-256 for handoff verification.
   artifacts verify validates a package manifest and archive entries, reports
   SHA-256 and lab-safe redaction status, and returns exact unpack/replay/capsule
-  commands without writing files.
+  commands without writing files. Add --sha256 <digest> to require the expected
+  package checksum in the read-only gate.
   Add --require-lab-safe to make verify, unpack, or intake an enforcing handoff gate:
   packages that were not packed with --redact lab-safe return blocked status
   for verify or a usage error for unpack/intake before any files are extracted.
@@ -116,7 +117,7 @@ Examples:
   luotsi artifacts pack artifacts/20260518-100000-run --output replay.zip --dry-run
   luotsi artifacts pack artifacts/20260518-100000-run --output replay.zip
   luotsi artifacts pack artifacts/20260518-100000-run --output replay-lab-safe.zip --redact lab-safe
-  luotsi artifacts verify replay-lab-safe.zip --require-lab-safe
+  luotsi artifacts verify replay-lab-safe.zip --require-lab-safe --sha256 <digest>
   luotsi artifacts intake replay-lab-safe.zip --output artifacts/replay --require-lab-safe --write-json --write-readme --sha256 <digest>
   luotsi artifacts unpack replay-lab-safe.zip --output artifacts/replay --require-lab-safe --sha256 <digest>
   luotsi artifacts unpack replay.zip --output artifacts/replay --dry-run
@@ -851,7 +852,7 @@ Command groups:
     artifacts info (<artifact-root-or-run-id-or-package.zip> | --last [--artifacts <directory>])
     artifacts open (<artifact-root-or-run-id> | --last [--artifacts <directory>]) [--dry-run]
     artifacts pack <artifact-root-or-run-id> [--output <file.zip>] [--force] [--dry-run] [--redact lab-safe|off]
-    artifacts verify <artifact.zip> [--output <directory>] [--require-lab-safe]
+    artifacts verify <artifact.zip> [--output <directory>] [--require-lab-safe] [--sha256 <digest>]
     artifacts unpack <artifact.zip> [--output <directory>] [--force] [--dry-run] [--require-lab-safe] [--sha256 <digest>]
     artifacts intake <artifact.zip> [--output <directory>] [--force] [--dry-run] [--require-lab-safe] [--sha256 <digest>] [--write-json] [--write-readme] [--open]
     replay summarize --artifacts <artifact-root> [--format json|jsonl]

@@ -247,7 +247,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             CreatePackRecommendedCommands(artifactRoot, outputPath, labSafeOutputPath, redactionPolicy, sha256));
     }
 
-    public async Task<ArtifactVerifyResult> VerifyAsync(string packagePath, string? output, bool requireLabSafe)
+    public async Task<ArtifactVerifyResult> VerifyAsync(string packagePath, string? output, bool requireLabSafe, string? expectedSha256 = null)
     {
         if (string.IsNullOrWhiteSpace(packagePath))
         {
@@ -259,6 +259,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             throw new UsageException($"Artifact package '{packagePath}' does not exist.");
         }
 
+        var normalizedExpectedSha256 = NormalizeExpectedSha256(expectedSha256);
         var outputDirectory = ResolveUnpackOutputPath(packagePath, output);
         var packageManifest = ReadPackageManifest(packagePath);
         var entries = ValidateArtifactPackage(packagePath, outputDirectory, force: true, packageManifest);
@@ -266,6 +267,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         var blockers = ResolveVerifyBlockers(shareSafety, requireLabSafe);
         var status = blockers.Count > 0 ? "blocked" : "valid";
         var sha256 = await ComputeSha256Async(packagePath).ConfigureAwait(false);
+        var verification = VerifyPackageSha256(packagePath, normalizedExpectedSha256, sha256);
         var unpackForce = _fileSystem.DirectoryExists(outputDirectory) ? " --force" : string.Empty;
         var unpackLabSafe = string.Equals(shareSafety, "lab_safe", StringComparison.Ordinal) ? " --require-lab-safe" : string.Empty;
         var unpackCommand = $"luotsi artifacts unpack {Quote(packagePath)} --output {Quote(outputDirectory)}{unpackForce}{unpackLabSafe} --sha256 {sha256}";
@@ -277,6 +279,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             PackageManifestFileName,
             packageManifest,
             sha256,
+            verification,
             shareSafety,
             requireLabSafe,
             blockers,
@@ -1045,7 +1048,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         var unpackLabSafe = string.Equals(redactionMode, RedactionModeLabSafe, StringComparison.Ordinal)
             ? " --require-lab-safe"
             : string.Empty;
-        var verifyCommand = $"luotsi artifacts verify {Quote(outputPath)}";
+        var verifyCommand = $"luotsi artifacts verify {Quote(outputPath)} --sha256 {sha256}";
         if (string.Equals(redactionMode, RedactionModeLabSafe, StringComparison.Ordinal))
         {
             verifyCommand += " --require-lab-safe";
@@ -1111,7 +1114,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         var labSafeGate = string.Equals(shareSafety, "lab_safe", StringComparison.Ordinal) ? " --require-lab-safe" : string.Empty;
         return
         [
-            new("verify_artifacts", "Validate this package explicitly before handoff or restore.", $"luotsi artifacts verify {Quote(packagePath)} --output {Quote(outputDirectory)}{labSafeGate}"),
+            new("verify_artifacts", "Validate this package explicitly before handoff or restore.", $"luotsi artifacts verify {Quote(packagePath)} --output {Quote(outputDirectory)}{labSafeGate} --sha256 {sha256}"),
             new("unpack_artifacts", "Restore this validated package locally after verifying its SHA-256.", $"luotsi artifacts unpack {Quote(packagePath)} --output {Quote(outputDirectory)}{unpackForce}{labSafeGate} --sha256 {sha256}"),
             new("unpack_artifacts_dry_run", "Re-run package validation and SHA-256 verification without writing files.", $"luotsi artifacts unpack {Quote(packagePath)} --output {Quote(outputDirectory)}{unpackForce}{labSafeGate} --dry-run --sha256 {sha256}"),
             new("open_artifacts_after_unpack", "Open the restored artifact root after unpacking.", $"luotsi artifacts open {Quote(outputDirectory)}"),
@@ -1322,6 +1325,7 @@ internal sealed record ArtifactVerifyResult(
     string ManifestPath,
     ArtifactPackageManifestResult Manifest,
     string Sha256,
+    ArtifactPackageVerificationResult? Verification,
     string ShareSafety,
     bool LabSafeRequired,
     IReadOnlyList<string> Blockers,
