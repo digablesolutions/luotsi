@@ -944,6 +944,9 @@ public sealed partial class AppTests
         var runSummaryMarkdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "run-summary.md"));
         Assert.Contains("# Luotsi Run Summary", runSummaryMarkdown, StringComparison.Ordinal);
         Assert.Contains("Status: `needs_triage`", runSummaryMarkdown, StringComparison.Ordinal);
+        Assert.Contains("## 60-Second Triage Checklist", runSummaryMarkdown, StringComparison.Ordinal);
+        Assert.Contains("1. Run `luotsi replay scrub", runSummaryMarkdown, StringComparison.Ordinal);
+        Assert.Contains("2. Read the primary failure fields below before opening broad artifacts.", runSummaryMarkdown, StringComparison.Ordinal);
         Assert.Contains("## First Action", runSummaryMarkdown, StringComparison.Ordinal);
         var indexMarkdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "index.md"));
         Assert.Contains("[replay-open.md](replay-open.md)", indexMarkdown, StringComparison.Ordinal);
@@ -983,6 +986,8 @@ public sealed partial class AppTests
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.html")));
         var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "run-summary.md"));
         Assert.Contains("# Luotsi Run Summary", markdown, StringComparison.Ordinal);
+        Assert.Contains("## 60-Second Triage Checklist", markdown, StringComparison.Ordinal);
+        Assert.Contains("3. Use the commands section only after the focused failure window is understood.", markdown, StringComparison.Ordinal);
         Assert.Contains("luotsi replay scrub", markdown, StringComparison.Ordinal);
     }
 

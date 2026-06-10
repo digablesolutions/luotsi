@@ -418,6 +418,21 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         builder.AppendLine($"Sessions: `{result.SessionCount}`");
         builder.AppendLine($"Failures: `{result.FailureCount}`");
         builder.AppendLine();
+        builder.AppendLine("## 60-Second Triage Checklist");
+        builder.AppendLine();
+        builder.AppendLine($"1. Run `{EscapeMarkdown(result.RecommendedNextAction.Command)}`");
+        if (result.PrimaryFailure is null)
+        {
+            builder.AppendLine("2. Confirm whether the run passed, is incomplete, or lacks replay metadata.");
+            builder.AppendLine("3. Use the artifact index only after the packet command and replay metadata have been checked.");
+        }
+        else
+        {
+            builder.AppendLine("2. Read the primary failure fields below before opening broad artifacts.");
+            builder.AppendLine("3. Use the commands section only after the focused failure window is understood.");
+        }
+
+        builder.AppendLine();
         builder.AppendLine("## First Action");
         builder.AppendLine();
         builder.AppendLine($"- **{EscapeMarkdown(result.RecommendedNextAction.Title)}** (`{EscapeMarkdown(result.RecommendedNextAction.Kind)}`)");

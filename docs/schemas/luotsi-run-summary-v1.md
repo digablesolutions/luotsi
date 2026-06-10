@@ -7,8 +7,11 @@ for CI job summaries, PR comments, and agent loops when a failed run needs to be
 understood before opening raw artifacts.
 
 `run-summary.md` is the human-readable companion generated from the same model.
-Agents should prefer `run-summary.json`; humans can start with the Markdown job
-summary and then follow the same command fields.
+It starts with a 60-second triage checklist so a new reviewer can run the first
+command, read the primary failure, and avoid broad artifact browsing until the
+focused failure window is understood. Agents should prefer `run-summary.json`;
+humans can start with the Markdown job summary and then follow the same command
+fields.
 
 Use `luotsi replay packet --artifacts <artifact-root> --check` when CI, support,
 or an agent receives an artifact root and needs to prove that the existing
