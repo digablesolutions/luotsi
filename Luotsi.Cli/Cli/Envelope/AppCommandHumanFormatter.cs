@@ -224,6 +224,7 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
 
         AddQuickstartStepSummary(lines, value);
         AddRecommendedCommand(lines, value);
+        AddQuickstartProofChecks(lines, value);
         AddMultilineScalar(lines, value, "agent_prompt");
         return lines;
     }
@@ -247,6 +248,33 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
             var title = TryGetString(step, "title");
             var command = TryGetString(step, "command");
             var summary = string.Join("; ", new[] { minute, title, command is null ? null : $"command={command}" }
+                .Where(static part => !string.IsNullOrWhiteSpace(part)));
+            if (!string.IsNullOrWhiteSpace(summary))
+            {
+                lines.Add($"  - {summary}");
+            }
+        }
+    }
+
+    private static void AddQuickstartProofChecks(List<string> lines, JsonElement value)
+    {
+        if (!value.TryGetProperty("proof_checks", out var checks) || checks.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        lines.Add($"proof_checks: {checks.GetArrayLength()}");
+        var selectedChecks = checks
+            .EnumerateArray()
+            .Where(static check => check.ValueKind == JsonValueKind.Object)
+            .OrderBy(static check => string.Equals(TryGetString(check, "kind"), "artifact_handoff", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .Take(1);
+        foreach (var check in selectedChecks)
+        {
+            var kind = TryGetString(check, "kind");
+            var command = TryGetString(check, "command");
+            var evidence = TryGetString(check, "evidence");
+            var summary = string.Join("; ", new[] { kind, command is null ? null : $"command={command}", evidence is null ? null : $"evidence={evidence}" }
                 .Where(static part => !string.IsNullOrWhiteSpace(part)));
             if (!string.IsNullOrWhiteSpace(summary))
             {

@@ -252,11 +252,13 @@ Common workflows:
 
 Tips:
   The quickstart command returns the same path as JSON: status, time_budget,
-  inputs, steps, recommended_commands, differentiators, and an agent_prompt
-  that can be handed to an AI operator. Add --human when you want a compact
-  terminal plan with the first command, selected inputs, and minute-by-minute
-  next steps. Add --write-json and --write-markdown to persist
-  quickstart-plan.json and quickstart-plan.md in the artifact root.
+  inputs, steps, recommended_commands, proof_checks, differentiators, and an
+  agent_prompt that can be handed to an AI operator. proof_checks is the
+  install/device/artifact/device-truth/replay checklist for deciding whether the first
+  five minutes produced usable evidence. Add --human when you want a compact
+  terminal plan with the first command, selected inputs, minute-by-minute next
+  steps, and the handoff proof command. Add --write-json and --write-markdown
+  to persist quickstart-plan.json and quickstart-plan.md in the artifact root.
   If your next question is how to read the JSON envelope, JSONL session, or
   artifact root, run luotsi help output.
   Scenario runs write artifacts into the default Luotsi run-artifact home
