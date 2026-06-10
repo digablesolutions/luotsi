@@ -409,12 +409,20 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         }
         else
         {
+            AppendField(builder, "Session kind", result.PrimaryFailure.SessionKind);
+            AppendField(builder, "Session ID", result.PrimaryFailure.SessionId);
+            AppendField(builder, "Started", result.PrimaryFailure.StartedAt.ToString("O"));
+            AppendField(builder, "Ended", result.PrimaryFailure.EndedAt.ToString("O"));
+            AppendField(builder, "Reason", result.PrimaryFailure.Reason);
+            AppendField(builder, "Exit code", result.PrimaryFailure.ExitCode.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            AppendField(builder, "Target", result.PrimaryFailure.Target);
             AppendField(builder, "Scenario", result.PrimaryFailure.Scenario);
             AppendField(builder, "Step", result.PrimaryFailure.Step);
             AppendField(builder, "Action", result.PrimaryFailure.Action);
             AppendField(builder, "Message", result.PrimaryFailure.Message);
             AppendField(builder, "Timeline", result.PrimaryFailure.TimelinePath);
             AppendField(builder, "Failure capsule", result.PrimaryFailure.FailureCapsulePath);
+            AppendField(builder, "Reopen", result.PrimaryFailure.SourceCommand);
         }
 
         builder.AppendLine();
@@ -470,12 +478,20 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         }
         else
         {
+            AppendField(builder, "Session kind", result.PrimaryFailure.SessionKind);
+            AppendField(builder, "Session ID", result.PrimaryFailure.SessionId);
+            AppendField(builder, "Started", result.PrimaryFailure.StartedAt.ToString("O"));
+            AppendField(builder, "Ended", result.PrimaryFailure.EndedAt.ToString("O"));
+            AppendField(builder, "Reason", result.PrimaryFailure.Reason);
+            AppendField(builder, "Exit code", result.PrimaryFailure.ExitCode.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            AppendField(builder, "Target", result.PrimaryFailure.Target);
             AppendField(builder, "Scenario", result.PrimaryFailure.Scenario);
             AppendField(builder, "Step", result.PrimaryFailure.Step);
             AppendField(builder, "Action", result.PrimaryFailure.Action);
             AppendField(builder, "Message", result.PrimaryFailure.Message);
             AppendField(builder, "Timeline", result.PrimaryFailure.TimelinePath);
             AppendField(builder, "Failure capsule", result.PrimaryFailure.FailureCapsulePath);
+            AppendField(builder, "Reopen", result.PrimaryFailure.SourceCommand);
         }
 
         builder.AppendLine();
@@ -524,12 +540,20 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         var failedStep = failedScenario?.FailedStep;
         var failureHighlight = summary.TimelineHighlights.FirstOrDefault(static entry => entry.IsFailureRelevant);
         return new ReplayOpenPrimaryFailureResult(
+            summary.SessionKind,
+            summary.SessionId,
+            summary.StartedAt,
+            summary.EndedAt,
+            summary.Reason,
+            summary.ExitCode,
+            summary.Target,
             failedScenario?.Scenario,
             failedStep?.Name,
             failedStep?.Action,
             failedScenario?.Error?.Message ?? failureHighlight?.Detail,
             summary.TimelinePath,
-            summary.FailureCapsulePath);
+            summary.FailureCapsulePath,
+            failureHighlight is null ? null : BuildTimelineSourceCommand(summary.TimelinePath, failureHighlight.Sequence));
     }
 
     private static IEnumerable<ReplayOpenCommandHintResult> BuildOpenCommandHints(
@@ -754,6 +778,9 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         var parent = Path.GetDirectoryName(artifactRoot);
         return string.IsNullOrWhiteSpace(parent) ? artifactRoot : parent;
     }
+
+    private static string BuildTimelineSourceCommand(string timelinePath, int sequence) =>
+        $"luotsi replay scrub --source-path {Quote(timelinePath)} --sequence {sequence} --context 3";
 
     private static string Quote(string value) =>
         value.Contains(' ', StringComparison.Ordinal) ? "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"" : value;

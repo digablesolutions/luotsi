@@ -448,12 +448,20 @@ public sealed record ReplayOpenResult(
     IReadOnlyList<string> OpenerArgs);
 
 public sealed record ReplayOpenPrimaryFailureResult(
+    string SessionKind,
+    string SessionId,
+    DateTimeOffset StartedAt,
+    DateTimeOffset EndedAt,
+    string Reason,
+    int ExitCode,
+    string? Target,
     string? Scenario,
     string? Step,
     string? Action,
     string? Message,
     string? TimelinePath,
-    string? FailureCapsulePath);
+    string? FailureCapsulePath,
+    string? SourceCommand);
 
 public sealed record ReplayOpenNextActionResult(
     string Kind,

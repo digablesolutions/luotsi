@@ -50,16 +50,25 @@ or `entryPoints.indexHtmlPath`."
 
 ## `primaryFailure`
 
-When present, `primaryFailure` uses these nullable string fields:
+When present, `primaryFailure` identifies the replay session and the focused
+failure evidence:
 
 | Field | Meaning |
 |---|---|
+| `sessionKind` | Replay session kind, such as `view`, `inspect`, or `scenario`. |
+| `sessionId` | Replay session identifier from `session-replay.json`. |
+| `startedAt` | RFC 3339 session start timestamp. |
+| `endedAt` | RFC 3339 session end timestamp. |
+| `reason` | Session completion reason. |
+| `exitCode` | Session exit code. |
+| `target` | Device, package, or other target when replay metadata knows it. |
 | `scenario` | Scenario name or identifier when replay metadata knows it. |
 | `step` | Scenario step name or index when available. |
 | `action` | Action that was running near the failure. |
 | `message` | Failure message or condensed reason. |
 | `timelinePath` | Timeline file containing the failure evidence. |
 | `failureCapsulePath` | Failure capsule JSON path when the run captured one. |
+| `sourceCommand` | Exact command to reopen the focused timeline event when one is available. |
 
 ## `recommendedNextAction`
 
@@ -117,12 +126,20 @@ belongs in the broader command list. Consumers should still prefer
   "sessionCount": 1,
   "failureCount": 1,
   "primaryFailure": {
+    "sessionKind": "scenario",
+    "sessionId": "checkout-20260610",
+    "startedAt": "2026-06-10T11:59:30Z",
+    "endedAt": "2026-06-10T12:00:00Z",
+    "reason": "failed",
+    "exitCode": 1,
+    "target": "emulator-5554",
     "scenario": "checkout",
     "step": "submit payment",
     "action": "tap",
     "message": "Expected confirmation text was not visible.",
     "timelinePath": "session-timeline.jsonl",
-    "failureCapsulePath": "failure-capsule.json"
+    "failureCapsulePath": "failure-capsule.json",
+    "sourceCommand": "luotsi replay scrub --source-path session-timeline.jsonl --sequence 42 --context 3"
   },
   "recommendedNextAction": {
     "kind": "scrub_failure",

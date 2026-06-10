@@ -981,13 +981,29 @@ public sealed partial class AppTests
         Assert.Equal(Path.Join(replayRoot, "run-summary.json"), data.GetProperty("entry_points").GetProperty("run_summary_json_path").GetString());
         Assert.Equal(Path.Join(replayRoot, "run-summary.md"), data.GetProperty("entry_points").GetProperty("run_summary_markdown_path").GetString());
         Assert.Equal("scrub_failure", data.GetProperty("recommended_next_action").GetProperty("kind").GetString());
+        var primaryFailure = data.GetProperty("primary_failure");
+        Assert.Equal("view", primaryFailure.GetProperty("session_kind").GetString());
+        Assert.Equal("view-session", primaryFailure.GetProperty("session_id").GetString());
+        Assert.Equal("error", primaryFailure.GetProperty("reason").GetString());
+        Assert.Equal(1, primaryFailure.GetProperty("exit_code").GetInt32());
+        Assert.Equal("192.168.0.134:5555", primaryFailure.GetProperty("target").GetString());
+        Assert.Contains("luotsi replay scrub --source-path", primaryFailure.GetProperty("source_command").GetString(), StringComparison.Ordinal);
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "run-summary.json")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "run-summary.md")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.html")));
+        using var runSummaryJson = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "run-summary.json")));
+        var persistedPrimaryFailure = runSummaryJson.RootElement.GetProperty("primaryFailure");
+        Assert.Equal("view", persistedPrimaryFailure.GetProperty("sessionKind").GetString());
+        Assert.Equal("view-session", persistedPrimaryFailure.GetProperty("sessionId").GetString());
+        Assert.Equal("192.168.0.134:5555", persistedPrimaryFailure.GetProperty("target").GetString());
+        Assert.Contains("luotsi replay scrub --source-path", persistedPrimaryFailure.GetProperty("sourceCommand").GetString(), StringComparison.Ordinal);
         var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "run-summary.md"));
         Assert.Contains("# Luotsi Run Summary", markdown, StringComparison.Ordinal);
         Assert.Contains("## 60-Second Triage Checklist", markdown, StringComparison.Ordinal);
         Assert.Contains("3. Use the commands section only after the focused failure window is understood.", markdown, StringComparison.Ordinal);
+        Assert.Contains("Session ID", markdown, StringComparison.Ordinal);
+        Assert.Contains("view-session", markdown, StringComparison.Ordinal);
+        Assert.Contains("Reopen", markdown, StringComparison.Ordinal);
         Assert.Contains("luotsi replay scrub", markdown, StringComparison.Ordinal);
     }
 
