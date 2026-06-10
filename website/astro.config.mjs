@@ -22,9 +22,9 @@ export default defineConfig({
 					label: 'Start Here',
 					items: [
 						{ label: 'Overview', slug: 'docs' },
+						{ label: 'First Five Minutes', slug: 'docs/getting-started/first-five-minutes' },
 						{ label: 'Installation', slug: 'docs/getting-started/installation' },
 						{ label: 'Quickstart', slug: 'docs/getting-started/quickstart' },
-						{ label: 'First Five Minutes', slug: 'docs/getting-started/first-five-minutes' },
 						{ label: 'Device Readiness', slug: 'docs/getting-started/device-readiness' },
 						{ label: 'Troubleshooting', slug: 'docs/getting-started/troubleshooting' },
 					],
