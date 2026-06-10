@@ -253,6 +253,12 @@ public sealed partial class AppTests
         Assert.Contains("Bad input exits non-zero with an `extract-next-command:` message", examples, StringComparison.Ordinal);
         Assert.Contains("artifacts.artifact_root", examples, StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --last --artifacts artifacts/agent-loop --dry-run", examples, StringComparison.Ordinal);
+        var firstFiveMinutes = File.ReadAllText(Path.Join(root, "website", "src", "content", "docs", "docs", "getting-started", "first-five-minutes.mdx"));
+        var outputEnvelopes = File.ReadAllText(Path.Join(root, "website", "src", "content", "docs", "docs", "reference", "output-envelopes.mdx"));
+        Assert.Contains("data.proof_checks[]", firstFiveMinutes, StringComparison.Ordinal);
+        Assert.Contains("readiness evidence gates", firstFiveMinutes, StringComparison.Ordinal);
+        Assert.Contains("data.proof_checks[]", outputEnvelopes, StringComparison.Ordinal);
+        Assert.Contains("readiness evidence gates", outputEnvelopes, StringComparison.Ordinal);
         Assert.Contains("command -> structured output -> artifact root -> replay command -> next action", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("luotsi help output", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("schema: \"luotsi-command.v1\"", aiAgentWorkflows, StringComparison.Ordinal);

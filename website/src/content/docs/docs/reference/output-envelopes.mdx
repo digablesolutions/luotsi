@@ -34,6 +34,8 @@ When an agent or CI job needs the next action, read command hints in this order:
 
 The source tree includes executable examples of this priority order at `examples/agents/extract-next-command.py` and `examples/agents/extract-next-command.mjs`.
 
+Quickstart envelopes additionally include `data.proof_checks[]`. Those checks are readiness evidence gates for the first-five-minute path, not a replacement for the next-command priority order above.
+
 When an artifact root has a persisted package intake audit, human output for `artifacts info` and `replay capsule` includes a compact `intake:` line with status, share-safety, SHA verification, and package path.
 
 ## Long-lived session mode
