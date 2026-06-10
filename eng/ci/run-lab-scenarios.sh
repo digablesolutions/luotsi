@@ -39,6 +39,16 @@ append_run_summary_to_github_step_summary() {
   } >> "$GITHUB_STEP_SUMMARY"
 }
 
+write_and_check_run_summary_packet() {
+  if [[ ! -d "$artifacts_dir" ]]; then
+    return 0
+  fi
+
+  run_luotsi replay packet --artifacts "$artifacts_dir"
+  run_luotsi replay packet --artifacts "$artifacts_dir" --check
+  append_run_summary_to_github_step_summary
+}
+
 is_true() {
   case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
     1|true|yes|y|on) return 0 ;;
@@ -60,6 +70,8 @@ fi
 run_luotsi lab status --device-query "$device_query"
 run_luotsi lab plan --device-query "$device_query"
 run_luotsi scenario-validate --path "$scenario_path"
+run_exit_code=0
+set +e
 run_luotsi run \
   --path "$scenario_path" \
   --device-query "$device_query" \
@@ -68,5 +80,8 @@ run_luotsi run \
   --ttl-sec "$ttl_sec" \
   --report-junit "$junit_path" \
   --artifacts "$artifacts_dir"
-run_luotsi replay packet --artifacts "$artifacts_dir"
-append_run_summary_to_github_step_summary
+run_exit_code=$?
+set -e
+
+write_and_check_run_summary_packet
+exit "$run_exit_code"

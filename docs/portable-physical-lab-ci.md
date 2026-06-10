@@ -48,6 +48,11 @@ into `LUOTSI_ARTIFACTS_DIR`. On GitHub Actions, the scripts append
 `run-summary.md` to `GITHUB_STEP_SUMMARY` so the first triage packet is visible
 in the job summary before anyone downloads raw artifacts.
 
+The scripts preserve the scenario run exit code, but they still attempt
+`replay packet`, `replay packet --check`, and the GitHub job-summary append
+after a failing run. That keeps the uploaded artifact bundle useful when the
+job is red.
+
 Dry runs execute `scenario-validate` and `run --dry-run`, then stop before lab
 selection or device claiming.
 

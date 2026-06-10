@@ -512,10 +512,16 @@ public sealed partial class AppTests
         Assert.DoesNotContain("require_capabilities:", workflow, StringComparison.Ordinal);
 
         Assert.Contains("run_luotsi replay packet --artifacts \"$artifacts_dir\"", bashScript, StringComparison.Ordinal);
+        Assert.Contains("run_luotsi replay packet --artifacts \"$artifacts_dir\" --check", bashScript, StringComparison.Ordinal);
+        Assert.Contains("run_exit_code=$?", bashScript, StringComparison.Ordinal);
+        Assert.Contains("exit \"$run_exit_code\"", bashScript, StringComparison.Ordinal);
         Assert.Contains("append_run_summary_to_github_step_summary", bashScript, StringComparison.Ordinal);
         Assert.Contains("GITHUB_STEP_SUMMARY", bashScript, StringComparison.Ordinal);
         Assert.DoesNotContain("run_luotsi replay summarize", bashScript, StringComparison.Ordinal);
         Assert.Contains("Invoke-Luotsi replay packet --artifacts $ArtifactsDir", powershellScript, StringComparison.Ordinal);
+        Assert.Contains("Invoke-Luotsi replay packet --artifacts $ArtifactsDir --check", powershellScript, StringComparison.Ordinal);
+        Assert.Contains("Invoke-LuotsiAllowFailure run", powershellScript, StringComparison.Ordinal);
+        Assert.Contains("exit $runExitCode", powershellScript, StringComparison.Ordinal);
         Assert.Contains("Add-RunSummaryToGitHubStepSummary", powershellScript, StringComparison.Ordinal);
         Assert.Contains("GITHUB_STEP_SUMMARY", powershellScript, StringComparison.Ordinal);
         Assert.DoesNotContain("Invoke-Luotsi replay summarize", powershellScript, StringComparison.Ordinal);

@@ -31,6 +31,14 @@ function Invoke-Luotsi {
     }
 }
 
+function Invoke-LuotsiAllowFailure {
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
+
+    Write-Host ("+ {0} {1}" -f $script:LuotsiBin, ($Arguments -join " "))
+    & $script:LuotsiBin @Arguments
+    return $LASTEXITCODE
+}
+
 function Add-RunSummaryToGitHubStepSummary {
     $summaryPath = Join-Path $ArtifactsDir "run-summary.md"
     if ([string]::IsNullOrWhiteSpace($env:GITHUB_STEP_SUMMARY) -or -not (Test-Path -LiteralPath $summaryPath -PathType Leaf)) {
@@ -41,6 +49,16 @@ function Add-RunSummaryToGitHubStepSummary {
     Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "## Luotsi Run Summary"
     Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ""
     Get-Content -LiteralPath $summaryPath | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+}
+
+function Write-AndCheckRunSummaryPacket {
+    if (-not (Test-Path -LiteralPath $ArtifactsDir -PathType Container)) {
+        return
+    }
+
+    Invoke-Luotsi replay packet --artifacts $ArtifactsDir
+    Invoke-Luotsi replay packet --artifacts $ArtifactsDir --check
+    Add-RunSummaryToGitHubStepSummary
 }
 
 $script:LuotsiBin = Get-EnvValue -Name "LUOTSI_BIN" -Default "luotsi"
@@ -79,7 +97,7 @@ if (Test-Truthy $DryRun) {
 Invoke-Luotsi lab status --device-query $DeviceQuery
 Invoke-Luotsi lab plan --device-query $DeviceQuery
 Invoke-Luotsi scenario-validate --path $ScenarioPath
-Invoke-Luotsi run `
+$runExitCode = Invoke-LuotsiAllowFailure run `
     --path $ScenarioPath `
     --device-query $DeviceQuery `
     --claim-device `
@@ -87,5 +105,5 @@ Invoke-Luotsi run `
     --ttl-sec $TtlSec `
     --report-junit $JunitPath `
     --artifacts $ArtifactsDir
-Invoke-Luotsi replay packet --artifacts $ArtifactsDir
-Add-RunSummaryToGitHubStepSummary
+Write-AndCheckRunSummaryPacket
+exit $runExitCode
