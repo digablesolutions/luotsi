@@ -110,7 +110,9 @@ public sealed partial class AppTests
         Assert.Contains("luotsi help output", viewSession, StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", viewSession, StringComparison.Ordinal);
         AssertContainsBefore(viewSession, "luotsi replay open --artifacts <artifact-root> --dry-run", "luotsi replay summarize --artifacts <artifact-root>");
-        Assert.Contains("luotsi replay open --artifacts \"$LUOTSI_ARTIFACTS_DIR\" --dry-run", portableCi, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay open --artifacts \"$LUOTSI_ARTIFACTS_DIR\" --dry-run --write-json --write-markdown", portableCi, StringComparison.Ordinal);
+        Assert.Contains("run-summary.md", portableCi, StringComparison.Ordinal);
+        Assert.Contains("GITHUB_STEP_SUMMARY", portableCi, StringComparison.Ordinal);
         Assert.Contains("primary", portableCi, StringComparison.Ordinal);
         Assert.Contains("recommended next action", portableCi, StringComparison.Ordinal);
 
@@ -457,7 +459,10 @@ public sealed partial class AppTests
         Assert.Contains("`scenario_path`", markdown, StringComparison.Ordinal);
         Assert.Contains("`ttl_sec`", markdown, StringComparison.Ordinal);
         Assert.Contains("`dry_run`", markdown, StringComparison.Ordinal);
-        Assert.Contains("luotsi replay open --artifacts artifacts/luotsi-lab --dry-run", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay open --artifacts artifacts/luotsi-lab --dry-run --write-json --write-markdown", markdown, StringComparison.Ordinal);
+        Assert.Contains("run-summary.json", markdown, StringComparison.Ordinal);
+        Assert.Contains("run-summary.md", markdown, StringComparison.Ordinal);
+        Assert.Contains("GitHub Actions job summary", markdown, StringComparison.Ordinal);
         Assert.Contains("primary failure", markdown, StringComparison.Ordinal);
         Assert.Contains("recommended next action", markdown, StringComparison.Ordinal);
         Assert.Contains("do not yet surface `--claim-wait-sec`, `--device-pool`, or `--require-capabilities`", markdown, StringComparison.Ordinal);
@@ -470,9 +475,13 @@ public sealed partial class AppTests
         Assert.DoesNotContain("device_pool:", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("require_capabilities:", workflow, StringComparison.Ordinal);
 
-        Assert.Contains("run_luotsi replay open --artifacts \"$artifacts_dir\" --dry-run", bashScript, StringComparison.Ordinal);
+        Assert.Contains("run_luotsi replay open --artifacts \"$artifacts_dir\" --dry-run --write-json --write-markdown", bashScript, StringComparison.Ordinal);
+        Assert.Contains("append_run_summary_to_github_step_summary", bashScript, StringComparison.Ordinal);
+        Assert.Contains("GITHUB_STEP_SUMMARY", bashScript, StringComparison.Ordinal);
         Assert.DoesNotContain("run_luotsi replay summarize", bashScript, StringComparison.Ordinal);
-        Assert.Contains("Invoke-Luotsi replay open --artifacts $ArtifactsDir --dry-run", powershellScript, StringComparison.Ordinal);
+        Assert.Contains("Invoke-Luotsi replay open --artifacts $ArtifactsDir --dry-run --write-json --write-markdown", powershellScript, StringComparison.Ordinal);
+        Assert.Contains("Add-RunSummaryToGitHubStepSummary", powershellScript, StringComparison.Ordinal);
+        Assert.Contains("GITHUB_STEP_SUMMARY", powershellScript, StringComparison.Ordinal);
         Assert.DoesNotContain("Invoke-Luotsi replay summarize", powershellScript, StringComparison.Ordinal);
     }
 

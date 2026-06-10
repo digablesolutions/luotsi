@@ -31,6 +31,18 @@ function Invoke-Luotsi {
     }
 }
 
+function Add-RunSummaryToGitHubStepSummary {
+    $summaryPath = Join-Path $ArtifactsDir "run-summary.md"
+    if ([string]::IsNullOrWhiteSpace($env:GITHUB_STEP_SUMMARY) -or -not (Test-Path -LiteralPath $summaryPath -PathType Leaf)) {
+        return
+    }
+
+    Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ""
+    Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "## Luotsi Run Summary"
+    Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ""
+    Get-Content -LiteralPath $summaryPath | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+}
+
 $script:LuotsiBin = Get-EnvValue -Name "LUOTSI_BIN" -Default "luotsi"
 $DeviceQuery = Get-EnvValue -Name "LUOTSI_DEVICE_QUERY" -Default "state=online,type=physical,availability=available"
 $ScenarioPath = Get-EnvValue -Name "LUOTSI_SCENARIO_PATH" -Default "examples/scenarios"
@@ -75,4 +87,5 @@ Invoke-Luotsi run `
     --ttl-sec $TtlSec `
     --report-junit $JunitPath `
     --artifacts $ArtifactsDir
-Invoke-Luotsi replay open --artifacts $ArtifactsDir --dry-run
+Invoke-Luotsi replay open --artifacts $ArtifactsDir --dry-run --write-json --write-markdown
+Add-RunSummaryToGitHubStepSummary

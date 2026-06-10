@@ -26,6 +26,19 @@ run_luotsi() {
   "$luotsi_bin" "$@"
 }
 
+append_run_summary_to_github_step_summary() {
+  local summary_path="${artifacts_dir%/}/run-summary.md"
+  if [[ -z "${GITHUB_STEP_SUMMARY:-}" || ! -f "$summary_path" ]]; then
+    return 0
+  fi
+
+  {
+    printf '\n## Luotsi Run Summary\n\n'
+    cat "$summary_path"
+    printf '\n'
+  } >> "$GITHUB_STEP_SUMMARY"
+}
+
 is_true() {
   case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
     1|true|yes|y|on) return 0 ;;
@@ -55,4 +68,5 @@ run_luotsi run \
   --ttl-sec "$ttl_sec" \
   --report-junit "$junit_path" \
   --artifacts "$artifacts_dir"
-run_luotsi replay open --artifacts "$artifacts_dir" --dry-run
+run_luotsi replay open --artifacts "$artifacts_dir" --dry-run --write-json --write-markdown
+append_run_summary_to_github_step_summary
