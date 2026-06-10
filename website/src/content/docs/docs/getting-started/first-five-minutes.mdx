@@ -187,15 +187,15 @@ Use this sequence to answer:
 Before you close the session, make sure the artifact root contains the evidence you would send to a teammate:
 
 ```bash
-luotsi artifacts info --artifacts artifacts/first-run
-luotsi artifacts open --artifacts artifacts/first-run --dry-run
+luotsi artifacts info artifacts/first-run
+luotsi artifacts open artifacts/first-run --dry-run
 ```
 
 For CI or shared-lab review, package and verify the artifact root:
 
 ```bash
-luotsi artifacts pack --artifacts artifacts/first-run --output artifacts/first-run.zip
-luotsi artifacts verify --bundle artifacts/first-run.zip
+luotsi artifacts pack artifacts/first-run --output artifacts/first-run.zip
+luotsi artifacts verify artifacts/first-run.zip
 ```
 
 ## Pick The Reader
