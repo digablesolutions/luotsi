@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Runtime.InteropServices;
 using System.IO.Compression;
 using Luotsi.Cli.Artifacts;
@@ -1095,6 +1096,39 @@ public sealed partial class AppTests
         Assert.Equal(data.GetProperty("recommended_next_action_command").GetString(), checklist[0].GetProperty("command").GetString());
         Assert.Equal("view-session", data.GetProperty("primary_failure").GetProperty("session_id").GetString());
         Assert.Contains("luotsi replay scrub --source-path", data.GetProperty("primary_failure").GetProperty("source_command").GetString(), StringComparison.Ordinal);
+        Assert.Empty(processRunner.Calls);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayPacket_Check_PrimaryFailureWithoutSourceCommand_ReturnsUsageError()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var processRunner = new FakeProcessRunner();
+        var replayRoot = SeedReplaySummaryArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = processRunner,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var writeExitCode = await app.RunAsync(["replay", "packet", "--artifacts", replayRoot]);
+        var packetPath = Path.Join(replayRoot, "run-summary.json");
+        var packet = JsonNode.Parse(await fileSystem.ReadAllTextAsync(packetPath))!.AsObject();
+        packet["primaryFailure"]!.AsObject()["sourceCommand"] = null;
+        fileSystem.AddFile(packetPath, packet.ToJsonString());
+        console.OutputLines.Clear();
+        var checkExitCode = await app.RunAsync(["replay", "packet", "--check", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, writeExitCode);
+        Assert.Equal(2, checkExitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("primaryFailure.sourceCommand is required", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("Re-run `luotsi replay packet", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
         Assert.Empty(processRunner.Calls);
     }
 

@@ -275,6 +275,8 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
                 throw new UsageException($"{RunSummaryMarkdownFileName} does not include the recommended next action command from {RunSummaryJsonFileName}. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
             }
 
+            ValidatePrimaryFailureHandoff(primaryFailure, triageChecklist, runSummaryMarkdown, packetPath, artifacts.Root);
+
             return new RunSummaryCheckResult(
                 ResultSchemas.RunSummaryCheck,
                 started,
@@ -289,6 +291,34 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
                 triageChecklist,
                 primaryFailure,
                 runSummaryMarkdownPath);
+        }
+    }
+
+    private static void ValidatePrimaryFailureHandoff(
+        ReplayOpenPrimaryFailureResult? primaryFailure,
+        IReadOnlyList<RunSummaryChecklistItemResult> triageChecklist,
+        string runSummaryMarkdown,
+        string packetPath,
+        string artifactRoot)
+    {
+        if (primaryFailure is null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(primaryFailure.SourceCommand))
+        {
+            throw new UsageException($"{Path.GetFileName(packetPath)} primaryFailure.sourceCommand is required when primaryFailure is present. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        if (!triageChecklist.Any(item => string.Equals(item.Command, primaryFailure.SourceCommand, StringComparison.Ordinal)))
+        {
+            throw new UsageException($"{Path.GetFileName(packetPath)} triageChecklist must include primaryFailure.sourceCommand. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        if (!runSummaryMarkdown.Contains(primaryFailure.SourceCommand, StringComparison.Ordinal))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} does not include primaryFailure.sourceCommand from {RunSummaryJsonFileName}. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
         }
     }
 
