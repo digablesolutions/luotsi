@@ -135,6 +135,60 @@ function Expand-ArchiveByExtension {
     throw "Unsupported archive format: $ArchivePath"
 }
 
+function Resolve-GitHubReleaseAsset {
+    param(
+        [string]$Owner,
+        [string]$Repository,
+        [string]$AssetPattern
+    )
+
+    $releaseUri = "https://api.github.com/repos/$Owner/$Repository/releases/latest"
+    $headers = @{
+        "Accept" = "application/vnd.github+json"
+        "User-Agent" = "luotsi-ffmpeg-stager"
+        "X-GitHub-Api-Version" = "2022-11-28"
+    }
+
+    $release = Invoke-RestMethod -Uri $releaseUri -Headers $headers
+    $asset = @($release.assets | Where-Object { $_.name -match $AssetPattern } | Select-Object -First 1)
+    if (-not $asset) {
+        throw "Could not find a GitHub release asset matching '$AssetPattern' in $Owner/$Repository latest release '$($release.tag_name)'."
+    }
+
+    return [pscustomobject]@{
+        ArchiveName = $asset.name
+        Url = $asset.browser_download_url
+    }
+}
+
+function Invoke-DownloadWithRetry {
+    param(
+        [string]$Uri,
+        [string]$DestinationPath,
+        [int]$MaxAttempts = 5
+    )
+
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        try {
+            Invoke-WebRequest -Uri $Uri -OutFile $DestinationPath -UseBasicParsing
+            if ((Test-Path -LiteralPath $DestinationPath) -and ((Get-Item -LiteralPath $DestinationPath).Length -gt 0)) {
+                return
+            }
+
+            throw "Downloaded file is empty: $DestinationPath"
+        }
+        catch {
+            Remove-Item -LiteralPath $DestinationPath -Force -ErrorAction SilentlyContinue
+            if ($attempt -eq $MaxAttempts) {
+                throw
+            }
+
+            Write-Warning "Download attempt $attempt failed for $Uri. Retrying... $($_.Exception.Message)"
+            Start-Sleep -Seconds ([Math]::Min(10, 2 * $attempt))
+        }
+    }
+}
+
 function Get-DownloadPlan {
     param(
         [string]$ResolvedPlatform,
@@ -155,8 +209,9 @@ function Get-DownloadPlan {
         "win-arm64" {
             return [pscustomobject]@{
                 Strategy = "archive"
-                ArchiveName = "ffmpeg-n$ResolvedVersion-latest-winarm64-lgpl-shared-$ResolvedVersion.zip"
-                Url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n$ResolvedVersion-latest-winarm64-lgpl-shared-$ResolvedVersion.zip"
+                GitHubOwner = "BtbN"
+                GitHubRepository = "FFmpeg-Builds"
+                AssetPattern = "^ffmpeg-n.+-winarm64-lgpl-shared-$([regex]::Escape($ResolvedVersion))\.zip$"
                 ExtractSubdirectory = "bin"
                 FilePatterns = @("*.dll")
             }
@@ -165,8 +220,9 @@ function Get-DownloadPlan {
         "linux-x64" {
             return [pscustomobject]@{
                 Strategy = "archive"
-                ArchiveName = "ffmpeg-n$ResolvedVersion-latest-linux64-lgpl-shared-$ResolvedVersion.tar.xz"
-                Url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n$ResolvedVersion-latest-linux64-lgpl-shared-$ResolvedVersion.tar.xz"
+                GitHubOwner = "BtbN"
+                GitHubRepository = "FFmpeg-Builds"
+                AssetPattern = "^ffmpeg-n.+-linux64-lgpl-shared-$([regex]::Escape($ResolvedVersion))\.tar\.xz$"
                 ExtractSubdirectory = "lib"
                 FilePatterns = @("*.so", "*.so.*")
             }
@@ -175,8 +231,9 @@ function Get-DownloadPlan {
         "linux-arm64" {
             return [pscustomobject]@{
                 Strategy = "archive"
-                ArchiveName = "ffmpeg-n$ResolvedVersion-latest-linuxarm64-lgpl-shared-$ResolvedVersion.tar.xz"
-                Url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n$ResolvedVersion-latest-linuxarm64-lgpl-shared-$ResolvedVersion.tar.xz"
+                GitHubOwner = "BtbN"
+                GitHubRepository = "FFmpeg-Builds"
+                AssetPattern = "^ffmpeg-n.+-linuxarm64-lgpl-shared-$([regex]::Escape($ResolvedVersion))\.tar\.xz$"
                 ExtractSubdirectory = "lib"
                 FilePatterns = @("*.so", "*.so.*")
             }
@@ -207,6 +264,11 @@ $BinDir = Join-Path $ScriptDir "bin"
 $TempDir = Join-Path $ScriptDir "temp"
 $ResolvedPlatform = if ([string]::IsNullOrWhiteSpace($Platform)) { Get-DefaultPlatform } else { $Platform }
 $Plan = Get-DownloadPlan -ResolvedPlatform $ResolvedPlatform -ResolvedVersion $Version
+if ($Plan.PSObject.Properties.Name -contains "GitHubOwner") {
+    $asset = Resolve-GitHubReleaseAsset -Owner $Plan.GitHubOwner -Repository $Plan.GitHubRepository -AssetPattern $Plan.AssetPattern
+    $Plan | Add-Member -NotePropertyName ArchiveName -NotePropertyValue $asset.ArchiveName
+    $Plan | Add-Member -NotePropertyName Url -NotePropertyValue $asset.Url
+}
 
 if ((Get-ExistingLibraryCount -Directory $BinDir -Patterns $Plan.FilePatterns) -gt 0 -and -not $Force) {
     Write-Host "FFmpeg native libraries already exist in $BinDir"
@@ -251,7 +313,7 @@ try {
 
     New-Item -ItemType Directory -Force -Path $TempDir | Out-Null
     $archivePath = Join-Path $TempDir $Plan.ArchiveName
-    Invoke-WebRequest -Uri $Plan.Url -OutFile $archivePath -UseBasicParsing
+    Invoke-DownloadWithRetry -Uri $Plan.Url -DestinationPath $archivePath
 
     Write-Host "Extracting archive..."
     Expand-ArchiveByExtension -ArchivePath $archivePath -DestinationPath $TempDir
