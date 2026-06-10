@@ -354,14 +354,20 @@ public sealed partial class AppTests
         {
             Assert.Contains("First five minutes", text, StringComparison.Ordinal);
             Assert.Contains("luotsi help output", text, StringComparison.Ordinal);
+            Assert.Contains("luotsi replay packet --artifacts <artifact-root>", text, StringComparison.Ordinal);
+            Assert.Contains("luotsi replay packet --artifacts <artifact-root> --check", text, StringComparison.Ordinal);
             Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", text, StringComparison.Ordinal);
             Assert.Contains("recommended next action", text, StringComparison.Ordinal);
             AssertContainsBefore(name, text, "First five minutes", "Replay and artifacts");
+            AssertContainsBefore(name, text, "luotsi replay packet --artifacts <artifact-root>", "luotsi replay open --artifacts <artifact-root> --dry-run");
         }
 
         Assert.Contains("output/replay handoff checked with `luotsi help output`", pullRequestTemplate, StringComparison.Ordinal);
         Assert.Contains("first follow-up command points to `data.recommended_next_action.command`", pullRequestTemplate, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --artifacts <artifact-root>", pullRequestTemplate, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --artifacts <artifact-root> --check", pullRequestTemplate, StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", pullRequestTemplate, StringComparison.Ordinal);
+        AssertContainsBefore(pullRequestTemplate, "luotsi replay packet --artifacts <artifact-root>", "luotsi replay open --artifacts <artifact-root> --dry-run");
     }
 
     [Fact]

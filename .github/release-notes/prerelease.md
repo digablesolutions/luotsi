@@ -9,7 +9,7 @@
 - Exercise `view`, `view setup --fix`, and `doctor --fix` from a clean install.
 - Run a small scenario with JSON/JSONL reports and inspect the replay artifacts.
 - Run `luotsi help output` for the JSON envelope, JSONL session, artifact root, and replay handoff model.
-- Start failed-run triage with `luotsi replay open --artifacts <artifact-root> --dry-run` to see the primary failure, recommended next action, and follow-up commands without launching a browser.
+- Start failed CI, agent, or artifact-packet triage with `luotsi replay packet --artifacts <artifact-root>`, then validate the packet with `luotsi replay packet --artifacts <artifact-root> --check` to see `run-summary.json`, `run-summary.md`, the primary failure, recommended next action, and the 60-second checklist. Use `luotsi replay open --artifacts <artifact-root> --dry-run` when a human needs the replay front door without launching a browser.
 - Check that release packages include the expected helper APK and host-native runtime assets.
 
 ## Start Here
