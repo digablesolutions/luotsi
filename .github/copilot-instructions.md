@@ -22,9 +22,9 @@ When you are reasoning from Luotsi output, start with the CLI-native primer:
 luotsi help output
 ```
 
-The core handoff is `command -> structured output -> artifact root -> replay command -> next action`. Normal commands return one JSON envelope, while `inspect` is a JSONL session. After checking `ok` and the process exit code, choose the next command from `data.recommended_next_action.command`, ordered handoff arrays such as `data.recommended_next_steps`, `data.next_actions`, and `data.suggested_commands`, command arrays such as `data.commands`, `data.artifact_commands`, and `data.recommended_commands`, and finally `artifacts.artifact_root` as the fallback target for `luotsi replay open --artifacts <artifact-root> --dry-run`.
+The core handoff is `command -> structured output -> artifact root -> replay command -> next action`. Normal commands return one JSON envelope, while `inspect` is a JSONL session. After checking `ok` and the process exit code, choose the next command from `data.recommended_next_action.command`, ordered handoff arrays such as `data.recommended_next_steps`, `data.next_actions`, and `data.suggested_commands`, command arrays such as `data.commands`, `data.artifact_commands`, and `data.recommended_commands`, and finally `artifacts.artifact_root` as the fallback target for `luotsi replay packet --artifacts <artifact-root>`.
 
-Use `luotsi replay open --artifacts <artifact-root> --dry-run` as the first replay handoff when you need the primary failure, recommended next action, and follow-up commands without launching a browser. Use `luotsi artifacts open <artifact-root>` only when you specifically need the generic artifact browser.
+Use `luotsi replay open --artifacts <artifact-root> --dry-run` when a human needs the primary failure, recommended next action, and follow-up commands without launching a browser. Use `luotsi artifacts open <artifact-root>` only when you specifically need the generic artifact browser.
 
 ## High-level architecture
 

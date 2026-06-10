@@ -295,6 +295,7 @@ public sealed partial class AppTests
         Assert.Contains("data.recommended_next_action.command", copilotInstructions, StringComparison.Ordinal);
         Assert.Contains("data.artifact_commands", copilotInstructions, StringComparison.Ordinal);
         Assert.Contains("artifacts.artifact_root", copilotInstructions, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --artifacts <artifact-root>", copilotInstructions, StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", copilotInstructions, StringComparison.Ordinal);
         Assert.Contains("generic artifact browser", copilotInstructions, StringComparison.Ordinal);
         Assert.Contains("command -> structured output -> artifact root -> replay command -> next action", contributing, StringComparison.Ordinal);
@@ -302,6 +303,7 @@ public sealed partial class AppTests
         Assert.Contains("data.recommended_next_action.command", contributing, StringComparison.Ordinal);
         Assert.Contains("data.artifact_commands", contributing, StringComparison.Ordinal);
         Assert.Contains("artifacts.artifact_root", contributing, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --artifacts <artifact-root>", contributing, StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", contributing, StringComparison.Ordinal);
         Assert.Contains("generic artifact browser", contributing, StringComparison.Ordinal);
         Assert.Contains("command -> structured output -> artifact root -> replay command -> next action", contributionGuide, StringComparison.Ordinal);
@@ -309,6 +311,7 @@ public sealed partial class AppTests
         Assert.Contains("data.recommended_next_action.command", contributionGuide, StringComparison.Ordinal);
         Assert.Contains("data.artifact_commands", contributionGuide, StringComparison.Ordinal);
         Assert.Contains("artifacts.artifact_root", contributionGuide, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --artifacts <artifact-root>", contributionGuide, StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", contributionGuide, StringComparison.Ordinal);
         Assert.Contains("generic artifact browser", contributionGuide, StringComparison.Ordinal);
         Assert.Contains("First five minutes: https://digablesolutions.github.io/luotsi/docs/getting-started/first-five-minutes/", llms, StringComparison.Ordinal);
@@ -317,7 +320,7 @@ public sealed partial class AppTests
         Assert.Contains("data.recommended_next_action.command", llms, StringComparison.Ordinal);
         Assert.Contains("data.artifact_commands", llms, StringComparison.Ordinal);
         Assert.Contains("artifacts.artifact_root", llms, StringComparison.Ordinal);
-        Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", llms, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --artifacts <artifact-root>", llms, StringComparison.Ordinal);
         Assert.Contains("examples/agents/extract-next-command.py", llms, StringComparison.Ordinal);
         Assert.Contains("examples/agents/extract-next-command.mjs", llms, StringComparison.Ordinal);
         Assert.Contains("saved JSONL-style log", llms, StringComparison.Ordinal);
@@ -375,9 +378,9 @@ public sealed partial class AppTests
         {
             var outputGuidance = SliceFrom(name, text, "data.recommended_next_action.command");
             Assert.Contains("artifacts.artifact_root", outputGuidance, StringComparison.Ordinal);
-            Assert.Contains("replay open", outputGuidance, StringComparison.Ordinal);
+            Assert.Contains("replay packet", outputGuidance, StringComparison.Ordinal);
             AssertContainsBefore(name, outputGuidance, "data.recommended_next_action.command", "artifacts.artifact_root");
-            AssertContainsBefore(name, outputGuidance, "artifacts.artifact_root", "replay open");
+            AssertContainsBefore(name, outputGuidance, "artifacts.artifact_root", "replay packet");
         }
 
         Assert.Contains("generic artifact browser", entryPoints["README.md"], StringComparison.Ordinal);
@@ -387,9 +390,9 @@ public sealed partial class AppTests
         Assert.Contains("examples/agents/extract-next-command.mjs", entryPoints["first-five-minutes.mdx"], StringComparison.Ordinal);
         Assert.Contains("examples/agents/extract-next-command.py", entryPoints["output-envelopes.mdx"], StringComparison.Ordinal);
         Assert.Contains("examples/agents/extract-next-command.mjs", entryPoints["output-envelopes.mdx"], StringComparison.Ordinal);
-        Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", entryPoints["AGENTS.md"], StringComparison.Ordinal);
-        Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", entryPoints["examples/agents/README.md"], StringComparison.Ordinal);
-        Assert.Contains("guide: artifact root is durable evidence; replay open explains failures and next actions", entryPoints["luotsi help output"], StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --artifacts <artifact-root>", entryPoints["AGENTS.md"], StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --artifacts <artifact-root>", entryPoints["examples/agents/README.md"], StringComparison.Ordinal);
+        Assert.Contains("guide: artifact root is durable evidence; replay packet writes run-summary.json and run-summary.md", entryPoints["luotsi help output"], StringComparison.Ordinal);
         Assert.Contains("one-shot envelope or saved JSONL-style log", entryPoints["luotsi help output"], StringComparison.Ordinal);
         Assert.Contains("examples/agents/extract-next-command.py", entryPoints["luotsi help output"], StringComparison.Ordinal);
         Assert.Contains("examples/agents/extract-next-command.mjs", entryPoints["luotsi help output"], StringComparison.Ordinal);

@@ -308,7 +308,7 @@ Parser examples:
 
 Human output cue:
   artifacts: artifacts/smoke-run/<run-id>
-  guide: artifact root is durable evidence; replay open explains failures and next actions
+  guide: artifact root is durable evidence; replay packet writes run-summary.json and run-summary.md
   next: luotsi replay open --artifacts artifacts/smoke-run/<run-id> --dry-run
 
 First commands:

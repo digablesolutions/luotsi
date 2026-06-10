@@ -30,11 +30,11 @@ commands return one JSON envelope, while `inspect` emits JSONL. After checking
 `data.suggested_commands`, command arrays such as `data.commands`,
 `data.artifact_commands`, and `data.recommended_commands`, then
 `artifacts.artifact_root` as the fallback target for
-`luotsi replay open --artifacts <artifact-root> --dry-run`.
+`luotsi replay packet --artifacts <artifact-root>`.
 
-Prefer `luotsi replay open --artifacts <artifact-root> --dry-run` as the first
-replay handoff when the user or agent needs the primary failure, recommended
-next action, and follow-up commands without launching a browser. Use
+Prefer `luotsi replay open --artifacts <artifact-root> --dry-run` when a human
+needs the primary failure, recommended next action, and follow-up commands
+without launching a browser. Use
 `luotsi artifacts open <artifact-root>` only when the generic artifact browser
 is the specific goal.
 
