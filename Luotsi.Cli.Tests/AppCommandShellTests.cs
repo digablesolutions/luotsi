@@ -407,6 +407,8 @@ public sealed class AppCommandShellTests
             "/tmp/replay-root/index.md",
             null,
             null,
+            null,
+            null,
             1,
             1,
             new ReplayOpenPrimaryFailureResult(

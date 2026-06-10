@@ -12,6 +12,8 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
 {
     private const string ReplayOpenSummaryJsonFileName = "replay-open-summary.json";
     private const string ReplayOpenSummaryMarkdownFileName = "replay-open.md";
+    private const string RunSummaryJsonFileName = "run-summary.json";
+    private const string RunSummaryMarkdownFileName = "run-summary.md";
     private readonly ReplayCommandHostDependencies _dependencies = dependencies ?? throw new ArgumentNullException(nameof(dependencies));
 
     public async Task<int> RunAsync(CliOptions options, DateTimeOffset started, ArtifactSession artifacts)
@@ -21,7 +23,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
 
         if (IsOpenCommand(options))
         {
-            var openResult = await OpenAsync(options, artifacts).ConfigureAwait(false);
+            var openResult = await OpenAsync(options, started, artifacts).ConfigureAwait(false);
             _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, openResult, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
             return 0;
         }
@@ -118,7 +120,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         return 0;
     }
 
-    private async Task<ReplayOpenResult> OpenAsync(CliOptions options, ArtifactSession artifacts)
+    private async Task<ReplayOpenResult> OpenAsync(CliOptions options, DateTimeOffset started, ArtifactSession artifacts)
     {
         var snapshot = await artifacts.RefreshIndexWithSnapshotAsync().ConfigureAwait(false);
 
@@ -129,6 +131,12 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             : null;
         var markdownPath = options.HasFlag("write-markdown")
             ? Path.Join(artifacts.Root, ReplayOpenSummaryMarkdownFileName)
+            : null;
+        var runSummaryJsonPath = options.HasFlag("write-json")
+            ? Path.Join(artifacts.Root, RunSummaryJsonFileName)
+            : null;
+        var runSummaryMarkdownPath = options.HasFlag("write-markdown")
+            ? Path.Join(artifacts.Root, RunSummaryMarkdownFileName)
             : null;
         var summaries = snapshot.ReplaySummaries;
         var primaryFailure = CreatePrimaryFailure(summaries);
@@ -155,6 +163,8 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             indexMarkdownPath,
             jsonPath,
             markdownPath,
+            runSummaryJsonPath,
+            runSummaryMarkdownPath,
             summaries.Count,
             summaries.Count(static summary => summary.HasFailureSignals),
             primaryFailure,
@@ -163,6 +173,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             opened,
             command.FileName,
             command.Args);
+        var runSummary = BuildRunSummary(result, started);
 
         if (jsonPath is not null)
         {
@@ -174,7 +185,50 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             await artifacts.WriteTextAsync(ReplayOpenSummaryMarkdownFileName, BuildOpenMarkdown(result)).ConfigureAwait(false);
         }
 
+        if (runSummaryJsonPath is not null)
+        {
+            await artifacts.WriteJsonAsync(RunSummaryJsonFileName, runSummary).ConfigureAwait(false);
+        }
+
+        if (runSummaryMarkdownPath is not null)
+        {
+            await artifacts.WriteTextAsync(RunSummaryMarkdownFileName, BuildRunSummaryMarkdown(runSummary)).ConfigureAwait(false);
+        }
+
         return result;
+    }
+
+    private static RunSummaryResult BuildRunSummary(ReplayOpenResult result, DateTimeOffset generatedAt)
+    {
+        var status = result.PrimaryFailure is not null
+            ? "needs_triage"
+            : result.SessionCount > 0
+                ? "passed_or_incomplete"
+                : "no_replay_metadata";
+        var verdict = result.PrimaryFailure is not null
+            ? "Failure signals found. Start with the recommended next action before broad artifact browsing."
+            : result.SessionCount > 0
+                ? "No failure signals found in replay metadata. Write a capsule or inspect the timeline for context."
+                : "No replay metadata found. Inspect the artifact index and verify the run wrote session replay files.";
+
+        return new RunSummaryResult(
+            ResultSchemas.RunSummary,
+            generatedAt,
+            result.ArtifactRoot,
+            status,
+            verdict,
+            result.SessionCount,
+            result.FailureCount,
+            result.PrimaryFailure,
+            result.RecommendedNextAction,
+            new RunSummaryEntryPoints(
+                result.IndexHtmlPath,
+                result.IndexMarkdownPath,
+                result.JsonPath,
+                result.MarkdownPath,
+                result.RunSummaryJsonPath,
+                result.RunSummaryMarkdownPath),
+            result.Commands);
     }
 
     private static string BuildOpenMarkdown(ReplayOpenResult result)
@@ -213,6 +267,61 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             AppendField(builder, "Failure capsule", result.PrimaryFailure.FailureCapsulePath);
         }
 
+        builder.AppendLine();
+        builder.AppendLine("## Commands");
+        builder.AppendLine();
+        foreach (var hint in result.Commands)
+        {
+            builder.AppendLine($"- `{EscapeMarkdown(hint.Command)}`");
+            builder.AppendLine($"  {EscapeMarkdown(hint.Description)}");
+        }
+
+        return builder.ToString();
+    }
+
+    private static string BuildRunSummaryMarkdown(RunSummaryResult result)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("# Luotsi Run Summary");
+        builder.AppendLine();
+        builder.AppendLine($"Generated: `{result.GeneratedAt:O}`");
+        builder.AppendLine($"Artifact root: `{EscapeMarkdown(result.ArtifactRoot)}`");
+        builder.AppendLine($"Status: `{EscapeMarkdown(result.Status)}`");
+        builder.AppendLine($"Verdict: {EscapeMarkdown(result.Verdict)}");
+        builder.AppendLine($"Sessions: `{result.SessionCount}`");
+        builder.AppendLine($"Failures: `{result.FailureCount}`");
+        builder.AppendLine();
+        builder.AppendLine("## First Action");
+        builder.AppendLine();
+        builder.AppendLine($"- **{EscapeMarkdown(result.RecommendedNextAction.Title)}** (`{EscapeMarkdown(result.RecommendedNextAction.Kind)}`)");
+        builder.AppendLine($"  {EscapeMarkdown(result.RecommendedNextAction.Reason)}");
+        builder.AppendLine($"  `{EscapeMarkdown(result.RecommendedNextAction.Command)}`");
+        builder.AppendLine();
+        builder.AppendLine("## Primary Failure");
+        builder.AppendLine();
+        if (result.PrimaryFailure is null)
+        {
+            builder.AppendLine("No primary failure was found in replay metadata.");
+        }
+        else
+        {
+            AppendField(builder, "Scenario", result.PrimaryFailure.Scenario);
+            AppendField(builder, "Step", result.PrimaryFailure.Step);
+            AppendField(builder, "Action", result.PrimaryFailure.Action);
+            AppendField(builder, "Message", result.PrimaryFailure.Message);
+            AppendField(builder, "Timeline", result.PrimaryFailure.TimelinePath);
+            AppendField(builder, "Failure capsule", result.PrimaryFailure.FailureCapsulePath);
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("## Entry Points");
+        builder.AppendLine();
+        AppendField(builder, "Index HTML", result.EntryPoints.IndexHtmlPath);
+        AppendField(builder, "Index Markdown", result.EntryPoints.IndexMarkdownPath);
+        AppendField(builder, "Replay open JSON", result.EntryPoints.ReplayOpenJsonPath);
+        AppendField(builder, "Replay open Markdown", result.EntryPoints.ReplayOpenMarkdownPath);
+        AppendField(builder, "Run summary JSON", result.EntryPoints.RunSummaryJsonPath);
+        AppendField(builder, "Run summary Markdown", result.EntryPoints.RunSummaryMarkdownPath);
         builder.AppendLine();
         builder.AppendLine("## Commands");
         builder.AppendLine();

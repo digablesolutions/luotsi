@@ -465,9 +465,10 @@ Notes:
   index.html/index.md, opens the artifact browser, and returns session counts,
   primary failure, recommended next action, and commands into capsule, timeline,
   scrub, graph, search, scenario draft, and clustering. With --write-json and
-  --write-markdown, it writes replay-open-summary.json and replay-open.md. Use
-  --last to resume the latest artifact root under the default temp root or
-  --artifacts <directory> without re-copying a path.
+  --write-markdown, it writes replay-open-summary.json, replay-open.md, and the
+  stable production packet run-summary.json/run-summary.md. Use --last to
+  resume the latest artifact root under the default temp root or --artifacts
+  <directory> without re-copying a path.
   Replay summarize reads session-replay.json and session-timeline.jsonl from an
   existing artifact root. By default it returns the condensed failure timeline
   as a normal JSON command envelope. `--format json` writes the bare summary

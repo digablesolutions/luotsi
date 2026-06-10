@@ -436,6 +436,8 @@ public sealed record ReplayOpenResult(
     string IndexMarkdownPath,
     string? JsonPath,
     string? MarkdownPath,
+    string? RunSummaryJsonPath,
+    string? RunSummaryMarkdownPath,
     int SessionCount,
     int FailureCount,
     ReplayOpenPrimaryFailureResult? PrimaryFailure,
@@ -463,6 +465,27 @@ public sealed record ReplayOpenCommandHintResult(
     string Kind,
     string Description,
     string Command);
+
+public sealed record RunSummaryResult(
+    string Schema,
+    DateTimeOffset GeneratedAt,
+    string ArtifactRoot,
+    string Status,
+    string Verdict,
+    int SessionCount,
+    int FailureCount,
+    ReplayOpenPrimaryFailureResult? PrimaryFailure,
+    ReplayOpenNextActionResult RecommendedNextAction,
+    RunSummaryEntryPoints EntryPoints,
+    IReadOnlyList<ReplayOpenCommandHintResult> Commands);
+
+public sealed record RunSummaryEntryPoints(
+    string IndexHtmlPath,
+    string IndexMarkdownPath,
+    string? ReplayOpenJsonPath,
+    string? ReplayOpenMarkdownPath,
+    string? RunSummaryJsonPath,
+    string? RunSummaryMarkdownPath);
 
 public sealed record ReplayScenarioDraftResult(
     string Schema,
