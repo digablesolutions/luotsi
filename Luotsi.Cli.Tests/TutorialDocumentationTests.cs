@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO.Compression;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -90,6 +91,39 @@ public sealed partial class AppTests
         Assert.Contains("artifacts unpack", markdown, StringComparison.Ordinal);
         Assert.Contains("artifacts open --last", markdown, StringComparison.Ordinal);
         Assert.Contains("replay open --last", markdown, StringComparison.Ordinal);
+        Assert.Contains("Return the canonical replay front-door summary with session counts, primary failure, recommended next action, and follow-up commands", markdown, StringComparison.Ordinal);
+        Assert.Contains("before raw artifact browsing", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("Refresh the artifact browser index, open `index.html` locally, and return the canonical replay front-door summary", markdown, StringComparison.Ordinal);
+        Assert.Contains("guide: artifact root is durable evidence; replay open explains failures and next actions", markdown, StringComparison.Ordinal);
+        Assert.Contains("examples/agents/extract-next-command.py", markdown, StringComparison.Ordinal);
+        Assert.Contains("examples/agents/extract-next-command.mjs", markdown, StringComparison.Ordinal);
+        Assert.Contains("one JSON envelope or a saved JSONL-style log", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Static_Workflow_Docs_Document_Replay_First_Output_Handoffs()
+    {
+        var root = FindRepositoryRoot();
+        var viewSession = File.ReadAllText(Path.Join(root, "docs", "view-session.md"));
+        var portableCi = File.ReadAllText(Path.Join(root, "docs", "portable-physical-lab-ci.md"));
+
+        Assert.Contains("luotsi help output", viewSession, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", viewSession, StringComparison.Ordinal);
+        AssertContainsBefore(viewSession, "luotsi replay open --artifacts <artifact-root> --dry-run", "luotsi replay summarize --artifacts <artifact-root>");
+        Assert.Contains("luotsi replay open --artifacts \"$LUOTSI_ARTIFACTS_DIR\" --dry-run", portableCi, StringComparison.Ordinal);
+        Assert.Contains("primary", portableCi, StringComparison.Ordinal);
+        Assert.Contains("recommended next action", portableCi, StringComparison.Ordinal);
+
+        var replayGraphSchema = File.ReadAllText(Path.Join(root, "docs", "replay-graph-schema.md"));
+        Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", replayGraphSchema, StringComparison.Ordinal);
+        Assert.Contains("before raw artifact browsing", replayGraphSchema, StringComparison.Ordinal);
+        Assert.DoesNotContain("back to the browser index", replayGraphSchema, StringComparison.Ordinal);
+        AssertContainsBefore(replayGraphSchema, "luotsi replay open --artifacts artifacts/run --dry-run", "luotsi replay graph --artifacts artifacts/run --failed");
+
+        var legacyTutorial = File.ReadAllText(Path.Join(root, "docs", "tutorials", "buggy-controller-live-demo.md"));
+        Assert.Contains("--artifacts .\\artifacts\\buggy-demo `", legacyTutorial, StringComparison.Ordinal);
+        Assert.Contains("--artifacts <artifact-root> `", legacyTutorial, StringComparison.Ordinal);
+        Assert.Contains("recommended next action", legacyTutorial, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -109,7 +143,11 @@ public sealed partial class AppTests
     [Fact]
     public void Website_Documentation_Documents_Artifact_Package_And_Last_Reopen_Surfaces()
     {
+        var autonomousDiscovery = ReadWebsiteDocumentationPages("core-workflows/autonomous-discovery.mdx");
+        var replayAndArtifacts = ReadWebsiteDocumentationPages("core-workflows/replay-and-artifacts.mdx");
+        var cliCommandGroups = ReadWebsiteDocumentationPages("reference/cli-command-groups.mdx");
         var markdown = ReadWebsiteDocumentationPages(
+            "core-workflows/autonomous-discovery.mdx",
             "core-workflows/inspect-and-scenarios.mdx",
             "core-workflows/replay-and-artifacts.mdx",
             "reference/cli-command-groups.mdx");
@@ -121,6 +159,253 @@ public sealed partial class AppTests
         Assert.Contains("--require-lab-safe", markdown, StringComparison.Ordinal);
         Assert.Contains("artifacts open --last", markdown, StringComparison.Ordinal);
         Assert.Contains("replay open --last", markdown, StringComparison.Ordinal);
+        AssertContainsBefore(markdown, "luotsi replay open --artifacts ./artifacts/my-run", "luotsi artifacts open ./artifacts/my-run");
+        AssertContainsBefore(autonomousDiscovery, "luotsi replay open --last --artifacts artifacts --dry-run", "luotsi artifacts open --last --artifacts artifacts");
+        AssertContainsBefore(cliCommandGroups, "luotsi replay open --last --artifacts ./artifacts --dry-run", "luotsi artifacts open --last --artifacts ./artifacts");
+        AssertContainsBefore(markdown, "`replay open --last` for the latest replay-specific next actions", "`artifacts open --last` only when you specifically need the latest generic browser");
+        AssertContainsBefore(markdown, "start replay-specific triage with `replay open`", "Use `artifacts open` only when you specifically need the generic browser");
+        AssertContainsBefore(replayAndArtifacts, "`replay open` is the canonical first stop", "`replay capsule` is the deeper operator and CI handoff");
+        Assert.Contains("Start with `replay open --dry-run` after discovery", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Website_Documentation_Documents_First_Five_Minute_Output_Loop()
+    {
+        var markdown = ReadWebsiteDocumentationPages(
+            "getting-started/first-five-minutes.mdx",
+            "getting-started/quickstart.mdx",
+            "getting-started/troubleshooting.mdx",
+            "tutorials/buggy-controller-live-demo.mdx",
+            "reference/output-envelopes.mdx",
+            "core-workflows/agent-loop-example.mdx",
+            "reference/cli-command-groups.mdx");
+        var landingPage = File.ReadAllText(Path.Join(FindRepositoryRoot(), "website", "src", "pages", "index.astro"));
+        var readme = File.ReadAllText(Path.Join(FindRepositoryRoot(), "README.md"));
+        var docsHub = File.ReadAllText(Path.Join(FindRepositoryRoot(), "website", "src", "content", "docs", "docs", "index.mdx"));
+        var astroConfig = File.ReadAllText(Path.Join(FindRepositoryRoot(), "website", "astro.config.mjs"));
+
+        Assert.Contains("command -> structured output -> artifact root -> replay command -> next action", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi help output", markdown, StringComparison.Ordinal);
+        Assert.Contains("One JSON envelope", markdown, StringComparison.Ordinal);
+        Assert.Contains("JSONL session stream", markdown, StringComparison.Ordinal);
+        Assert.Contains("Replay artifact root", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay open --last --artifacts ./artifacts/smoke-run --dry-run", markdown, StringComparison.Ordinal);
+        AssertContainsBefore(markdown, "luotsi replay open --artifacts ./artifacts/demo-run --dry-run", "luotsi replay summarize --artifacts ./artifacts/demo-run");
+        AssertContainsBefore(markdown, "luotsi replay open --artifacts ./artifacts/buggy-demo --dry-run", "luotsi replay summarize --artifacts ./artifacts/buggy-demo");
+        Assert.Contains("primary failure, recommended next action, and follow-up commands", markdown, StringComparison.Ordinal);
+        Assert.Contains("\"schema\": \"luotsi-command.v1\"", markdown, StringComparison.Ordinal);
+        Assert.Contains("\"artifact_root\":", markdown, StringComparison.Ordinal);
+        Assert.Contains("artifacts.artifact_root", markdown, StringComparison.Ordinal);
+        Assert.Contains("data.recommended_next_action.command", markdown, StringComparison.Ordinal);
+        Assert.Contains("data.artifact_commands", markdown, StringComparison.Ordinal);
+        Assert.Contains("examples/agents/extract-next-command.py", markdown, StringComparison.Ordinal);
+        Assert.Contains("examples/agents/extract-next-command.mjs", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("artifacts.root", markdown, StringComparison.Ordinal);
+        Assert.Contains("\"artifact_root\":", readme, StringComparison.Ordinal);
+        Assert.Contains("\"poll_artifacts\":", readme, StringComparison.Ordinal);
+        AssertContainsBefore(readme, "First five minutes: [docs/getting-started/first-five-minutes]", "Installation: [docs/getting-started/installation]");
+        Assert.Contains("data.recommended_next_action.command", readme, StringComparison.Ordinal);
+        Assert.Contains("data.artifact_commands", readme, StringComparison.Ordinal);
+        Assert.Contains("Human output leads with the artifact root", readme, StringComparison.Ordinal);
+        Assert.Contains("guide:` reminder that the root is durable evidence", readme, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", readme, StringComparison.Ordinal);
+        Assert.Contains("examples/agents/extract-next-command.py", readme, StringComparison.Ordinal);
+        Assert.Contains("examples/agents/extract-next-command.mjs", readme, StringComparison.Ordinal);
+        Assert.Contains("saved JSONL-style log", readme, StringComparison.Ordinal);
+        AssertContainsBefore(docsHub, "<Card title=\"First five minutes\">", "<Card title=\"Device readiness\">");
+        AssertContainsBefore(docsHub, "<Card title=\"First five minutes\">", "<Card title=\"Installation\">");
+        AssertContainsBefore(docsHub, "<Card title=\"First five minutes\">", "<Card title=\"Quickstart\">");
+        Assert.Contains("guide: artifact root is durable evidence; replay open explains failures and next actions", markdown, StringComparison.Ordinal);
+        Assert.Contains("leads with the artifact path", markdown, StringComparison.Ordinal);
+        AssertWebsiteReplayOpenIsFirstReplayTriageCommand(markdown);
+        Assert.Contains("docs/getting-started/first-five-minutes", astroConfig, StringComparison.Ordinal);
+        Assert.Contains("firstFiveMinutesHref", landingPage, StringComparison.Ordinal);
+        Assert.Contains("Understand the output", landingPage, StringComparison.Ordinal);
+        Assert.Contains("guide: replay open explains failures and next actions", landingPage, StringComparison.Ordinal);
+        Assert.Contains("next: luotsi replay open --artifacts ./artifacts/smoke-run --dry-run", landingPage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Agent_Entry_Surfaces_Document_Output_Reasoning_Handoff()
+    {
+        var root = FindRepositoryRoot();
+        var examples = File.ReadAllText(Path.Join(root, "examples", "agents", "README.md"));
+        var aiAgentWorkflows = File.ReadAllText(Path.Join(root, "website", "src", "content", "docs", "docs", "core-workflows", "ai-agent-workflows.mdx"));
+        var nodeExample = File.ReadAllText(Path.Join(root, "examples", "agents", "inspect-agent-loop.mjs"));
+        var pythonExample = File.ReadAllText(Path.Join(root, "examples", "agents", "inspect-agent-loop.py"));
+        var nodeNextCommandExample = File.ReadAllText(Path.Join(root, "examples", "agents", "extract-next-command.mjs"));
+        var pythonNextCommandExample = File.ReadAllText(Path.Join(root, "examples", "agents", "extract-next-command.py"));
+        var agentGuide = File.ReadAllText(Path.Join(root, "AGENTS.md"));
+        var copilotInstructions = File.ReadAllText(Path.Join(root, ".github", "copilot-instructions.md"));
+        var contributing = File.ReadAllText(Path.Join(root, "CONTRIBUTING.md"));
+        var contributionGuide = File.ReadAllText(Path.Join(root, "website", "src", "content", "docs", "docs", "contributing", "guide.mdx"));
+        var llms = File.ReadAllText(Path.Join(root, "website", "public", "llms.txt"));
+
+        Assert.Contains("command -> structured output -> artifact root -> replay command -> next action", examples, StringComparison.Ordinal);
+        Assert.Contains("data.recommended_next_action.command", examples, StringComparison.Ordinal);
+        Assert.Contains("data.recommended_next_steps", examples, StringComparison.Ordinal);
+        Assert.Contains("data.next_actions", examples, StringComparison.Ordinal);
+        Assert.Contains("data.suggested_commands", examples, StringComparison.Ordinal);
+        Assert.Contains("data.commands", examples, StringComparison.Ordinal);
+        Assert.Contains("data.artifact_commands", examples, StringComparison.Ordinal);
+        Assert.Contains("data.recommended_commands", examples, StringComparison.Ordinal);
+        Assert.Contains("prefer a `replay_open` item", examples, StringComparison.Ordinal);
+        Assert.Contains("Bad input exits non-zero with an `extract-next-command:` message", examples, StringComparison.Ordinal);
+        Assert.Contains("artifacts.artifact_root", examples, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay open --last --artifacts artifacts/agent-loop --dry-run", examples, StringComparison.Ordinal);
+        Assert.Contains("command -> structured output -> artifact root -> replay command -> next action", aiAgentWorkflows, StringComparison.Ordinal);
+        Assert.Contains("luotsi help output", aiAgentWorkflows, StringComparison.Ordinal);
+        Assert.Contains("schema: \"luotsi-command.v1\"", aiAgentWorkflows, StringComparison.Ordinal);
+        Assert.Contains("data.recommended_next_action.command", aiAgentWorkflows, StringComparison.Ordinal);
+        Assert.Contains("data.artifact_commands", aiAgentWorkflows, StringComparison.Ordinal);
+        Assert.Contains("artifacts.artifact_root", aiAgentWorkflows, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", aiAgentWorkflows, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay open --last --artifacts", nodeExample, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay open --last --artifacts", pythonExample, StringComparison.Ordinal);
+        Assert.Contains("extract-next-command.py", examples, StringComparison.Ordinal);
+        Assert.Contains("extract-next-command.mjs", examples, StringComparison.Ordinal);
+        Assert.Contains("recommended_next_action", nodeNextCommandExample, StringComparison.Ordinal);
+        Assert.Contains("recommended_next_action", pythonNextCommandExample, StringComparison.Ordinal);
+        Assert.Contains("artifact_commands", nodeNextCommandExample, StringComparison.Ordinal);
+        Assert.Contains("artifact_commands", pythonNextCommandExample, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay open --artifacts", nodeNextCommandExample, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay open --artifacts", pythonNextCommandExample, StringComparison.Ordinal);
+        Assert.Contains("luotsi help output", agentGuide, StringComparison.Ordinal);
+        Assert.Contains("Do not treat model confidence as validation", agentGuide, StringComparison.Ordinal);
+        Assert.Contains("data.recommended_next_action.command", agentGuide, StringComparison.Ordinal);
+        Assert.Contains("data.artifact_commands", agentGuide, StringComparison.Ordinal);
+        Assert.Contains("artifacts.artifact_root", agentGuide, StringComparison.Ordinal);
+        Assert.Contains("command -> structured output -> artifact root -> replay command -> next action", copilotInstructions, StringComparison.Ordinal);
+        Assert.Contains("luotsi help output", copilotInstructions, StringComparison.Ordinal);
+        Assert.Contains("data.recommended_next_action.command", copilotInstructions, StringComparison.Ordinal);
+        Assert.Contains("data.artifact_commands", copilotInstructions, StringComparison.Ordinal);
+        Assert.Contains("artifacts.artifact_root", copilotInstructions, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", copilotInstructions, StringComparison.Ordinal);
+        Assert.Contains("generic artifact browser", copilotInstructions, StringComparison.Ordinal);
+        Assert.Contains("command -> structured output -> artifact root -> replay command -> next action", contributing, StringComparison.Ordinal);
+        Assert.Contains("luotsi help output", contributing, StringComparison.Ordinal);
+        Assert.Contains("data.recommended_next_action.command", contributing, StringComparison.Ordinal);
+        Assert.Contains("data.artifact_commands", contributing, StringComparison.Ordinal);
+        Assert.Contains("artifacts.artifact_root", contributing, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", contributing, StringComparison.Ordinal);
+        Assert.Contains("generic artifact browser", contributing, StringComparison.Ordinal);
+        Assert.Contains("command -> structured output -> artifact root -> replay command -> next action", contributionGuide, StringComparison.Ordinal);
+        Assert.Contains("luotsi help output", contributionGuide, StringComparison.Ordinal);
+        Assert.Contains("data.recommended_next_action.command", contributionGuide, StringComparison.Ordinal);
+        Assert.Contains("data.artifact_commands", contributionGuide, StringComparison.Ordinal);
+        Assert.Contains("artifacts.artifact_root", contributionGuide, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", contributionGuide, StringComparison.Ordinal);
+        Assert.Contains("generic artifact browser", contributionGuide, StringComparison.Ordinal);
+        Assert.Contains("First five minutes: https://digablesolutions.github.io/luotsi/docs/getting-started/first-five-minutes/", llms, StringComparison.Ordinal);
+        AssertContainsBefore(llms, "First five minutes: https://digablesolutions.github.io/luotsi/docs/getting-started/first-five-minutes/", "Installation: https://digablesolutions.github.io/luotsi/docs/getting-started/installation/");
+        Assert.Contains("Use First Five Minutes first", llms, StringComparison.Ordinal);
+        Assert.Contains("data.recommended_next_action.command", llms, StringComparison.Ordinal);
+        Assert.Contains("data.artifact_commands", llms, StringComparison.Ordinal);
+        Assert.Contains("artifacts.artifact_root", llms, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", llms, StringComparison.Ordinal);
+        Assert.Contains("examples/agents/extract-next-command.py", llms, StringComparison.Ordinal);
+        Assert.Contains("examples/agents/extract-next-command.mjs", llms, StringComparison.Ordinal);
+        Assert.Contains("saved JSONL-style log", llms, StringComparison.Ordinal);
+        Assert.Contains("prefer `replay_open` inside unordered command arrays", llms, StringComparison.Ordinal);
+        Assert.Contains("fail with an `extract-next-command:` message", llms, StringComparison.Ordinal);
+        Assert.Contains("generic artifact browser or raw file inspection", llms, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Release_And_Pr_Surfaces_Document_First_Output_Handoff()
+    {
+        var root = FindRepositoryRoot();
+        var pullRequestTemplate = File.ReadAllText(Path.Join(root, ".github", "pull_request_template.md"));
+        var prereleaseTemplate = File.ReadAllText(Path.Join(root, ".github", "release-notes", "prerelease.template.md"));
+        var stableTemplate = File.ReadAllText(Path.Join(root, ".github", "release-notes", "stable.template.md"));
+        var activePrerelease = File.ReadAllText(Path.Join(root, ".github", "release-notes", "prerelease.md"));
+        var distributionPlaybook = File.ReadAllText(Path.Join(root, "docs", "distribution-playbook.md"));
+
+        foreach (var (name, text) in new Dictionary<string, string>
+                 {
+                     ["prerelease.template.md"] = prereleaseTemplate,
+                     ["stable.template.md"] = stableTemplate,
+                     ["prerelease.md"] = activePrerelease,
+                     ["distribution-playbook.md"] = distributionPlaybook
+                 })
+        {
+            Assert.Contains("First five minutes", text, StringComparison.Ordinal);
+            Assert.Contains("luotsi help output", text, StringComparison.Ordinal);
+            Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", text, StringComparison.Ordinal);
+            Assert.Contains("recommended next action", text, StringComparison.Ordinal);
+            AssertContainsBefore(name, text, "First five minutes", "Replay and artifacts");
+        }
+
+        Assert.Contains("output/replay handoff checked with `luotsi help output`", pullRequestTemplate, StringComparison.Ordinal);
+        Assert.Contains("first follow-up command points to `data.recommended_next_action.command`", pullRequestTemplate, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", pullRequestTemplate, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Output_Fallback_Guidance_Is_Replay_First_Across_Entry_Points()
+    {
+        var root = FindRepositoryRoot();
+        var entryPoints = new Dictionary<string, string>
+        {
+            ["README.md"] = File.ReadAllText(Path.Join(root, "README.md")),
+            ["AGENTS.md"] = File.ReadAllText(Path.Join(root, "AGENTS.md")),
+            ["examples/agents/README.md"] = File.ReadAllText(Path.Join(root, "examples", "agents", "README.md")),
+            ["first-five-minutes.mdx"] = File.ReadAllText(Path.Join(root, "website", "src", "content", "docs", "docs", "getting-started", "first-five-minutes.mdx")),
+            ["output-envelopes.mdx"] = File.ReadAllText(Path.Join(root, "website", "src", "content", "docs", "docs", "reference", "output-envelopes.mdx")),
+            ["ai-agent-workflows.mdx"] = File.ReadAllText(Path.Join(root, "website", "src", "content", "docs", "docs", "core-workflows", "ai-agent-workflows.mdx")),
+            ["luotsi help output"] = Help.GetTopic("output")
+        };
+
+        foreach (var (name, text) in entryPoints)
+        {
+            var outputGuidance = SliceFrom(name, text, "data.recommended_next_action.command");
+            Assert.Contains("artifacts.artifact_root", outputGuidance, StringComparison.Ordinal);
+            Assert.Contains("replay open", outputGuidance, StringComparison.Ordinal);
+            AssertContainsBefore(name, outputGuidance, "data.recommended_next_action.command", "artifacts.artifact_root");
+            AssertContainsBefore(name, outputGuidance, "artifacts.artifact_root", "replay open");
+        }
+
+        Assert.Contains("generic artifact browser", entryPoints["README.md"], StringComparison.Ordinal);
+        Assert.Contains("generic artifact browser", entryPoints["first-five-minutes.mdx"], StringComparison.Ordinal);
+        Assert.Contains("generic artifact browser", entryPoints["output-envelopes.mdx"], StringComparison.Ordinal);
+        Assert.Contains("examples/agents/extract-next-command.py", entryPoints["first-five-minutes.mdx"], StringComparison.Ordinal);
+        Assert.Contains("examples/agents/extract-next-command.mjs", entryPoints["first-five-minutes.mdx"], StringComparison.Ordinal);
+        Assert.Contains("examples/agents/extract-next-command.py", entryPoints["output-envelopes.mdx"], StringComparison.Ordinal);
+        Assert.Contains("examples/agents/extract-next-command.mjs", entryPoints["output-envelopes.mdx"], StringComparison.Ordinal);
+        Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", entryPoints["AGENTS.md"], StringComparison.Ordinal);
+        Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", entryPoints["examples/agents/README.md"], StringComparison.Ordinal);
+        Assert.Contains("guide: artifact root is durable evidence; replay open explains failures and next actions", entryPoints["luotsi help output"], StringComparison.Ordinal);
+        Assert.Contains("one-shot envelope or saved JSONL-style log", entryPoints["luotsi help output"], StringComparison.Ordinal);
+        Assert.Contains("examples/agents/extract-next-command.py", entryPoints["luotsi help output"], StringComparison.Ordinal);
+        Assert.Contains("examples/agents/extract-next-command.mjs", entryPoints["luotsi help output"], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Website_Use_Cases_Start_Replay_Handoffs_With_Open_Dry_Run()
+    {
+        var pages = new[]
+        {
+            "use-cases/ai-agent-android-automation.mdx",
+            "use-cases/replay-driven-triage.mdx",
+            "use-cases/scenario-based-android-automation.mdx",
+            "use-cases/android-ci-device-lab-workflows.mdx"
+        };
+
+        foreach (var page in pages)
+        {
+            var markdown = ReadWebsiteDocumentationPages(page);
+            var openIndex = markdown.IndexOf("luotsi replay open --artifacts ./artifacts/<run> --dry-run", StringComparison.Ordinal);
+            var summarizeIndex = markdown.IndexOf("luotsi replay summarize --artifacts ./artifacts/<run>", StringComparison.Ordinal);
+
+            Assert.True(openIndex >= 0, $"Expected {page} to show replay open --dry-run as the first replay handoff.");
+            Assert.Contains("primary failure", markdown, StringComparison.Ordinal);
+            Assert.Contains("recommended next action", markdown, StringComparison.Ordinal);
+
+            if (summarizeIndex >= 0)
+            {
+                Assert.True(openIndex < summarizeIndex, $"Expected {page} to put replay open --dry-run before replay summarize.");
+            }
+        }
     }
 
     [Fact]
@@ -139,25 +424,42 @@ public sealed partial class AppTests
     [Fact]
     public void Website_Documentation_Documents_Replay_Graph_Open_Front_Door()
     {
-        var markdown = ReadWebsiteDocumentationPages("reference/replay-graph-and-clusters.mdx");
+        var markdown = ReadWebsiteDocumentationPages(
+            "core-workflows/replay-and-artifacts.mdx",
+            "reference/replay-graph-and-clusters.mdx");
 
         Assert.Contains("The default action list starts with `replay open`", markdown, StringComparison.Ordinal);
         Assert.Contains("`replay open` when you want the canonical front door", markdown, StringComparison.Ordinal);
+        Assert.Contains("`replay open` is the canonical first stop", markdown, StringComparison.Ordinal);
+        Assert.Contains("canonical replay front door", markdown, StringComparison.Ordinal);
+        Assert.Contains("before raw artifact browsing", markdown, StringComparison.Ordinal);
+        Assert.Contains("`replay capsule` is the shareable CI-triage summary after the replay front door", markdown, StringComparison.Ordinal);
+        AssertContainsBefore(markdown, "luotsi replay open --artifacts ./artifacts/my-run --dry-run", "luotsi replay graph --artifacts ./artifacts/my-run");
+        AssertContainsBefore(markdown, "luotsi replay open --artifacts ./artifacts/failing-run --dry-run", "luotsi replay capsule --artifacts ./artifacts/failing-run");
+        Assert.DoesNotContain("`replay capsule` is the operator-facing entry point", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("`replay capsule` is the CI-triage entry point", markdown, StringComparison.Ordinal);
         Assert.DoesNotContain("commands start with `replay capsule`", markdown, StringComparison.Ordinal);
         Assert.DoesNotContain("The default action list starts with `replay capsule`", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("canonical replay front door with the artifact browser", markdown, StringComparison.Ordinal);
     }
 
     [Fact]
     public void Website_Documentation_Documents_Portable_Ci_Workflow_Contract()
     {
+        var root = FindRepositoryRoot();
         var markdown = ReadWebsiteDocumentationPages("reference/portable-physical-lab-ci.mdx");
-        var workflow = File.ReadAllText(Path.Join(FindRepositoryRoot(), ".github", "workflows", "android-lab-scenarios.yml"));
+        var workflow = File.ReadAllText(Path.Join(root, ".github", "workflows", "android-lab-scenarios.yml"));
+        var bashScript = File.ReadAllText(Path.Join(root, "eng", "ci", "run-lab-scenarios.sh"));
+        var powershellScript = File.ReadAllText(Path.Join(root, "eng", "ci", "run-lab-scenarios.ps1"));
 
         Assert.Contains("android-lab-scenarios.yml", markdown, StringComparison.Ordinal);
         Assert.Contains("`device_query`", markdown, StringComparison.Ordinal);
         Assert.Contains("`scenario_path`", markdown, StringComparison.Ordinal);
         Assert.Contains("`ttl_sec`", markdown, StringComparison.Ordinal);
         Assert.Contains("`dry_run`", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay open --artifacts artifacts/luotsi-lab --dry-run", markdown, StringComparison.Ordinal);
+        Assert.Contains("primary failure", markdown, StringComparison.Ordinal);
+        Assert.Contains("recommended next action", markdown, StringComparison.Ordinal);
         Assert.Contains("do not yet surface `--claim-wait-sec`, `--device-pool`, or `--require-capabilities`", markdown, StringComparison.Ordinal);
 
         Assert.Contains("device_query:", workflow, StringComparison.Ordinal);
@@ -167,6 +469,11 @@ public sealed partial class AppTests
         Assert.DoesNotContain("claim_wait_sec:", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("device_pool:", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("require_capabilities:", workflow, StringComparison.Ordinal);
+
+        Assert.Contains("run_luotsi replay open --artifacts \"$artifacts_dir\" --dry-run", bashScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("run_luotsi replay summarize", bashScript, StringComparison.Ordinal);
+        Assert.Contains("Invoke-Luotsi replay open --artifacts $ArtifactsDir --dry-run", powershellScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("Invoke-Luotsi replay summarize", powershellScript, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -174,11 +481,21 @@ public sealed partial class AppTests
     {
         var manifestPath = Path.Join(FindRepositoryRoot(), "Luotsi.Cli.Tests", "Fixtures", "artifacts", "package-manifest-v1.json");
         var manifestJson = File.ReadAllText(manifestPath);
+        var schemaGuide = File.ReadAllText(Path.Join(FindRepositoryRoot(), "docs", "schemas", "luotsi-artifact-package-v1.md"));
         using var fixture = JsonDocument.Parse(manifestJson);
         Assert.Equal("luotsi-artifact-package.v1", fixture.RootElement.GetProperty("schema").GetString());
         Assert.Equal("20260526-120000-run", fixture.RootElement.GetProperty("run_id").GetString());
         Assert.Equal(2, fixture.RootElement.GetProperty("source_file_count").GetInt32());
         Assert.Equal(2, fixture.RootElement.GetProperty("files").GetArrayLength());
+        var recommendedCommands = fixture.RootElement.GetProperty("recommended_commands").EnumerateArray().ToArray();
+        Assert.Equal("replay_open", recommendedCommands[0].GetProperty("kind").GetString());
+        Assert.Equal("Open the replay front door for the unpacked artifact root.", recommendedCommands[0].GetProperty("summary").GetString());
+        Assert.Contains(recommendedCommands, command =>
+            command.GetProperty("kind").GetString() == "open_artifacts" &&
+            command.GetProperty("summary").GetString() == "Open the unpacked artifact root in the generic artifact browser.");
+        Assert.Contains("The first command should be `replay_open`", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("Use `info_artifacts` for a non-mutating file/category check", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("`open_artifacts` only when you specifically need the generic artifact browser", schemaGuide, StringComparison.Ordinal);
 
         var fileSystem = new FakeFileSystem();
         var console = new FakeConsole();
@@ -220,6 +537,93 @@ public sealed partial class AppTests
 
         Assert.Equal(0, exitCode);
         Assert.Equal("20260526-120000-run", envelope.RootElement.GetProperty("data").GetProperty("manifest").GetProperty("run_id").GetString());
+    }
+
+    [Fact]
+    public void Tutorial_Run_Envelope_Fixture_Shows_Replay_First_Artifact_Handoff()
+    {
+        var fixturePath = Path.Join(
+            FindRepositoryRoot(),
+            "docs",
+            "assets",
+            "tutorials",
+            "buggy-controller-live-demo",
+            "outputs",
+            "deep-tour-envelope.json");
+        using var fixture = JsonDocument.Parse(File.ReadAllText(fixturePath));
+        var root = fixture.RootElement.GetProperty("artifacts").GetProperty("artifact_root").GetString();
+        var artifactCommands = fixture.RootElement.GetProperty("data").GetProperty("artifact_commands").EnumerateArray().ToArray();
+
+        Assert.Equal("luotsi-command.v1", fixture.RootElement.GetProperty("schema").GetString());
+        Assert.Equal("run", fixture.RootElement.GetProperty("command").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(root));
+        Assert.Equal("replay_open", artifactCommands[0].GetProperty("kind").GetString());
+        Assert.Equal($"luotsi replay open --artifacts {root}", artifactCommands[0].GetProperty("command").GetString());
+        Assert.Contains(artifactCommands, command => command.GetProperty("kind").GetString() == "open_artifacts");
+        Assert.Contains(artifactCommands, command => command.GetProperty("kind").GetString() == "pack_artifacts");
+    }
+
+    [Fact]
+    public void Agent_Next_Command_Parser_Examples_Run_Against_Representative_Envelopes()
+    {
+        var root = FindRepositoryRoot();
+        var fixturePath = Path.Join(root, "docs", "assets", "tutorials", "buggy-controller-live-demo", "outputs", "deep-tour-envelope.json");
+        var fixtureJson = File.ReadAllText(fixturePath);
+        using var fixture = JsonDocument.Parse(fixtureJson);
+        var artifactRoot = fixture.RootElement.GetProperty("artifacts").GetProperty("artifact_root").GetString();
+        var expectedFromFixture = $"luotsi replay open --artifacts {artifactRoot}";
+        const string directNextActionJson = """{"schema":"luotsi-command.v1","ok":true,"data":{"recommended_next_action":{"kind":"run_dry_run","command":"luotsi run --path scenarios/smoke.json --dry-run"},"artifact_commands":[{"kind":"replay_open","command":"luotsi replay open --artifacts /tmp/direct-root --dry-run"}]},"artifacts":{"artifact_root":"/tmp/direct-root"}}""";
+        const string expectedFromDirectNextAction = "luotsi run --path scenarios/smoke.json --dry-run";
+        const string fallbackJson = """{"ok":true,"data":{},"artifacts":{"artifact_root":"/tmp/only-root"}}""";
+        const string expectedFallback = "luotsi replay open --artifacts /tmp/only-root --dry-run";
+        const string spacedFallbackJson = """{"ok":true,"data":{},"artifacts":{"artifact_root":"/tmp/only root"}}""";
+        const string expectedSpacedFallback = "luotsi replay open --artifacts '/tmp/only root' --dry-run";
+        var jsonlLog = string.Join(Environment.NewLine, [
+            """{"type":"session_started","session_id":"inspect-session"}""",
+            """{"schema":"luotsi-command.v1","ok":true,"data":{},"artifacts":{"artifact_root":"/tmp/first-root"}}""",
+            "not json",
+            """{"schema":"luotsi-command.v1","ok":true,"data":{"artifact_commands":[{"kind":"open_artifacts","command":"luotsi artifacts open /tmp/second-root"},{"kind":"replay_open","command":"luotsi replay open --artifacts /tmp/second-root"}]},"artifacts":{"artifact_root":"/tmp/second-root"}}""",
+            """{"type":"command_result","id":"tap-1","ok":true}"""
+        ]);
+        const string expectedFromJsonlLog = "luotsi replay open --artifacts /tmp/second-root";
+        const string unorderedRecommendedCommandsJson = """{"schema":"luotsi-command.v1","ok":true,"data":{"recommended_commands":[{"kind":"open_artifacts","command":"luotsi artifacts open /tmp/recommended-root"},{"kind":"replay_open","command":"luotsi replay open --artifacts /tmp/recommended-root --dry-run"}]},"artifacts":{"artifact_root":"/tmp/recommended-root"}}""";
+        const string expectedFromRecommendedCommands = "luotsi replay open --artifacts /tmp/recommended-root --dry-run";
+
+        var executed = 0;
+        if (TryFindExecutable("python3", "python", out var python))
+        {
+            var script = Path.Join(root, "examples", "agents", "extract-next-command.py");
+            Assert.Equal(expectedFromFixture, RunProcess(python, [script], fixtureJson));
+            Assert.Equal(expectedFromDirectNextAction, RunProcess(python, [script], directNextActionJson));
+            Assert.Equal(expectedFallback, RunProcess(python, [script], fallbackJson));
+            Assert.Equal(expectedSpacedFallback, RunProcess(python, [script], spacedFallbackJson));
+            Assert.Equal(expectedFromJsonlLog, RunProcess(python, [script], jsonlLog));
+            Assert.Equal(expectedFromRecommendedCommands, RunProcess(python, [script], unorderedRecommendedCommandsJson));
+            var failure = RunProcessExpectingFailure(python, [script], "not json");
+            Assert.Contains("extract-next-command: stdin did not contain a Luotsi command envelope", failure.StandardError, StringComparison.Ordinal);
+            Assert.DoesNotContain("Traceback", failure.StandardError, StringComparison.Ordinal);
+            executed++;
+        }
+
+        if (TryFindExecutable("node", out var node))
+        {
+            var script = Path.Join(root, "examples", "agents", "extract-next-command.mjs");
+            Assert.Equal(expectedFromFixture, RunProcess(node, [script], fixtureJson));
+            Assert.Equal(expectedFromDirectNextAction, RunProcess(node, [script], directNextActionJson));
+            Assert.Equal(expectedFallback, RunProcess(node, [script], fallbackJson));
+            Assert.Equal(expectedSpacedFallback, RunProcess(node, [script], spacedFallbackJson));
+            Assert.Equal(expectedFromJsonlLog, RunProcess(node, [script], jsonlLog));
+            Assert.Equal(expectedFromRecommendedCommands, RunProcess(node, [script], unorderedRecommendedCommandsJson));
+            var failure = RunProcessExpectingFailure(node, [script], "not json");
+            Assert.Contains("extract-next-command: stdin did not contain a Luotsi command envelope", failure.StandardError, StringComparison.Ordinal);
+            Assert.DoesNotContain("Error:", failure.StandardError, StringComparison.Ordinal);
+            executed++;
+        }
+
+        if (executed == 0)
+        {
+            return;
+        }
     }
 
     [Fact]
@@ -588,6 +992,133 @@ public sealed partial class AppTests
 
     private static bool TargetExists(string path) =>
         File.Exists(path) || Directory.Exists(path);
+
+    private static void AssertContainsBefore(string name, string text, string first, string second)
+    {
+        var firstIndex = text.IndexOf(first, StringComparison.Ordinal);
+        var secondIndex = text.IndexOf(second, StringComparison.Ordinal);
+
+        Assert.True(firstIndex >= 0, $"Expected {name} to contain '{first}'.");
+        Assert.True(secondIndex >= 0, $"Expected {name} to contain '{second}'.");
+        Assert.True(firstIndex < secondIndex, $"Expected {name} to document '{first}' before '{second}'.");
+    }
+
+    private static void AssertContainsBefore(string text, string first, string second) =>
+        AssertContainsBefore("documentation", text, first, second);
+
+    private static bool TryFindExecutable(string firstCandidate, string secondCandidate, out string executable) =>
+        TryFindExecutable([firstCandidate, secondCandidate], out executable);
+
+    private static bool TryFindExecutable(string candidate, out string executable) =>
+        TryFindExecutable([candidate], out executable);
+
+    private static bool TryFindExecutable(IReadOnlyList<string> candidates, out string executable)
+    {
+        foreach (var candidate in candidates)
+        {
+            var result = RunProcessForProbe(candidate, ["--version"]);
+            if (result.ExitCode == 0)
+            {
+                executable = candidate;
+                return true;
+            }
+        }
+
+        executable = string.Empty;
+        return false;
+    }
+
+    private static string RunProcess(string executable, IReadOnlyList<string> arguments, string standardInput)
+    {
+        var result = RunProcessCore(executable, arguments, standardInput);
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(string.IsNullOrWhiteSpace(result.StandardError), result.StandardError);
+        return result.StandardOutput.Trim();
+    }
+
+    private static ScriptProcessResult RunProcessExpectingFailure(string executable, IReadOnlyList<string> arguments, string standardInput)
+    {
+        var result = RunProcessCore(executable, arguments, standardInput);
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.True(string.IsNullOrWhiteSpace(result.StandardOutput), result.StandardOutput);
+        return result;
+    }
+
+    private static ScriptProcessResult RunProcessCore(string executable, IReadOnlyList<string> arguments, string standardInput)
+    {
+        var startInfo = new ProcessStartInfo(executable)
+        {
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+        foreach (var argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Failed to start {executable}.");
+        process.StandardInput.Write(standardInput);
+        process.StandardInput.Close();
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
+        Assert.True(process.WaitForExit(10_000), $"{executable} did not exit within 10 seconds.");
+        return new ScriptProcessResult(process.ExitCode, stdout, stderr);
+    }
+
+    private static ProcessProbeResult RunProcessForProbe(string executable, IReadOnlyList<string> arguments)
+    {
+        try
+        {
+            var startInfo = new ProcessStartInfo(executable)
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            };
+            foreach (var argument in arguments)
+            {
+                startInfo.ArgumentList.Add(argument);
+            }
+
+            using var process = Process.Start(startInfo);
+            if (process is null || !process.WaitForExit(5_000))
+            {
+                return new ProcessProbeResult(-1);
+            }
+
+            return new ProcessProbeResult(process.ExitCode);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            return new ProcessProbeResult(-1);
+        }
+    }
+
+    private sealed record ProcessProbeResult(int ExitCode);
+
+    private sealed record ScriptProcessResult(int ExitCode, string StandardOutput, string StandardError);
+
+    private static string SliceFrom(string name, string text, string start)
+    {
+        var startIndex = text.IndexOf(start, StringComparison.Ordinal);
+        Assert.True(startIndex >= 0, $"Expected {name} to contain '{start}'.");
+        return text.Substring(startIndex);
+    }
+
+    private static void AssertWebsiteReplayOpenIsFirstReplayTriageCommand(string text)
+    {
+        var openIndex = text.IndexOf("replay open", StringComparison.Ordinal);
+        var summarizeIndex = text.IndexOf("replay summarize", StringComparison.Ordinal);
+        var capsuleIndex = text.IndexOf("replay capsule", StringComparison.Ordinal);
+
+        Assert.True(openIndex >= 0, "Expected replay open to be documented.");
+        Assert.True(summarizeIndex >= 0, "Expected replay summarize to be documented.");
+        Assert.True(capsuleIndex >= 0, "Expected replay capsule to be documented.");
+        Assert.True(openIndex < summarizeIndex, "Expected replay open to appear before replay summarize.");
+        Assert.True(openIndex < capsuleIndex, "Expected replay open to appear before replay capsule.");
+    }
 
     private static string? ExtractFrontmatter(string content)
     {

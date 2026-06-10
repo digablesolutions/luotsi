@@ -73,14 +73,19 @@ Each `recommended_commands` item is an object with:
   },
   "recommended_commands": [
     {
+      "kind": "replay_open",
+      "summary": "Open the replay front door for the unpacked artifact root.",
+      "command": "luotsi replay open --artifacts <unpacked-artifact-root>"
+    },
+    {
       "kind": "info_artifacts",
       "summary": "Inspect the unpacked artifact root without opening it.",
       "command": "luotsi artifacts info <unpacked-artifact-root>"
     },
     {
-      "kind": "replay_open",
-      "summary": "Open the replay workbench for the unpacked artifact root.",
-      "command": "luotsi replay open --artifacts <unpacked-artifact-root>"
+      "kind": "open_artifacts",
+      "summary": "Open the unpacked artifact root in the generic artifact browser.",
+      "command": "luotsi artifacts open <unpacked-artifact-root>"
     }
   ],
   "files": [
@@ -93,6 +98,8 @@ Each `recommended_commands` item is an object with:
 ## Compatibility rules
 
 - Unknown fields must be ignored.
+- The first command should be `replay_open` so humans and agents see the replay front door before the generic artifact browser.
+- Use `info_artifacts` for a non-mutating file/category check, and `open_artifacts` only when you specifically need the generic artifact browser.
 - Missing `redaction` means the package was created before redaction metadata existed or with the default exact-copy policy.
 - `artifacts verify --require-lab-safe` treats missing `redaction` or any non-`lab-safe` mode as a blocked handoff gate and exits non-zero while still reporting manifest/SHA details.
 - `artifacts unpack --require-lab-safe` treats missing `redaction` or any non-`lab-safe` mode as a usage error before files are extracted.

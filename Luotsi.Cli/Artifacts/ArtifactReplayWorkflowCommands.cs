@@ -13,7 +13,7 @@ internal sealed class ArtifactReplayWorkflowCommands(string root)
             new(
                 "OPEN",
                 $"luotsi replay open --artifacts {ArtifactIndexPaths.Quote(_root)}",
-                "Start here: refresh the browser index and get the canonical replay workflow summary."),
+                "Start here: get the primary failure, recommended next action, and follow-up replay commands."),
             new(
                 "CAPSULE",
                 $"luotsi replay capsule --artifacts {ArtifactIndexPaths.Quote(_root)} --write-readme --write-json",

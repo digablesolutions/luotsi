@@ -13,19 +13,19 @@
   },
   "recommended_commands": [
     {
+      "kind": "replay_open",
+      "summary": "Open the replay front door for the unpacked artifact root.",
+      "command": "luotsi replay open --artifacts <unpacked-artifact-root>"
+    },
+    {
       "kind": "info_artifacts",
       "summary": "Inspect the unpacked artifact root without opening it.",
       "command": "luotsi artifacts info <unpacked-artifact-root>"
     },
     {
       "kind": "open_artifacts",
-      "summary": "Open the unpacked artifact root locally.",
+      "summary": "Open the unpacked artifact root in the generic artifact browser.",
       "command": "luotsi artifacts open <unpacked-artifact-root>"
-    },
-    {
-      "kind": "replay_open",
-      "summary": "Open the replay workbench for the unpacked artifact root.",
-      "command": "luotsi replay open --artifacts <unpacked-artifact-root>"
     }
   ],
   "files": [

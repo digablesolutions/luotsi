@@ -12,6 +12,32 @@ changes small, explicit, and easy to validate.
 - Update `docs/` first for maintained prose and reference content.
 - If the public website mirrors that topic under `website/src/content/docs/docs/`, update the matching page in the same change.
 
+## First-five-minute DX
+
+When a change affects command output, artifacts, replay, or agent-facing
+behavior, keep the first output handoff obvious for both humans and agents.
+The core Luotsi loop is:
+
+```text
+command -> structured output -> artifact root -> replay command -> next action
+```
+
+Use `luotsi help output` as the CLI-native source for that model. Normal
+commands return one JSON envelope, while `inspect` emits JSONL. After checking
+`ok` and the process exit code, command readers should look for
+`data.recommended_next_action.command`, ordered handoff arrays such as
+`data.recommended_next_steps`, `data.next_actions`, and
+`data.suggested_commands`, command arrays such as `data.commands`,
+`data.artifact_commands`, and `data.recommended_commands`, then
+`artifacts.artifact_root` as the fallback target for
+`luotsi replay open --artifacts <artifact-root> --dry-run`.
+
+Prefer `luotsi replay open --artifacts <artifact-root> --dry-run` as the first
+replay handoff when the user or agent needs the primary failure, recommended
+next action, and follow-up commands without launching a browser. Use
+`luotsi artifacts open <artifact-root>` only when the generic artifact browser
+is the specific goal.
+
 ## Validation
 
 Use the pinned .NET SDK from `global.json` (`10.0.300`) for source builds and

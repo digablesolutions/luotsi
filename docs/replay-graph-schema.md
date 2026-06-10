@@ -6,7 +6,9 @@
 - what changed or was observed around the failure
 - what command can I run next
 
-Graph is not the only replay entry point. `replay open` is the front door for one artifact root, and graph actions intentionally include that command so an agent can move from semantic context back to the browser index, primary failure, recommended next action, and bundle follow-ups.
+Graph is not the only replay entry point. `replay open` is the front door for one artifact root, and graph actions intentionally include that command so an agent can move from semantic context back to the primary failure, recommended next action, and bundle follow-ups before raw artifact browsing.
+
+For first-pass orientation, start with `luotsi replay open --artifacts <artifact-root> --dry-run` before asking for graph detail. It returns the primary failure, recommended next action, and follow-up command set without launching a browser.
 
 ## Command
 
@@ -141,6 +143,7 @@ Each `hypotheses[]` item has:
 ## Agent Queries
 
 ```text
+luotsi replay open --artifacts artifacts/run --dry-run
 luotsi replay capsule --artifacts artifacts/run --write-readme --write-json
 luotsi replay graph --artifacts artifacts/run --failed --write-markdown
 luotsi replay graph --artifacts artifacts/run --format jsonl

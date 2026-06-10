@@ -256,11 +256,78 @@ Tips:
   terminal plan with the first command, selected inputs, and minute-by-minute
   next steps. Add --write-json and --write-markdown to persist
   quickstart-plan.json and quickstart-plan.md in the artifact root.
+  If your next question is how to read the JSON envelope, JSONL session, or
+  artifact root, run luotsi help output.
   Scenario runs write artifacts into the default Luotsi run-artifact home
   unless you override it with --artifacts <directory>. --output-dir <directory>
   is a clearer alias for the same root.
   Use luotsi help view, luotsi help scenario, and luotsi help lab when you want
   a deeper command family reference.
+""",
+        ["output"] = """
+Luotsi help: output
+
+Goal:
+  Understand what Luotsi printed, where the evidence lives, and which command
+  should run next.
+
+Mental model:
+  command -> structured output -> artifact root -> replay command -> next action
+
+Output shapes:
+  1. One-shot JSON envelope
+     Most commands return one final object with schema, ok, command,
+     started_at, ended_at, data, artifacts, provenance, and error. Check ok
+     first, then data and artifacts. For local readability use --human or
+     --console-output human; human output leads with artifacts, a guide line,
+     and next before the rest of the summary when Luotsi can name a follow-up.
+     For scripts use the default JSON envelope.
+
+  2. JSONL session stream
+     inspect streams one JSON event per line and accepts one JSON command per
+     line on stdin. view can stream JSONL with -o jsonl, --output jsonl, or
+     --json. Match command responses by id and watch for command_result,
+     screen_delta, protocol_error, and session_error.
+
+  3. Replay artifact root
+     Scenario runs, inspect sessions, view sessions, and captured failures
+     leave durable artifacts. Reopen them with replay open, replay summarize,
+     replay timeline, replay graph, or artifacts open.
+
+Next-action fields:
+  Prefer data.recommended_next_action.command when present. Then check
+  recommended_next_steps, next_actions, suggested_commands, commands,
+  artifact_commands, and recommended_commands. If no command field is present,
+  use artifacts.artifact_root and run replay open --dry-run first; use
+  artifacts open only when you specifically need the generic artifact browser.
+  Command arrays are exact follow-ups but not always ordered by the best first
+  move, so parser examples prefer replay_open there when present.
+
+Parser examples:
+  From source, pipe a one-shot envelope or saved JSONL-style log into
+  examples/agents/extract-next-command.py or
+  examples/agents/extract-next-command.mjs to print the same best next command.
+
+Human output cue:
+  artifacts: artifacts/smoke-run/<run-id>
+  guide: artifact root is durable evidence; replay open explains failures and next actions
+  next: luotsi replay open --artifacts artifacts/smoke-run/<run-id> --dry-run
+
+First commands:
+  luotsi quickstart
+  luotsi screen-state --device <adb serial>
+  luotsi inspect --device <adb serial> --artifacts artifacts/inspect
+  luotsi run --file scenarios/smoke.json --device <adb serial> --artifacts artifacts/smoke-run
+  luotsi replay open --last --artifacts artifacts/smoke-run --dry-run
+  luotsi replay graph --artifacts artifacts/smoke-run/<run-id> --failed
+
+Reader guide:
+  Humans: scan artifacts, guide, and next first; then read the concise summary.
+  Use the artifact browser only when you need to inspect raw files.
+  Agents: read JSONL events, send one JSON command with a stable id, and wait
+  for command_result plus screen_delta when state changes.
+  CI: gate on exit code and ok, upload artifacts/JUnit/replay summaries, and
+  use policy fields to classify product, lab, environment, or harness failures.
 """,
         ["lab"] = """
 Luotsi help: lab
@@ -520,8 +587,8 @@ Examples:
 Artifacts:
   Runs can emit JSONL lifecycle events, JSON summaries, JUnit XML, failure
   bundles, screenshots, recordings, and a browsable artifact index. Successful
-  run results also include artifact_commands with exact artifacts open,
-  artifacts pack, and replay open commands for the run artifact root. With
+  run results also include artifact_commands with exact replay open,
+  artifacts open, and artifacts pack commands for the run artifact root. With
   --human or --console-output human, failed runs are rendered as a compact
   triage capsule that surfaces the primary failure, evidence counts, and next
   command. JSON reports, JSONL lifecycle events, and failed run payloads also
@@ -663,6 +730,7 @@ Usage:
 Start here:
   luotsi quickstart
   luotsi help quickstart
+  luotsi help output
 
 Workflow index:
 
@@ -689,7 +757,7 @@ Workflow index:
     luotsi help run
 
 Help topics:
-  quickstart | lab | view | inspect | discover | scenario | run | artifacts
+  quickstart | output | lab | view | inspect | discover | scenario | run | artifacts
   replay | adb | wireless | ports | app | update
 
 From source:
@@ -862,6 +930,7 @@ Design:
         normalized = topic.ToLowerInvariant() switch
         {
             "workflow" or "workflows" or "start" or "getting-started" or "gettingstarted" => "quickstart",
+            "outputs" or "envelope" or "envelopes" or "json" or "jsonl" => "output",
             "replay-summarize" => "replay",
             "version" => "update",
             "view-setup" or "view-doctor" or "reconnect" or "profile-list" or "profile-delete" => "view",
@@ -881,8 +950,12 @@ Design:
 
     private static IReadOnlyList<string> BuildSuggestedTopics()
     {
-        var topics = Topics.Where(static topic => !string.Equals(topic, "quickstart", StringComparison.OrdinalIgnoreCase)).ToList();
+        var topics = Topics
+            .Where(static topic => !string.Equals(topic, "quickstart", StringComparison.OrdinalIgnoreCase))
+            .Where(static topic => !string.Equals(topic, "output", StringComparison.OrdinalIgnoreCase))
+            .ToList();
         topics.Insert(0, "quickstart");
+        topics.Insert(1, "output");
         return topics;
     }
 }

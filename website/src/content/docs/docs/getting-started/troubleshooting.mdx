@@ -63,8 +63,8 @@ If you want predictable outputs, choose the artifact root explicitly:
 
 ```bash
 luotsi run --path scenarios --device <serial> --artifacts ./artifacts/demo-run
+luotsi replay open --artifacts ./artifacts/demo-run --dry-run
 luotsi replay summarize --artifacts ./artifacts/demo-run
-luotsi replay open --artifacts ./artifacts/demo-run
 ```
 
 The replay commands are the fastest way to understand what already happened without reconnecting to the device or re-running a flaky flow.

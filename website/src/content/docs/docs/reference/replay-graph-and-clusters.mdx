@@ -13,7 +13,7 @@ description: Use replay graph for semantic triage within one artifact root and r
 ## Commands
 
 ```bash
-luotsi replay open --artifacts ./artifacts/my-run
+luotsi replay open --artifacts ./artifacts/my-run --dry-run
 luotsi replay graph --artifacts ./artifacts/my-run
 luotsi replay graph --artifacts ./artifacts/my-run --write-json --write-markdown
 luotsi replay cluster --artifacts ./artifacts/ci-runs --write-json --write-markdown
@@ -115,7 +115,7 @@ Use it as a triage reducer, not as a replacement for `replay open`, `replay caps
 ## Practical triage loop
 
 ```bash
-luotsi replay open --artifacts ./artifacts/failing-run --write-markdown
+luotsi replay open --artifacts ./artifacts/failing-run --dry-run
 luotsi replay capsule --artifacts ./artifacts/failing-run --write-readme --write-json
 luotsi replay timeline --artifacts ./artifacts/failing-run --failures --context 3 --write-markdown
 luotsi replay graph --artifacts ./artifacts/failing-run --write-markdown
