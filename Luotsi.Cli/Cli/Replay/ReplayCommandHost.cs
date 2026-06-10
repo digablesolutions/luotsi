@@ -231,7 +231,9 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             var failureCount = RequireInt32(root, "failureCount", packetPath);
             var recommendedNextAction = RequireObject(root, "recommendedNextAction", packetPath);
             var recommendedCommand = RequireString(recommendedNextAction, "command", packetPath);
-            ValidateTriageChecklist(root, recommendedCommand, packetPath);
+            var recommendedNextActionResult = ReadRecommendedNextAction(recommendedNextAction, packetPath);
+            var triageChecklist = ReadTriageChecklist(root, recommendedCommand, packetPath);
+            var primaryFailure = ReadPrimaryFailure(root, packetPath);
             var entryPoints = RequireObject(root, "entryPoints", packetPath);
             var indexHtmlPath = RequireString(entryPoints, "indexHtmlPath", packetPath);
             if (!_dependencies.FileSystem.FileExists(indexHtmlPath))
@@ -283,6 +285,9 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
                 sessionCount,
                 failureCount,
                 recommendedCommand,
+                recommendedNextActionResult,
+                triageChecklist,
+                primaryFailure,
                 runSummaryMarkdownPath);
         }
     }
@@ -747,7 +752,14 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         return property;
     }
 
-    private static void ValidateTriageChecklist(JsonElement root, string recommendedCommand, string sourcePath)
+    private static ReplayOpenNextActionResult ReadRecommendedNextAction(JsonElement element, string sourcePath) =>
+        new(
+            RequireString(element, "kind", sourcePath),
+            RequireString(element, "title", sourcePath),
+            RequireString(element, "reason", sourcePath),
+            RequireString(element, "command", sourcePath));
+
+    private static IReadOnlyList<RunSummaryChecklistItemResult> ReadTriageChecklist(JsonElement root, string recommendedCommand, string sourcePath)
     {
         if (!root.TryGetProperty("triageChecklist", out var checklist) ||
             checklist.ValueKind != JsonValueKind.Array ||
@@ -756,23 +768,68 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             throw new UsageException($"{Path.GetFileName(sourcePath)} is missing non-empty array property 'triageChecklist'.");
         }
 
-        var firstStep = checklist.EnumerateArray().FirstOrDefault();
-        if (firstStep.ValueKind != JsonValueKind.Object)
-        {
-            throw new UsageException($"{Path.GetFileName(sourcePath)} triageChecklist[0] must be an object.");
-        }
+        var items = checklist.EnumerateArray()
+            .Select(item => new RunSummaryChecklistItemResult(
+                RequireInt32(item, "step", sourcePath),
+                RequireString(item, "action", sourcePath),
+                RequireNullableString(item, "command", sourcePath),
+                RequireString(item, "rationale", sourcePath)))
+            .OrderBy(static item => item.Step)
+            .ToArray();
 
-        var step = RequireInt32(firstStep, "step", sourcePath);
-        if (step != 1)
+        var firstStep = items[0];
+        if (firstStep.Step != 1)
         {
             throw new UsageException($"{Path.GetFileName(sourcePath)} triageChecklist[0].step must be 1.");
         }
 
-        var checklistCommand = RequireString(firstStep, "command", sourcePath);
-        if (!string.Equals(checklistCommand, recommendedCommand, StringComparison.Ordinal))
+        if (!string.Equals(firstStep.Command, recommendedCommand, StringComparison.Ordinal))
         {
             throw new UsageException($"{Path.GetFileName(sourcePath)} triageChecklist[0].command must match recommendedNextAction.command.");
         }
+
+        return items;
+    }
+
+    private static ReplayOpenPrimaryFailureResult? ReadPrimaryFailure(JsonElement root, string sourcePath)
+    {
+        if (!root.TryGetProperty("primaryFailure", out var primaryFailure) ||
+            primaryFailure.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        if (primaryFailure.ValueKind != JsonValueKind.Object)
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} property 'primaryFailure' must be an object or null.");
+        }
+
+        return new ReplayOpenPrimaryFailureResult(
+            RequireString(primaryFailure, "sessionKind", sourcePath),
+            RequireString(primaryFailure, "sessionId", sourcePath),
+            RequireDateTimeOffset(primaryFailure, "startedAt", sourcePath),
+            RequireDateTimeOffset(primaryFailure, "endedAt", sourcePath),
+            RequireString(primaryFailure, "reason", sourcePath),
+            RequireInt32(primaryFailure, "exitCode", sourcePath),
+            RequireNullableString(primaryFailure, "target", sourcePath),
+            RequireNullableString(primaryFailure, "scenario", sourcePath),
+            RequireNullableString(primaryFailure, "step", sourcePath),
+            RequireNullableString(primaryFailure, "action", sourcePath),
+            RequireNullableString(primaryFailure, "message", sourcePath),
+            RequireNullableString(primaryFailure, "timelinePath", sourcePath),
+            RequireNullableString(primaryFailure, "failureCapsulePath", sourcePath),
+            RequireNullableString(primaryFailure, "sourceCommand", sourcePath));
+    }
+
+    private static DateTimeOffset RequireDateTimeOffset(JsonElement element, string propertyName, string sourcePath)
+    {
+        var value = RequireString(element, propertyName, sourcePath);
+        if (!DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var timestamp))
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} property '{propertyName}' must be an RFC 3339 timestamp.");
+        }
+
+        return timestamp;
     }
 
     private static ReplayOutputMode ParseOutputMode(CliOptions options, string commandName)

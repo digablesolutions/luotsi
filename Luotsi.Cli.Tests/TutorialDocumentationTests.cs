@@ -635,6 +635,8 @@ public sealed partial class AppTests
         const string expectedFromRecommendedCommands = "luotsi replay open --artifacts /tmp/recommended-root --dry-run";
         const string runSummaryJson = """{"schema":"luotsi-run-summary.v1","status":"needs_triage","recommendedNextAction":{"kind":"scrub_failure","command":"luotsi replay scrub --artifacts /tmp/packet-root --failures --context 3 --write-markdown"},"commands":[{"kind":"capsule","command":"luotsi replay capsule --artifacts /tmp/packet-root --write-readme --write-json"}]}""";
         const string expectedFromRunSummary = "luotsi replay scrub --artifacts /tmp/packet-root --failures --context 3 --write-markdown";
+        const string runSummaryCheckEnvelopeJson = """{"schema":"luotsi-command.v1","ok":true,"data":{"schema":"luotsi-run-summary-check.v1","status":"valid","recommended_next_action":{"kind":"scrub_failure","command":"luotsi replay scrub --artifacts /tmp/checked-root --failures --context 3 --write-markdown"},"triage_checklist":[{"step":1,"action":"Run the recommended packet command","command":"luotsi replay scrub --artifacts /tmp/checked-root --failures --context 3 --write-markdown","rationale":"Highest-signal command."}]},"artifacts":{"artifact_root":"/tmp/checked-root"}}""";
+        const string expectedFromRunSummaryCheck = "luotsi replay scrub --artifacts /tmp/checked-root --failures --context 3 --write-markdown";
         var runSummaryJsonlLog = string.Join(Environment.NewLine, [
             """{"schema":"luotsi-command.v1","ok":true,"data":{"artifact_commands":[{"kind":"replay_open","command":"luotsi replay open --artifacts /tmp/before-packet"}]},"artifacts":{"artifact_root":"/tmp/before-packet"}}""",
             runSummaryJson
@@ -651,6 +653,7 @@ public sealed partial class AppTests
             Assert.Equal(expectedFromJsonlLog, RunProcess(python, [script], jsonlLog));
             Assert.Equal(expectedFromRecommendedCommands, RunProcess(python, [script], unorderedRecommendedCommandsJson));
             Assert.Equal(expectedFromRunSummary, RunProcess(python, [script], runSummaryJson));
+            Assert.Equal(expectedFromRunSummaryCheck, RunProcess(python, [script], runSummaryCheckEnvelopeJson));
             Assert.Equal(expectedFromRunSummary, RunProcess(python, [script], runSummaryJsonlLog));
             var failure = RunProcessExpectingFailure(python, [script], "not json");
             Assert.Contains("extract-next-command: stdin did not contain a Luotsi command envelope or run summary", failure.StandardError, StringComparison.Ordinal);
@@ -668,6 +671,7 @@ public sealed partial class AppTests
             Assert.Equal(expectedFromJsonlLog, RunProcess(node, [script], jsonlLog));
             Assert.Equal(expectedFromRecommendedCommands, RunProcess(node, [script], unorderedRecommendedCommandsJson));
             Assert.Equal(expectedFromRunSummary, RunProcess(node, [script], runSummaryJson));
+            Assert.Equal(expectedFromRunSummaryCheck, RunProcess(node, [script], runSummaryCheckEnvelopeJson));
             Assert.Equal(expectedFromRunSummary, RunProcess(node, [script], runSummaryJsonlLog));
             var failure = RunProcessExpectingFailure(node, [script], "not json");
             Assert.Contains("extract-next-command: stdin did not contain a Luotsi command envelope or run summary", failure.StandardError, StringComparison.Ordinal);

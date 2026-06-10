@@ -512,6 +512,9 @@ public sealed record RunSummaryCheckResult(
     int SessionCount,
     int FailureCount,
     string RecommendedNextActionCommand,
+    ReplayOpenNextActionResult RecommendedNextAction,
+    IReadOnlyList<RunSummaryChecklistItemResult> TriageChecklist,
+    ReplayOpenPrimaryFailureResult? PrimaryFailure,
     string? RunSummaryMarkdownPath);
 
 public sealed record ReplayScenarioDraftResult(

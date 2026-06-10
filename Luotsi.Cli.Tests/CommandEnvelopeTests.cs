@@ -1045,6 +1045,13 @@ public sealed partial class AppTests
         Assert.Equal(Path.Join(replayRoot, "run-summary.json"), data.GetProperty("packet_path").GetString());
         Assert.Equal(Path.Join(replayRoot, "run-summary.md"), data.GetProperty("run_summary_markdown_path").GetString());
         Assert.Contains("luotsi replay scrub", data.GetProperty("recommended_next_action_command").GetString(), StringComparison.Ordinal);
+        Assert.Equal("scrub_failure", data.GetProperty("recommended_next_action").GetProperty("kind").GetString());
+        Assert.Equal(data.GetProperty("recommended_next_action_command").GetString(), data.GetProperty("recommended_next_action").GetProperty("command").GetString());
+        var checklist = data.GetProperty("triage_checklist").EnumerateArray().ToArray();
+        Assert.Equal(3, checklist.Length);
+        Assert.Equal(data.GetProperty("recommended_next_action_command").GetString(), checklist[0].GetProperty("command").GetString());
+        Assert.Equal("view-session", data.GetProperty("primary_failure").GetProperty("session_id").GetString());
+        Assert.Contains("luotsi replay scrub --source-path", data.GetProperty("primary_failure").GetProperty("source_command").GetString(), StringComparison.Ordinal);
         Assert.Empty(processRunner.Calls);
     }
 
