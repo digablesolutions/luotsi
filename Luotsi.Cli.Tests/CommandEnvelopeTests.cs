@@ -953,6 +953,40 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayPacket_WritesRunSummaryWithoutOpeningBrowser()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var processRunner = new FakeProcessRunner();
+        var replayRoot = SeedReplaySummaryArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = processRunner,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "packet", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(processRunner.Calls);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("luotsi-run-summary.v1", data.GetProperty("schema").GetString());
+        Assert.Equal("needs_triage", data.GetProperty("status").GetString());
+        Assert.Equal(Path.Join(replayRoot, "run-summary.json"), data.GetProperty("entry_points").GetProperty("run_summary_json_path").GetString());
+        Assert.Equal(Path.Join(replayRoot, "run-summary.md"), data.GetProperty("entry_points").GetProperty("run_summary_markdown_path").GetString());
+        Assert.Equal("scrub_failure", data.GetProperty("recommended_next_action").GetProperty("kind").GetString());
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "run-summary.json")));
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "run-summary.md")));
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.html")));
+        var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "run-summary.md"));
+        Assert.Contains("# Luotsi Run Summary", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay scrub", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayOpen_WithSessionWithoutFailure_RecommendsCapsule()
     {
         var console = new FakeConsole();
@@ -1053,6 +1087,37 @@ public sealed partial class AppTests
         Assert.Equal(0, exitCode);
         Assert.Equal(secondRoot, envelope.RootElement.GetProperty("data").GetProperty("artifact_root").GetString());
         Assert.Equal(secondRoot, envelope.RootElement.GetProperty("artifacts").GetProperty("artifact_root").GetString());
+        Assert.Empty(processRunner.Calls);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayPacket_Last_Resolves_Latest_Root_From_Search_Root()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var processRunner = new FakeProcessRunner();
+        var searchRoot = Path.Join("/tmp", "artifacts");
+        var firstRoot = Path.Join(searchRoot, "20260526-110000-view");
+        var secondRoot = Path.Join(searchRoot, "20260526-120000-run");
+        fileSystem.CreateDirectory(searchRoot);
+        fileSystem.AddFile(Path.Join(firstRoot, "session-timeline.jsonl"), "{\"type\":\"session_started\"}");
+        fileSystem.AddFile(Path.Join(secondRoot, "session-timeline.jsonl"), "{\"type\":\"session_started\"}");
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = processRunner,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "packet", "--last", "--artifacts", searchRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(secondRoot, envelope.RootElement.GetProperty("data").GetProperty("artifact_root").GetString());
+        Assert.Equal(secondRoot, envelope.RootElement.GetProperty("artifacts").GetProperty("artifact_root").GetString());
+        Assert.True(fileSystem.FileExists(Path.Join(secondRoot, "run-summary.json")));
+        Assert.True(fileSystem.FileExists(Path.Join(secondRoot, "run-summary.md")));
         Assert.Empty(processRunner.Calls);
     }
 

@@ -107,7 +107,7 @@ internal sealed class AppCommandRouteBootstrapper(
     private string ResolveReplayArtifactRoot(CliOptions options)
     {
         var artifactRoot = options.Get("artifacts");
-        if (IsReplayOpenCommand(options) && options.HasFlag("last"))
+        if (IsReplayLatestRootCommand(options) && options.HasFlag("last"))
         {
             return ArtifactRootResolver.ResolveLatestArtifactRoot(_fileSystem, artifactRoot, _environment, preferWorkspaceHome: true);
         }
@@ -122,12 +122,25 @@ internal sealed class AppCommandRouteBootstrapper(
             throw new UsageException("replay open requires --artifacts <directory> pointing to an existing artifact root, or use --last.");
         }
 
+        if (IsReplayPacketCommand(options))
+        {
+            throw new UsageException("replay packet requires --artifacts <directory> pointing to an existing artifact root, or use --last.");
+        }
+
         throw new UsageException("replay requires --artifacts <directory> pointing to an existing artifact root.");
     }
 
     private static bool IsReplayOpenCommand(CliOptions options) =>
         options.Arguments.Count > 0 &&
         string.Equals(options.Arguments[0], "open", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsReplayPacketCommand(CliOptions options) =>
+        options.Arguments.Count > 0 &&
+        (string.Equals(options.Arguments[0], "packet", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(options.Arguments[0], "triage", StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsReplayLatestRootCommand(CliOptions options) =>
+        IsReplayOpenCommand(options) || IsReplayPacketCommand(options);
 
     private static bool ShouldPreferWorkspaceHome(CliOptions options) =>
         string.Equals(options.Command, "run", StringComparison.OrdinalIgnoreCase);

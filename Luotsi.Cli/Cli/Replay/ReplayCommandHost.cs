@@ -28,6 +28,13 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             return 0;
         }
 
+        if (IsPacketCommand(options))
+        {
+            var packetResult = await PacketAsync(started, artifacts).ConfigureAwait(false);
+            _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, packetResult, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
+            return 0;
+        }
+
         if (IsScenarioDraftCommand(options))
         {
             var draftResult = await _dependencies.ScenarioDraftService.CreateAsync(options, artifacts).ConfigureAwait(false);
@@ -122,27 +129,20 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
 
     private async Task<ReplayOpenResult> OpenAsync(CliOptions options, DateTimeOffset started, ArtifactSession artifacts)
     {
-        var snapshot = await artifacts.RefreshIndexWithSnapshotAsync().ConfigureAwait(false);
-
-        var indexHtmlPath = Path.Join(artifacts.Root, ArtifactSession.ArtifactHtmlIndexFileName);
-        var indexMarkdownPath = Path.Join(artifacts.Root, ArtifactSession.ArtifactIndexFileName);
         var jsonPath = options.HasFlag("write-json")
             ? Path.Join(artifacts.Root, ReplayOpenSummaryJsonFileName)
             : null;
         var markdownPath = options.HasFlag("write-markdown")
             ? Path.Join(artifacts.Root, ReplayOpenSummaryMarkdownFileName)
             : null;
-        var runSummaryJsonPath = options.HasFlag("write-json")
-            ? Path.Join(artifacts.Root, RunSummaryJsonFileName)
-            : null;
-        var runSummaryMarkdownPath = options.HasFlag("write-markdown")
-            ? Path.Join(artifacts.Root, RunSummaryMarkdownFileName)
-            : null;
-        var summaries = snapshot.ReplaySummaries;
-        var primaryFailure = CreatePrimaryFailure(summaries);
-        var commands = BuildOpenCommandHints(artifacts.Root, summaries, primaryFailure).ToArray();
-        var nextAction = BuildRecommendedNextAction(artifacts.Root, summaries, primaryFailure, commands);
-        var command = BuildOpenCommand(indexHtmlPath);
+        var packet = await CreateRunSummaryAsync(
+            started,
+            artifacts,
+            writeJson: options.HasFlag("write-json"),
+            writeMarkdown: options.HasFlag("write-markdown"),
+            replayOpenJsonPath: jsonPath,
+            replayOpenMarkdownPath: markdownPath).ConfigureAwait(false);
+        var command = BuildOpenCommand(packet.EntryPoints.IndexHtmlPath);
         var opened = false;
         if (!options.HasFlag("dry-run"))
         {
@@ -159,21 +159,20 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         var result = new ReplayOpenResult(
             ResultSchemas.ReplayOpen,
             artifacts.Root,
-            indexHtmlPath,
-            indexMarkdownPath,
+            packet.EntryPoints.IndexHtmlPath,
+            packet.EntryPoints.IndexMarkdownPath,
             jsonPath,
             markdownPath,
-            runSummaryJsonPath,
-            runSummaryMarkdownPath,
-            summaries.Count,
-            summaries.Count(static summary => summary.HasFailureSignals),
-            primaryFailure,
-            nextAction,
-            commands,
+            packet.EntryPoints.RunSummaryJsonPath,
+            packet.EntryPoints.RunSummaryMarkdownPath,
+            packet.SessionCount,
+            packet.FailureCount,
+            packet.PrimaryFailure,
+            packet.RecommendedNextAction,
+            packet.Commands,
             opened,
             command.FileName,
             command.Args);
-        var runSummary = BuildRunSummary(result, started);
 
         if (jsonPath is not null)
         {
@@ -185,6 +184,48 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             await artifacts.WriteTextAsync(ReplayOpenSummaryMarkdownFileName, BuildOpenMarkdown(result)).ConfigureAwait(false);
         }
 
+        return result;
+    }
+
+    private Task<RunSummaryResult> PacketAsync(DateTimeOffset started, ArtifactSession artifacts) =>
+        CreateRunSummaryAsync(started, artifacts, writeJson: true, writeMarkdown: true);
+
+    private async Task<RunSummaryResult> CreateRunSummaryAsync(
+        DateTimeOffset started,
+        ArtifactSession artifacts,
+        bool writeJson,
+        bool writeMarkdown,
+        string? replayOpenJsonPath = null,
+        string? replayOpenMarkdownPath = null)
+    {
+        var snapshot = await artifacts.RefreshIndexWithSnapshotAsync().ConfigureAwait(false);
+        var indexHtmlPath = Path.Join(artifacts.Root, ArtifactSession.ArtifactHtmlIndexFileName);
+        var indexMarkdownPath = Path.Join(artifacts.Root, ArtifactSession.ArtifactIndexFileName);
+        var runSummaryJsonPath = writeJson
+            ? Path.Join(artifacts.Root, RunSummaryJsonFileName)
+            : null;
+        var runSummaryMarkdownPath = writeMarkdown
+            ? Path.Join(artifacts.Root, RunSummaryMarkdownFileName)
+            : null;
+        var summaries = snapshot.ReplaySummaries;
+        var primaryFailure = CreatePrimaryFailure(summaries);
+        var commands = BuildOpenCommandHints(artifacts.Root, summaries, primaryFailure).ToArray();
+        var nextAction = BuildRecommendedNextAction(artifacts.Root, summaries, primaryFailure, commands);
+        var runSummary = BuildRunSummary(
+            started,
+            artifacts.Root,
+            indexHtmlPath,
+            indexMarkdownPath,
+            replayOpenJsonPath,
+            replayOpenMarkdownPath,
+            runSummaryJsonPath,
+            runSummaryMarkdownPath,
+            summaries.Count,
+            summaries.Count(static summary => summary.HasFailureSignals),
+            primaryFailure,
+            nextAction,
+            commands);
+
         if (runSummaryJsonPath is not null)
         {
             await artifacts.WriteJsonAsync(RunSummaryJsonFileName, runSummary).ConfigureAwait(false);
@@ -195,40 +236,53 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             await artifacts.WriteTextAsync(RunSummaryMarkdownFileName, BuildRunSummaryMarkdown(runSummary)).ConfigureAwait(false);
         }
 
-        return result;
+        return runSummary;
     }
 
-    private static RunSummaryResult BuildRunSummary(ReplayOpenResult result, DateTimeOffset generatedAt)
+    private static RunSummaryResult BuildRunSummary(
+        DateTimeOffset generatedAt,
+        string artifactRoot,
+        string indexHtmlPath,
+        string indexMarkdownPath,
+        string? replayOpenJsonPath,
+        string? replayOpenMarkdownPath,
+        string? runSummaryJsonPath,
+        string? runSummaryMarkdownPath,
+        int sessionCount,
+        int failureCount,
+        ReplayOpenPrimaryFailureResult? primaryFailure,
+        ReplayOpenNextActionResult recommendedNextAction,
+        IReadOnlyList<ReplayOpenCommandHintResult> commands)
     {
-        var status = result.PrimaryFailure is not null
+        var status = primaryFailure is not null
             ? "needs_triage"
-            : result.SessionCount > 0
+            : sessionCount > 0
                 ? "passed_or_incomplete"
                 : "no_replay_metadata";
-        var verdict = result.PrimaryFailure is not null
+        var verdict = primaryFailure is not null
             ? "Failure signals found. Start with the recommended next action before broad artifact browsing."
-            : result.SessionCount > 0
+            : sessionCount > 0
                 ? "No failure signals found in replay metadata. Write a capsule or inspect the timeline for context."
                 : "No replay metadata found. Inspect the artifact index and verify the run wrote session replay files.";
 
         return new RunSummaryResult(
             ResultSchemas.RunSummary,
             generatedAt,
-            result.ArtifactRoot,
+            artifactRoot,
             status,
             verdict,
-            result.SessionCount,
-            result.FailureCount,
-            result.PrimaryFailure,
-            result.RecommendedNextAction,
+            sessionCount,
+            failureCount,
+            primaryFailure,
+            recommendedNextAction,
             new RunSummaryEntryPoints(
-                result.IndexHtmlPath,
-                result.IndexMarkdownPath,
-                result.JsonPath,
-                result.MarkdownPath,
-                result.RunSummaryJsonPath,
-                result.RunSummaryMarkdownPath),
-            result.Commands);
+                indexHtmlPath,
+                indexMarkdownPath,
+                replayOpenJsonPath,
+                replayOpenMarkdownPath,
+                runSummaryJsonPath,
+                runSummaryMarkdownPath),
+            commands);
     }
 
     private static string BuildOpenMarkdown(ReplayOpenResult result)
@@ -479,6 +533,11 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
     private static bool IsOpenCommand(CliOptions options) =>
         options.Arguments.Count > 0 &&
         string.Equals(options.Arguments[0], "open", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsPacketCommand(CliOptions options) =>
+        options.Arguments.Count > 0 &&
+        (string.Equals(options.Arguments[0], "packet", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(options.Arguments[0], "triage", StringComparison.OrdinalIgnoreCase));
 
     private static bool IsScenarioDraftCommand(CliOptions options) =>
         options.Arguments.Count > 0 &&

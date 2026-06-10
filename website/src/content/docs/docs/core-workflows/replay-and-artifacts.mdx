@@ -22,6 +22,7 @@ luotsi artifacts list --artifacts ./artifacts
 luotsi artifacts info ./artifacts/my-run
 luotsi replay open --artifacts ./artifacts/my-run --dry-run
 luotsi replay open --last --artifacts ./artifacts --dry-run
+luotsi replay packet --last --artifacts ./artifacts
 luotsi artifacts open ./artifacts/my-run
 luotsi artifacts open --last --artifacts ./artifacts
 luotsi artifacts pack ./artifacts/my-run --output my-run.zip --dry-run
@@ -32,6 +33,7 @@ luotsi artifacts info my-run-lab-safe.zip
 luotsi artifacts intake my-run-lab-safe.zip --output ./artifacts/my-run --require-lab-safe --write-json --write-readme --sha256 <digest>
 luotsi artifacts unpack my-run-lab-safe.zip --output ./artifacts/my-run --require-lab-safe --sha256 <digest>
 luotsi replay summarize --artifacts ./artifacts/my-run
+luotsi replay packet --artifacts ./artifacts/my-run
 luotsi replay open --artifacts ./artifacts/my-run --dry-run --write-json --write-markdown
 luotsi replay capsule --artifacts ./artifacts/my-run --write-readme --write-json
 luotsi replay timeline --artifacts ./artifacts/my-run --failures
@@ -52,6 +54,7 @@ luotsi replay search --artifacts ./artifacts/my-run --contains "timeout"
 - `replay timeline`: ordered timeline events with type, timestamps, detail text, filters, and follow-up commands when failures are selected
 - `replay scrub`: local previous/focused/next event view with exact commands to move through replay evidence, open the capsule, search, or graph the focused failure
 - `replay search`: text search across timelines and text-like artifacts with follow-up commands when matches are replay-relevant
+- `replay packet`: write `run-summary.json` and `run-summary.md`, return the `luotsi-run-summary.v1` packet, and stay non-interactive for CI and agents; use `--last` when the agent only has a search root
 - `replay open`: `replay open` is the canonical first stop for one artifact root; returns session counts, primary failure, recommended next action, and follow-up commands before raw artifact browsing, then opens the browser only when `--dry-run` is not supplied. Add `--write-json --write-markdown` to persist `run-summary.json` and `run-summary.md` as the stable production investigation packet.
 - `replay capsule`: `replay capsule` is the shareable CI-triage summary after the replay front door, with primary failure reopen command, failure timeline with exact reopen commands, restored package intake audit when present, existing scenario draft artifacts and summary counts, ready draft run handoff, artifact manifest, and suggested next commands
 - `replay scenario-draft`: turn inspect or replay actions into a conservative starter scenario
@@ -78,6 +81,7 @@ Use `replay graph` when you want a stable node or edge model across sessions, fa
 The public distinction that matters is:
 
 - `replay open` is the canonical first stop for one failing artifact root
+- `replay packet` is the direct packet writer when CI or an agent wants `run-summary.json` without launching a browser
 - `run-summary.json` and `run-summary.md` are the stable packet files to attach to CI, reviews, and agent loops after `replay open --write-json --write-markdown`
 - `replay capsule` is the deeper operator and CI handoff after the replay front door
 - `replay graph` is the agent- and debugger-facing node/edge model for that same root

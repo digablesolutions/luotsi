@@ -440,6 +440,9 @@ public sealed partial class AppTests
         Assert.Contains("The default action list starts with `replay open`", markdown, StringComparison.Ordinal);
         Assert.Contains("`replay open` when you want the canonical front door", markdown, StringComparison.Ordinal);
         Assert.Contains("`replay open` is the canonical first stop", markdown, StringComparison.Ordinal);
+        Assert.Contains("`replay packet` is the direct packet writer", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --artifacts ./artifacts/my-run", markdown, StringComparison.Ordinal);
+        Assert.Contains("run-summary.json", markdown, StringComparison.Ordinal);
         Assert.Contains("canonical replay front door", markdown, StringComparison.Ordinal);
         Assert.Contains("before raw artifact browsing", markdown, StringComparison.Ordinal);
         Assert.Contains("`replay capsule` is the shareable CI-triage summary after the replay front door", markdown, StringComparison.Ordinal);
