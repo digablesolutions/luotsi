@@ -110,7 +110,10 @@ public sealed partial class AppTests
         var portableCi = File.ReadAllText(Path.Join(root, "docs", "portable-physical-lab-ci.md"));
 
         Assert.Contains("luotsi help output", viewSession, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --artifacts <artifact-root>", viewSession, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --artifacts <artifact-root> --check", viewSession, StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", viewSession, StringComparison.Ordinal);
+        AssertContainsBefore(viewSession, "luotsi replay packet --artifacts <artifact-root>", "luotsi replay open --artifacts <artifact-root> --dry-run");
         AssertContainsBefore(viewSession, "luotsi replay open --artifacts <artifact-root> --dry-run", "luotsi replay summarize --artifacts <artifact-root>");
         Assert.Contains("luotsi replay packet --artifacts \"$LUOTSI_ARTIFACTS_DIR\"", portableCi, StringComparison.Ordinal);
         Assert.Contains("run-summary.md", portableCi, StringComparison.Ordinal);
@@ -269,8 +272,10 @@ public sealed partial class AppTests
         Assert.Contains("data.artifact_commands", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("artifacts.artifact_root", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --artifacts <artifact-root>", aiAgentWorkflows, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --artifacts <artifact-root> --check", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("run-summary.json", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", aiAgentWorkflows, StringComparison.Ordinal);
+        AssertContainsBefore(aiAgentWorkflows, "luotsi replay packet --artifacts <artifact-root>", "luotsi replay open --artifacts <artifact-root> --dry-run");
         Assert.Contains("luotsi replay open --last --artifacts", nodeExample, StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --last --artifacts", pythonExample, StringComparison.Ordinal);
         Assert.Contains("extract-next-command.py", examples, StringComparison.Ordinal);
