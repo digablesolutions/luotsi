@@ -57,7 +57,7 @@ internal sealed class ArtifactCommandHost(
     private Task<ArtifactVerifyResult> VerifyAsync(CliOptions options)
     {
         var target = RequireTarget(options, "verify", "<artifact.zip>");
-        return _artifactCommandService.VerifyAsync(target, options.Get("output"), options.HasFlag("require-lab-safe"));
+        return _artifactCommandService.VerifyAsync(target, options.Get("output"), options.HasFlag("require-lab-safe"), options.Get("sha256"));
     }
 
     private Task<ArtifactUnpackResult> UnpackAsync(CliOptions options)
