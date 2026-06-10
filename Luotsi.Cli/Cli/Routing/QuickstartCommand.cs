@@ -33,7 +33,7 @@ internal static class QuickstartCommand
                 jsonPath,
                 markdownPath,
                 jsonPath is null || markdownPath is null
-                    ? $"luotsi quickstart {BuildCurrentOptionFlags(result)} --write-json --write-markdown".Replace("  ", " ", StringComparison.Ordinal).Trim()
+                    ? $"luotsi quickstart {BuildCurrentOptionFlags(result.Inputs)} --write-json --write-markdown".Replace("  ", " ", StringComparison.Ordinal).Trim()
                     : null)
         };
 
@@ -74,6 +74,9 @@ internal static class QuickstartCommand
             : $"luotsi doctor {deviceFlag} {packageFlag}";
         var repairCommand = $"luotsi doctor {deviceFlag} {packageFlag} --fix";
         var firstCommand = suppliedDevice is null ? doctorCommand : repairCommand;
+        var quickstartHandoffCommand = $"luotsi quickstart {BuildCurrentOptionFlags(new QuickstartInputResult(suppliedDevice, package, artifacts, scenarioPath))} --write-json --write-markdown"
+            .Replace("  ", " ", StringComparison.Ordinal)
+            .Trim();
 
         var steps = new[]
         {
@@ -169,6 +172,37 @@ internal static class QuickstartCommand
                 $"luotsi replay open --last --artifacts {Quote(artifacts)} --dry-run")
         };
 
+        var proofChecks = new[]
+        {
+            new QuickstartProofCheckResult(
+                "install",
+                "Luotsi binary and bundled assets are discoverable.",
+                "luotsi version",
+                "Envelope includes runtime_version, command_path, install_root, and helper/bundled asset status."),
+            new QuickstartProofCheckResult(
+                "device",
+                suppliedDevice is null
+                    ? "At least one adb device can be selected for the readiness report."
+                    : "The selected adb device is visible and stable.",
+                suppliedDevice is null ? "luotsi doctor" : $"luotsi doctor {deviceFlag} {packageFlag}",
+                "readiness_plan.status is ready, or blockers include exact remediation commands."),
+            new QuickstartProofCheckResult(
+                "artifact_handoff",
+                "First-run handoff artifacts can be written for a human or AI operator.",
+                quickstartHandoffCommand,
+                "quickstart-plan.json, quickstart-plan.md, and artifact-index.json exist in the artifact root."),
+            new QuickstartProofCheckResult(
+                "device_truth",
+                "The selected device can produce structured UI evidence.",
+                $"luotsi screen-state {deviceFlag} {artifactsFlag}",
+                "Screen-state output includes visible UI data and preserves the artifact root."),
+            new QuickstartProofCheckResult(
+                "replay",
+                "Captured evidence can be reopened without touching the device.",
+                $"luotsi replay open --last --artifacts {Quote(artifacts)} --dry-run",
+                "Replay output returns next actions and references the latest preserved artifact bundle.")
+        };
+
         return new QuickstartResult(
             ResultSchemas.Quickstart,
             "ready_to_start",
@@ -181,6 +215,7 @@ internal static class QuickstartCommand
                 scenarioPath),
             steps,
             recommendedCommands,
+            proofChecks,
             firstCommand,
             "Run Luotsi commands as the Android actuation surface. Read JSON envelopes and JSONL events, preserve artifacts, reopen replay evidence before proposing scenario changes, and pause for human review before destructive actions.",
             [
@@ -239,6 +274,16 @@ internal static class QuickstartCommand
         }
 
         builder.AppendLine();
+        builder.AppendLine("## Proof checks");
+        builder.AppendLine();
+        foreach (var check in result.ProofChecks)
+        {
+            builder.AppendLine($"- {check.Kind}: `{check.Command}`");
+            builder.AppendLine($"  - Summary: {check.Summary}");
+            builder.AppendLine($"  - Evidence: {check.Evidence}");
+        }
+
+        builder.AppendLine();
         builder.AppendLine("## Agent prompt");
         builder.AppendLine();
         builder.AppendLine(result.AgentPrompt);
@@ -253,27 +298,27 @@ internal static class QuickstartCommand
         await stream.WriteAsync(bytes).ConfigureAwait(false);
     }
 
-    private static string BuildCurrentOptionFlags(QuickstartResult result)
+    private static string BuildCurrentOptionFlags(QuickstartInputResult inputs)
     {
         var builder = new StringBuilder();
-        if (!string.IsNullOrWhiteSpace(result.Inputs.Device))
+        if (!string.IsNullOrWhiteSpace(inputs.Device))
         {
-            builder.Append(" --device ").Append(Quote(result.Inputs.Device));
+            builder.Append(" --device ").Append(Quote(inputs.Device));
         }
 
-        if (!string.IsNullOrWhiteSpace(result.Inputs.Package))
+        if (!string.IsNullOrWhiteSpace(inputs.Package))
         {
-            builder.Append(" --package ").Append(Quote(result.Inputs.Package));
+            builder.Append(" --package ").Append(Quote(inputs.Package));
         }
 
-        if (!string.IsNullOrWhiteSpace(result.Inputs.Artifacts))
+        if (!string.IsNullOrWhiteSpace(inputs.Artifacts))
         {
-            builder.Append(" --artifacts ").Append(Quote(result.Inputs.Artifacts));
+            builder.Append(" --artifacts ").Append(Quote(inputs.Artifacts));
         }
 
-        if (!string.IsNullOrWhiteSpace(result.Inputs.ScenarioPath))
+        if (!string.IsNullOrWhiteSpace(inputs.ScenarioPath))
         {
-            builder.Append(" --path ").Append(Quote(result.Inputs.ScenarioPath));
+            builder.Append(" --path ").Append(Quote(inputs.ScenarioPath));
         }
 
         return builder.ToString();
@@ -306,6 +351,7 @@ internal sealed record QuickstartResult(
     QuickstartInputResult Inputs,
     IReadOnlyList<QuickstartStepResult> Steps,
     IReadOnlyList<QuickstartRecommendedCommandResult> RecommendedCommands,
+    IReadOnlyList<QuickstartProofCheckResult> ProofChecks,
     string FirstCommand,
     string AgentPrompt,
     IReadOnlyList<string> Differentiators,
@@ -337,3 +383,9 @@ internal sealed record QuickstartRecommendedCommandResult(
     string Kind,
     string Summary,
     string Command);
+
+internal sealed record QuickstartProofCheckResult(
+    string Kind,
+    string Summary,
+    string Command,
+    string Evidence);
