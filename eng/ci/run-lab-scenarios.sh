@@ -68,5 +68,5 @@ run_luotsi run \
   --ttl-sec "$ttl_sec" \
   --report-junit "$junit_path" \
   --artifacts "$artifacts_dir"
-run_luotsi replay open --artifacts "$artifacts_dir" --dry-run --write-json --write-markdown
+run_luotsi replay packet --artifacts "$artifacts_dir"
 append_run_summary_to_github_step_summary

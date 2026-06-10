@@ -87,5 +87,5 @@ Invoke-Luotsi run `
     --ttl-sec $TtlSec `
     --report-junit $JunitPath `
     --artifacts $ArtifactsDir
-Invoke-Luotsi replay open --artifacts $ArtifactsDir --dry-run --write-json --write-markdown
+Invoke-Luotsi replay packet --artifacts $ArtifactsDir
 Add-RunSummaryToGitHubStepSummary
