@@ -336,7 +336,8 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             [
                 new ArtifactRecommendedCommandResult("info_artifacts", "Inspect the unpacked artifact root without mutating it.", $"luotsi artifacts info {Quote(outputDirectory)}"),
                 new ArtifactRecommendedCommandResult("open_artifacts", "Open the unpacked artifact root.", $"luotsi artifacts open {Quote(outputDirectory)}"),
-                new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench for the unpacked artifact root.", $"luotsi replay open --artifacts {Quote(outputDirectory)}")
+                new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench for the unpacked artifact root.", $"luotsi replay open --artifacts {Quote(outputDirectory)}"),
+                CreateReplayCapsuleCommand("replay_capsule", "Write a replay capsule summary for handoff triage.", outputDirectory)
             ]);
     }
 
@@ -484,7 +485,8 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             [
                 new ArtifactRecommendedCommandResult("info_artifacts", "Inspect the unpacked artifact root without opening it.", "luotsi artifacts info <unpacked-artifact-root>"),
                 new ArtifactRecommendedCommandResult("open_artifacts", "Open the unpacked artifact root locally.", "luotsi artifacts open <unpacked-artifact-root>"),
-                new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench for the unpacked artifact root.", "luotsi replay open --artifacts <unpacked-artifact-root>")
+                new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench for the unpacked artifact root.", "luotsi replay open --artifacts <unpacked-artifact-root>"),
+                new ArtifactRecommendedCommandResult("replay_capsule", "Write a replay capsule summary for handoff triage.", "luotsi replay capsule --artifacts <unpacked-artifact-root> --write-json --write-readme")
             ],
             relativeFiles,
             redaction);
@@ -1099,7 +1101,8 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         [
             new ArtifactRecommendedCommandResult("unpack_artifacts", "Restore this verified package locally after verifying its SHA-256.", unpackCommand),
             new ArtifactRecommendedCommandResult("info_artifacts", "Inspect the restored artifact root after unpacking.", $"luotsi artifacts info {Quote(outputDirectory)}"),
-            new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench after unpacking.", $"luotsi replay open --artifacts {Quote(outputDirectory)}")
+            new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench after unpacking.", $"luotsi replay open --artifacts {Quote(outputDirectory)}"),
+            CreateReplayCapsuleCommand("replay_capsule", "Write a replay capsule summary after unpacking.", outputDirectory)
         ];
     }
 
@@ -1112,7 +1115,8 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             new("unpack_artifacts", "Restore this validated package locally after verifying its SHA-256.", $"luotsi artifacts unpack {Quote(packagePath)} --output {Quote(outputDirectory)}{unpackForce}{labSafeGate} --sha256 {sha256}"),
             new("unpack_artifacts_dry_run", "Re-run package validation and SHA-256 verification without writing files.", $"luotsi artifacts unpack {Quote(packagePath)} --output {Quote(outputDirectory)}{unpackForce}{labSafeGate} --dry-run --sha256 {sha256}"),
             new("open_artifacts_after_unpack", "Open the restored artifact root after unpacking.", $"luotsi artifacts open {Quote(outputDirectory)}"),
-            new("replay_open_after_unpack", "Open the replay workbench after unpacking.", $"luotsi replay open --artifacts {Quote(outputDirectory)}")
+            new("replay_open_after_unpack", "Open the replay workbench after unpacking.", $"luotsi replay open --artifacts {Quote(outputDirectory)}"),
+            CreateReplayCapsuleCommand("replay_capsule_after_unpack", "Write a replay capsule summary after unpacking.", outputDirectory)
         ];
     }
 
@@ -1121,7 +1125,8 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         var commands = new List<ArtifactRecommendedCommandResult>
         {
             new("info_artifacts", "Inspect the restored artifact root without mutating it.", $"luotsi artifacts info {Quote(outputDirectory)}"),
-            new("replay_open", "Open the replay workbench for the restored artifact root.", $"luotsi replay open --artifacts {Quote(outputDirectory)}")
+            new("replay_open", "Open the replay workbench for the restored artifact root.", $"luotsi replay open --artifacts {Quote(outputDirectory)}"),
+            CreateReplayCapsuleCommand("replay_capsule", "Write a replay capsule summary for handoff triage.", outputDirectory)
         };
 
         if (dryRun)
@@ -1138,6 +1143,9 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
 
         return commands;
     }
+
+    private static ArtifactRecommendedCommandResult CreateReplayCapsuleCommand(string kind, string summary, string artifactRoot) =>
+        new(kind, summary, $"luotsi replay capsule --artifacts {Quote(artifactRoot)} --write-json --write-readme");
 
     private static string BuildIntakeReadme(ArtifactIntakeResult result)
     {

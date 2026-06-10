@@ -86,6 +86,11 @@ Each `recommended_commands` item is an object with:
       "kind": "open_artifacts",
       "summary": "Open the unpacked artifact root in the generic artifact browser.",
       "command": "luotsi artifacts open <unpacked-artifact-root>"
+    },
+    {
+      "kind": "replay_capsule",
+      "summary": "Write a replay capsule summary for handoff triage.",
+      "command": "luotsi replay capsule --artifacts <unpacked-artifact-root> --write-json --write-readme"
     }
   ],
   "files": [

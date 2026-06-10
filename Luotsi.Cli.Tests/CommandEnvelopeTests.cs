@@ -5087,6 +5087,9 @@ public sealed partial class AppTests
         Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
             command.GetProperty("kind").GetString() == "replay_open_after_unpack" &&
             command.GetProperty("command").GetString() == $"luotsi replay open --artifacts {defaultOutputDirectory}");
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "replay_capsule_after_unpack" &&
+            command.GetProperty("command").GetString() == $"luotsi replay capsule --artifacts {defaultOutputDirectory} --write-json --write-readme");
         Assert.False(fileSystem.DirectoryExists(defaultOutputDirectory));
         Assert.False(fileSystem.FileExists(Path.Join(defaultOutputDirectory, "session-timeline.jsonl")));
     }
@@ -5578,6 +5581,9 @@ public sealed partial class AppTests
         Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
             command.GetProperty("kind").GetString() == "unpack_artifacts" &&
             command.GetProperty("command").GetString() == $"luotsi artifacts unpack {packagePath} --output {suggestedOutput} --require-lab-safe --sha256 {sha256}");
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "replay_capsule" &&
+            command.GetProperty("command").GetString() == $"luotsi replay capsule --artifacts {suggestedOutput} --write-json --write-readme");
         Assert.False(fileSystem.DirectoryExists(suggestedOutput));
         Assert.False(fileSystem.FileExists(Path.Join(suggestedOutput, "index.html")));
     }
@@ -5695,6 +5701,9 @@ public sealed partial class AppTests
         Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
             command.GetProperty("kind").GetString() == "unpack_artifacts" &&
             command.GetProperty("command").GetString() == $"luotsi artifacts unpack {packagePath} --output {Path.GetFullPath("/tmp/share/replay-lab-safe")} --require-lab-safe --sha256 {sha256}");
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "replay_capsule" &&
+            command.GetProperty("command").GetString() == $"luotsi replay capsule --artifacts {Path.GetFullPath("/tmp/share/replay-lab-safe")} --write-json --write-readme");
     }
 
     [Fact]
@@ -6215,6 +6224,9 @@ public sealed partial class AppTests
         Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
             command.GetProperty("kind").GetString() == "replay_open" &&
             command.GetProperty("command").GetString() == "luotsi replay open --artifacts /tmp/intake");
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "replay_capsule" &&
+            command.GetProperty("command").GetString() == "luotsi replay capsule --artifacts /tmp/intake --write-json --write-readme");
     }
 
     [Fact]
@@ -6262,6 +6274,7 @@ public sealed partial class AppTests
         Assert.Contains("# Artifact Intake", readme, StringComparison.Ordinal);
         Assert.Contains("Share safety: `lab_safe`", readme, StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --artifacts /tmp/intake", readme, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay capsule --artifacts /tmp/intake --write-json --write-readme", readme, StringComparison.Ordinal);
 
         var markdownIndex = await fileSystem.ReadAllTextAsync(Path.Join("/tmp/intake", "index.md"));
         Assert.Contains("artifact-intake-summary.json", markdownIndex, StringComparison.Ordinal);
@@ -6661,6 +6674,9 @@ public sealed partial class AppTests
             command.GetProperty("command").GetString() == $"luotsi artifacts open {unpackedRoot}");
         Assert.Contains(unpackData.GetProperty("recommended_commands").EnumerateArray(), command =>
             command.GetProperty("command").GetString() == $"luotsi replay open --artifacts {unpackedRoot}");
+        Assert.Contains(unpackData.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "replay_capsule" &&
+            command.GetProperty("command").GetString() == $"luotsi replay capsule --artifacts {unpackedRoot} --write-json --write-readme");
 
         console.OutputLines.Clear();
         console.ErrorLines.Clear();
