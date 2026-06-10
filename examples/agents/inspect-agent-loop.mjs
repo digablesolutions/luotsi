@@ -429,10 +429,34 @@ async function runLoop(args) {
   }
 }
 
+function writeArtifactHandoff(args) {
+  if (!args.artifacts) {
+    return;
+  }
+
+  process.stderr.write(`inspect-agent-loop artifacts: ${args.artifacts}\n`);
+  process.stderr.write(`inspect-agent-loop next: luotsi replay open --last --artifacts ${quoteShellArg(args.artifacts)} --dry-run\n`);
+}
+
+function quoteShellArg(value) {
+  const text = String(value);
+  if (/^[A-Za-z0-9_./:=-]+$/u.test(text)) {
+    return text;
+  }
+
+  return `'${text.replaceAll("'", "'\"'\"'")}'`;
+}
+
+let args;
 try {
-  const exitCode = await runLoop(parseArgs(process.argv.slice(2)));
+  args = parseArgs(process.argv.slice(2));
+  const exitCode = await runLoop(args);
+  writeArtifactHandoff(args);
   process.exitCode = exitCode;
 } catch (error) {
   process.stderr.write(`inspect-agent-loop failed: ${error.message}\n`);
+  if (args) {
+    writeArtifactHandoff(args);
+  }
   process.exitCode = 1;
 }

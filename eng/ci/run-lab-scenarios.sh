@@ -55,4 +55,4 @@ run_luotsi run \
   --ttl-sec "$ttl_sec" \
   --report-junit "$junit_path" \
   --artifacts "$artifacts_dir"
-run_luotsi replay summarize --artifacts "$artifacts_dir"
+run_luotsi replay open --artifacts "$artifacts_dir" --dry-run

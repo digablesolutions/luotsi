@@ -119,6 +119,8 @@ luotsi run --path scenarios --output-dir ./artifacts/my-run --dry-run --include-
 luotsi run --path scenarios --device <serial> --report-junit junit.xml
 luotsi artifacts list --artifacts ./artifacts
 luotsi artifacts info ./artifacts/my-run
+luotsi replay open --artifacts ./artifacts/my-run --dry-run
+luotsi replay open --last --artifacts ./artifacts --dry-run
 luotsi artifacts open ./artifacts/my-run
 luotsi artifacts open --last --artifacts ./artifacts
 luotsi artifacts pack ./artifacts/my-run --output my-run.zip --dry-run
@@ -135,8 +137,6 @@ luotsi replay graph --artifacts ./artifacts/my-run --write-markdown
 luotsi replay cluster --artifacts ./artifacts/ci-runs --write-markdown
 luotsi replay search --artifacts ./artifacts/my-run --contains timeout
 luotsi replay scenario-draft --artifacts ./artifacts/my-run --output scenarios/recovered.json --validate --write-markdown
-luotsi replay open --artifacts ./artifacts/my-run
-luotsi replay open --last --artifacts ./artifacts
 ```
 
 Use `journey-intake validate` when Android CLI Journey-style intent (a Journey objective; not an Android `Intent` object) needs a CI-friendly contract check before Luotsi scenario drafting. Use `journey-intake draft-scenario` when that valid intake should become a review-required evidence skeleton without touching a device.

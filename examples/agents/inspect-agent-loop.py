@@ -243,11 +243,36 @@ def stop_inspect(session: InspectProcess) -> None:
         raise RuntimeError(f"Inspect process exited with code {exit_code}.")
 
 
+def write_artifact_handoff(args: argparse.Namespace) -> None:
+    if not args.artifacts:
+        return
+
+    print(f"inspect-agent-loop artifacts: {args.artifacts}", file=sys.stderr)
+    print(
+        f"inspect-agent-loop next: luotsi replay open --last --artifacts {quote_shell_arg(args.artifacts)} --dry-run",
+        file=sys.stderr,
+    )
+
+
+def quote_shell_arg(value: str) -> str:
+    safe = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./:=-"
+    if value and all(character in safe for character in value):
+        return value
+
+    return "'" + value.replace("'", "'\"'\"'") + "'"
+
+
 def main() -> int:
+    args: argparse.Namespace | None = None
     try:
-        return run_loop(parse_args())
+        args = parse_args()
+        exit_code = run_loop(args)
+        write_artifact_handoff(args)
+        return exit_code
     except Exception as exc:  # noqa: BLE001 - example script should surface concise failures.
         print(f"inspect-agent-loop failed: {exc}", file=sys.stderr)
+        if args is not None:
+            write_artifact_handoff(args)
         return 1
 
 

@@ -2,6 +2,14 @@
 
 These examples show how an agent or host-side adapter can drive Luotsi without a separate device control plane.
 
+Start with the same output loop Luotsi uses everywhere:
+
+```text
+command -> structured output -> artifact root -> replay command -> next action
+```
+
+For the CLI-native primer, run `luotsi help output`. For the published docs version, read [First Five Minutes](../../website/src/content/docs/docs/getting-started/first-five-minutes.mdx).
+
 ## Inspect Agent Loop
 
 `inspect-agent-loop.mjs` starts `luotsi inspect`, reads JSONL events from stdout, and writes JSON command objects to stdin.
@@ -12,9 +20,46 @@ node examples/agents/inspect-agent-loop.mjs --device <serial> --text "Sign in" -
 
 The example is intentionally small. Replace its decision function with your own planner, policy checks, or model call. The protocol stays the same: one JSON object per line in both directions.
 
+When adapting it, keep the loop explicit:
+
+1. Wait for `screen_snapshot`.
+2. Send one command with a stable `id`.
+3. Wait for the matching `command_result`.
+4. If the command changes state, wait for the matching `screen_delta`.
+5. Capture artifacts before exiting or when a command fails.
+
 The `--artifacts` value is a base directory. The scripts create it if needed, and Luotsi writes each session into a timestamped child run directory.
 
+For one-shot commands and replay follow-ups, parse the standard envelope before making another device decision. Check `ok` and the process exit code first, then choose the next command in the same order as `luotsi help output`:
+
+1. `data.recommended_next_action.command`
+2. Ordered handoff arrays: `data.recommended_next_steps`, `data.next_actions`, `data.suggested_commands`
+3. Command arrays: `data.commands`, `data.artifact_commands`, `data.recommended_commands`
+4. Fallback evidence pointer: `artifacts.artifact_root`, then run `luotsi replay open --artifacts <artifact-root> --dry-run`
+
+Command arrays are not always ordered by the human-friendly first move, so the parser examples prefer a `replay_open` item when one appears in `data.commands`, `data.artifact_commands`, or `data.recommended_commands`. Use `open_artifacts` only when the next task is specifically browsing raw files.
+
+Use the tiny parser examples when you want that rule as executable glue:
+
+```bash
+luotsi run --file scenarios/smoke.json --device <serial> --artifacts artifacts/smoke-run \
+  | python3 examples/agents/extract-next-command.py
+
+luotsi run --file scenarios/smoke.json --device <serial> --artifacts artifacts/smoke-run \
+  | node examples/agents/extract-next-command.mjs
+```
+
+The parsers accept either one normal Luotsi JSON envelope or a saved JSONL-style log with multiple one-line JSON objects; in JSONL mode they use the last Luotsi command envelope they find. Bad input exits non-zero with an `extract-next-command:` message and no language runtime stack trace.
+
 If Luotsi reports a protocol, session, wait, tap, screenshot, post-action state, or inspect-process failure, the scripts exit non-zero and leave the artifact directory behind for replay.
+
+After a failed or interesting run, start from the artifacts instead of reconnecting blindly:
+
+```bash
+luotsi artifacts list --artifacts artifacts/agent-loop
+luotsi replay open --last --artifacts artifacts/agent-loop --dry-run
+luotsi replay timeline --artifacts artifacts/agent-loop/<run-id> --type command_result
+```
 
 Use selector fields when text is broad:
 

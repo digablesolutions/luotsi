@@ -17,10 +17,10 @@ If you are looking for scenario-based Android automation, Luotsi fits when the f
 ```bash
 luotsi scenario-validate --path scenarios
 luotsi run --path scenarios --device <serial>
-luotsi replay summarize --artifacts ./artifacts/<run>
+luotsi replay open --artifacts ./artifacts/<run> --dry-run
 ```
 
-Use `inspect` first when the flow is still changing. Use scenarios when the next goal is repeatability.
+Use `inspect` first when the flow is still changing. Use scenarios when the next goal is repeatability. After a run, start with `replay open --dry-run` to get the primary failure, recommended next action, and suggested follow-up commands before choosing a deeper replay tool.
 
 ## Strong fit when
 
