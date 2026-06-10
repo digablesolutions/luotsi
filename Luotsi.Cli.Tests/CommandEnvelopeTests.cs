@@ -332,6 +332,8 @@ public sealed partial class AppTests
         Assert.Contains("luotsi artifacts unpack <artifact.zip>", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi artifacts intake <artifact.zip>", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi-artifact-package.json", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("unpack/replay/capsule", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("info/open/replay/capsule", console.ErrorLines[0], StringComparison.Ordinal);
     }
 
     [Theory]
