@@ -252,6 +252,9 @@ public sealed partial class AppTests
         Assert.Contains("data.artifact_commands", examples, StringComparison.Ordinal);
         Assert.Contains("data.recommended_commands", examples, StringComparison.Ordinal);
         Assert.Contains("prefer a `replay_open` item", examples, StringComparison.Ordinal);
+        Assert.Contains("run-summary.json", examples, StringComparison.Ordinal);
+        Assert.Contains("luotsi-run-summary.v1", examples, StringComparison.Ordinal);
+        Assert.Contains("recommendedNextAction.command", examples, StringComparison.Ordinal);
         Assert.Contains("Bad input exits non-zero with an `extract-next-command:` message", examples, StringComparison.Ordinal);
         Assert.Contains("artifacts.artifact_root", examples, StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --last --artifacts artifacts/agent-loop --dry-run", examples, StringComparison.Ordinal);
@@ -268,6 +271,10 @@ public sealed partial class AppTests
         Assert.Contains("extract-next-command.mjs", examples, StringComparison.Ordinal);
         Assert.Contains("recommended_next_action", nodeNextCommandExample, StringComparison.Ordinal);
         Assert.Contains("recommended_next_action", pythonNextCommandExample, StringComparison.Ordinal);
+        Assert.Contains("luotsi-run-summary.v1", nodeNextCommandExample, StringComparison.Ordinal);
+        Assert.Contains("luotsi-run-summary.v1", pythonNextCommandExample, StringComparison.Ordinal);
+        Assert.Contains("recommendedNextAction", nodeNextCommandExample, StringComparison.Ordinal);
+        Assert.Contains("recommendedNextAction", pythonNextCommandExample, StringComparison.Ordinal);
         Assert.Contains("artifact_commands", nodeNextCommandExample, StringComparison.Ordinal);
         Assert.Contains("artifact_commands", pythonNextCommandExample, StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --artifacts", nodeNextCommandExample, StringComparison.Ordinal);
@@ -597,6 +604,12 @@ public sealed partial class AppTests
         const string expectedFromJsonlLog = "luotsi replay open --artifacts /tmp/second-root";
         const string unorderedRecommendedCommandsJson = """{"schema":"luotsi-command.v1","ok":true,"data":{"recommended_commands":[{"kind":"open_artifacts","command":"luotsi artifacts open /tmp/recommended-root"},{"kind":"replay_open","command":"luotsi replay open --artifacts /tmp/recommended-root --dry-run"}]},"artifacts":{"artifact_root":"/tmp/recommended-root"}}""";
         const string expectedFromRecommendedCommands = "luotsi replay open --artifacts /tmp/recommended-root --dry-run";
+        const string runSummaryJson = """{"schema":"luotsi-run-summary.v1","status":"needs_triage","recommendedNextAction":{"kind":"scrub_failure","command":"luotsi replay scrub --artifacts /tmp/packet-root --failures --context 3 --write-markdown"},"commands":[{"kind":"capsule","command":"luotsi replay capsule --artifacts /tmp/packet-root --write-readme --write-json"}]}""";
+        const string expectedFromRunSummary = "luotsi replay scrub --artifacts /tmp/packet-root --failures --context 3 --write-markdown";
+        var runSummaryJsonlLog = string.Join(Environment.NewLine, [
+            """{"schema":"luotsi-command.v1","ok":true,"data":{"artifact_commands":[{"kind":"replay_open","command":"luotsi replay open --artifacts /tmp/before-packet"}]},"artifacts":{"artifact_root":"/tmp/before-packet"}}""",
+            runSummaryJson
+        ]);
 
         var executed = 0;
         if (TryFindExecutable("python3", "python", out var python))
@@ -608,8 +621,10 @@ public sealed partial class AppTests
             Assert.Equal(expectedSpacedFallback, RunProcess(python, [script], spacedFallbackJson));
             Assert.Equal(expectedFromJsonlLog, RunProcess(python, [script], jsonlLog));
             Assert.Equal(expectedFromRecommendedCommands, RunProcess(python, [script], unorderedRecommendedCommandsJson));
+            Assert.Equal(expectedFromRunSummary, RunProcess(python, [script], runSummaryJson));
+            Assert.Equal(expectedFromRunSummary, RunProcess(python, [script], runSummaryJsonlLog));
             var failure = RunProcessExpectingFailure(python, [script], "not json");
-            Assert.Contains("extract-next-command: stdin did not contain a Luotsi command envelope", failure.StandardError, StringComparison.Ordinal);
+            Assert.Contains("extract-next-command: stdin did not contain a Luotsi command envelope or run summary", failure.StandardError, StringComparison.Ordinal);
             Assert.DoesNotContain("Traceback", failure.StandardError, StringComparison.Ordinal);
             executed++;
         }
@@ -623,8 +638,10 @@ public sealed partial class AppTests
             Assert.Equal(expectedSpacedFallback, RunProcess(node, [script], spacedFallbackJson));
             Assert.Equal(expectedFromJsonlLog, RunProcess(node, [script], jsonlLog));
             Assert.Equal(expectedFromRecommendedCommands, RunProcess(node, [script], unorderedRecommendedCommandsJson));
+            Assert.Equal(expectedFromRunSummary, RunProcess(node, [script], runSummaryJson));
+            Assert.Equal(expectedFromRunSummary, RunProcess(node, [script], runSummaryJsonlLog));
             var failure = RunProcessExpectingFailure(node, [script], "not json");
-            Assert.Contains("extract-next-command: stdin did not contain a Luotsi command envelope", failure.StandardError, StringComparison.Ordinal);
+            Assert.Contains("extract-next-command: stdin did not contain a Luotsi command envelope or run summary", failure.StandardError, StringComparison.Ordinal);
             Assert.DoesNotContain("Error:", failure.StandardError, StringComparison.Ordinal);
             executed++;
         }

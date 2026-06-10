@@ -29,13 +29,13 @@ export function readEnvelope(text) {
     parsed = null;
   }
 
-  if (isLooseCommandEnvelope(parsed)) {
+  if (isLooseCommandEnvelope(parsed) || isRunSummary(parsed)) {
     return parsed;
   }
 
   if (Array.isArray(parsed)) {
     for (const item of [...parsed].reverse()) {
-      if (isCommandEnvelope(item)) {
+      if (isCommandEnvelope(item) || isRunSummary(item)) {
         return item;
       }
     }
@@ -50,7 +50,7 @@ export function readEnvelope(text) {
 
     try {
       const item = JSON.parse(line);
-      if (isCommandEnvelope(item)) {
+      if (isCommandEnvelope(item) || isRunSummary(item)) {
         envelopes.push(item);
       }
     } catch {
@@ -62,22 +62,22 @@ export function readEnvelope(text) {
     return envelopes.at(-1);
   }
 
-  throw new Error('stdin did not contain a Luotsi command envelope');
+  throw new Error('stdin did not contain a Luotsi command envelope or run summary');
 }
 
 export function extractNextCommand(envelope) {
+  if (isRunSummary(envelope)) {
+    const command = extractNextCommandFromObject(envelope);
+    if (command) {
+      return command;
+    }
+  }
+
   const data = envelope?.data;
   if (isObject(data)) {
-    const direct = cleanCommand(data.recommended_next_action?.command);
-    if (direct) {
-      return direct;
-    }
-
-    for (const name of ['recommended_next_steps', 'next_actions', 'suggested_commands', 'commands', 'artifact_commands', 'recommended_commands']) {
-      const command = firstCommand(data[name], { preferReplayOpen: ['commands', 'artifact_commands', 'recommended_commands'].includes(name) });
-      if (command) {
-        return command;
-      }
+    const command = extractNextCommandFromObject(data);
+    if (command) {
+      return command;
     }
   }
 
@@ -93,11 +93,55 @@ function isCommandEnvelope(value) {
   return isObject(value) && value.schema === 'luotsi-command.v1';
 }
 
+function isRunSummary(value) {
+  return isObject(value) && value.schema === 'luotsi-run-summary.v1';
+}
+
 function isLooseCommandEnvelope(value) {
   return isCommandEnvelope(value) || (isObject(value) && (
     'ok' in value ||
     'data' in value ||
     'artifacts' in value));
+}
+
+function extractNextCommandFromObject(value) {
+  const direct = cleanCommand(firstPresent(value, 'recommended_next_action', 'recommendedNextAction')?.command);
+  if (direct) {
+    return direct;
+  }
+
+  for (const name of [
+    'recommended_next_steps',
+    'recommendedNextSteps',
+    'next_actions',
+    'nextActions',
+    'suggested_commands',
+    'suggestedCommands',
+    'commands',
+    'artifact_commands',
+    'artifactCommands',
+    'recommended_commands',
+    'recommendedCommands'
+  ]) {
+    const command = firstCommand(value[name], {
+      preferReplayOpen: ['commands', 'artifact_commands', 'artifactCommands', 'recommended_commands', 'recommendedCommands'].includes(name)
+    });
+    if (command) {
+      return command;
+    }
+  }
+
+  return null;
+}
+
+function firstPresent(value, ...names) {
+  for (const name of names) {
+    if (name in value) {
+      return value[name];
+    }
+  }
+
+  return null;
 }
 
 function firstCommand(items, { preferReplayOpen }) {

@@ -34,12 +34,12 @@ def read_envelope(text: str) -> dict[str, Any]:
     except json.JSONDecodeError:
         parsed = None
 
-    if is_loose_command_envelope(parsed):
+    if is_loose_command_envelope(parsed) or is_run_summary(parsed):
         return parsed
 
     if isinstance(parsed, list):
         for item in reversed(parsed):
-            if is_command_envelope(item):
+            if is_command_envelope(item) or is_run_summary(item):
                 return item
 
     envelopes: list[dict[str, Any]] = []
@@ -51,13 +51,13 @@ def read_envelope(text: str) -> dict[str, Any]:
             item = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if is_command_envelope(item):
+        if is_command_envelope(item) or is_run_summary(item):
             envelopes.append(item)
 
     if envelopes:
         return envelopes[-1]
 
-    raise ValueError("stdin did not contain a Luotsi command envelope")
+    raise ValueError("stdin did not contain a Luotsi command envelope or run summary")
 
 
 def is_command_envelope(value: Any) -> bool:
@@ -73,21 +73,21 @@ def is_loose_command_envelope(value: Any) -> bool:
     )
 
 
+def is_run_summary(value: Any) -> bool:
+    return isinstance(value, dict) and value.get("schema") == "luotsi-run-summary.v1"
+
+
 def extract_next_command(envelope: dict[str, Any]) -> str | None:
+    if is_run_summary(envelope):
+        command = extract_next_command_from_mapping(envelope)
+        if command:
+            return command
+
     data = envelope.get("data")
     if isinstance(data, dict):
-        next_action = data.get("recommended_next_action")
-        if isinstance(next_action, dict):
-            command = clean_command(next_action.get("command"))
-            if command:
-                return command
-
-        for name in ("recommended_next_steps", "next_actions", "suggested_commands", "commands", "artifact_commands", "recommended_commands"):
-            items = data.get(name)
-            if isinstance(items, list):
-                command = first_command(items, prefer_replay_open=name in ("commands", "artifact_commands", "recommended_commands"))
-                if command:
-                    return command
+        command = extract_next_command_from_mapping(data)
+        if command:
+            return command
 
     artifacts = envelope.get("artifacts")
     if isinstance(artifacts, dict):
@@ -95,6 +95,48 @@ def extract_next_command(envelope: dict[str, Any]) -> str | None:
         if artifact_root:
             return f"luotsi replay open --artifacts {quote_shell_arg(artifact_root)} --dry-run"
 
+    return None
+
+
+def extract_next_command_from_mapping(value: dict[str, Any]) -> str | None:
+    next_action = first_present(value, "recommended_next_action", "recommendedNextAction")
+    if isinstance(next_action, dict):
+        command = clean_command(next_action.get("command"))
+        if command:
+            return command
+
+    for name in (
+        "recommended_next_steps",
+        "recommendedNextSteps",
+        "next_actions",
+        "nextActions",
+        "suggested_commands",
+        "suggestedCommands",
+        "commands",
+        "artifact_commands",
+        "artifactCommands",
+        "recommended_commands",
+        "recommendedCommands",
+    ):
+        items = value.get(name)
+        if isinstance(items, list):
+            command = first_command(items, prefer_replay_open=name in (
+                "commands",
+                "artifact_commands",
+                "artifactCommands",
+                "recommended_commands",
+                "recommendedCommands",
+            ))
+            if command:
+                return command
+
+    return None
+
+
+def first_present(value: dict[str, Any], *names: str) -> Any:
+    for name in names:
+        if name in value:
+            return value[name]
     return None
 
 
