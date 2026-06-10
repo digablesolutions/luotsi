@@ -16,7 +16,10 @@ fields.
 Use `luotsi replay packet --artifacts <artifact-root> --check` when CI, support,
 or an agent receives an artifact root and needs to prove that the existing
 packet is present, readable, points at the checked artifact root, and has a
-Markdown companion before continuing.
+Markdown companion before continuing. The check also verifies that the refreshed
+artifact index entry points exist and that `run-summary.md` contains both the
+60-second triage checklist and the same recommended command as
+`run-summary.json`.
 
 ## Top-level fields
 
@@ -158,4 +161,4 @@ belongs in the broader command list. Consumers should still prefer
 - Consumers should check `schema` first, then use `recommendedNextAction.command` / `recommended_next_action.command` as the first next command.
 - If `primaryFailure` is `null`, do not assume the run passed. Check `status`, `verdict`, and `sessionCount`.
 - If `runSummaryJsonPath` or `runSummaryMarkdownPath` is `null`, the packet was returned in-memory by a command path that did not persist both files. Run `luotsi replay packet --artifacts <artifact-root>` to write them.
-- `replay packet --check` is the contract gate for an existing packet. It must exit non-zero for missing JSON, invalid JSON, unsupported schema, stale `artifactRoot`, missing `recommendedNextAction.command`, missing `entryPoints.runSummaryJsonPath`, missing `entryPoints.runSummaryMarkdownPath`, or a missing Markdown companion.
+- `replay packet --check` is the contract gate for an existing packet. It must exit non-zero for missing JSON, invalid JSON, unsupported schema, stale `artifactRoot`, missing index entry points, missing `recommendedNextAction.command`, missing `entryPoints.runSummaryJsonPath`, missing `entryPoints.runSummaryMarkdownPath`, a missing Markdown companion, Markdown without the 60-second triage checklist, or Markdown that omits the JSON packet's recommended command.

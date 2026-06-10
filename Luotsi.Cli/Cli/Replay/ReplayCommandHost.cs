@@ -232,6 +232,18 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             var recommendedNextAction = RequireObject(root, "recommendedNextAction", packetPath);
             var recommendedCommand = RequireString(recommendedNextAction, "command", packetPath);
             var entryPoints = RequireObject(root, "entryPoints", packetPath);
+            var indexHtmlPath = RequireString(entryPoints, "indexHtmlPath", packetPath);
+            if (!_dependencies.FileSystem.FileExists(indexHtmlPath))
+            {
+                throw new UsageException($"{RunSummaryJsonFileName} points at missing index HTML '{indexHtmlPath}'. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
+            }
+
+            var indexMarkdownPath = RequireString(entryPoints, "indexMarkdownPath", packetPath);
+            if (!_dependencies.FileSystem.FileExists(indexMarkdownPath))
+            {
+                throw new UsageException($"{RunSummaryJsonFileName} points at missing index Markdown '{indexMarkdownPath}'. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
+            }
+
             var runSummaryJsonPath = RequireString(entryPoints, "runSummaryJsonPath", packetPath);
             if (!string.Equals(runSummaryJsonPath, packetPath, StringComparison.Ordinal))
             {
@@ -247,6 +259,17 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             if (!_dependencies.FileSystem.FileExists(runSummaryMarkdownPath))
             {
                 throw new UsageException($"{RunSummaryJsonFileName} points at missing Markdown packet '{runSummaryMarkdownPath}'. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
+            }
+
+            var runSummaryMarkdown = await _dependencies.FileSystem.ReadAllTextAsync(runSummaryMarkdownPath).ConfigureAwait(false);
+            if (!runSummaryMarkdown.Contains("## 60-Second Triage Checklist", StringComparison.Ordinal))
+            {
+                throw new UsageException($"{RunSummaryMarkdownFileName} is missing the 60-second triage checklist. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
+            }
+
+            if (!runSummaryMarkdown.Contains(recommendedCommand, StringComparison.Ordinal))
+            {
+                throw new UsageException($"{RunSummaryMarkdownFileName} does not include the recommended next action command from {RunSummaryJsonFileName}. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
             }
 
             return new RunSummaryCheckResult(
