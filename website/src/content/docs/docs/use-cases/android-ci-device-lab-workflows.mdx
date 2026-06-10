@@ -18,10 +18,10 @@ If you are looking for Android CI device lab workflows, Luotsi fits when the sam
 luotsi doctor --device <serial>
 luotsi scenario-validate --path scenarios
 luotsi run --path scenarios --device <serial> --report-junit junit.xml
-luotsi replay summarize --artifacts ./artifacts/<run>
+luotsi replay open --artifacts ./artifacts/<run> --dry-run
 ```
 
-When the workflow depends on a shared device pool, pair this with [Lab And Device Claims](../../reference/lab-and-device-claims/) and [Shared Lab Operations](../../reference/shared-lab-operations/).
+Use `replay open --dry-run` as the CI handoff preview: it reports the primary failure, recommended next action, and follow-up replay commands without trying to launch a browser on the runner. When the workflow depends on a shared device pool, pair this with [Lab And Device Claims](../../reference/lab-and-device-claims/) and [Shared Lab Operations](../../reference/shared-lab-operations/).
 
 ## Portable CI workflow pack
 

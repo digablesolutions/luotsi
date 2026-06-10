@@ -22,13 +22,17 @@ For each public release, add a short hand-written introduction above the generat
 1. What changed for agent builders.
 2. What changed for engineers running real-device workflows.
 3. Which docs page or tutorial to open first.
+4. How to reason from the first command output into the next replay command.
 
 Use wording that points readers to stable public entry points:
 
 - Docs hub: `https://digablesolutions.github.io/luotsi/docs/`
+- First five minutes: `https://digablesolutions.github.io/luotsi/docs/getting-started/first-five-minutes/`
 - AI workflows: `https://digablesolutions.github.io/luotsi/docs/core-workflows/ai-agent-workflows/`
 - Installation: `https://digablesolutions.github.io/luotsi/docs/getting-started/installation/`
 - Replay and artifacts: `https://digablesolutions.github.io/luotsi/docs/core-workflows/replay-and-artifacts/`
+
+For release validation and community posts, prefer the same first-output loop used by the CLI: `command -> structured output -> artifact root -> replay command -> next action`. Mention `luotsi help output` for source-tree users. When the message talks about failed runs or artifacts, make the first concrete handoff `luotsi replay open --artifacts <artifact-root> --dry-run` so evaluators see the primary failure, recommended next action, and follow-up commands before opening the generic artifact browser.
 
 ## Directory and package listings
 

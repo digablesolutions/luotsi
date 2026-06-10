@@ -239,6 +239,16 @@ The live run passed:
 
 The report and events also captured timing data, step metrics, report provenance, and screenshot artifact references.
 
+Start replay from the artifact root before reconnecting to the device or opening the generic artifact browser:
+
+```powershell
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- replay open `
+  --artifacts .\artifacts\buggy-demo `
+  --dry-run
+```
+
+That front door reports the primary failure when one exists, the recommended next action, and the follow-up commands into capsule, timeline, scrub, graph, search, scenario draft, and clustering without launching a browser.
+
 In the sample run, the slowest step was a Vision screenshot. That is visible in the JSON report and is the kind of signal Luotsi is meant to surface during developer-loop debugging.
 
 ## 5. Review The Scenario Artifacts
@@ -358,6 +368,14 @@ UI hierchary dumped to: /dev/tty (sic)
 Luotsi still produced a failure envelope and artifact bundle:
 
 ![Screen-state fallback screenshot](../assets/tutorials/buggy-controller-live-demo/screen-state-fallback.png)
+
+For the same fallback shape in your own run, start from the captured artifact root:
+
+```powershell
+dotnet run --no-build --no-launch-profile --project Luotsi.Cli -- replay open `
+  --artifacts <artifact-root> `
+  --dry-run
+```
 
 That is useful behavior for CI and live debugging: even when hierarchy extraction fails, the command still returns a structured error and captures evidence. For old devices like this, prefer screenshot-oriented or coordinate-oriented scenarios until hierarchy capture is hardened for `/sdcard/window_dump.xml` style pulls.
 

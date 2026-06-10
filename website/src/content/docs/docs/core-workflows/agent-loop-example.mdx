@@ -7,6 +7,12 @@ Luotsi does not require an agent framework to prove the device path. The smalles
 
 Use this when the question is: can an agent inspect and act on a real Android device through a stable contract?
 
+If you are still orienting around Luotsi output, read [First Five Minutes](../../getting-started/first-five-minutes/) first or run `luotsi help output`. The same loop applies here:
+
+```text
+command -> structured output -> artifact root -> replay command -> next action
+```
+
 The protocol is language-agnostic. The first example uses Node because many agent adapters and MCP experiments start in JavaScript or TypeScript, and the same `.mjs` script can also run under Bun. There is also a standard-library Python 3.8+ version for smoke tests and CI glue. A maintained Go or Rust client should be a separate, tested package rather than a copy-paste variant of this minimal process loop.
 
 ## What the example proves
@@ -79,6 +85,14 @@ Output events are one JSON object per line:
 {"type":"session_ended","id":"4","reason":"client_exit"}
 ```
 
+For agent adapters, keep the reasoning loop explicit:
+
+1. Wait for `screen_snapshot`.
+2. Send one command with a stable `id`.
+3. Wait for the matching `command_result`.
+4. If the command changes state, wait for the matching `screen_delta`.
+5. Capture artifacts before exiting or when a command fails.
+
 ## Replay after the loop
 
 After the process exits, inspect the artifact base directory instead of reconnecting to the device. Luotsi writes each session under a concrete child run directory such as `artifacts/agent-loop/<timestamp>-inspect`.
@@ -99,6 +113,7 @@ This example is a host-side adapter, not an autonomous product by itself. It doe
 ## Related pages
 
 - [AI Agent Workflows](../ai-agent-workflows/)
+- [First Five Minutes](../../getting-started/first-five-minutes/)
 - [Inspect And Scenarios](../inspect-and-scenarios/)
 - [Output Envelopes](../../reference/output-envelopes/)
 - [Replay And Artifacts](../replay-and-artifacts/)

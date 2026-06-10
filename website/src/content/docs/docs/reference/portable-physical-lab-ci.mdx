@@ -84,6 +84,8 @@ luotsi run --path examples/scenarios --device-query "state=online,type=physical,
 luotsi replay open --artifacts artifacts/luotsi-lab --dry-run
 ```
 
+`replay open --dry-run` is the CI handoff preview: it reports the primary failure, recommended next action, and follow-up replay commands without trying to launch a browser on the runner.
+
 Use that explicit form when the job must wait fairly for a leased device or when allocation has to respect durable pool and capability registration.
 
 ## Generic CI

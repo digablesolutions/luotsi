@@ -5,6 +5,8 @@ description: Understand when Luotsi emits a single JSON envelope versus a long-l
 
 Luotsi uses two output contracts on purpose.
 
+For a faster first-pass mental model, start with [First Five Minutes](../getting-started/first-five-minutes/). This page is the reference for the underlying output contracts.
+
 ## One-shot command mode
 
 Most commands return a single final JSON envelope with:
@@ -21,7 +23,16 @@ Most commands return a single final JSON envelope with:
 
 This is the default contract for CLI commands, including scenario execution unless you explicitly request raw replay output modes.
 
-For local terminal readability, one-shot commands also accept `--human` or `--console-output human`. That mode prints a concise text summary and artifact path, while the default and `--json` keep the full machine-readable envelope. Use `--quiet` or `--console-output quiet` to suppress successful command output while still printing failure envelopes. Luotsi does not use a global `--output` switch for this because some commands already use `--output` for file paths.
+For local terminal readability, one-shot commands also accept `--human` or `--console-output human`. That mode leads with the artifact path, a `guide:` reminder that the artifact root is durable evidence, and a `next:` command when Luotsi can name the follow-up before the rest of the concise text summary. The default and `--json` keep the full machine-readable envelope. Use `--quiet` or `--console-output quiet` to suppress successful command output while still printing failure envelopes. Luotsi does not use a global `--output` switch for this because some commands already use `--output` for file paths.
+
+When an agent or CI job needs the next action, read command hints in this order:
+
+1. `data.recommended_next_action.command` when the command can name one best action.
+2. `data.recommended_next_steps[]`, `data.next_actions[]`, or `data.suggested_commands[]` when the workflow returns an ordered handoff.
+3. `data.commands[]`, `data.artifact_commands[]`, or `data.recommended_commands[]` when the result exposes exact follow-up commands.
+4. `artifacts.artifact_root` as the fallback evidence pointer; reopen it with `replay open --dry-run` first, and use `artifacts open` only when you specifically need the generic artifact browser.
+
+The source tree includes executable examples of this priority order at `examples/agents/extract-next-command.py` and `examples/agents/extract-next-command.mjs`.
 
 When an artifact root has a persisted package intake audit, human output for `artifacts info` and `replay capsule` includes a compact `intake:` line with status, share-safety, SHA verification, and package path.
 
@@ -100,5 +111,6 @@ Treat these as current API-visible values derived from the active failure paths 
 ## Related pages
 
 - [CLI command groups](../cli-command-groups/)
+- [First Five Minutes](../getting-started/first-five-minutes/)
 - [Replay and artifacts](../../core-workflows/replay-and-artifacts/)
 - [Live view](../../core-workflows/live-view/)

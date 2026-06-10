@@ -19,6 +19,7 @@ Docs site: [https://digablesolutions.github.io/luotsi/](https://digablesolutions
 
 Start here:
 
+- First five minutes: [docs/getting-started/first-five-minutes](https://digablesolutions.github.io/luotsi/docs/getting-started/first-five-minutes/)
 - Installation: [docs/getting-started/installation](https://digablesolutions.github.io/luotsi/docs/getting-started/installation/)
 - Quickstart: [docs/getting-started/quickstart](https://digablesolutions.github.io/luotsi/docs/getting-started/quickstart/)
 - AI agent workflows: [docs/core-workflows/ai-agent-workflows](https://digablesolutions.github.io/luotsi/docs/core-workflows/ai-agent-workflows/)
@@ -66,7 +67,7 @@ Yes. `replay open`, `replay summarize`, `replay capsule`, `replay timeline`, `re
 2. **Run a scenario** - drive multi-step device flows from a small JSON playbook. Steps are validated, templated, and timed; failures produce artifact bundles automatically.
 3. **Inspect mode** - open a JSONL session for agent-driven exploration. Luotsi emits structured events (`session_started`, `screen_snapshot`, `screen_delta`, `command_result`, `session_ended`, `protocol_error`, `session_error`) so an agent can reason about the UI and act without a scenario file.
 4. **Preserve artifacts** - `run` writes into the user-local artifact home by default; `inspect` and one-shot commands write into a temp artifact root unless you override them with `--artifacts` or `--output-dir`. `artifacts list`, `info`, `open`, `pack`, `verify --require-lab-safe`, and `unpack` make bundles discoverable and shareable.
-5. **Replay failures** - `replay open`, `summarize`, `capsule`, `timeline`, `scrub`, `graph`, `search`, `scenario-draft`, and clustering work from saved artifacts so triage does not require another live device session.
+5. **Replay failures** - start with `luotsi replay open --artifacts <artifact-root> --dry-run` when you need the primary failure, recommended next action, and follow-up commands without reconnecting to the device or launching a browser. Then use `replay summarize`, `capsule`, `timeline`, `scrub`, `graph`, `search`, `scenario-draft`, and clustering from the same saved artifacts.
 6. **Live view** - stream a mirrored device display to a local SDL window with an operator control layer, hotkeys, human startup progress, and JSONL events for agents consuming stream state.
 7. **Telemetry** - parse structured `LUOTSI_DEVICE_TELEMETRY` events from logcat for semantic waits and assertions.
 8. **CI-friendly** - same binary for engineers, CI pipelines, and agent-driven flows, with default envelopes plus optional raw replay summary output for CI consumers.
@@ -227,9 +228,11 @@ If you already know the target serial, start from `luotsi quickstart --device <s
   `LUOTSI_LAB_STATE_ROOT` when multiple runners should share the same leases,
   queue, quarantine, inventory, and device-health state.
 
-The CLI also exposes this directly via `luotsi help quickstart`.
+The CLI also exposes this directly via `luotsi help quickstart`; use `luotsi help output` for the JSON envelope, JSONL session, artifact, and replay mental model.
 
 ## Code layout
+
+AI agents working in this repository should start with [`AGENTS.md`](AGENTS.md). It summarizes the Luotsi output model, ownership map, and validation commands.
 
 | Path | Contents |
 |---|---|
@@ -415,7 +418,7 @@ For a full device walkthrough with screenshots, reports, and troubleshooting not
 
 ## Output format
 
-One-shot commands return a single JSON envelope by default. Use `--human` or `--console-output human` when you want a concise terminal summary, `--quiet` or `--console-output quiet` when success output should be suppressed, and use `--json` or omit the human flag when a script needs the full envelope. Quiet mode still prints failure envelopes so diagnostics are not lost. Luotsi does not currently use a global `--output` switch for this because some commands already use `--output` for file paths.
+One-shot commands return a single JSON envelope by default. Use `--human` or `--console-output human` when you want a concise terminal summary, `--quiet` or `--console-output quiet` when success output should be suppressed, and use `--json` or omit the human flag when a script needs the full envelope. Human output leads with the artifact root, a `guide:` reminder that the root is durable evidence, and a `next:` command when Luotsi can name the follow-up before the rest of the summary. Quiet mode still prints failure envelopes so diagnostics are not lost. Luotsi does not currently use a global `--output` switch for this because some commands already use `--output` for file paths.
 
 Default JSON envelope:
 
@@ -428,7 +431,8 @@ Default JSON envelope:
   "ended_at": "2026-05-20T17:55:17.584933+00:00",
   "data": {},
   "artifacts": {
-    "artifact_root": "/tmp/luotsi/..."
+    "artifact_root": "/tmp/luotsi/...",
+    "poll_artifacts": "final"
   },
   "provenance": {
     "tool": "luotsi",
@@ -447,6 +451,8 @@ Default JSON envelope:
 ```
 
 Failure envelopes include `error.type`, `error.message`, and `error.category`. The current category values are documented in the public [Output Envelopes guide](https://digablesolutions.github.io/luotsi/docs/reference/output-envelopes/).
+
+When an agent or CI job needs the next command, check `data.recommended_next_action.command` first, then ordered handoff arrays such as `data.recommended_next_steps`, `data.next_actions`, and `data.suggested_commands`, then command arrays such as `data.commands`, `data.artifact_commands`, and `data.recommended_commands`. If no richer field is present, use `artifacts.artifact_root` with `luotsi replay open --artifacts <artifact-root> --dry-run` first; use `luotsi artifacts open <artifact-root>` only when you specifically need the generic artifact browser. Source checkouts include executable parser examples at [`examples/agents/extract-next-command.py`](examples/agents/extract-next-command.py) and [`examples/agents/extract-next-command.mjs`](examples/agents/extract-next-command.mjs); they accept one JSON envelope or a saved JSONL-style log and print the best next command.
 
 Scenario `run` commands return the scenario result inside `data`, including per-step timing and top-level overhead:
 

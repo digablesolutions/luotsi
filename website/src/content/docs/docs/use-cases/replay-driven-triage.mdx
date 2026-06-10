@@ -20,11 +20,13 @@ That lets triage stay host-side and asynchronous instead of forcing another live
 ## Recommended commands
 
 ```bash
+luotsi replay open --artifacts ./artifacts/<run> --dry-run
 luotsi replay summarize --artifacts ./artifacts/<run>
-luotsi replay open --artifacts ./artifacts/<run>
 luotsi replay search --artifacts ./artifacts/<run> --contains "error"
 luotsi replay capsule --artifacts ./artifacts/<run>
 ```
+
+Start with `replay open --dry-run` when the first job is orientation: it returns the primary failure, one recommended next action, and the command set for deeper replay tools without launching the local browser.
 
 ## Strong fit when
 

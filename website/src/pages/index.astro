@@ -13,6 +13,7 @@ const docsHref = `${base}docs/`;
 const docsUrl = new URL(docsHref, siteUrl).toString();
 const installHref = `${base}docs/getting-started/installation/`;
 const quickstartHref = `${base}docs/getting-started/quickstart/`;
+const firstFiveMinutesHref = `${base}docs/getting-started/first-five-minutes/`;
 const agentLoopHref = `${base}docs/core-workflows/agent-loop-example/`;
 const githubHref = 'https://github.com/digablesolutions/luotsi';
 const releasesHref = `${githubHref}/releases`;
@@ -121,6 +122,7 @@ const docsBuckets = [
 		title: 'Start Here',
 		intro: 'Get from install to a stable device session before you debug the app.',
 		items: [
+			{ label: 'First Five Minutes', href: firstFiveMinutesHref },
 			{ label: 'Installation', href: installHref },
 			{ label: 'Quickstart', href: quickstartHref },
 			{ label: 'Device Readiness', href: `${base}docs/getting-started/device-readiness/` },
@@ -202,8 +204,8 @@ const inspectSnippet = [
 
 const replaySnippet = [
 	'artifact_root: ./artifacts/smoke-run',
-	'timeline: session-timeline.jsonl',
-	'summary: session-replay.json',
+	'guide: replay open explains failures and next actions',
+	'next: luotsi replay open --artifacts ./artifacts/smoke-run --dry-run',
 ];
 ---
 
@@ -246,6 +248,7 @@ const replaySnippet = [
 					<nav class="nav-links" aria-label="Primary navigation">
 						<a href={docsHref}>Docs</a>
 						<a href={quickstartHref}>Quickstart</a>
+						<a href={firstFiveMinutesHref}>First five minutes</a>
 						<a href={agentLoopHref}>Agent loop</a>
 						<a href={releasesHref}>Releases</a>
 						<a href={githubHref}>GitHub</a>
@@ -261,6 +264,7 @@ const replaySnippet = [
 						</p>
 						<div class="hero-actions">
 							<a class="button-link button-link--primary" href={installHref}>Install Luotsi</a>
+							<a class="button-link button-link--secondary" href={firstFiveMinutesHref}>Understand the output</a>
 							<a class="button-link button-link--secondary" href={agentLoopHref}>See the agent loop</a>
 						</div>
 						<div class="trust-strip" role="list" aria-label="Luotsi product signals">

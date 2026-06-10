@@ -1,0 +1,185 @@
+---
+title: First Five Minutes
+description: Learn Luotsi's output model quickly so humans, scripts, CI jobs, and AI agents know what happened and what to run next.
+---
+
+Luotsi is easiest to reason about when you treat every workflow as a loop:
+
+```text
+command -> structured output -> artifact root -> replay command -> next action
+```
+
+The first minute is about identifying which output contract you are looking at. The next few minutes are about following the evidence to the next command.
+
+From the CLI, run the same primer with:
+
+```bash
+luotsi help output
+```
+
+## Minute 1: Identify The Output
+
+Luotsi has three main output shapes.
+
+| Shape | Where You See It | How To Read It |
+|---|---|---|
+| One JSON envelope | Most commands, including `devices`, `doctor`, `screen-state`, and normal `run` output | Check `ok`, then inspect `data`, `artifacts`, `provenance`, and `error`. |
+| JSONL session stream | `inspect`, and `view --json` / `view -o jsonl` | Read each line as an event. Match command responses by `id`. |
+| Replay artifact root | Scenario runs, inspect sessions, view sessions, and captured failure bundles | Reopen it later with `replay open`, `replay summarize`, `replay timeline`, or `replay graph`. |
+
+If you are not sure what to do next, look for an artifact path first. Luotsi is designed so live device work can turn into replayable evidence.
+
+## One-Shot Commands
+
+Most commands return one final JSON object:
+
+```json
+{
+  "schema": "luotsi-command.v1",
+  "ok": true,
+  "command": "screen-state",
+  "started_at": "2026-06-08T10:15:30Z",
+  "ended_at": "2026-06-08T10:15:31Z",
+  "data": {
+    "focused_package": "com.example.app",
+    "element_count": 12
+  },
+  "artifacts": {
+    "artifact_root": "artifacts/screen-state/20260608-101530",
+    "poll_artifacts": "final"
+  },
+  "provenance": {
+    "device": "emulator-5554"
+  },
+  "error": null
+}
+```
+
+For humans, read:
+
+- `ok`: did the command succeed?
+- `data`: what did Luotsi learn or do?
+- `artifacts.artifact_root`: where is the durable evidence?
+- `error`: what failed, and which category does it belong to?
+
+If you run with `--human`, the same loop is compressed into terminal text:
+
+```text
+OK  screen-state completed in 1000 ms.
+  artifacts: artifacts/screen-state/20260608-101530
+  guide: artifact root is durable evidence; replay open explains failures and next actions
+  next: luotsi replay open --artifacts artifacts/screen-state/20260608-101530 --dry-run
+```
+
+For scripts and CI, treat `ok` plus the process exit code as the first gate, then consume the command-specific `data` contract.
+
+To find the next command in structured output, check these fields in order:
+
+1. `data.recommended_next_action.command` when present.
+2. `data.recommended_next_steps[]`, `data.next_actions[]`, or `data.suggested_commands[]` for ordered handoffs.
+3. `data.commands[]`, `data.artifact_commands[]`, or `data.recommended_commands[]` for exact follow-up commands.
+4. `artifacts.artifact_root` when no richer command field exists, then run `luotsi replay open --artifacts <artifact-root> --dry-run` first. Use `luotsi artifacts open <artifact-root>` only when you specifically need the generic artifact browser.
+
+From source, the agent examples include tiny parsers that implement this same order:
+
+```bash
+luotsi run --file scenarios/smoke.json --device <serial> --artifacts ./artifacts/smoke-run \
+  | python3 examples/agents/extract-next-command.py
+
+luotsi run --file scenarios/smoke.json --device <serial> --artifacts ./artifacts/smoke-run \
+  | node examples/agents/extract-next-command.mjs
+```
+
+## Agent Sessions
+
+`inspect` is not one final object. It is a line-oriented control loop:
+
+```text
+agent sends JSON command -> Luotsi emits JSONL event -> agent decides next command
+```
+
+Input commands are one JSON object per line:
+
+```json
+{"id":"1","command":"wait_visible","text":"Sign in","text_match":"exact","timeout_sec":15}
+{"id":"2","command":"tap_text","text":"Sign in","text_match":"exact","timeout_sec":5}
+{"id":"3","command":"screenshot","label":"after-sign-in"}
+{"id":"4","command":"exit"}
+```
+
+Output events are also one JSON object per line:
+
+```json
+{"type":"session_started","session_id":"...","started_at":"..."}
+{"type":"screen_snapshot","session_id":"...","state":{"element_count":12,"elements":[...]}}
+{"type":"command_result","id":"1","command":"wait_visible","ok":true}
+{"type":"screen_delta","id":"2","delta":{"added_count":1,"removed_count":0},"state":{...}}
+{"type":"session_ended","id":"4","reason":"client_exit"}
+```
+
+For agents, the practical loop is:
+
+1. Wait for `screen_snapshot`.
+2. Send one command with a stable `id`.
+3. Wait for the matching `command_result`.
+4. If the command changes state, wait for the matching `screen_delta`.
+5. Capture artifacts before exiting or when a command fails.
+
+## Failed Runs
+
+When a scenario fails, do not start by rerunning blindly. Start from the artifact root:
+
+```bash
+luotsi run --file scenarios/smoke.json --device <serial> --artifacts ./artifacts/smoke-run
+luotsi replay open --last --artifacts ./artifacts/smoke-run --dry-run
+luotsi replay summarize --artifacts ./artifacts/smoke-run/<run-id>
+luotsi replay graph --artifacts ./artifacts/smoke-run/<run-id> --failed --write-markdown
+```
+
+Use this sequence to answer:
+
+- What failed?
+- What changed or was observed around the failure?
+- Which screenshot, hierarchy, logcat, telemetry, or timeline event proves it?
+- Which command should run next?
+
+`replay open --dry-run` returns the primary failure, recommended next action, and follow-up commands without launching the local artifact browser.
+
+## Pick The Reader
+
+| Reader | Preferred Surface | First Question |
+|---|---|---|
+| Human debugging live | `view`, `screen-state`, human summaries, artifact browser | What do I see, and where are the artifacts? |
+| AI agent exploring | `inspect` JSONL and artifact roots | What event arrived, and what command should I send next? |
+| CI job | JSON envelopes, JUnit, policy fields, replay summaries | Did the run pass, and what evidence should be uploaded? |
+| Reviewer after failure | `replay open`, `replay graph`, capsules, timelines | What proof explains the failure without reconnecting the device? |
+
+## Command Map
+
+Start with these commands when you are oriented by output shape:
+
+```bash
+# Find a device and verify host/device readiness.
+luotsi devices
+luotsi doctor --device <serial>
+
+# Inspect current state once.
+luotsi screen-state --device <serial>
+
+# Open an agent-readable live loop.
+luotsi inspect --device <serial> --artifacts artifacts/inspect
+
+# Run a repeatable scenario.
+luotsi run --file scenarios/smoke.json --device <serial> --artifacts ./artifacts/smoke-run
+
+# Reopen saved evidence.
+luotsi replay open --last --artifacts ./artifacts/smoke-run --dry-run
+luotsi replay graph --artifacts ./artifacts/smoke-run/<run-id> --failed
+```
+
+## Related Pages
+
+- [Quickstart](./quickstart/)
+- [Output Envelopes](../reference/output-envelopes/)
+- [Agent Loop Example](../core-workflows/agent-loop-example/)
+- [Replay And Artifacts](../core-workflows/replay-and-artifacts/)

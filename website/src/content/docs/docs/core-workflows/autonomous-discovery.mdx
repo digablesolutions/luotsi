@@ -47,12 +47,14 @@ Use discovery to find and explain behavior, then promote only reviewed behavior 
 
 ```bash
 luotsi discover --device <serial> --package <app.id> --budget 5m --output-dir artifacts
-luotsi artifacts open --last --artifacts artifacts
+luotsi replay open --last --artifacts artifacts --dry-run
 luotsi scenario-validate --file artifacts/<run>/scenario-candidates/discovery-candidate.json
 luotsi run --file artifacts/<run>/scenario-candidates/discovery-candidate.json --device <serial>
 luotsi replay timeline --artifacts artifacts/<run> --type command_result
-luotsi replay open --artifacts artifacts/<run>
+luotsi artifacts open --last --artifacts artifacts
 ```
+
+Start with `replay open --dry-run` after discovery so Luotsi returns the primary evidence, recommended next action, and follow-up replay commands without launching a browser. Use `artifacts open --last` only when you specifically need to browse every captured file.
 
 ## Related pages
 
