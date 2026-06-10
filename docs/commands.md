@@ -159,6 +159,7 @@ Artifact command quick guide:
 - `artifacts list` is the discovery step for local runs. It returns run ids, roots, file counts, index presence, replay metadata presence, and exact info/open/pack commands.
 - Use `artifacts open --last` for the latest generic artifact browser.
 - Use `replay open --last` for the latest replay-specific next actions.
+- `run-summary.json` uses the `luotsi-run-summary.v1` contract documented in `docs/schemas/luotsi-run-summary-v1.md`.
 - `artifacts info` is the non-mutating check for one artifact root or package zip:
   - For roots, it reports index/replay flags plus artifact category counts, next commands, and any persisted intake audit status/share-safety/SHA verification.
   - For package zips, it validates the manifest and entries, reports redaction metadata plus SHA-256, and returns checksum-verified unpack/replay-after-unpack commands without creating files.

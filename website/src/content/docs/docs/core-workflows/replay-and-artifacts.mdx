@@ -82,7 +82,7 @@ The public distinction that matters is:
 
 - `replay open` is the canonical first stop for one failing artifact root
 - `replay packet` is the direct packet writer when CI or an agent wants `run-summary.json` without launching a browser
-- `run-summary.json` and `run-summary.md` are the stable packet files to attach to CI, reviews, and agent loops after `replay open --write-json --write-markdown`
+- `run-summary.json` and `run-summary.md` are the stable packet files to attach to CI, reviews, and agent loops after `replay packet`, with the source contract documented in `docs/schemas/luotsi-run-summary-v1.md`
 - `replay capsule` is the deeper operator and CI handoff after the replay front door
 - `replay graph` is the agent- and debugger-facing node/edge model for that same root
 - `replay cluster` is the cross-run grouping view when the same failure shape keeps returning in CI
