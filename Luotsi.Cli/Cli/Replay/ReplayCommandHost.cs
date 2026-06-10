@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli.Envelope;
 using Luotsi.Cli.Errors;
@@ -30,7 +31,9 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
 
         if (IsPacketCommand(options))
         {
-            var packetResult = await PacketAsync(started, artifacts).ConfigureAwait(false);
+            object packetResult = options.HasFlag("check")
+                ? await CheckPacketAsync(started, artifacts).ConfigureAwait(false)
+                : await PacketAsync(started, artifacts).ConfigureAwait(false);
             _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, packetResult, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
             return 0;
         }
@@ -189,6 +192,76 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
 
     private Task<RunSummaryResult> PacketAsync(DateTimeOffset started, ArtifactSession artifacts) =>
         CreateRunSummaryAsync(started, artifacts, writeJson: true, writeMarkdown: true);
+
+    private async Task<RunSummaryCheckResult> CheckPacketAsync(DateTimeOffset started, ArtifactSession artifacts)
+    {
+        var packetPath = Path.Join(artifacts.Root, RunSummaryJsonFileName);
+        if (!_dependencies.FileSystem.FileExists(packetPath))
+        {
+            throw new UsageException($"replay packet --check requires {RunSummaryJsonFileName} in the artifact root. Run `luotsi replay packet --artifacts {Quote(artifacts.Root)}` first.");
+        }
+
+        JsonDocument document;
+        try
+        {
+            document = JsonDocument.Parse(await _dependencies.FileSystem.ReadAllTextAsync(packetPath).ConfigureAwait(false));
+        }
+        catch (JsonException ex)
+        {
+            throw new UsageException($"{RunSummaryJsonFileName} is not valid JSON: {ex.Message}");
+        }
+
+        using (document)
+        {
+            var root = document.RootElement;
+            var schema = RequireString(root, "schema", packetPath);
+            if (!string.Equals(schema, ResultSchemas.RunSummary, StringComparison.Ordinal))
+            {
+                throw new UsageException($"{RunSummaryJsonFileName} has unsupported schema '{schema}'. Expected '{ResultSchemas.RunSummary}'.");
+            }
+
+            var artifactRoot = RequireString(root, "artifactRoot", packetPath);
+            if (!string.Equals(artifactRoot, artifacts.Root, StringComparison.Ordinal))
+            {
+                throw new UsageException($"{RunSummaryJsonFileName} points at artifact root '{artifactRoot}', but the checked root is '{artifacts.Root}'. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
+            }
+
+            var packetStatus = RequireString(root, "status", packetPath);
+            var sessionCount = RequireInt32(root, "sessionCount", packetPath);
+            var failureCount = RequireInt32(root, "failureCount", packetPath);
+            var recommendedNextAction = RequireObject(root, "recommendedNextAction", packetPath);
+            var recommendedCommand = RequireString(recommendedNextAction, "command", packetPath);
+            var entryPoints = RequireObject(root, "entryPoints", packetPath);
+            var runSummaryJsonPath = RequireString(entryPoints, "runSummaryJsonPath", packetPath);
+            if (!string.Equals(runSummaryJsonPath, packetPath, StringComparison.Ordinal))
+            {
+                throw new UsageException($"{RunSummaryJsonFileName} entryPoints.runSummaryJsonPath points at '{runSummaryJsonPath}', but expected '{packetPath}'. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
+            }
+
+            var runSummaryMarkdownPath = RequireNullableString(entryPoints, "runSummaryMarkdownPath", packetPath);
+            if (string.IsNullOrWhiteSpace(runSummaryMarkdownPath))
+            {
+                throw new UsageException($"{RunSummaryJsonFileName} is missing entryPoints.runSummaryMarkdownPath. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
+            }
+
+            if (!_dependencies.FileSystem.FileExists(runSummaryMarkdownPath))
+            {
+                throw new UsageException($"{RunSummaryJsonFileName} points at missing Markdown packet '{runSummaryMarkdownPath}'. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
+            }
+
+            return new RunSummaryCheckResult(
+                ResultSchemas.RunSummaryCheck,
+                started,
+                artifacts.Root,
+                packetPath,
+                "valid",
+                packetStatus,
+                sessionCount,
+                failureCount,
+                recommendedCommand,
+                runSummaryMarkdownPath);
+        }
+    }
 
     private async Task<RunSummaryResult> CreateRunSummaryAsync(
         DateTimeOffset started,
@@ -509,6 +582,61 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             $"luotsi artifacts open {Quote(artifactRoot)}");
     }
 
+    private static string RequireString(JsonElement element, string propertyName, string sourcePath)
+    {
+        if (!element.TryGetProperty(propertyName, out var property) ||
+            property.ValueKind != JsonValueKind.String ||
+            string.IsNullOrWhiteSpace(property.GetString()))
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} is missing string property '{propertyName}'.");
+        }
+
+        return property.GetString()!;
+    }
+
+    private static string? RequireNullableString(JsonElement element, string propertyName, string sourcePath)
+    {
+        if (!element.TryGetProperty(propertyName, out var property))
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} is missing string property '{propertyName}'.");
+        }
+
+        if (property.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        if (property.ValueKind != JsonValueKind.String)
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} property '{propertyName}' must be a string or null.");
+        }
+
+        return property.GetString();
+    }
+
+    private static int RequireInt32(JsonElement element, string propertyName, string sourcePath)
+    {
+        if (!element.TryGetProperty(propertyName, out var property) ||
+            property.ValueKind != JsonValueKind.Number ||
+            !property.TryGetInt32(out var value))
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} is missing integer property '{propertyName}'.");
+        }
+
+        return value;
+    }
+
+    private static JsonElement RequireObject(JsonElement element, string propertyName, string sourcePath)
+    {
+        if (!element.TryGetProperty(propertyName, out var property) ||
+            property.ValueKind != JsonValueKind.Object)
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} is missing object property '{propertyName}'.");
+        }
+
+        return property;
+    }
+
     private static ReplayOutputMode ParseOutputMode(CliOptions options, string commandName)
     {
         var format = options.Get("format");
@@ -639,6 +767,7 @@ internal sealed record ReplayCommandHostDependencies(
     AppCommandEnvelopeWriter EnvelopeWriter,
     AppCommandJsonWriter JsonWriter,
     Routing.ReplayCommandDispatcher CommandDispatcher,
+    IFileSystem FileSystem,
     IProcessRunner ProcessRunner,
     ReplayScenarioDraftService ScenarioDraftService,
     ReplaySearchService SearchService,

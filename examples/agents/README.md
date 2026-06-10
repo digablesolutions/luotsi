@@ -51,7 +51,7 @@ luotsi run --file scenarios/smoke.json --device <serial> --artifacts artifacts/s
 
 The parsers accept either one normal Luotsi JSON envelope or a saved JSONL-style log with multiple one-line JSON objects; in JSONL mode they use the last Luotsi command envelope they find. Bad input exits non-zero with an `extract-next-command:` message and no language runtime stack trace.
 
-They also accept the persisted `run-summary.json` packet written by `luotsi replay packet`. That packet uses the artifact JSON schema `luotsi-run-summary.v1` and camelCase fields such as `recommendedNextAction.command`, so an agent can download a CI artifact, feed `run-summary.json` into the same parser, and continue with the recommended replay command without scraping Markdown. The source-tree contract lives at `docs/schemas/luotsi-run-summary-v1.md`.
+They also accept the persisted `run-summary.json` packet written by `luotsi replay packet`. That packet uses the artifact JSON schema `luotsi-run-summary.v1` and camelCase fields such as `recommendedNextAction.command`, so an agent can download a CI artifact, feed `run-summary.json` into the same parser, and continue with the recommended replay command without scraping Markdown. Run `luotsi replay packet --artifacts <artifact-root> --check` as the pass/fail gate when you receive an existing packet. The source-tree contract lives at `docs/schemas/luotsi-run-summary-v1.md`.
 
 If Luotsi reports a protocol, session, wait, tap, screenshot, post-action state, or inspect-process failure, the scripts exit non-zero and leave the artifact directory behind for replay.
 

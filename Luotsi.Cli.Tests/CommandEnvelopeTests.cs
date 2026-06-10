@@ -987,6 +987,120 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayPacket_Check_ValidatesExistingRunSummary()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var processRunner = new FakeProcessRunner();
+        var replayRoot = SeedReplaySummaryArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = processRunner,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var writeExitCode = await app.RunAsync(["replay", "packet", "--artifacts", replayRoot]);
+        console.OutputLines.Clear();
+        var checkExitCode = await app.RunAsync(["replay", "packet", "--check", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, writeExitCode);
+        Assert.Equal(0, checkExitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("luotsi-run-summary-check.v1", data.GetProperty("schema").GetString());
+        Assert.Equal("valid", data.GetProperty("status").GetString());
+        Assert.Equal("needs_triage", data.GetProperty("packet_status").GetString());
+        Assert.Equal(replayRoot, data.GetProperty("artifact_root").GetString());
+        Assert.Equal(Path.Join(replayRoot, "run-summary.json"), data.GetProperty("packet_path").GetString());
+        Assert.Equal(Path.Join(replayRoot, "run-summary.md"), data.GetProperty("run_summary_markdown_path").GetString());
+        Assert.Contains("luotsi replay scrub", data.GetProperty("recommended_next_action_command").GetString(), StringComparison.Ordinal);
+        Assert.Empty(processRunner.Calls);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayPacket_Check_MissingPacket_ReturnsUsageError()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplaySummaryArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = new FakeProcessRunner(),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "packet", "--check", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("requires run-summary.json", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayPacket_Check_StaleArtifactRoot_ReturnsUsageError()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplaySummaryArtifacts(fileSystem);
+        var staleRoot = Path.Join("/tmp", "other-run");
+        var staleJsonPath = Path.Join(staleRoot, "run-summary.json");
+        var staleMarkdownPath = Path.Join(staleRoot, "run-summary.md");
+        fileSystem.CreateDirectory(staleRoot);
+        fileSystem.AddFile(staleMarkdownPath, "# Luotsi Run Summary");
+        fileSystem.AddFile(staleJsonPath, JsonSerializer.Serialize(new
+        {
+            schema = "luotsi-run-summary.v1",
+            generatedAt = "2026-06-10T12:00:00Z",
+            artifactRoot = replayRoot,
+            status = "needs_triage",
+            verdict = "Failure signals found.",
+            sessionCount = 1,
+            failureCount = 1,
+            primaryFailure = (object?)null,
+            recommendedNextAction = new
+            {
+                kind = "scrub_failure",
+                title = "Scrub",
+                reason = "Failure",
+                command = $"luotsi replay scrub --artifacts {replayRoot} --failures"
+            },
+            entryPoints = new
+            {
+                indexHtmlPath = Path.Join(replayRoot, "index.html"),
+                indexMarkdownPath = Path.Join(replayRoot, "index.md"),
+                replayOpenJsonPath = (string?)null,
+                replayOpenMarkdownPath = (string?)null,
+                runSummaryJsonPath = staleJsonPath,
+                runSummaryMarkdownPath = staleMarkdownPath
+            },
+            commands = Array.Empty<object>()
+        }));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = new FakeProcessRunner(),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "packet", "--check", "--artifacts", staleRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("points at artifact root", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("Re-run `luotsi replay packet", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayOpen_WithSessionWithoutFailure_RecommendsCapsule()
     {
         var console = new FakeConsole();

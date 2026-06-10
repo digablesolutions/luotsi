@@ -421,8 +421,8 @@ Luotsi help: replay
 Usage:
   luotsi replay open --artifacts <artifact-root> [--dry-run] [--write-json] [--write-markdown]
   luotsi replay open --last [--artifacts <directory>] [--dry-run] [--write-json] [--write-markdown]
-  luotsi replay packet --artifacts <artifact-root>
-  luotsi replay packet --last [--artifacts <directory>]
+  luotsi replay packet --artifacts <artifact-root> [--check]
+  luotsi replay packet --last [--artifacts <directory>] [--check]
   luotsi replay summarize --artifacts <artifact-root> [--format json|jsonl]
   luotsi replay capsule --artifacts <artifact-root> [--write-readme] [--write-json]
   luotsi replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--source-path <timeline-path>] [--sequence <n>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
@@ -435,6 +435,7 @@ Usage:
 Examples:
   luotsi replay open --artifacts artifacts/20260518-100000-view --write-json --write-markdown
   luotsi replay packet --artifacts artifacts/20260518-100000-run
+  luotsi replay packet --artifacts artifacts/20260518-100000-run --check
   luotsi replay open --last --artifacts artifacts --dry-run
   luotsi replay summarize --artifacts artifacts/20260518-100000-view
   luotsi replay summarize --artifacts artifacts/20260518-100000-view --format json
@@ -474,7 +475,9 @@ Notes:
   <directory> without re-copying a path.
   Replay packet is the non-interactive packet writer: it refreshes the artifact
   index, writes run-summary.json and run-summary.md, and returns the
-  luotsi-run-summary.v1 packet without launching a browser.
+  luotsi-run-summary.v1 packet without launching a browser. Add --check to
+  validate an existing run-summary.json/run-summary.md pair without rewriting
+  artifacts; missing, malformed, or stale-root packets fail as usage errors.
   Replay summarize reads session-replay.json and session-timeline.jsonl from an
   existing artifact root. By default it returns the condensed failure timeline
   as a normal JSON command envelope. `--format json` writes the bare summary
@@ -863,7 +866,7 @@ Command groups:
     replay scrub --artifacts <artifact-root> [--failures] [--source-path <timeline-path>] [--sequence <n>] [--context <n>] [--write-json] [--write-markdown]
     replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--contains <text>] [--insight <kind>] [--severity info|warning|error] [--evidence <kind>] [--fact <text>] [--node <id> --depth 1] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
     replay cluster --artifacts <artifact-root> [--write-json] [--write-markdown]
-    replay packet (--artifacts <artifact-root> | --last [--artifacts <directory>])
+    replay packet (--artifacts <artifact-root> | --last [--artifacts <directory>]) [--check]
     replay open (--artifacts <artifact-root> | --last [--artifacts <directory>]) [--dry-run] [--write-json] [--write-markdown]
     replay scenario-draft --artifacts <artifact-root> [--output <scenario.json>|--file <scenario.json>] [--name <name>] [--validate] [--write-json] [--write-markdown]
     replay search --artifacts <artifact-root> --contains <text> [--limit 50]

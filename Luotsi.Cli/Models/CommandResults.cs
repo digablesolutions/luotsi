@@ -487,6 +487,18 @@ public sealed record RunSummaryEntryPoints(
     string? RunSummaryJsonPath,
     string? RunSummaryMarkdownPath);
 
+public sealed record RunSummaryCheckResult(
+    string Schema,
+    DateTimeOffset CheckedAt,
+    string ArtifactRoot,
+    string PacketPath,
+    string Status,
+    string PacketStatus,
+    int SessionCount,
+    int FailureCount,
+    string RecommendedNextActionCommand,
+    string? RunSummaryMarkdownPath);
+
 public sealed record ReplayScenarioDraftResult(
     string Schema,
     string ArtifactRoot,

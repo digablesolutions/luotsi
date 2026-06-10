@@ -10,6 +10,11 @@ understood before opening raw artifacts.
 Agents should prefer `run-summary.json`; humans can start with the Markdown job
 summary and then follow the same command fields.
 
+Use `luotsi replay packet --artifacts <artifact-root> --check` when CI, support,
+or an agent receives an artifact root and needs to prove that the existing
+packet is present, readable, points at the checked artifact root, and has a
+Markdown companion before continuing.
+
 ## Top-level fields
 
 | Field | Type | Required | Meaning |
@@ -150,3 +155,4 @@ belongs in the broader command list. Consumers should still prefer
 - Consumers should check `schema` first, then use `recommendedNextAction.command` / `recommended_next_action.command` as the first next command.
 - If `primaryFailure` is `null`, do not assume the run passed. Check `status`, `verdict`, and `sessionCount`.
 - If `runSummaryJsonPath` or `runSummaryMarkdownPath` is `null`, the packet was returned in-memory by a command path that did not persist both files. Run `luotsi replay packet --artifacts <artifact-root>` to write them.
+- `replay packet --check` is the contract gate for an existing packet. It must exit non-zero for missing JSON, invalid JSON, unsupported schema, stale `artifactRoot`, missing `recommendedNextAction.command`, missing `entryPoints.runSummaryJsonPath`, missing `entryPoints.runSummaryMarkdownPath`, or a missing Markdown companion.

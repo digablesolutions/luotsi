@@ -32,7 +32,7 @@ When an agent or CI job needs the next action, read command hints in this order:
 3. `data.commands[]`, `data.artifact_commands[]`, or `data.recommended_commands[]` when the result exposes exact follow-up commands.
 4. `artifacts.artifact_root` as the fallback evidence pointer; reopen it with `replay open --dry-run` first, and use `artifacts open` only when you specifically need the generic artifact browser.
 
-The source tree includes executable examples of this priority order at `examples/agents/extract-next-command.py` and `examples/agents/extract-next-command.mjs`. The same parsers accept persisted `run-summary.json` packets with schema `luotsi-run-summary.v1`; the source contract is documented at `docs/schemas/luotsi-run-summary-v1.md`.
+The source tree includes executable examples of this priority order at `examples/agents/extract-next-command.py` and `examples/agents/extract-next-command.mjs`. The same parsers accept persisted `run-summary.json` packets with schema `luotsi-run-summary.v1`; the source contract is documented at `docs/schemas/luotsi-run-summary-v1.md`, and `replay packet --check` is the pass/fail gate for an existing packet.
 
 When an artifact root has a persisted package intake audit, human output for `artifacts info` and `replay capsule` includes a compact `intake:` line with status, share-safety, SHA verification, and package path.
 

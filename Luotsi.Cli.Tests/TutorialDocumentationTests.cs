@@ -99,6 +99,7 @@ public sealed partial class AppTests
         Assert.Contains("examples/agents/extract-next-command.mjs", markdown, StringComparison.Ordinal);
         Assert.Contains("one JSON envelope or a saved JSONL-style log", markdown, StringComparison.Ordinal);
         Assert.Contains("docs/schemas/luotsi-run-summary-v1.md", markdown, StringComparison.Ordinal);
+        Assert.Contains("replay packet --check", markdown, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -257,6 +258,7 @@ public sealed partial class AppTests
         Assert.Contains("luotsi-run-summary.v1", examples, StringComparison.Ordinal);
         Assert.Contains("recommendedNextAction.command", examples, StringComparison.Ordinal);
         Assert.Contains("docs/schemas/luotsi-run-summary-v1.md", examples, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --artifacts <artifact-root> --check", examples, StringComparison.Ordinal);
         Assert.Contains("Bad input exits non-zero with an `extract-next-command:` message", examples, StringComparison.Ordinal);
         Assert.Contains("artifacts.artifact_root", examples, StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --last --artifacts artifacts/agent-loop --dry-run", examples, StringComparison.Ordinal);
@@ -446,6 +448,7 @@ public sealed partial class AppTests
         Assert.Contains("luotsi replay packet --artifacts ./artifacts/my-run", markdown, StringComparison.Ordinal);
         Assert.Contains("run-summary.json", markdown, StringComparison.Ordinal);
         Assert.Contains("docs/schemas/luotsi-run-summary-v1.md", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --artifacts ./artifacts/my-run --check", markdown, StringComparison.Ordinal);
         Assert.Contains("canonical replay front door", markdown, StringComparison.Ordinal);
         Assert.Contains("before raw artifact browsing", markdown, StringComparison.Ordinal);
         Assert.Contains("`replay capsule` is the shareable CI-triage summary after the replay front door", markdown, StringComparison.Ordinal);
@@ -468,6 +471,8 @@ public sealed partial class AppTests
         Assert.Contains("recommendedNextAction.command", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("entryPoints", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("Consumers should accept both camelCase artifact JSON fields and snake_case command-envelope fields", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("replay packet --check", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("must exit non-zero for missing JSON", schemaGuide, StringComparison.Ordinal);
     }
 
     [Fact]
