@@ -220,8 +220,8 @@ First run:
      exact next commands. With --device or --device-query, Doctor JSON includes
      readiness_plan.status, blockers, next_command, and recommended_commands
      for agent/operator handoff. When ready, package-aware doctor results prefer
-     discover, then inspect, screen-state, persisted quickstart handoff,
-     scenario validation, run, and live view commands.
+     discover, package preflight, inspect, screen-state, persisted quickstart
+     handoff, scenario validation, run, and live view commands.
 
   3. Open a live mirror when you need operator feedback
      luotsi view --device <adb serial>

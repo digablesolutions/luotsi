@@ -57,7 +57,7 @@ luotsi doctor --device <serial>
 luotsi doctor --device <serial> --fix
 ```
 
-Use `doctor` when you want the broad first-run report. Without `--device` or `--device-query`, it lists adb-visible devices and returns exact next commands for selecting the target. With a selected device, it wraps adb checks, optional package preflight, and the same live-view readiness path exposed by `view setup` and `view-doctor`. The JSON result includes a `readiness_plan` with status, blockers, `next_command`, and `recommended_commands` for operator or agent handoff; ready package-aware reports route to `discover` first.
+Use `doctor` when you want the broad first-run report. Without `--device` or `--device-query`, it lists adb-visible devices and returns exact next commands for selecting the target. With a selected device, it wraps adb checks, optional package preflight, and the same live-view readiness path exposed by `view setup` and `view-doctor`. The JSON result includes a `readiness_plan` with status, blockers, `next_command`, and `recommended_commands` for operator or agent handoff; ready package-aware reports route to `discover` first, then keep package preflight in the recommended follow-up list.
 
 ## Next steps
 
