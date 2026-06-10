@@ -29,7 +29,7 @@ export function readEnvelope(text) {
     parsed = null;
   }
 
-  if (isObject(parsed)) {
+  if (isLooseCommandEnvelope(parsed)) {
     return parsed;
   }
 
@@ -90,10 +90,14 @@ export function extractNextCommand(envelope) {
 }
 
 function isCommandEnvelope(value) {
-  return isObject(value) && (value.schema === 'luotsi-command.v1' ||
+  return isObject(value) && value.schema === 'luotsi-command.v1';
+}
+
+function isLooseCommandEnvelope(value) {
+  return isCommandEnvelope(value) || (isObject(value) && (
     'ok' in value ||
     'data' in value ||
-    'artifacts' in value);
+    'artifacts' in value));
 }
 
 function firstCommand(items, { preferReplayOpen }) {

@@ -33,9 +33,9 @@
       },
       "Microsoft.NET.ILLink.Tasks": {
         "type": "Direct",
-        "requested": "[10.0.8, )",
-        "resolved": "10.0.8",
-        "contentHash": "dVbSXGIFNR5nZcv2tOLoWI+a9T4jtFd77IYjuND+QVe360qWgAF7H0WtoopYhRw/+SgpGUTyrkrh+65+ClNnfw=="
+        "requested": "[10.0.9, )",
+        "resolved": "10.0.9",
+        "contentHash": "FeXZfSx/RVXiooaWdkmd9g8TGAKC+MeC5IBByPf2FgTgR+NAXLMTgfHgimM6T4iV40+s2tzFXM/7RKYLZKZjHA=="
       },
       "ppy.SDL3-CS": {
         "type": "Direct",

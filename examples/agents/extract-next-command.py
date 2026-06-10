@@ -34,7 +34,7 @@ def read_envelope(text: str) -> dict[str, Any]:
     except json.JSONDecodeError:
         parsed = None
 
-    if isinstance(parsed, dict):
+    if is_loose_command_envelope(parsed):
         return parsed
 
     if isinstance(parsed, list):
@@ -61,8 +61,12 @@ def read_envelope(text: str) -> dict[str, Any]:
 
 
 def is_command_envelope(value: Any) -> bool:
+    return isinstance(value, dict) and value.get("schema") == "luotsi-command.v1"
+
+
+def is_loose_command_envelope(value: Any) -> bool:
     return isinstance(value, dict) and (
-        value.get("schema") == "luotsi-command.v1"
+        is_command_envelope(value)
         or "ok" in value
         or "data" in value
         or "artifacts" in value
