@@ -329,12 +329,10 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
                      .Select(static item => item.Command)
                      .Where(static command => !string.IsNullOrWhiteSpace(command))
                      .Select(static command => command!)
-                     .Distinct(StringComparer.Ordinal))
+                     .Distinct(StringComparer.Ordinal)
+                     .Where(command => !commandBlock.Contains(command, StringComparison.Ordinal)))
         {
-            if (!commandBlock.Contains(command, StringComparison.Ordinal))
-            {
-                throw new UsageException($"{RunSummaryMarkdownFileName} copy-paste triage command block is missing checklist command '{command}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
-            }
+            throw new UsageException($"{RunSummaryMarkdownFileName} copy-paste triage command block is missing checklist command '{command}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
         }
     }
 
@@ -436,12 +434,12 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
                      primaryFailure.Step,
                      primaryFailure.Action,
                      primaryFailure.Message
-                 }.Where(static value => !string.IsNullOrWhiteSpace(value)))
+                 }
+                 .Where(static value => !string.IsNullOrWhiteSpace(value))
+                 .Select(static value => value!)
+                 .Where(value => !runSummaryMarkdown.Contains(EscapeMarkdown(value), StringComparison.Ordinal)))
         {
-            if (!runSummaryMarkdown.Contains(EscapeMarkdown(value!), StringComparison.Ordinal))
-            {
-                throw new UsageException($"{RunSummaryMarkdownFileName} failure snapshot is missing primary failure value '{value}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
-            }
+            throw new UsageException($"{RunSummaryMarkdownFileName} failure snapshot is missing primary failure value '{value}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
         }
     }
 
