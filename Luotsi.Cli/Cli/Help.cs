@@ -265,7 +265,9 @@ Tips:
   a status such as ready_to_run, needs_input, or ready_after_artifact. Use
   the quickstart-verify command with the same --device, --package, and
   --artifacts inputs when you want that checklist grouped into ready, blocked,
-  and later proof commands before starting the first-run path. Add --human
+  and later proof commands before starting the first-run path. It also writes
+  the local plan/proof-pack handoff artifacts and reports the local proofs
+  that passed. Add --human
   when you want a compact terminal plan with the first command, selected
   inputs, minute-by-minute next steps, and the handoff proof command.
   Add --write-json and --write-markdown to persist quickstart-plan.json,

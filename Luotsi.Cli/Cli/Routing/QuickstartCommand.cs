@@ -334,11 +334,12 @@ internal static class QuickstartCommand
             recommendedCommands);
     }
 
-    public static QuickstartVerifyResult Verify(CliOptions options)
+    public static async Task<QuickstartVerifyResult> VerifyAsync(CliOptions options, ArtifactSession artifacts)
     {
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(artifacts);
 
-        var plan = Build(options);
+        var plan = Build(options, artifacts.Root);
         var readyChecks = plan.ProofChecks
             .Where(static check => string.Equals(check.Status, "ready_to_run", StringComparison.OrdinalIgnoreCase))
             .Select(QuickstartVerifyCheckResult.FromProofCheck)
@@ -357,6 +358,8 @@ internal static class QuickstartCommand
         var nextCommand = readyChecks.FirstOrDefault()?.Command ??
             blockedChecks.FirstOrDefault()?.Command ??
             plan.FirstCommand;
+        var localProofs = await RunLocalProofsAsync(plan, artifacts).ConfigureAwait(false);
+        var passedLocalProofCount = localProofs.Count(static proof => string.Equals(proof.Status, "passed", StringComparison.OrdinalIgnoreCase));
 
         return new QuickstartVerifyResult(
             ResultSchemas.QuickstartVerify,
@@ -369,7 +372,10 @@ internal static class QuickstartCommand
             readyChecks.Length,
             blockedChecks.Length,
             laterChecks.Length,
+            localProofs.Count,
+            passedLocalProofCount,
             nextCommand,
+            localProofs,
             readyChecks,
             blockedChecks,
             laterChecks,
@@ -383,6 +389,45 @@ internal static class QuickstartCommand
                     "Persist the first-run plan and proof checklist for a human or AI operator.",
                     $"luotsi quickstart {BuildCurrentOptionFlags(plan.Inputs)} --write-json --write-markdown".Replace("  ", " ", StringComparison.Ordinal).Trim())
             ]);
+    }
+
+    private static async Task<IReadOnlyList<QuickstartLocalProofResult>> RunLocalProofsAsync(QuickstartResult plan, ArtifactSession artifacts)
+    {
+        var results = new List<QuickstartLocalProofResult>
+        {
+            new(
+                "install",
+                "passed",
+                "luotsi command envelope is executing and can evaluate the quickstart contract.",
+                plan.ProofChecks.First(static check => string.Equals(check.Kind, "install", StringComparison.Ordinal)).Command,
+                null)
+        };
+
+        var resultWithHandoff = plan with
+        {
+            Handoff = new QuickstartHandoffResult(
+                artifacts.Root,
+                Path.Join(artifacts.Root, JsonFileName),
+                Path.Join(artifacts.Root, MarkdownFileName),
+                Path.Join(artifacts.Root, ProofPackJsonFileName),
+                Path.Join(artifacts.Root, ProofPackMarkdownFileName),
+                null)
+        };
+
+        await WriteTextArtifactAsync(artifacts, JsonFileName, JsonSerializer.Serialize(resultWithHandoff, AppCommandJson.Options) + Environment.NewLine).ConfigureAwait(false);
+        await WriteTextArtifactAsync(artifacts, MarkdownFileName, BuildMarkdown(resultWithHandoff)).ConfigureAwait(false);
+        await WriteTextArtifactAsync(artifacts, ProofPackJsonFileName, JsonSerializer.Serialize(resultWithHandoff.ProofPack, AppCommandJson.Options) + Environment.NewLine).ConfigureAwait(false);
+        await WriteTextArtifactAsync(artifacts, ProofPackMarkdownFileName, BuildProofPackMarkdown(resultWithHandoff.ProofPack)).ConfigureAwait(false);
+        await artifacts.RefreshIndexAsync().ConfigureAwait(false);
+
+        results.Add(new(
+            "artifact_handoff",
+            "passed",
+            "quickstart-plan.json, quickstart-plan.md, evaluation-proof-pack.json, evaluation-proof-pack.md, and index.md were written in this command artifact root.",
+            plan.ProofChecks.First(static check => string.Equals(check.Kind, "artifact_handoff", StringComparison.Ordinal)).Command,
+            artifacts.Root));
+
+        return results;
     }
 
     private static string BuildMarkdown(QuickstartResult result)
@@ -673,7 +718,10 @@ internal sealed record QuickstartVerifyResult(
     int ReadyCount,
     int BlockedCount,
     int LaterCount,
+    int LocalProofCount,
+    int PassedLocalProofCount,
     string NextCommand,
+    IReadOnlyList<QuickstartLocalProofResult> LocalProofs,
     IReadOnlyList<QuickstartVerifyCheckResult> ReadyChecks,
     IReadOnlyList<QuickstartVerifyCheckResult> BlockedChecks,
     IReadOnlyList<QuickstartVerifyCheckResult> LaterChecks,
@@ -689,3 +737,10 @@ internal sealed record QuickstartVerifyCheckResult(
     public static QuickstartVerifyCheckResult FromProofCheck(QuickstartProofCheckResult check) =>
         new(check.Kind, check.Status, check.Command, check.Evidence, check.BlockedReason);
 }
+
+internal sealed record QuickstartLocalProofResult(
+    string Kind,
+    string Status,
+    string Evidence,
+    string Command,
+    string? ArtifactRoot);
