@@ -167,12 +167,14 @@ public sealed partial class AppTests
         Assert.Contains("artifacts open --last", markdown, StringComparison.Ordinal);
         Assert.Contains("replay open --last", markdown, StringComparison.Ordinal);
         AssertContainsBefore(markdown, "luotsi replay open --artifacts ./artifacts/my-run", "luotsi artifacts open ./artifacts/my-run");
-        AssertContainsBefore(autonomousDiscovery, "luotsi replay open --last --artifacts artifacts --dry-run", "luotsi artifacts open --last --artifacts artifacts");
+        AssertContainsBefore(autonomousDiscovery, "luotsi replay packet --last --artifacts artifacts", "luotsi replay open --last --artifacts artifacts --dry-run");
+        AssertContainsBefore(autonomousDiscovery, "luotsi replay packet --last --artifacts artifacts --check", "luotsi replay open --last --artifacts artifacts --dry-run");
         AssertContainsBefore(cliCommandGroups, "luotsi replay open --last --artifacts ./artifacts --dry-run", "luotsi artifacts open --last --artifacts ./artifacts");
-        AssertContainsBefore(markdown, "`replay open --last` for the latest replay-specific next actions", "`artifacts open --last` only when you specifically need the latest generic browser");
-        AssertContainsBefore(markdown, "start replay-specific triage with `replay open`", "Use `artifacts open` only when you specifically need the generic browser");
+        AssertContainsBefore(markdown, "`replay packet --last` to write the durable first-minute packet", "`artifacts open --last` only when you specifically need the latest generic browser");
+        AssertContainsBefore(markdown, "Start with `replay packet` after discovery", "Use `artifacts open --last` only when you specifically need to browse every captured file.");
+        AssertContainsBefore(markdown, "start replay-specific triage with `replay packet`", "Use `artifacts open` only when you specifically need the generic browser");
         AssertContainsBefore(replayAndArtifacts, "`replay packet` is the canonical first stop", "`replay capsule` is the deeper operator and CI handoff");
-        Assert.Contains("Start with `replay open --dry-run` after discovery", markdown, StringComparison.Ordinal);
+        AssertContainsBefore(replayAndArtifacts, "luotsi replay packet --artifacts ./artifacts/failing-run", "luotsi replay open --artifacts ./artifacts/failing-run --dry-run");
     }
 
     [Fact]

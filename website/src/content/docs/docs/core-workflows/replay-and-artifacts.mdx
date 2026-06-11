@@ -20,10 +20,12 @@ Use `artifacts list` when you need to rediscover a recent run id or temp-root ar
 ```bash
 luotsi artifacts list --artifacts ./artifacts
 luotsi artifacts info ./artifacts/my-run
-luotsi replay open --artifacts ./artifacts/my-run --dry-run
-luotsi replay open --last --artifacts ./artifacts --dry-run
+luotsi replay packet --artifacts ./artifacts/my-run
+luotsi replay packet --artifacts ./artifacts/my-run --check
 luotsi replay packet --last --artifacts ./artifacts
 luotsi replay packet --last --artifacts ./artifacts --check
+luotsi replay open --artifacts ./artifacts/my-run --dry-run
+luotsi replay open --last --artifacts ./artifacts --dry-run
 luotsi artifacts open ./artifacts/my-run
 luotsi artifacts open --last --artifacts ./artifacts
 luotsi artifacts pack ./artifacts/my-run --output my-run.zip --dry-run
@@ -34,8 +36,6 @@ luotsi artifacts info my-run-lab-safe.zip
 luotsi artifacts intake my-run-lab-safe.zip --output ./artifacts/my-run --require-lab-safe --write-json --write-readme --sha256 <digest>
 luotsi artifacts unpack my-run-lab-safe.zip --output ./artifacts/my-run --require-lab-safe --sha256 <digest>
 luotsi replay summarize --artifacts ./artifacts/my-run
-luotsi replay packet --artifacts ./artifacts/my-run
-luotsi replay packet --artifacts ./artifacts/my-run --check
 luotsi replay open --artifacts ./artifacts/my-run --dry-run --write-json --write-markdown
 luotsi replay capsule --artifacts ./artifacts/my-run --write-readme --write-json
 luotsi replay timeline --artifacts ./artifacts/my-run --failures
@@ -121,7 +121,7 @@ When you persist draft review artifacts, Luotsi currently writes:
 ## Practical workflow
 
 1. Run the command or scenario with an explicit artifact root if you want a stable location.
-2. Use `artifacts list` if you need to rediscover the run id or exact artifact root, then use `replay open --last` for the latest replay-specific next actions, `artifacts info` for a non-mutating root or package summary, and `artifacts open --last` only when you specifically need the latest generic browser.
+2. Use `artifacts list` if you need to rediscover the run id or exact artifact root, then use `replay packet --last` to write the durable first-minute packet, `replay packet --last --check` to validate a received packet, `replay open --last` when a human wants the replay-specific front door response, `artifacts info` for a non-mutating root or package summary, and `artifacts open --last` only when you specifically need the latest generic browser.
 3. Use `replay summarize` to confirm what happened at the session level.
 4. Move to `replay timeline` or `replay search` to narrow the failure window.
 5. Use `replay graph` when you need promoted selectors/actions/telemetry, facts, causal chains, or hypotheses; use `replay cluster` when the question is whether the same failure shape is repeating across runs.
@@ -168,6 +168,8 @@ This is enough for the near-term authoring loop: explore a flow, generate a draf
 ## CI triage recipe
 
 ```bash
+luotsi replay packet --artifacts ./artifacts/failing-run
+luotsi replay packet --artifacts ./artifacts/failing-run --check
 luotsi replay open --artifacts ./artifacts/failing-run --dry-run
 luotsi replay capsule --artifacts ./artifacts/failing-run --write-readme --write-json
 luotsi replay timeline --artifacts ./artifacts/failing-run --failures --context 3 --write-markdown
