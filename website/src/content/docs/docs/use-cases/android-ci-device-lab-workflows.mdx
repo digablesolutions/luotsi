@@ -22,7 +22,7 @@ luotsi replay packet --artifacts ./artifacts/<run>
 luotsi replay packet --artifacts ./artifacts/<run> --check
 ```
 
-Use `replay packet` as the CI handoff preview: it writes the failure snapshot, packet gate, primary failure, recommended next action, and first-minute commands without trying to launch a browser on the runner. Use `replay open --dry-run` when a human also needs the replay front door response. When the workflow depends on a shared device pool, pair this with [Lab And Device Claims](../../reference/lab-and-device-claims/) and [Shared Lab Operations](../../reference/shared-lab-operations/).
+Use `replay packet` as the CI handoff preview: it writes the At a Glance summary, failure snapshot, packet gate, primary failure, recommended next action, and first-minute commands without trying to launch a browser on the runner. Use `replay open --dry-run` when a human also needs the replay front door response. When the workflow depends on a shared device pool, pair this with [Lab And Device Claims](../../reference/lab-and-device-claims/) and [Shared Lab Operations](../../reference/shared-lab-operations/).
 
 ## Portable CI workflow pack
 

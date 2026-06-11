@@ -358,7 +358,7 @@ public sealed partial class AppTests
         Assert.Contains("examples/agents/extract-next-command.py", llms, StringComparison.Ordinal);
         Assert.Contains("examples/agents/extract-next-command.mjs", llms, StringComparison.Ordinal);
         Assert.Contains("saved JSONL-style log", llms, StringComparison.Ordinal);
-        Assert.Contains("prefer `replay_open` inside unordered command arrays", llms, StringComparison.Ordinal);
+        Assert.Contains("prefer the artifact-root packet fallback before unordered command arrays", llms, StringComparison.Ordinal);
         Assert.Contains("fail with an `extract-next-command:` message", llms, StringComparison.Ordinal);
         Assert.Contains("generic artifact browser or raw file inspection", llms, StringComparison.Ordinal);
     }
@@ -506,7 +506,7 @@ public sealed partial class AppTests
         Assert.Contains("The default action list includes `replay open`", markdown, StringComparison.Ordinal);
         Assert.Contains("`replay packet` is the canonical first stop", markdown, StringComparison.Ordinal);
         Assert.Contains("`replay open` is the browser-free replay front door", markdown, StringComparison.Ordinal);
-        Assert.Contains("failure snapshot, packet gate, copy-paste triage commands", markdown, StringComparison.Ordinal);
+        Assert.Contains("At a Glance summary, failure snapshot, packet gate, copy-paste triage commands", markdown, StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --artifacts ./artifacts/my-run", markdown, StringComparison.Ordinal);
         Assert.Contains("run-summary.json", markdown, StringComparison.Ordinal);
         Assert.Contains("docs/schemas/luotsi-run-summary-v1.md", markdown, StringComparison.Ordinal);

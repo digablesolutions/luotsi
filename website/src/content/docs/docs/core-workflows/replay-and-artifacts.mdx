@@ -83,7 +83,7 @@ Use `replay graph` when you want a stable node or edge model across sessions, fa
 The public distinction that matters is:
 
 - `replay packet` is the canonical first stop for failed CI, reviews, and agent loops because it writes and returns the durable investigation packet without launching a browser
-- `run-summary.json` and `run-summary.md` are the stable packet files to attach after `replay packet`; the Markdown starts with a failure snapshot, packet gate, copy-paste triage commands, and the 60-second checklist, and the source contract is documented in `docs/schemas/luotsi-run-summary-v1.md`
+- `run-summary.json` and `run-summary.md` are the stable packet files to attach after `replay packet`; the Markdown starts with an At a Glance summary, failure snapshot, packet gate, copy-paste triage commands, and the 60-second checklist, and the source contract is documented in `docs/schemas/luotsi-run-summary-v1.md`
 - `replay open` is the browser-free replay front door when a human also wants one artifact root summarized before opening the local index
 - `replay capsule` is the deeper operator and CI handoff after the packet/front door
 - `replay graph` is the agent- and debugger-facing node/edge model for that same root
