@@ -270,6 +270,8 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
                 throw new UsageException($"{RunSummaryMarkdownFileName} is missing the copy-paste triage command block. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
             }
 
+            ValidateCopyPasteTriageCommands(triageChecklist, runSummaryMarkdown, artifacts.Root);
+
             if (!runSummaryMarkdown.Contains("## 60-Second Triage Checklist", StringComparison.Ordinal))
             {
                 throw new UsageException($"{RunSummaryMarkdownFileName} is missing the 60-second triage checklist. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
@@ -297,6 +299,51 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
                 primaryFailure,
                 runSummaryMarkdownPath);
         }
+    }
+
+    private static void ValidateCopyPasteTriageCommands(
+        IReadOnlyList<RunSummaryChecklistItemResult> triageChecklist,
+        string runSummaryMarkdown,
+        string artifactRoot)
+    {
+        var commandBlock = ExtractCopyPasteTriageCommandBlock(runSummaryMarkdown);
+        if (string.IsNullOrWhiteSpace(commandBlock))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} is missing the copy-paste triage command block. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        foreach (var command in triageChecklist
+                     .OrderBy(static item => item.Step)
+                     .Select(static item => item.Command)
+                     .Where(static command => !string.IsNullOrWhiteSpace(command))
+                     .Select(static command => command!)
+                     .Distinct(StringComparer.Ordinal))
+        {
+            if (!commandBlock.Contains(command, StringComparison.Ordinal))
+            {
+                throw new UsageException($"{RunSummaryMarkdownFileName} copy-paste triage command block is missing checklist command '{command}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+            }
+        }
+    }
+
+    private static string? ExtractCopyPasteTriageCommandBlock(string runSummaryMarkdown)
+    {
+        const string heading = "## Copy-Paste Triage Commands";
+        var headingIndex = runSummaryMarkdown.IndexOf(heading, StringComparison.Ordinal);
+        if (headingIndex < 0)
+        {
+            return null;
+        }
+
+        var blockStart = runSummaryMarkdown.IndexOf("```bash", headingIndex + heading.Length, StringComparison.Ordinal);
+        if (blockStart < 0)
+        {
+            return null;
+        }
+
+        blockStart += "```bash".Length;
+        var blockEnd = runSummaryMarkdown.IndexOf("```", blockStart, StringComparison.Ordinal);
+        return blockEnd < 0 ? null : runSummaryMarkdown[blockStart..blockEnd];
     }
 
     private static void ValidatePrimaryFailureHandoff(

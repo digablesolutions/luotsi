@@ -1280,7 +1280,7 @@ public sealed partial class AppTests
     }
 
     [Fact]
-    public async Task RunAsync_ReplayPacket_Check_MarkdownWithoutRecommendedCommand_ReturnsUsageError()
+    public async Task RunAsync_ReplayPacket_Check_CopyPasteBlockWithoutChecklistCommand_ReturnsUsageError()
     {
         var console = new FakeConsole();
         var fileSystem = new FakeFileSystem();
@@ -1315,8 +1315,8 @@ public sealed partial class AppTests
         Assert.Equal(2, checkExitCode);
         Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
         Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
-        Assert.Contains("does not include the recommended next action command", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
-        Assert.Contains("run-summary.json", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("copy-paste triage command block is missing checklist command", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("Re-run `luotsi replay packet", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]

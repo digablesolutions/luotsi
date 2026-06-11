@@ -19,7 +19,8 @@ or an agent receives an artifact root and needs to prove that the existing
 packet is present, readable, points at the checked artifact root, and has a
 Markdown companion before continuing. The check also verifies that the refreshed
 artifact index entry points exist and that `run-summary.md` contains both the
-copy-paste triage command block, the 60-second triage checklist, and the same recommended command as
+copy-paste triage command block, the non-null checklist commands inside that
+block, the 60-second triage checklist, and the same recommended command as
 `run-summary.json`. When `primaryFailure` is present, the check also requires
 `primaryFailure.sourceCommand` to be present in both the structured checklist
 and Markdown packet. A successful check returns `luotsi-run-summary-check.v1`
@@ -62,8 +63,8 @@ the same 60-second path as humans.
 
 The Markdown packet also starts with `## Copy-Paste Triage Commands`, a fenced
 `bash` block containing the non-null checklist commands in order. This is the
-fastest human handoff surface and should stay in sync with the structured
-checklist.
+fastest human handoff surface. `replay packet --check` verifies that every
+non-null checklist command appears in that block.
 
 Each checklist item uses:
 
@@ -228,4 +229,4 @@ belongs in the broader command list. Consumers should still prefer
 - If `primaryFailure.sourceCommand` is present, use it as the focused evidence command after `recommendedNextAction.command`. It should not be treated as broad artifact browsing; it is the packet's best path back to the failure evidence.
 - If `runSummaryJsonPath` or `runSummaryMarkdownPath` is `null`, the packet was returned in-memory by a command path that did not persist both files. Run `luotsi replay packet --artifacts <artifact-root>` to write them.
 - A successful `luotsi-run-summary-check.v1` result repeats `recommendedNextAction`, `triageChecklist`, and `primaryFailure` from the packet so consumers can continue from the check envelope without reopening `run-summary.json`.
-- `replay packet --check` is the contract gate for an existing packet. It must exit non-zero for missing JSON, invalid JSON, unsupported schema, stale `artifactRoot`, missing index entry points, missing `triageChecklist`, a first checklist item that does not point at `recommendedNextAction.command`, missing `recommendedNextAction.command`, a primary failure without `primaryFailure.sourceCommand`, a checklist that omits `primaryFailure.sourceCommand`, missing `entryPoints.runSummaryJsonPath`, missing `entryPoints.runSummaryMarkdownPath`, a missing Markdown companion, Markdown without the copy-paste triage command block, Markdown without the 60-second triage checklist, Markdown that omits the JSON packet's recommended command, or Markdown that omits `primaryFailure.sourceCommand`.
+- `replay packet --check` is the contract gate for an existing packet. It must exit non-zero for missing JSON, invalid JSON, unsupported schema, stale `artifactRoot`, missing index entry points, missing `triageChecklist`, a first checklist item that does not point at `recommendedNextAction.command`, missing `recommendedNextAction.command`, a primary failure without `primaryFailure.sourceCommand`, a checklist that omits `primaryFailure.sourceCommand`, missing `entryPoints.runSummaryJsonPath`, missing `entryPoints.runSummaryMarkdownPath`, a missing Markdown companion, Markdown without the copy-paste triage command block, a copy-paste block that omits any non-null checklist command, Markdown without the 60-second triage checklist, Markdown that omits the JSON packet's recommended command, or Markdown that omits `primaryFailure.sourceCommand`.
