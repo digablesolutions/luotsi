@@ -258,24 +258,11 @@ Common workflows:
 
 Tips:
   The quickstart command returns the same path as JSON: status, time_budget,
-  inputs, steps, recommended_commands, proof_checks, differentiators, and an
-  agent_prompt that can be handed to an AI operator. proof_checks is the
-  compact install/device/artifact/device-truth/replay checklist for deciding
-  whether the first five minutes produced usable evidence; each check includes
-  a status such as ready_to_run, needs_input, or ready_after_artifact. Use
-  the quickstart-verify command with the same --device, --package, and
-  --artifacts inputs when you want that checklist grouped into ready, blocked,
-  and later proof commands before starting the first-run path. It also writes
-  the local plan/proof-pack handoff artifacts and reports the local proofs
-  that passed. Add --human
-  when you want a compact terminal plan with the first command, selected
-  inputs, minute-by-minute next steps, and the handoff proof command.
-  Add --write-json and --write-markdown to persist quickstart-plan.json,
-  quickstart-plan.md, evaluation-proof-pack.json, and evaluation-proof-pack.md
-  in the artifact root.
-  The proof pack names the install, device-readiness, screen-state, inspect,
-  scenario, replay, and share-package gates a teammate or AI operator should
-  collect before calling the first evaluation production-ready.
+  inputs, steps, recommended_commands, differentiators, and an agent_prompt
+  that can be handed to an AI operator. Add --human when you want a compact
+  terminal plan with the first command, selected inputs, and minute-by-minute
+  next steps. Add --write-json and --write-markdown to persist
+  quickstart-plan.json and quickstart-plan.md in the artifact root.
   If your next question is how to read the JSON envelope, JSONL session, or
   artifact root, run luotsi help output.
   Scenario runs write artifacts into the default Luotsi run-artifact home
@@ -315,13 +302,19 @@ Output shapes:
      replay timeline, replay graph, or artifacts open.
 
 Next-action fields:
-  Prefer data.recommended_next_action.command when present. Then check
-  recommended_next_steps, next_actions, suggested_commands, commands,
-  artifact_commands, and recommended_commands. If no command field is present,
-  use artifacts.artifact_root and run replay open --dry-run first; use
-  artifacts open only when you specifically need the generic artifact browser.
+  Prefer data.recommended_next_action_command when a packet check returns the
+  direct continuation command. Then use data.recommended_next_action.command,
+  primary_failure.source_command for focused packet evidence,
+  triage_checklist[].command for packet checklist fallback, followed by
+  recommended_next_steps, next_actions, and suggested_commands. If no richer
+  command field is present, use artifacts.artifact_root and run replay packet
+  first so the loop has run-summary.json and run-summary.md. Use commands,
+  artifact_commands, and recommended_commands only when there is no artifact
+  root to packetize; use artifacts open only when you specifically need the
+  generic artifact browser.
   Command arrays are exact follow-ups but not always ordered by the best first
-  move, so parser examples prefer replay_open there when present.
+  move, so parser examples prefer the artifact-root packet fallback before
+  unordered command arrays.
 
 Parser examples:
   From source, pipe a one-shot envelope or saved JSONL-style log into
@@ -330,15 +323,16 @@ Parser examples:
 
 Human output cue:
   artifacts: artifacts/smoke-run/<run-id>
-  guide: artifact root is durable evidence; replay open explains failures and next actions
-  next: luotsi replay open --artifacts artifacts/smoke-run/<run-id> --dry-run
+  guide: artifact root is durable evidence; replay packet writes run-summary.json and run-summary.md
+  next: luotsi replay packet --artifacts artifacts/smoke-run/<run-id>
 
 First commands:
   luotsi quickstart
   luotsi screen-state --device <adb serial>
   luotsi inspect --device <adb serial> --artifacts artifacts/inspect
   luotsi run --file scenarios/smoke.json --device <adb serial> --artifacts artifacts/smoke-run
-  luotsi replay open --last --artifacts artifacts/smoke-run --dry-run
+  luotsi replay packet --last --artifacts artifacts/smoke-run
+  luotsi replay packet --last --artifacts artifacts/smoke-run --check
   luotsi replay graph --artifacts artifacts/smoke-run/<run-id> --failed
 
 Reader guide:
@@ -443,6 +437,8 @@ Luotsi help: replay
 Usage:
   luotsi replay open --artifacts <artifact-root> [--dry-run] [--write-json] [--write-markdown]
   luotsi replay open --last [--artifacts <directory>] [--dry-run] [--write-json] [--write-markdown]
+  luotsi replay packet --artifacts <artifact-root> [--check]
+  luotsi replay packet --last [--artifacts <directory>] [--check]
   luotsi replay summarize --artifacts <artifact-root> [--format json|jsonl]
   luotsi replay capsule --artifacts <artifact-root> [--write-readme] [--write-json]
   luotsi replay timeline --artifacts <artifact-root> [--failures] [--type <event-type>] [--contains <text>] [--source-path <timeline-path>] [--sequence <n>] [--since <timestamp>] [--until <timestamp>] [--context <n>] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
@@ -454,6 +450,8 @@ Usage:
 
 Examples:
   luotsi replay open --artifacts artifacts/20260518-100000-view --write-json --write-markdown
+  luotsi replay packet --artifacts artifacts/20260518-100000-run
+  luotsi replay packet --artifacts artifacts/20260518-100000-run --check
   luotsi replay open --last --artifacts artifacts --dry-run
   luotsi replay summarize --artifacts artifacts/20260518-100000-view
   luotsi replay summarize --artifacts artifacts/20260518-100000-view --format json
@@ -487,9 +485,15 @@ Notes:
   index.html/index.md, opens the artifact browser, and returns session counts,
   primary failure, recommended next action, and commands into capsule, timeline,
   scrub, graph, search, scenario draft, and clustering. With --write-json and
-  --write-markdown, it writes replay-open-summary.json and replay-open.md. Use
-  --last to resume the latest artifact root under the default temp root or
-  --artifacts <directory> without re-copying a path.
+  --write-markdown, it writes replay-open-summary.json, replay-open.md, and the
+  stable production packet run-summary.json/run-summary.md. Use --last to
+  resume the latest artifact root under the default temp root or --artifacts
+  <directory> without re-copying a path.
+  Replay packet is the non-interactive packet writer: it refreshes the artifact
+  index, writes run-summary.json and run-summary.md, and returns the
+  luotsi-run-summary.v1 packet without launching a browser. Add --check to
+  validate an existing run-summary.json/run-summary.md pair without rewriting
+  artifacts; missing, malformed, or stale-root packets fail as usage errors.
   Replay summarize reads session-replay.json and session-timeline.jsonl from an
   existing artifact root. By default it returns the condensed failure timeline
   as a normal JSON command envelope. `--format json` writes the bare summary
@@ -878,6 +882,7 @@ Command groups:
     replay scrub --artifacts <artifact-root> [--failures] [--source-path <timeline-path>] [--sequence <n>] [--context <n>] [--write-json] [--write-markdown]
     replay graph --artifacts <artifact-root> [--failed] [--node-kind <kind>] [--edge-kind <kind>] [--action <text>] [--selector <text>] [--contains <text>] [--insight <kind>] [--severity info|warning|error] [--evidence <kind>] [--fact <text>] [--node <id> --depth 1] [--limit 200] [--format json|jsonl] [--write-json] [--write-jsonl] [--write-markdown]
     replay cluster --artifacts <artifact-root> [--write-json] [--write-markdown]
+    replay packet (--artifacts <artifact-root> | --last [--artifacts <directory>]) [--check]
     replay open (--artifacts <artifact-root> | --last [--artifacts <directory>]) [--dry-run] [--write-json] [--write-markdown]
     replay scenario-draft --artifacts <artifact-root> [--output <scenario.json>|--file <scenario.json>] [--name <name>] [--validate] [--write-json] [--write-markdown]
     replay search --artifacts <artifact-root> --contains <text> [--limit 50]

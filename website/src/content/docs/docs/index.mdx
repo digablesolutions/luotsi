@@ -77,7 +77,57 @@ That sequence gives a human or AI operator the same starting contract: a durable
 
 ## Evaluate Fit
 
-<CardGrid>
+<CardGrid stagger>
+	<Card title="First five minutes">
+		Learn the output model first: JSON envelopes, JSONL sessions, artifact roots, replay commands, and the next-action loop.
+
+		[Open first five minutes](./getting-started/first-five-minutes/)
+	</Card>
+	<Card title="Device readiness">
+		Use `doctor`, `preflight`, and lab-level checks to make device selection and first-run validation explicit before you start debugging the app itself.
+
+		[Open device readiness](./getting-started/device-readiness/)
+	</Card>
+	<Card title="Installation">
+		Use the release installer or build from source, then run <code>doctor</code> to confirm adb, device readiness, and live-view prerequisites.
+
+		[Open installation guide](./getting-started/installation/)
+	</Card>
+	<Card title="Quickstart">
+		Go from a connected device to a working live-view or scenario run in a few commands.
+
+		[Open quickstart](./getting-started/quickstart/)
+	</Card>
+	<Card title="Live view">
+		Mirror a device to a local SDL window, use presets and profiles, and relay the stream to observer sessions when needed.
+
+		[Explore live view](./core-workflows/live-view/)
+	</Card>
+	<Card title="Inspect and scenarios">
+		Choose between agent-driven JSONL sessions and repeatable JSON playbooks depending on whether you are exploring or codifying a flow.
+
+		[Read the workflow guide](./core-workflows/inspect-and-scenarios/)
+	</Card>
+	<Card title="AI agent workflows">
+		Use the host-side JSON, JSONL, and replay surfaces Luotsi already exposes when you are building agent loops on top of real Android devices.
+
+		[Open the agent workflow guide](./core-workflows/ai-agent-workflows/)
+	</Card>
+	<Card title="Evidence-backed Android Journeys">
+		Combine Android CLI Journey intent with Luotsi scenarios, real-device artifacts, replay, and shared-lab CI evidence.
+
+		[Open the Journey workflow](./core-workflows/evidence-backed-android-journeys/)
+	</Card>
+	<Card title="Agent loop example">
+		Start a minimal host-side adapter that reads `inspect` JSONL events and writes JSON commands to a real Android device session.
+
+		[Open the example](./core-workflows/agent-loop-example/)
+	</Card>
+	<Card title="Autonomous discovery">
+		Map visible app states from a real device, preserve agent-readable evidence, and generate review-required scenario candidates.
+
+		[Open autonomous discovery](./core-workflows/autonomous-discovery/)
+	</Card>
 	<Card title="For engineering leads">
 		Evaluate Luotsi as a product capability: real devices, agent-friendly contracts, CI, shared lab workflows, and artifact trails.
 

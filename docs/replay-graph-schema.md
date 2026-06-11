@@ -6,9 +6,9 @@
 - what changed or was observed around the failure
 - what command can I run next
 
-Graph is not the only replay entry point. `replay open` is the front door for one artifact root, and graph actions intentionally include that command so an agent can move from semantic context back to the primary failure, recommended next action, and bundle follow-ups before raw artifact browsing.
+Graph is not the only replay entry point. `replay packet` is the production handoff for one artifact root, and graph actions intentionally include replay commands so an agent can move from semantic context back to the failure snapshot, recommended next action, and bundle follow-ups before raw artifact browsing.
 
-For first-pass orientation, start with `luotsi replay open --artifacts <artifact-root> --dry-run` before asking for graph detail. It returns the primary failure, recommended next action, and follow-up command set without launching a browser.
+For first-pass orientation, start with `luotsi replay packet --artifacts <artifact-root>` and validate shared packets with `luotsi replay packet --artifacts <artifact-root> --check` before asking for graph detail. Use `luotsi replay open --artifacts <artifact-root> --dry-run` when a human also needs the replay front door without launching a browser.
 
 ## Command
 
@@ -163,4 +163,4 @@ luotsi replay graph --artifacts artifacts/run --node failure:session-timeline.js
 
 `replay-graph.md` starts with "Agent Summary", "What Failed", "What Agents Can Act On", "Evidence", "Facts", "Causal Chains", "Hypotheses", and "Insights" before the raw node and edge tables.
 
-JSONL output includes `summary`, `failure_path`, `evidence`, `causal_chain`, `hypothesis`, `fact`, `insight`, `node`, and `edge` line types. The `summary` line includes `agent_summary`, `node_kinds`, `edge_kinds`, and `evidence_kinds` so agents can decide whether to consume later lines. `agent_summary.commands` starts with `replay open`, then includes capsule/graph/scrub follow-ups from `actions`. Use `hypothesis` lines when an agent needs ranked likely-cause hints; use `causal_chain` lines when it needs the shortest path into a failure; use `fact` lines when it needs concise semantic statements; use `evidence` lines when it needs proof before deciding whether to open the full graph.
+JSONL output includes `summary`, `failure_path`, `evidence`, `causal_chain`, `hypothesis`, `fact`, `insight`, `node`, and `edge` line types. The `summary` line includes `agent_summary`, `node_kinds`, `edge_kinds`, and `evidence_kinds` so agents can decide whether to consume later lines. Use `replay packet` first when an agent needs the durable first-minute packet, then use `agent_summary.commands` for capsule/graph/scrub follow-ups from `actions`. Use `hypothesis` lines when an agent needs ranked likely-cause hints; use `causal_chain` lines when it needs the shortest path into a failure; use `fact` lines when it needs concise semantic statements; use `evidence` lines when it needs proof before deciding whether to open the full graph.

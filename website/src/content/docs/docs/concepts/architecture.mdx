@@ -1,40 +1,42 @@
 ---
 title: Architecture
-description: Understand Luotsi as a host-first runtime built around adb, structured outputs, and artifact capture.
+description: Understand Luotsi as a host-first Android automation runtime built around adb, structured outputs, lab-aware device use, and replayable artifacts.
 ---
 
-Luotsi is a .NET CLI for driving a real Android device through adb, capturing artifacts by default, and optionally opening a live mirrored view through the built-in `view` session.
+Luotsi is a host-first .NET CLI for Android automation. It drives real devices through adb, keeps device work behind typed host abstractions, and turns useful runs into structured output plus replayable artifacts.
 
-## The three long-lived concerns
-
-- One-shot command execution for CLI commands
-- Long-lived `inspect` and `view` sessions with structured JSONL output
-- Device-specific Android runtime work behind host abstractions
-
-## Top-level flow
+## Runtime shape
 
 1. The operator, agent, or CI job invokes Luotsi on the host machine.
-2. The command layer routes into one-shot commands, inspect sessions, or view sessions.
-3. Android-specific behavior flows through the host abstractions and adb-backed runtime.
-4. Sessions and commands write artifacts so failures can be debugged later from the artifact root.
+2. `AppExecutionShell` routes through the command family router and command dispatchers.
+3. One-shot commands return one final envelope; long-running `inspect` and `view` sessions stream JSONL-capable timelines.
+4. Lab/device selection, scenario execution, discovery, inspect, replay, artifact packaging, and view sessions share the same host/runtime boundaries.
+5. Artifact roots preserve the evidence needed to reopen failures without the original device.
 
-## Why the design is intentionally conservative
+## Product boundaries
 
-Luotsi keeps the core runtime boring on purpose:
+- **Command runtime:** parsing, help, envelopes, failure responses, and session output modes.
+- **Lab-aware device selection:** inventory, leases, queued claims, quarantines, health, and `run --claim-device`.
+- **Android host runtime:** adb-backed `IDeviceHost` actions for taps, text, lifecycle, screenshots, hierarchy, files, telemetry, and logs.
+- **Scenario lifecycle:** authoring, validation, planning, execution, reports, governance, and CI policy.
+- **Authoring and exploration:** `inspect`, `discover`, Journey intake, and replay-generated scenario drafts.
+- **Artifacts and replay:** run-summary packets, capsules, timelines, scrub views, graphs, clusters, packages, redaction, unpack, and intake.
+- **Live view:** helper bootstrap, localhost packet stream, libav decode, SDL3 rendering, sharing, recording, and diagnostics.
 
-- It prefers adb-first flows over inventing a heavyweight device server.
-- It reuses the same host abstractions across commands, scenarios, telemetry, and view sessions.
-- It treats artifact capture as part of the product contract rather than an optional afterthought.
+## Why the design is conservative
 
-## View-specific path
+Luotsi keeps production behavior explicit:
 
-The live view stack bootstraps an Android helper over adb, starts the requested capture backend, receives the mirrored H.264 packet stream over a localhost tunnel, decodes it with libav, and presents frames through SDL3.
-
-Observer sessions can join a shared TCP relay, but remain read-only at the input layer.
+- adb remains the device transport instead of a hidden device server.
+- Device work flows through typed host abstractions used by commands, scenarios, telemetry, inspect, and view.
+- Generated scenarios stay review-oriented until validated and accepted.
+- Artifact capture is part of the product contract, not an optional debug setting.
+- Shared-lab runs should claim a concrete device before execution when provenance is available.
 
 ## Read more
 
-- [Live view](../../core-workflows/live-view/)
-- [Inspect and scenarios](../../core-workflows/inspect-and-scenarios/)
 - [Subsystems](../subsystems/)
-- [Contribution guide](../../contributing/guide/)
+- [Inspect and scenarios](../../core-workflows/inspect-and-scenarios/)
+- [Replay and artifacts](../../core-workflows/replay-and-artifacts/)
+- [Live view](../../core-workflows/live-view/)
+- [Shared lab operations](../../reference/shared-lab-operations/)

@@ -38,12 +38,23 @@ luotsi lab status --device-query "$LUOTSI_DEVICE_QUERY"
 luotsi lab plan --device-query "$LUOTSI_DEVICE_QUERY"
 luotsi scenario-validate --path "$LUOTSI_SCENARIO_PATH"
 luotsi run --path "$LUOTSI_SCENARIO_PATH" --device-query "$LUOTSI_DEVICE_QUERY" --claim-device --owner "$LUOTSI_OWNER" --ttl-sec "$LUOTSI_TTL_SEC" --report-junit "$LUOTSI_JUNIT_PATH" --artifacts "$LUOTSI_ARTIFACTS_DIR"
-luotsi replay open --artifacts "$LUOTSI_ARTIFACTS_DIR" --dry-run
+luotsi replay packet --artifacts "$LUOTSI_ARTIFACTS_DIR"
 ```
 
-`replay open --dry-run` is the CI handoff preview: it reports the primary
-failure, recommended next action, and follow-up replay commands without trying
-to launch a browser on the runner.
+`replay packet` is the CI handoff writer: it reports the At a Glance summary,
+primary failure, recommended next action, and follow-up replay commands without
+trying to launch a browser on the runner. It also writes `run-summary.json` and `run-summary.md`
+into `LUOTSI_ARTIFACTS_DIR`. On GitHub Actions, the scripts append
+`run-summary.md` to `GITHUB_STEP_SUMMARY` so the first triage packet is visible
+in the job summary before anyone downloads raw artifacts.
+
+The scripts preserve the scenario run exit code, but they still attempt
+`replay packet`, `replay packet --check`, and the GitHub job-summary append
+after a failing run. The job stays red with the scenario run exit code, and the
+uploaded artifact bundle still has the first-minute packet. If packet writing
+or validation fails before `run-summary.md` exists, the scripts still append a
+fallback summary with exact `replay packet` and `replay packet --check`
+commands for the uploaded artifact root.
 
 Dry runs execute `scenario-validate` and `run --dry-run`, then stop before lab
 selection or device claiming.

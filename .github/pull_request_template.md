@@ -15,5 +15,5 @@
 - [ ] docs updated if command behavior, artifacts, or operator UX changed
 - [ ] JSON envelope or JSONL contract impact reviewed
 - [ ] artifact behavior reviewed for device-facing changes
-- [ ] first follow-up command points to `data.recommended_next_action.command` or `luotsi replay open --artifacts <artifact-root> --dry-run` where applicable
+- [ ] first follow-up command points to `data.recommended_next_action.command`, `luotsi replay packet --artifacts <artifact-root>`, or `luotsi replay packet --artifacts <artifact-root> --check` for failed-run artifacts; use `luotsi replay open --artifacts <artifact-root> --dry-run` when a human needs the replay front door
 - [ ] screenshots, logs, replay artifacts, or example payloads attached when they add clarity

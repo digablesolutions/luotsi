@@ -665,10 +665,12 @@ internal sealed class DiscoveryCommandService(IFileSystem fileSystem, TimeProvid
         var scenarioPath = Path.Join(artifactRoot, scenarioCandidatePath);
         return
         [
-            $"luotsi artifacts open {Quote(artifactRoot)}",
+            $"luotsi replay packet --artifacts {Quote(artifactRoot)}",
+            $"luotsi replay packet --artifacts {Quote(artifactRoot)} --check",
             $"luotsi scenario-validate --file {Quote(scenarioPath)}",
             $"luotsi run --file {Quote(scenarioPath)} --device <adb serial>",
-            $"luotsi replay open --artifacts {Quote(artifactRoot)} --dry-run"
+            $"luotsi replay open --artifacts {Quote(artifactRoot)} --dry-run",
+            $"luotsi artifacts open {Quote(artifactRoot)}"
         ];
     }
 

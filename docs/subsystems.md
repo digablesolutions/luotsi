@@ -1,137 +1,136 @@
 # Subsystems
 
-This document replaces the old phased view-plan docs with the subsystem story
-that matches the code currently in the repo.
+Use this map when a behavior crosses public commands, artifacts, and host-side
+device work. `docs/architecture.md` is the top-level runtime story; this page is
+the ownership map for the main code areas.
 
-## CLI and session subsystem
+## Command Runtime
 
-- `App` dispatches one-shot commands and the two long-lived session modes.
-- One-shot commands return exactly one final JSON envelope.
-- `inspect` is a JSONL session. `view` is an interactive session that prints human progress by default, can stream JSONL with `-o jsonl` or `--json`, and always writes JSONL session timelines to artifacts.
+- `App`, `CliOptions`, `AppExecutionShell`, and the command routers own CLI
+  parsing, dispatch, output envelopes, failure responses, and help.
+- One-shot commands return one final envelope unless the caller chooses human or
+  quiet console output.
+- `inspect` streams JSONL for agents, while `view` is an operator session that
+  can also stream JSONL.
 
 Relevant code:
 
 - `Luotsi.Cli/Cli/App.cs`
 - `Luotsi.Cli/Cli/CliOptions.cs`
-- `Luotsi.Cli/Cli/InspectSession.cs`
-- `Luotsi.Cli/View/ViewSession.cs`
+- `Luotsi.Cli/Cli/Composition/`
+- `Luotsi.Cli/Cli/Routing/`
+- `Luotsi.Cli/Cli/Envelope/`
 
-## Host automation subsystem
+## Lab And Device Selection
+
+- Lab commands own inventory, leases, queued claims, quarantines, health
+  summaries, and device-query selection.
+- Scenario runs use the same allocation model through `run --claim-device`.
+- Shared-lab flows should prefer claimed run commands when a concrete serial is
+  available.
+
+Relevant code:
+
+- `Luotsi.Cli/Cli/Routing/Lab*`
+- `Luotsi.Cli/Cli/Routing/DeviceSelectorResolver.cs`
+- `Luotsi.Cli/Scenarios/ScenarioDeviceAllocator.cs`
+- `Luotsi.Cli/Infrastructure/Devices/`
+
+## Host Automation
 
 - `IDeviceHost` is the host-side automation seam.
-- The Android runtime stays `adb` first.
-- Core device actions include tap, type, key events, screen-state capture,
-  hierarchy capture, and telemetry/log collection.
+- The Android implementation stays adb-first and translates typed host actions
+  into bounded device work.
+- Safe read-style probes can use retry policies; mutating actions are not
+  blindly replayed.
 
 Relevant code:
 
-- `Luotsi.Cli/Infrastructure/`
-- `Luotsi.Cli/Hosts/Android/DeviceRunner.cs`
-- `Luotsi.Cli/Hosts/Android/AdbClient.cs`
+- `Luotsi.Cli/Infrastructure/Contracts/`
+- `Luotsi.Cli/Infrastructure/Devices/`
+- `Luotsi.Cli/Hosts/Android/`
+- `Luotsi.Cli/Telemetry/`
 
-## Scenario subsystem
+## Scenario Lifecycle
 
-- The repo ships generic scenario examples under `examples/scenarios/`.
-- `ScenarioExecutor` resolves templates, validates steps, and routes them
-  through host-side actions.
-- Failure handling is artifact-heavy by design.
+- Scenario files are explicit JSON playbooks with validation before execution.
+- `ScenarioRunOrchestrator`, `ScenarioExecutor`, and
+  `ScenarioActionDispatcher` run playbooks through `IDeviceHost`.
+- Reports preserve governance, device-health, CI-policy, artifacts, and replay
+  handoffs.
 
 Relevant code:
 
+- `Luotsi.Cli/Scenarios/ScenarioCatalog.cs`
+- `Luotsi.Cli/Scenarios/ScenarioValidator.cs`
+- `Luotsi.Cli/Scenarios/ScenarioValidationExecutor.cs`
+- `Luotsi.Cli/Scenarios/ScenarioRunOrchestrator.cs`
 - `Luotsi.Cli/Scenarios/ScenarioExecutor.cs`
-- `Luotsi.Cli/Scenarios/ScenarioStepFailureException.cs`
+- `Luotsi.Cli/Scenarios/ScenarioRunReport*`
 
-## Telemetry subsystem
+## Authoring And Exploration
 
-- The CLI understands `LUOTSI_DEVICE_TELEMETRY` logcat lines.
-- Telemetry is reused both by dedicated commands and by semantic waits in
-  scenarios.
-
-Relevant code:
-
-- `Luotsi.Cli/Telemetry/LuotsiDeviceTelemetryParser.cs`
-- `Luotsi.Cli/Telemetry/Telemetry.cs`
-
-## Artifact subsystem
-
-- Each run/session gets its own artifact root.
-- Runtime failures should leave behind enough context to diagnose device,
-  screen, log, and view state.
+- `inspect` records structured command/action sessions for agents.
+- `discover` explores UI state conservatively and emits review-required starter
+  scenario evidence.
+- `journey-intake` validates external Journey-style intent before drafting a
+  Luotsi scenario skeleton.
+- `replay scenario-draft` turns persisted action events into a conservative
+  scenario draft, optionally validates it, and surfaces next actions.
 
 Relevant code:
 
-- `Luotsi.Cli/Artifacts/ArtifactSession.cs`
-- `Luotsi.Cli/Artifacts/UiPollArtifactPolicy.cs`
+- `Luotsi.Cli/Cli/Inspect/`
+- `Luotsi.Cli/Cli/Discovery/`
+- `Luotsi.Cli/Cli/JourneyIntake/`
+- `Luotsi.Cli/Cli/Replay/ReplayScenarioDraftService.cs`
 
-## View subsystem
+## Artifacts, Packages, And Replay
 
-The built-in mirror is now a real subsystem, not just a design sketch.
-
-### Transport and bootstrap
-
-- `AndroidViewBootstrap` stages the helper package, configures the ADB tunnel,
-  and starts the helper process or MediaProjection consent flow.
-- `LocalhostViewStreamConnector` opens the forwarded localhost socket.
-- `ViewPacketStreamReader` parses the private packet stream.
-- `auto` capture prefers MediaProjection and retries with `screenrecord` if
-  startup or consent fails before the stream header is established.
-- Optional TCP share relay (`--share-bind`) mirrors the packet stream to
-  observers and replays bootstrap packets (config + latest keyframe) for
-  late joins.
+- Artifact roots are the durable boundary between live device work and later
+  analysis.
+- Replay commands reopen packet summaries, capsules, timelines, scrub views,
+  graphs, clusters, searches, and scenario drafts.
+- Artifact packages can be packed, verified, unpacked, and ingested; lab-safe
+  redaction affects zip text entries only and never mutates the source root.
 
 Relevant code:
 
-- `Luotsi.Cli/Hosts/Android/View/AndroidViewBootstrap.cs`
-- `Luotsi.Cli/Hosts/Android/View/AndroidViewServerInstaller.cs`
-- `Luotsi.Cli/Hosts/Android/View/AndroidViewStreamClient.cs`
-- `Luotsi.Cli/View/ViewSession.cs`
+- `Luotsi.Cli/Artifacts/`
+- `Luotsi.Cli/Cli/Replay/`
+- `docs/schemas/`
 
-### Decode and presentation
+## Live View
 
-- `LibavViewBackend` decodes compressed H.264 packets into BGRA frames.
-- `NativeWindowViewRenderer` owns renderer/session glue and pointer routing.
-- `Sdl3ViewWindowSurface` owns the actual local native window and texture
-  presentation path.
+- `AndroidViewBootstrap` stages or locates the helper, configures the adb
+  tunnel, and starts MediaProjection or `screenrecord`.
+- `LocalhostViewStreamConnector` and `ViewPacketStreamReader` receive the
+  private packet stream.
+- `LibavViewBackend` decodes H.264 into BGRA frames.
+- `NativeWindowViewRenderer` and `Sdl3ViewWindowSurface` own local
+  presentation.
+- Optional sharing is read-only for observers; screenshots and recordings write
+  to artifacts.
 
 Relevant code:
 
-- `Luotsi.Cli/View/Backends/Ffmpeg/LibavViewBackend.cs`
-- `Luotsi.Cli/View/NativeWindowViewRenderer.cs`
-- `Luotsi.Cli/View/Sdl3ViewWindowSurface.cs`
+- `Luotsi.Cli/Cli/View/`
+- `Luotsi.Cli/View/`
+- `Luotsi.Cli/Hosts/Android/View/`
+- `docs/view-session.md`
 
-### Input path
+## Native Dependencies And Distribution
 
-- Pointer events are intentionally mapped back into existing `IDeviceHost`
-  semantics instead of inventing a separate low-level control protocol.
-- That keeps mirror input aligned with scenario input behavior.
+- SDL3 and FFmpeg/libav are probed from environment, repo-local, bundled, and
+  app-base locations.
+- `view setup`, `view-doctor`, and `doctor --fix` are the diagnostic and repair
+  entry points for view prerequisites.
+- `version` and `update` expose install metadata and explicit installer-managed
+  updates.
 
-### Current constraints
+Relevant code:
 
-- The built-in live path currently assumes H.264 over the private packet stream.
-- MediaProjection currently requires H.264 and interactive Android consent;
-  `screenrecord` remains the explicit fallback path.
-- `screenrecord` capture has platform limits, so long runs may reconnect
-  proactively before the backend limit window is reached.
-- The primary validated host path is Windows.
-- macOS and Linux are supported by the chosen SDL3/libav architecture, but they
-  still need live validation passes on actual host machines.
-
-### Operational diagnostics
-
-- `view-doctor` uses the same option resolution path as `view`.
-- Current checks cover decoder readiness, helper package discovery,
-  capture-backend policy, adb device visibility, device preflight,
-  MediaProjection readiness when requested, and optional recording output
-  readiness.
-- Startup and doctor flows emit explicit startup-phase/diagnostic events
-  (`view_startup_phase`, `view_diagnostic`) so agents can track readiness
-  progress from the artifact timeline or JSONL stdout mode.
-- Stats cadence is split intentionally: `--stats-interval-ms` controls
-  `view_stats` timeline/JSONL events, while `--renderer-stats-interval-ms`
-  controls renderer/title update cadence.
-
-## Suggested next docs to keep current
-
-- keep `docs/architecture.md` as the top-level runtime map
-- keep this file focused on subsystem boundaries and owning code
-- add targeted operational notes only when they reflect validated behavior
+- `Luotsi.Cli/Cli/View/`
+- `Luotsi.Cli/Cli/Update/`
+- `ffmpeg/download-ffmpeg.ps1`
+- `docs/distribution-playbook.md`

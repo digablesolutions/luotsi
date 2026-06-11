@@ -19,10 +19,11 @@ luotsi doctor --device <serial> --fix
 luotsi inspect --device <serial>
 luotsi scenario-validate --path scenarios
 luotsi run --path scenarios --device <serial>
-luotsi replay open --artifacts ./artifacts/<run> --dry-run
+luotsi replay packet --artifacts ./artifacts/<run>
+luotsi replay packet --artifacts ./artifacts/<run> --check
 ```
 
-This progression keeps the agent loop on the host machine: explore first, codify second, replay after the run. Start replay with `open --dry-run` so the agent gets the primary failure, recommended next action, and follow-up commands before deciding whether to summarize, search, draft, or rerun.
+This progression keeps the agent loop on the host machine: explore first, codify second, replay after the run. Start replay with `packet` and `packet --check` so the agent gets the At a Glance summary, failure snapshot, primary failure, recommended next action, and first-minute checklist before deciding whether to open, summarize, search, draft, or rerun.
 
 When the starting point is Android CLI Journey-style intent, use [Evidence-Backed Android Journeys](../../core-workflows/evidence-backed-android-journeys/) to keep natural-language flow authoring separate from Luotsi's reviewed scenario and replay evidence path.
 

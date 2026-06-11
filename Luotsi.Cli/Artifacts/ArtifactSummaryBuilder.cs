@@ -110,6 +110,11 @@ internal sealed class ArtifactSummaryBuilder(string root, IFileSystem fileSystem
                 return BuildReplayOpenSummary(root);
             }
 
+            if (string.Equals(schemaName, ResultSchemas.RunSummary, StringComparison.Ordinal))
+            {
+                return BuildRunSummary(root);
+            }
+
             if (string.Equals(schemaName, ResultSchemas.ScenarioDraft, StringComparison.Ordinal))
             {
                 return BuildScenarioDraftSummary(root);
@@ -173,6 +178,17 @@ internal sealed class ArtifactSummaryBuilder(string root, IFileSystem fileSystem
         AddReplayOpenNextActionSummary(parts, root);
         AddReplayOpenPrimaryFailureSummary(parts, root);
         AddArrayCount(parts, root, "commands");
+        return parts.Count == 0 ? null : string.Join(" | ", parts);
+    }
+
+    private static string? BuildRunSummary(JsonElement root)
+    {
+        var parts = new List<string>();
+        AddJsonProperty(parts, root, "status");
+        AddJsonProperty(parts, root, "sessionCount", "session_count");
+        AddJsonProperty(parts, root, "failureCount", "failure_count");
+        AddReplayOpenNextActionSummary(parts, root);
+        AddReplayOpenPrimaryFailureSummary(parts, root);
         return parts.Count == 0 ? null : string.Join(" | ", parts);
     }
 

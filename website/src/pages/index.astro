@@ -89,7 +89,7 @@ const workflowRoutes = [
 		title: 'Debug after the session',
 		summary: 'Use replay when the device is gone but the artifacts still need to explain what happened.',
 		cta: 'Use replay',
-		command: 'luotsi replay open --artifacts ./artifacts/<run-id>',
+		command: 'luotsi replay packet --artifacts ./artifacts/<run-id>',
 	},
 ];
 
@@ -113,7 +113,7 @@ const positioningQuestions = [
 		answer: 'Yes. Replay commands read saved artifacts, summarize the run, build capsules, scrub timelines, query semantic graphs, cluster repeated failures, and draft follow-up scenarios.',
 		href: `${base}docs/core-workflows/replay-and-artifacts/`,
 		cta: 'Open replay and artifacts',
-		command: 'luotsi replay open --artifacts ./artifacts/<run-id>',
+		command: 'luotsi replay packet --artifacts ./artifacts/<run-id>',
 	},
 ];
 
@@ -204,8 +204,8 @@ const inspectSnippet = [
 
 const replaySnippet = [
 	'artifact_root: ./artifacts/smoke-run',
-	'guide: replay open explains failures and next actions',
-	'next: luotsi replay open --artifacts ./artifacts/smoke-run --dry-run',
+	'guide: replay packet writes run-summary.json and run-summary.md',
+	'next: luotsi replay packet --artifacts ./artifacts/smoke-run',
 ];
 ---
 
@@ -294,8 +294,8 @@ const replaySnippet = [
 session: real-device JSONL
 actions: tap_text, wait_visible, screenshot
 
-$ luotsi replay open --artifacts ./artifacts/smoke-run
-capsule: screenshots, hierarchy, logcat, junit`}</code></pre>
+$ luotsi replay packet --artifacts ./artifacts/smoke-run
+packet: run-summary.json, run-summary.md`}</code></pre>
 						</div>
 						<div class="proof-device">
 							<div class="proof-window-bar">

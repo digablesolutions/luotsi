@@ -33,13 +33,13 @@ The top-level fields that matter most are:
 | `node_count`, `edge_count` | Returned graph size after filters |
 | `total_node_count`, `total_edge_count` | Full graph size before filters |
 | `matched_node_count`, `matched_edge_count` | Query match size before `--limit` is applied |
-| `agent_summary` | Compact "what failed", "what changed", and "what can I run next" summary; commands start with `replay open` |
+| `agent_summary` | Compact "what failed", "what changed", and "what can I run next" summary; commands include `replay open` for browser-free replay navigation after the packet/check handoff |
 | `node_kinds`, `edge_kinds` | Counts by node kind and edge kind for quick triage |
 | `insights`, `actions`, `evidence`, `facts`, `causal_chains`, `hypotheses` | Promoted semantic summaries for agents and reviewers |
 | `json_path`, `markdown_path` | Paths written only when `--write-json` or `--write-markdown` is requested |
 | `nodes`, `edges` | Returned graph payload |
 
-Use graph filters when you already know what you need: `--failed`, `--node-kind`, `--edge-kind`, `--action`, `--selector`, `--contains`, `--insight`, `--severity`, `--evidence`, `--fact`, or `--node <id> --depth <n>`. The default action list starts with `replay open`, then routes to capsule, artifact browsing, scrub, streaming JSONL, and narrower graph queries.
+Use graph filters when you already know what you need: `--failed`, `--node-kind`, `--edge-kind`, `--action`, `--selector`, `--contains`, `--insight`, `--severity`, `--evidence`, `--fact`, or `--node <id> --depth <n>`. The default action list includes `replay open` for browser-free replay navigation, then routes to capsule, artifact browsing, scrub, streaming JSONL, and narrower graph queries.
 
 ## Node kinds
 

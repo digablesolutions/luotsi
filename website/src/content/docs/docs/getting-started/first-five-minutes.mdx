@@ -1,33 +1,7 @@
 ---
 title: First Five Minutes
-description: "Create a first-run plan, prove a real device is ready, understand Luotsi output, and keep replayable evidence."
+description: Learn Luotsi's output model quickly so humans, scripts, CI jobs, and AI agents know what happened and what to run next.
 ---
-
-This page is the product path for a new Luotsi evaluator. It keeps the first session focused on four proofs:
-
-- Luotsi can see the Android device.
-- Luotsi can explain readiness before you debug the app.
-- You can choose the right workflow without reading the whole manual.
-- The session leaves artifacts a teammate, CI job, or AI agent can inspect later.
-
-## Before Minute 1: Create The First-Run Plan
-
-```bash
-luotsi quickstart --human
-luotsi quickstart --artifacts artifacts/first-run --write-json --write-markdown
-luotsi doctor
-luotsi doctor --device <serial> --fix
-```
-
-Use `--human` while you are getting oriented in the terminal. Use `--write-json --write-markdown` when the evaluation needs a durable handoff: `quickstart-plan.json` for agents and scripts, `quickstart-plan.md` for humans, and `evaluation-proof-pack.json` / `evaluation-proof-pack.md` for the evidence gates a teammate or AI operator should check before calling the first run production-ready.
-
-If you already know the target, make the plan concrete:
-
-```bash
-luotsi quickstart --device <serial> --package <app.id> --artifacts artifacts/first-run --write-json --write-markdown
-```
-
-Stop at `doctor` if readiness is blocked. Fix the reported device, adb, helper, decoder, or package issue before moving to workflow commands.
 
 Luotsi is easiest to reason about when you treat every workflow as a loop:
 
@@ -93,18 +67,21 @@ If you run with `--human`, the same loop is compressed into terminal text:
 ```text
 OK  screen-state completed in 1000 ms.
   artifacts: artifacts/screen-state/20260608-101530
-  guide: artifact root is durable evidence; replay open explains failures and next actions
-  next: luotsi replay open --artifacts artifacts/screen-state/20260608-101530 --dry-run
+  guide: artifact root is durable evidence; replay packet writes run-summary.json and run-summary.md
+  next: luotsi replay packet --artifacts artifacts/screen-state/20260608-101530
 ```
 
 For scripts and CI, treat `ok` plus the process exit code as the first gate, then consume the command-specific `data` contract.
 
 To find the next command in structured output, check these fields in order:
 
-1. `data.recommended_next_action.command` when present.
-2. `data.recommended_next_steps[]`, `data.next_actions[]`, or `data.suggested_commands[]` for ordered handoffs.
-3. `data.commands[]`, `data.artifact_commands[]`, or `data.recommended_commands[]` for exact follow-up commands.
-4. `artifacts.artifact_root` when no richer command field exists, then run `luotsi replay open --artifacts <artifact-root> --dry-run` first. Use `luotsi artifacts open <artifact-root>` only when you specifically need the generic artifact browser.
+1. `data.recommended_next_action_command` or `data.recommendedNextActionCommand` when a check result exposes the direct continuation command.
+2. `data.recommended_next_action.command` when present.
+3. `data.primary_failure.source_command` or `data.primaryFailure.sourceCommand` when a packet/check result has focused failure evidence but no recommended action.
+4. `data.triage_checklist[].command` or `data.triageChecklist[].command` when a packet/check exposes a structured first-minute checklist.
+5. `data.recommended_next_steps[]`, `data.next_actions[]`, or `data.suggested_commands[]` for ordered handoffs.
+6. `artifacts.artifact_root` when no richer command field exists, then run `luotsi replay packet --artifacts <artifact-root>` first so the loop has `run-summary.json` and `run-summary.md`.
+7. `data.commands[]`, `data.artifact_commands[]`, or `data.recommended_commands[]` only when there is no artifact root to packetize. Use `luotsi replay open --artifacts <artifact-root> --dry-run` when a human needs the replay front door response, and use `luotsi artifacts open <artifact-root>` only when you specifically need the generic artifact browser.
 
 From source, the agent examples include tiny parsers that implement this same order:
 
@@ -115,8 +92,6 @@ luotsi run --file scenarios/smoke.json --device <serial> --artifacts ./artifacts
 luotsi run --file scenarios/smoke.json --device <serial> --artifacts ./artifacts/smoke-run \
   | node examples/agents/extract-next-command.mjs
 ```
-
-`luotsi quickstart` also returns `data.proof_checks[]`. Treat those checks as readiness evidence gates, not as the next-command priority order: they name the install, device, artifact handoff, device-truth, and replay proofs that show the first five minutes produced usable evidence. Each proof check carries a status such as `ready_to_run`, `needs_input`, or `ready_after_artifact` so agents can tell which commands still need concrete input. Run `luotsi quickstart-verify` with the same inputs when you want those checks grouped into ready, blocked, and later commands before starting; it writes the local plan/proof-pack handoff artifacts and reports the local proofs that passed.
 
 ## Agent Sessions
 
@@ -153,17 +128,6 @@ For agents, the practical loop is:
 4. If the command changes state, wait for the matching `screen_delta`.
 5. Capture artifacts before exiting or when a command fails.
 
-## Choose One Workflow
-
-| Job | Command | Continue |
-| --- | --- | --- |
-| Human operator needs a screen | `luotsi view --device <serial> --artifacts artifacts/live-view` | [Live View](../core-workflows/live-view/) |
-| Agent needs structured device state | `luotsi inspect --device <serial> --artifacts artifacts/inspect` | [AI Agent Workflows](../core-workflows/ai-agent-workflows/) |
-| CI needs a repeatable flow | `luotsi scenario-init --file scenarios/smoke.json --name smoke` | [Scenario Playbooks](../reference/scenario-playbooks/) |
-| Failure needs later review | `luotsi replay open --artifacts artifacts/<run-id>` | [Replay And Artifacts](../core-workflows/replay-and-artifacts/) |
-
-Pick one path. A strong first Luotsi evaluation is one working workflow with an artifact trail, not a tour of every command.
-
 ## Failed Runs
 
 When a scenario fails, do not start by rerunning blindly. Start from the artifact root:
@@ -182,25 +146,7 @@ Use this sequence to answer:
 - Which screenshot, hierarchy, logcat, telemetry, or timeline event proves it?
 - Which command should run next?
 
-`replay open --dry-run` returns the primary failure, recommended next action, and follow-up commands without launching the local artifact browser.
-
-## Keep The Proof
-
-Before you close the session, make sure the artifact root contains the evidence you would send to a teammate:
-
-```bash
-luotsi artifacts info artifacts/first-run
-luotsi artifacts open artifacts/first-run --dry-run
-```
-
-For CI or shared-lab review, package and verify the artifact root:
-
-```bash
-luotsi artifacts pack artifacts/first-run --output artifacts/first-run.zip
-luotsi artifacts verify artifacts/first-run.zip
-```
-
-The quickstart proof pack gives the same closure checklist in artifact form. It asks for install proof, selected-device readiness, screen-state evidence, inspect-session evidence, a scenario seed or explicit deferral, replay reopening, and a lab-safe package verification step.
+`replay packet` writes the production handoff files first. Use `replay open --dry-run` when a human also wants the browser-free replay front door with primary failure, recommended next action, and follow-up commands without launching the local artifact browser.
 
 ## Pick The Reader
 
@@ -216,10 +162,6 @@ The quickstart proof pack gives the same closure checklist in artifact form. It 
 Start with these commands when you are oriented by output shape:
 
 ```bash
-# Create a first-run handoff.
-luotsi quickstart --human
-luotsi quickstart --artifacts artifacts/first-run --write-json --write-markdown
-
 # Find a device and verify host/device readiness.
 luotsi devices
 luotsi doctor --device <serial>
@@ -241,7 +183,6 @@ luotsi replay graph --artifacts ./artifacts/smoke-run/<run-id> --failed
 ## Related Pages
 
 - [Quickstart](./quickstart/)
-- [Device Readiness](./device-readiness/)
 - [Output Envelopes](../reference/output-envelopes/)
 - [Agent Loop Example](../core-workflows/agent-loop-example/)
 - [Replay And Artifacts](../core-workflows/replay-and-artifacts/)

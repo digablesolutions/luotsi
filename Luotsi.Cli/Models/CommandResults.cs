@@ -436,6 +436,8 @@ public sealed record ReplayOpenResult(
     string IndexMarkdownPath,
     string? JsonPath,
     string? MarkdownPath,
+    string? RunSummaryJsonPath,
+    string? RunSummaryMarkdownPath,
     int SessionCount,
     int FailureCount,
     ReplayOpenPrimaryFailureResult? PrimaryFailure,
@@ -446,12 +448,20 @@ public sealed record ReplayOpenResult(
     IReadOnlyList<string> OpenerArgs);
 
 public sealed record ReplayOpenPrimaryFailureResult(
+    string SessionKind,
+    string SessionId,
+    DateTimeOffset StartedAt,
+    DateTimeOffset EndedAt,
+    string Reason,
+    int ExitCode,
+    string? Target,
     string? Scenario,
     string? Step,
     string? Action,
     string? Message,
     string? TimelinePath,
-    string? FailureCapsulePath);
+    string? FailureCapsulePath,
+    string? SourceCommand);
 
 public sealed record ReplayOpenNextActionResult(
     string Kind,
@@ -463,6 +473,60 @@ public sealed record ReplayOpenCommandHintResult(
     string Kind,
     string Description,
     string Command);
+
+public sealed record RunSummaryFailureSnapshotResult(
+    string SessionId,
+    string Reason,
+    string? Target,
+    string? Scenario,
+    string? Step,
+    string? Action,
+    string? Message);
+
+public sealed record RunSummaryResult(
+    string Schema,
+    DateTimeOffset GeneratedAt,
+    string ArtifactRoot,
+    string Status,
+    string Verdict,
+    int SessionCount,
+    int FailureCount,
+    IReadOnlyList<RunSummaryChecklistItemResult> TriageChecklist,
+    RunSummaryFailureSnapshotResult? FailureSnapshot,
+    ReplayOpenPrimaryFailureResult? PrimaryFailure,
+    ReplayOpenNextActionResult RecommendedNextAction,
+    RunSummaryEntryPoints EntryPoints,
+    IReadOnlyList<ReplayOpenCommandHintResult> Commands);
+
+public sealed record RunSummaryChecklistItemResult(
+    int Step,
+    string Action,
+    string? Command,
+    string Rationale);
+
+public sealed record RunSummaryEntryPoints(
+    string IndexHtmlPath,
+    string IndexMarkdownPath,
+    string? ReplayOpenJsonPath,
+    string? ReplayOpenMarkdownPath,
+    string? RunSummaryJsonPath,
+    string? RunSummaryMarkdownPath);
+
+public sealed record RunSummaryCheckResult(
+    string Schema,
+    DateTimeOffset CheckedAt,
+    string ArtifactRoot,
+    string PacketPath,
+    string Status,
+    string PacketStatus,
+    int SessionCount,
+    int FailureCount,
+    string RecommendedNextActionCommand,
+    RunSummaryFailureSnapshotResult? FailureSnapshot,
+    ReplayOpenNextActionResult RecommendedNextAction,
+    IReadOnlyList<RunSummaryChecklistItemResult> TriageChecklist,
+    ReplayOpenPrimaryFailureResult? PrimaryFailure,
+    string? RunSummaryMarkdownPath);
 
 public sealed record ReplayScenarioDraftResult(
     string Schema,

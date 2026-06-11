@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json;
 using Luotsi.Cli.Artifacts;
 using Luotsi.Cli.Cli.Envelope;
 using Luotsi.Cli.Errors;
@@ -12,6 +13,8 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
 {
     private const string ReplayOpenSummaryJsonFileName = "replay-open-summary.json";
     private const string ReplayOpenSummaryMarkdownFileName = "replay-open.md";
+    private const string RunSummaryJsonFileName = "run-summary.json";
+    private const string RunSummaryMarkdownFileName = "run-summary.md";
     private readonly ReplayCommandHostDependencies _dependencies = dependencies ?? throw new ArgumentNullException(nameof(dependencies));
 
     public async Task<int> RunAsync(CliOptions options, DateTimeOffset started, ArtifactSession artifacts)
@@ -21,8 +24,17 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
 
         if (IsOpenCommand(options))
         {
-            var openResult = await OpenAsync(options, artifacts).ConfigureAwait(false);
+            var openResult = await OpenAsync(options, started, artifacts).ConfigureAwait(false);
             _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, openResult, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
+            return 0;
+        }
+
+        if (IsPacketCommand(options))
+        {
+            object packetResult = options.HasFlag("check")
+                ? await CheckPacketAsync(started, artifacts).ConfigureAwait(false)
+                : await PacketAsync(started, artifacts).ConfigureAwait(false);
+            _dependencies.EnvelopeWriter.WriteSuccess(options.Command ?? "replay", started, packetResult, artifacts.ToData(), AppCommandConsoleOutputModeResolver.Resolve(options));
             return 0;
         }
 
@@ -118,23 +130,23 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         return 0;
     }
 
-    private async Task<ReplayOpenResult> OpenAsync(CliOptions options, ArtifactSession artifacts)
+    private async Task<ReplayOpenResult> OpenAsync(CliOptions options, DateTimeOffset started, ArtifactSession artifacts)
     {
-        var snapshot = await artifacts.RefreshIndexWithSnapshotAsync().ConfigureAwait(false);
-
-        var indexHtmlPath = Path.Join(artifacts.Root, ArtifactSession.ArtifactHtmlIndexFileName);
-        var indexMarkdownPath = Path.Join(artifacts.Root, ArtifactSession.ArtifactIndexFileName);
         var jsonPath = options.HasFlag("write-json")
             ? Path.Join(artifacts.Root, ReplayOpenSummaryJsonFileName)
             : null;
         var markdownPath = options.HasFlag("write-markdown")
             ? Path.Join(artifacts.Root, ReplayOpenSummaryMarkdownFileName)
             : null;
-        var summaries = snapshot.ReplaySummaries;
-        var primaryFailure = CreatePrimaryFailure(summaries);
-        var commands = BuildOpenCommandHints(artifacts.Root, summaries, primaryFailure).ToArray();
-        var nextAction = BuildRecommendedNextAction(artifacts.Root, summaries, primaryFailure, commands);
-        var command = BuildOpenCommand(indexHtmlPath);
+        var writeRunSummaryPacket = options.HasFlag("write-json") || options.HasFlag("write-markdown");
+        var packet = await CreateRunSummaryAsync(
+            started,
+            artifacts,
+            writeJson: writeRunSummaryPacket,
+            writeMarkdown: writeRunSummaryPacket,
+            replayOpenJsonPath: jsonPath,
+            replayOpenMarkdownPath: markdownPath).ConfigureAwait(false);
+        var command = BuildOpenCommand(packet.EntryPoints.IndexHtmlPath);
         var opened = false;
         if (!options.HasFlag("dry-run"))
         {
@@ -151,15 +163,17 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         var result = new ReplayOpenResult(
             ResultSchemas.ReplayOpen,
             artifacts.Root,
-            indexHtmlPath,
-            indexMarkdownPath,
+            packet.EntryPoints.IndexHtmlPath,
+            packet.EntryPoints.IndexMarkdownPath,
             jsonPath,
             markdownPath,
-            summaries.Count,
-            summaries.Count(static summary => summary.HasFailureSignals),
-            primaryFailure,
-            nextAction,
-            commands,
+            packet.EntryPoints.RunSummaryJsonPath,
+            packet.EntryPoints.RunSummaryMarkdownPath,
+            packet.SessionCount,
+            packet.FailureCount,
+            packet.PrimaryFailure,
+            packet.RecommendedNextAction,
+            packet.Commands,
             opened,
             command.FileName,
             command.Args);
@@ -175,6 +189,357 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         }
 
         return result;
+    }
+
+    private Task<RunSummaryResult> PacketAsync(DateTimeOffset started, ArtifactSession artifacts) =>
+        CreateRunSummaryAsync(started, artifacts, writeJson: true, writeMarkdown: true);
+
+    private async Task<RunSummaryCheckResult> CheckPacketAsync(DateTimeOffset started, ArtifactSession artifacts)
+    {
+        var packetPath = Path.Join(artifacts.Root, RunSummaryJsonFileName);
+        if (!_dependencies.FileSystem.FileExists(packetPath))
+        {
+            throw new UsageException($"replay packet --check requires {RunSummaryJsonFileName} in the artifact root. Run `luotsi replay packet --artifacts {Quote(artifacts.Root)}` first.");
+        }
+
+        JsonDocument document;
+        try
+        {
+            document = JsonDocument.Parse(await _dependencies.FileSystem.ReadAllTextAsync(packetPath).ConfigureAwait(false));
+        }
+        catch (JsonException ex)
+        {
+            throw new UsageException($"{RunSummaryJsonFileName} is not valid JSON: {ex.Message}");
+        }
+
+        using (document)
+        {
+            var root = document.RootElement;
+            var schema = RequireString(root, "schema", packetPath);
+            if (!string.Equals(schema, ResultSchemas.RunSummary, StringComparison.Ordinal))
+            {
+                throw new UsageException($"{RunSummaryJsonFileName} has unsupported schema '{schema}'. Expected '{ResultSchemas.RunSummary}'.");
+            }
+
+            var artifactRoot = RequireString(root, "artifactRoot", packetPath);
+            if (!string.Equals(artifactRoot, artifacts.Root, StringComparison.Ordinal))
+            {
+                throw new UsageException($"{RunSummaryJsonFileName} points at artifact root '{artifactRoot}', but the checked root is '{artifacts.Root}'. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
+            }
+
+            var packetStatus = RequireString(root, "status", packetPath);
+            var sessionCount = RequireInt32(root, "sessionCount", packetPath);
+            var failureCount = RequireInt32(root, "failureCount", packetPath);
+            var recommendedNextAction = RequireObject(root, "recommendedNextAction", packetPath);
+            var recommendedCommand = RequireString(recommendedNextAction, "command", packetPath);
+            var recommendedNextActionResult = ReadRecommendedNextAction(recommendedNextAction, packetPath);
+            var triageChecklist = ReadTriageChecklist(root, recommendedCommand, packetPath);
+            var primaryFailure = ReadPrimaryFailure(root, packetPath);
+            var failureSnapshot = ReadFailureSnapshot(root, primaryFailure, packetPath);
+            var entryPoints = RequireObject(root, "entryPoints", packetPath);
+            var indexHtmlPath = RequireString(entryPoints, "indexHtmlPath", packetPath);
+            if (!_dependencies.FileSystem.FileExists(indexHtmlPath))
+            {
+                throw new UsageException($"{RunSummaryJsonFileName} points at missing index HTML '{indexHtmlPath}'. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
+            }
+
+            var indexMarkdownPath = RequireString(entryPoints, "indexMarkdownPath", packetPath);
+            if (!_dependencies.FileSystem.FileExists(indexMarkdownPath))
+            {
+                throw new UsageException($"{RunSummaryJsonFileName} points at missing index Markdown '{indexMarkdownPath}'. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
+            }
+
+            var runSummaryJsonPath = RequireString(entryPoints, "runSummaryJsonPath", packetPath);
+            if (!string.Equals(runSummaryJsonPath, packetPath, StringComparison.Ordinal))
+            {
+                throw new UsageException($"{RunSummaryJsonFileName} entryPoints.runSummaryJsonPath points at '{runSummaryJsonPath}', but expected '{packetPath}'. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
+            }
+
+            var runSummaryMarkdownPath = RequireNullableString(entryPoints, "runSummaryMarkdownPath", packetPath);
+            if (string.IsNullOrWhiteSpace(runSummaryMarkdownPath))
+            {
+                throw new UsageException($"{RunSummaryJsonFileName} is missing entryPoints.runSummaryMarkdownPath. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
+            }
+
+            if (!_dependencies.FileSystem.FileExists(runSummaryMarkdownPath))
+            {
+                throw new UsageException($"{RunSummaryJsonFileName} points at missing Markdown packet '{runSummaryMarkdownPath}'. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
+            }
+
+            var runSummaryMarkdown = await _dependencies.FileSystem.ReadAllTextAsync(runSummaryMarkdownPath).ConfigureAwait(false);
+            ValidateAtAGlanceSection(primaryFailure, recommendedCommand, runSummaryMarkdown, artifacts.Root);
+            var checkCommand = BuildPacketCheckCommand(artifacts.Root);
+            if (!runSummaryMarkdown.Contains("## Packet Gate", StringComparison.Ordinal) ||
+                !runSummaryMarkdown.Contains(checkCommand, StringComparison.Ordinal))
+            {
+                throw new UsageException($"{RunSummaryMarkdownFileName} is missing the packet validation gate command. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
+            }
+
+            if (!runSummaryMarkdown.Contains("## Copy-Paste Triage Commands", StringComparison.Ordinal))
+            {
+                throw new UsageException($"{RunSummaryMarkdownFileName} is missing the copy-paste triage command block. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
+            }
+
+            ValidateCopyPasteTriageCommands(triageChecklist, runSummaryMarkdown, artifacts.Root);
+
+            if (!runSummaryMarkdown.Contains("## 60-Second Triage Checklist", StringComparison.Ordinal))
+            {
+                throw new UsageException($"{RunSummaryMarkdownFileName} is missing the 60-second triage checklist. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
+            }
+
+            if (!runSummaryMarkdown.Contains(recommendedCommand, StringComparison.Ordinal))
+            {
+                throw new UsageException($"{RunSummaryMarkdownFileName} does not include the recommended next action command from {RunSummaryJsonFileName}. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
+            }
+
+            ValidateFailureSnapshot(primaryFailure, runSummaryMarkdown, artifacts.Root);
+            ValidatePrimaryFailureHandoff(primaryFailure, triageChecklist, runSummaryMarkdown, packetPath, artifacts.Root);
+
+            return new RunSummaryCheckResult(
+                ResultSchemas.RunSummaryCheck,
+                started,
+                artifacts.Root,
+                packetPath,
+                "valid",
+                packetStatus,
+                sessionCount,
+                failureCount,
+                recommendedCommand,
+                failureSnapshot,
+                recommendedNextActionResult,
+                triageChecklist,
+                primaryFailure,
+                runSummaryMarkdownPath);
+        }
+    }
+
+    private static void ValidateCopyPasteTriageCommands(
+        IReadOnlyList<RunSummaryChecklistItemResult> triageChecklist,
+        string runSummaryMarkdown,
+        string artifactRoot)
+    {
+        var commandBlock = ExtractCopyPasteTriageCommandBlock(runSummaryMarkdown);
+        if (string.IsNullOrWhiteSpace(commandBlock))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} is missing the copy-paste triage command block. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        foreach (var command in triageChecklist
+                     .OrderBy(static item => item.Step)
+                     .Select(static item => item.Command)
+                     .Where(static command => !string.IsNullOrWhiteSpace(command))
+                     .Select(static command => command!)
+                     .Distinct(StringComparer.Ordinal)
+                     .Where(command => !commandBlock.Contains(command, StringComparison.Ordinal)))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} copy-paste triage command block is missing checklist command '{command}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+    }
+
+    private static void ValidateAtAGlanceSection(
+        ReplayOpenPrimaryFailureResult? primaryFailure,
+        string recommendedCommand,
+        string runSummaryMarkdown,
+        string artifactRoot)
+    {
+        if (!runSummaryMarkdown.Contains("## At a Glance", StringComparison.Ordinal))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} is missing the at-a-glance triage summary. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        if (!runSummaryMarkdown.Contains("Next command", StringComparison.Ordinal) ||
+            !runSummaryMarkdown.Contains(recommendedCommand, StringComparison.Ordinal))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} at-a-glance summary is missing the recommended next command. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        if (primaryFailure is not null &&
+            (!runSummaryMarkdown.Contains("Evidence command", StringComparison.Ordinal) ||
+             (!string.IsNullOrWhiteSpace(primaryFailure.SourceCommand) &&
+              !runSummaryMarkdown.Contains(primaryFailure.SourceCommand, StringComparison.Ordinal))))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} at-a-glance summary is missing primaryFailure.sourceCommand. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+    }
+
+    private static string? ExtractCopyPasteTriageCommandBlock(string runSummaryMarkdown)
+    {
+        const string heading = "## Copy-Paste Triage Commands";
+        var headingIndex = runSummaryMarkdown.IndexOf(heading, StringComparison.Ordinal);
+        if (headingIndex < 0)
+        {
+            return null;
+        }
+
+        var blockStart = runSummaryMarkdown.IndexOf("```bash", headingIndex + heading.Length, StringComparison.Ordinal);
+        if (blockStart < 0)
+        {
+            return null;
+        }
+
+        blockStart += "```bash".Length;
+        var blockEnd = runSummaryMarkdown.IndexOf("```", blockStart, StringComparison.Ordinal);
+        return blockEnd < 0 ? null : runSummaryMarkdown[blockStart..blockEnd];
+    }
+
+    private static void ValidatePrimaryFailureHandoff(
+        ReplayOpenPrimaryFailureResult? primaryFailure,
+        IReadOnlyList<RunSummaryChecklistItemResult> triageChecklist,
+        string runSummaryMarkdown,
+        string packetPath,
+        string artifactRoot)
+    {
+        if (primaryFailure is null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(primaryFailure.SourceCommand))
+        {
+            throw new UsageException($"{Path.GetFileName(packetPath)} primaryFailure.sourceCommand is required when primaryFailure is present. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        if (!triageChecklist.Any(item => string.Equals(item.Command, primaryFailure.SourceCommand, StringComparison.Ordinal)))
+        {
+            throw new UsageException($"{Path.GetFileName(packetPath)} triageChecklist must include primaryFailure.sourceCommand. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        if (!runSummaryMarkdown.Contains(primaryFailure.SourceCommand, StringComparison.Ordinal))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} does not include primaryFailure.sourceCommand from {RunSummaryJsonFileName}. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+    }
+
+    private static void ValidateFailureSnapshot(
+        ReplayOpenPrimaryFailureResult? primaryFailure,
+        string runSummaryMarkdown,
+        string artifactRoot)
+    {
+        if (primaryFailure is null)
+        {
+            return;
+        }
+
+        if (!runSummaryMarkdown.Contains("## Failure Snapshot", StringComparison.Ordinal))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} is missing the failure snapshot. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        foreach (var value in new[]
+                 {
+                     primaryFailure.SessionId,
+                     primaryFailure.Reason,
+                     primaryFailure.Target,
+                     primaryFailure.Scenario,
+                     primaryFailure.Step,
+                     primaryFailure.Action,
+                     primaryFailure.Message
+                 }
+                 .Where(static value => !string.IsNullOrWhiteSpace(value))
+                 .Select(static value => value!)
+                 .Where(value => !runSummaryMarkdown.Contains(EscapeMarkdown(value), StringComparison.Ordinal)))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} failure snapshot is missing primary failure value '{value}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+    }
+
+    private async Task<RunSummaryResult> CreateRunSummaryAsync(
+        DateTimeOffset started,
+        ArtifactSession artifacts,
+        bool writeJson,
+        bool writeMarkdown,
+        string? replayOpenJsonPath = null,
+        string? replayOpenMarkdownPath = null)
+    {
+        var snapshot = await artifacts.RefreshIndexWithSnapshotAsync().ConfigureAwait(false);
+        var indexHtmlPath = Path.Join(artifacts.Root, ArtifactSession.ArtifactHtmlIndexFileName);
+        var indexMarkdownPath = Path.Join(artifacts.Root, ArtifactSession.ArtifactIndexFileName);
+        var runSummaryJsonPath = writeJson
+            ? Path.Join(artifacts.Root, RunSummaryJsonFileName)
+            : null;
+        var runSummaryMarkdownPath = writeMarkdown
+            ? Path.Join(artifacts.Root, RunSummaryMarkdownFileName)
+            : null;
+        var summaries = snapshot.ReplaySummaries;
+        var primaryFailure = CreatePrimaryFailure(artifacts.Root, summaries);
+        var commands = BuildOpenCommandHints(artifacts.Root, summaries, primaryFailure).ToArray();
+        var nextAction = BuildRecommendedNextAction(artifacts.Root, summaries, primaryFailure, commands);
+        var runSummary = BuildRunSummary(
+            started,
+            artifacts.Root,
+            indexHtmlPath,
+            indexMarkdownPath,
+            replayOpenJsonPath,
+            replayOpenMarkdownPath,
+            runSummaryJsonPath,
+            runSummaryMarkdownPath,
+            summaries.Count,
+            summaries.Count(static summary => summary.HasFailureSignals),
+            primaryFailure,
+            nextAction,
+            commands);
+
+        if (runSummaryJsonPath is not null)
+        {
+            await artifacts.WriteJsonAsync(RunSummaryJsonFileName, runSummary).ConfigureAwait(false);
+        }
+
+        if (runSummaryMarkdownPath is not null)
+        {
+            await artifacts.WriteTextAsync(RunSummaryMarkdownFileName, BuildRunSummaryMarkdown(runSummary)).ConfigureAwait(false);
+        }
+
+        return runSummary;
+    }
+
+    private static RunSummaryResult BuildRunSummary(
+        DateTimeOffset generatedAt,
+        string artifactRoot,
+        string indexHtmlPath,
+        string indexMarkdownPath,
+        string? replayOpenJsonPath,
+        string? replayOpenMarkdownPath,
+        string? runSummaryJsonPath,
+        string? runSummaryMarkdownPath,
+        int sessionCount,
+        int failureCount,
+        ReplayOpenPrimaryFailureResult? primaryFailure,
+        ReplayOpenNextActionResult recommendedNextAction,
+        IReadOnlyList<ReplayOpenCommandHintResult> commands)
+    {
+        var status = primaryFailure is not null
+            ? "needs_triage"
+            : sessionCount > 0
+                ? "passed_or_incomplete"
+                : "no_replay_metadata";
+        var verdict = primaryFailure is not null
+            ? "Failure signals found. Start with the recommended next action before broad artifact browsing."
+            : sessionCount > 0
+                ? "No failure signals found in replay metadata. Write a capsule or inspect the timeline for context."
+                : "No replay metadata found. Inspect the artifact index and verify the run wrote session replay files.";
+
+        var triageChecklist = BuildTriageChecklist(primaryFailure, recommendedNextAction);
+
+        return new RunSummaryResult(
+            ResultSchemas.RunSummary,
+            generatedAt,
+            artifactRoot,
+            status,
+            verdict,
+            sessionCount,
+            failureCount,
+            triageChecklist,
+            CreateFailureSnapshot(primaryFailure),
+            primaryFailure,
+            recommendedNextAction,
+            new RunSummaryEntryPoints(
+                indexHtmlPath,
+                indexMarkdownPath,
+                replayOpenJsonPath,
+                replayOpenMarkdownPath,
+                runSummaryJsonPath,
+                runSummaryMarkdownPath),
+            commands);
     }
 
     private static string BuildOpenMarkdown(ReplayOpenResult result)
@@ -205,12 +570,20 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         }
         else
         {
+            AppendField(builder, "Session kind", result.PrimaryFailure.SessionKind);
+            AppendField(builder, "Session ID", result.PrimaryFailure.SessionId);
+            AppendField(builder, "Started", result.PrimaryFailure.StartedAt.ToString("O"));
+            AppendField(builder, "Ended", result.PrimaryFailure.EndedAt.ToString("O"));
+            AppendField(builder, "Reason", result.PrimaryFailure.Reason);
+            AppendField(builder, "Exit code", result.PrimaryFailure.ExitCode.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            AppendField(builder, "Target", result.PrimaryFailure.Target);
             AppendField(builder, "Scenario", result.PrimaryFailure.Scenario);
             AppendField(builder, "Step", result.PrimaryFailure.Step);
             AppendField(builder, "Action", result.PrimaryFailure.Action);
             AppendField(builder, "Message", result.PrimaryFailure.Message);
             AppendField(builder, "Timeline", result.PrimaryFailure.TimelinePath);
             AppendField(builder, "Failure capsule", result.PrimaryFailure.FailureCapsulePath);
+            AppendField(builder, "Reopen", result.PrimaryFailure.SourceCommand);
         }
 
         builder.AppendLine();
@@ -223,6 +596,146 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         }
 
         return builder.ToString();
+    }
+
+    private static string BuildRunSummaryMarkdown(RunSummaryResult result)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("# Luotsi Run Summary");
+        builder.AppendLine();
+        builder.AppendLine($"Generated: `{result.GeneratedAt:O}`");
+        builder.AppendLine($"Artifact root: `{EscapeMarkdown(result.ArtifactRoot)}`");
+        builder.AppendLine($"Status: `{EscapeMarkdown(result.Status)}`");
+        builder.AppendLine($"Verdict: {EscapeMarkdown(result.Verdict)}");
+        builder.AppendLine($"Sessions: `{result.SessionCount}`");
+        builder.AppendLine($"Failures: `{result.FailureCount}`");
+        builder.AppendLine();
+        builder.AppendLine("## At a Glance");
+        builder.AppendLine();
+        builder.AppendLine($"- Status: `{EscapeMarkdown(result.Status)}`");
+        builder.AppendLine($"- Next command: `{EscapeMarkdown(result.RecommendedNextAction.Command)}`");
+        if (!string.IsNullOrWhiteSpace(result.PrimaryFailure?.SourceCommand))
+        {
+            builder.AppendLine($"- Evidence command: `{EscapeMarkdown(result.PrimaryFailure.SourceCommand)}`");
+        }
+        builder.AppendLine();
+        builder.AppendLine("## Failure Snapshot");
+        builder.AppendLine();
+        AppendFailureSnapshot(builder, result.PrimaryFailure);
+        builder.AppendLine();
+        builder.AppendLine("## Packet Gate");
+        builder.AppendLine();
+        builder.AppendLine("Run this first when the packet came from CI, support, or another agent.");
+        builder.AppendLine();
+        builder.AppendLine("```bash");
+        builder.AppendLine(BuildPacketCheckCommand(result.ArtifactRoot));
+        builder.AppendLine("```");
+        builder.AppendLine();
+        builder.AppendLine("## Copy-Paste Triage Commands");
+        builder.AppendLine();
+        var firstMinuteCommands = result.TriageChecklist
+            .OrderBy(static item => item.Step)
+            .Select(static item => item.Command)
+            .Where(static command => !string.IsNullOrWhiteSpace(command))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (firstMinuteCommands.Length == 0)
+        {
+            builder.AppendLine("No command-only triage path is available in this packet.");
+        }
+        else
+        {
+            builder.AppendLine("```bash");
+            foreach (var command in firstMinuteCommands)
+            {
+                builder.AppendLine(command);
+            }
+
+            builder.AppendLine("```");
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("## 60-Second Triage Checklist");
+        builder.AppendLine();
+        foreach (var item in result.TriageChecklist.OrderBy(static item => item.Step))
+        {
+            if (string.IsNullOrWhiteSpace(item.Command))
+            {
+                builder.AppendLine($"{item.Step}. {EscapeMarkdown(item.Action)}");
+            }
+            else
+            {
+                builder.AppendLine($"{item.Step}. {EscapeMarkdown(item.Action)} `{EscapeMarkdown(item.Command)}`");
+            }
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("## First Action");
+        builder.AppendLine();
+        builder.AppendLine($"- **{EscapeMarkdown(result.RecommendedNextAction.Title)}** (`{EscapeMarkdown(result.RecommendedNextAction.Kind)}`)");
+        builder.AppendLine($"  {EscapeMarkdown(result.RecommendedNextAction.Reason)}");
+        builder.AppendLine($"  `{EscapeMarkdown(result.RecommendedNextAction.Command)}`");
+        builder.AppendLine();
+        builder.AppendLine("## Primary Failure");
+        builder.AppendLine();
+        if (result.PrimaryFailure is null)
+        {
+            builder.AppendLine("No primary failure was found in replay metadata.");
+        }
+        else
+        {
+            AppendField(builder, "Session kind", result.PrimaryFailure.SessionKind);
+            AppendField(builder, "Session ID", result.PrimaryFailure.SessionId);
+            AppendField(builder, "Started", result.PrimaryFailure.StartedAt.ToString("O"));
+            AppendField(builder, "Ended", result.PrimaryFailure.EndedAt.ToString("O"));
+            AppendField(builder, "Reason", result.PrimaryFailure.Reason);
+            AppendField(builder, "Exit code", result.PrimaryFailure.ExitCode.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            AppendField(builder, "Target", result.PrimaryFailure.Target);
+            AppendField(builder, "Scenario", result.PrimaryFailure.Scenario);
+            AppendField(builder, "Step", result.PrimaryFailure.Step);
+            AppendField(builder, "Action", result.PrimaryFailure.Action);
+            AppendField(builder, "Message", result.PrimaryFailure.Message);
+            AppendField(builder, "Timeline", result.PrimaryFailure.TimelinePath);
+            AppendField(builder, "Failure capsule", result.PrimaryFailure.FailureCapsulePath);
+            AppendField(builder, "Reopen", result.PrimaryFailure.SourceCommand);
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("## Entry Points");
+        builder.AppendLine();
+        AppendField(builder, "Index HTML", result.EntryPoints.IndexHtmlPath);
+        AppendField(builder, "Index Markdown", result.EntryPoints.IndexMarkdownPath);
+        AppendField(builder, "Replay open JSON", result.EntryPoints.ReplayOpenJsonPath);
+        AppendField(builder, "Replay open Markdown", result.EntryPoints.ReplayOpenMarkdownPath);
+        AppendField(builder, "Run summary JSON", result.EntryPoints.RunSummaryJsonPath);
+        AppendField(builder, "Run summary Markdown", result.EntryPoints.RunSummaryMarkdownPath);
+        builder.AppendLine();
+        builder.AppendLine("## Commands");
+        builder.AppendLine();
+        foreach (var hint in result.Commands)
+        {
+            builder.AppendLine($"- `{EscapeMarkdown(hint.Command)}`");
+            builder.AppendLine($"  {EscapeMarkdown(hint.Description)}");
+        }
+
+        return builder.ToString();
+    }
+
+    private static void AppendFailureSnapshot(StringBuilder builder, ReplayOpenPrimaryFailureResult? primaryFailure)
+    {
+        if (primaryFailure is null)
+        {
+            builder.AppendLine("No primary failure was found in replay metadata.");
+            return;
+        }
+
+        AppendField(builder, "Session", primaryFailure.SessionId);
+        AppendField(builder, "Reason", primaryFailure.Reason);
+        AppendField(builder, "Target", primaryFailure.Target);
+        AppendField(builder, "Scenario", primaryFailure.Scenario);
+        AppendField(builder, "Step", primaryFailure.Step);
+        AppendField(builder, "Action", primaryFailure.Action);
+        AppendField(builder, "Message", primaryFailure.Message);
     }
 
     private static void AppendField(StringBuilder builder, string label, string? value)
@@ -238,7 +751,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             .Replace("\r", " ", StringComparison.Ordinal)
             .Replace("\n", " ", StringComparison.Ordinal);
 
-    private static ReplayOpenPrimaryFailureResult? CreatePrimaryFailure(IReadOnlyList<SessionReplaySummary> summaries)
+    private static ReplayOpenPrimaryFailureResult? CreatePrimaryFailure(string artifactRoot, IReadOnlyList<SessionReplaySummary> summaries)
     {
         var summary = summaries.FirstOrDefault(static item => item.HasFailureSignals);
         if (summary is null)
@@ -250,12 +763,87 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         var failedStep = failedScenario?.FailedStep;
         var failureHighlight = summary.TimelineHighlights.FirstOrDefault(static entry => entry.IsFailureRelevant);
         return new ReplayOpenPrimaryFailureResult(
+            summary.SessionKind,
+            summary.SessionId,
+            summary.StartedAt,
+            summary.EndedAt,
+            summary.Reason,
+            summary.ExitCode,
+            summary.Target,
             failedScenario?.Scenario,
             failedStep?.Name,
             failedStep?.Action,
             failedScenario?.Error?.Message ?? failureHighlight?.Detail,
             summary.TimelinePath,
-            summary.FailureCapsulePath);
+            summary.FailureCapsulePath,
+            BuildPrimaryFailureSourceCommand(artifactRoot, summary, failureHighlight));
+    }
+
+    private static string? BuildPrimaryFailureSourceCommand(
+        string artifactRoot,
+        SessionReplaySummary summary,
+        SessionReplayTimelineEntry? failureHighlight)
+    {
+        if (failureHighlight is not null && !string.IsNullOrWhiteSpace(summary.TimelinePath))
+        {
+            return BuildTimelineSourceCommand(artifactRoot, summary.TimelinePath, failureHighlight.Sequence);
+        }
+
+        if (!string.IsNullOrWhiteSpace(summary.FailureCapsulePath))
+        {
+            return $"luotsi replay capsule --artifacts {Quote(artifactRoot)} --write-readme --write-json";
+        }
+
+        if (!string.IsNullOrWhiteSpace(summary.TimelinePath))
+        {
+            return $"luotsi replay timeline --artifacts {Quote(artifactRoot)} --context 3 --write-markdown";
+        }
+
+        return null;
+    }
+
+    private static IReadOnlyList<RunSummaryChecklistItemResult> BuildTriageChecklist(
+        ReplayOpenPrimaryFailureResult? primaryFailure,
+        ReplayOpenNextActionResult recommendedNextAction)
+    {
+        if (primaryFailure is null)
+        {
+            return [
+                new RunSummaryChecklistItemResult(
+                    1,
+                    "Run the recommended packet command",
+                    recommendedNextAction.Command,
+                    "This is the highest-signal next command computed from replay metadata."),
+                new RunSummaryChecklistItemResult(
+                    2,
+                    "Confirm whether the run passed, is incomplete, or lacks replay metadata",
+                    null,
+                    "A missing primary failure is not the same as a pass."),
+                new RunSummaryChecklistItemResult(
+                    3,
+                    "Use the artifact index only after the packet command and replay metadata have been checked",
+                    null,
+                    "The index is broader and less focused than the packet.")
+            ];
+        }
+
+        return [
+            new RunSummaryChecklistItemResult(
+                1,
+                "Run the recommended packet command",
+                recommendedNextAction.Command,
+                "This is the highest-signal next command computed from replay metadata."),
+            new RunSummaryChecklistItemResult(
+                2,
+                "Read the primary failure fields before opening broad artifacts",
+                primaryFailure.SourceCommand,
+                "Session identity and focused timeline evidence should be understood before broad artifact browsing."),
+            new RunSummaryChecklistItemResult(
+                3,
+                "Use the commands section only after the focused failure window is understood",
+                null,
+                "Follow-up commands are useful after the first failure window is clear.")
+        ];
     }
 
     private static IEnumerable<ReplayOpenCommandHintResult> BuildOpenCommandHints(
@@ -263,6 +851,14 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         IReadOnlyList<SessionReplaySummary> summaries,
         ReplayOpenPrimaryFailureResult? primaryFailure)
     {
+        yield return new ReplayOpenCommandHintResult(
+            "replay_packet",
+            "Write run-summary.json and run-summary.md for the durable first-minute packet.",
+            $"luotsi replay packet --artifacts {Quote(artifactRoot)}");
+        yield return new ReplayOpenCommandHintResult(
+            "replay_packet_check",
+            "Validate the durable first-minute packet before handoff.",
+            BuildPacketCheckCommand(artifactRoot));
         yield return new ReplayOpenCommandHintResult(
             "pack_artifacts",
             "Pack this artifact root for CI upload or replay handoff.",
@@ -346,6 +942,204 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             $"luotsi artifacts open {Quote(artifactRoot)}");
     }
 
+    private static string RequireString(JsonElement element, string propertyName, string sourcePath)
+    {
+        if (!element.TryGetProperty(propertyName, out var property) ||
+            property.ValueKind != JsonValueKind.String ||
+            string.IsNullOrWhiteSpace(property.GetString()))
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} is missing string property '{propertyName}'.");
+        }
+
+        return property.GetString()!;
+    }
+
+    private static string? RequireNullableString(JsonElement element, string propertyName, string sourcePath)
+    {
+        if (!element.TryGetProperty(propertyName, out var property))
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} is missing string property '{propertyName}'.");
+        }
+
+        if (property.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        if (property.ValueKind != JsonValueKind.String)
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} property '{propertyName}' must be a string or null.");
+        }
+
+        return property.GetString();
+    }
+
+    private static int RequireInt32(JsonElement element, string propertyName, string sourcePath)
+    {
+        if (!element.TryGetProperty(propertyName, out var property) ||
+            property.ValueKind != JsonValueKind.Number ||
+            !property.TryGetInt32(out var value))
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} is missing integer property '{propertyName}'.");
+        }
+
+        return value;
+    }
+
+    private static JsonElement RequireObject(JsonElement element, string propertyName, string sourcePath)
+    {
+        if (!element.TryGetProperty(propertyName, out var property) ||
+            property.ValueKind != JsonValueKind.Object)
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} is missing object property '{propertyName}'.");
+        }
+
+        return property;
+    }
+
+    private static ReplayOpenNextActionResult ReadRecommendedNextAction(JsonElement element, string sourcePath) =>
+        new(
+            RequireString(element, "kind", sourcePath),
+            RequireString(element, "title", sourcePath),
+            RequireString(element, "reason", sourcePath),
+            RequireString(element, "command", sourcePath));
+
+    private static IReadOnlyList<RunSummaryChecklistItemResult> ReadTriageChecklist(JsonElement root, string recommendedCommand, string sourcePath)
+    {
+        if (!root.TryGetProperty("triageChecklist", out var checklist) ||
+            checklist.ValueKind != JsonValueKind.Array ||
+            checklist.GetArrayLength() == 0)
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} is missing non-empty array property 'triageChecklist'.");
+        }
+
+        var items = checklist.EnumerateArray()
+            .Select(item => new RunSummaryChecklistItemResult(
+                RequireInt32(item, "step", sourcePath),
+                RequireString(item, "action", sourcePath),
+                RequireNullableString(item, "command", sourcePath),
+                RequireString(item, "rationale", sourcePath)))
+            .OrderBy(static item => item.Step)
+            .ToArray();
+
+        var firstStep = items[0];
+        if (firstStep.Step != 1)
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} triageChecklist[0].step must be 1.");
+        }
+
+        if (!string.Equals(firstStep.Command, recommendedCommand, StringComparison.Ordinal))
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} triageChecklist[0].command must match recommendedNextAction.command.");
+        }
+
+        return items;
+    }
+
+    private static ReplayOpenPrimaryFailureResult? ReadPrimaryFailure(JsonElement root, string sourcePath)
+    {
+        if (!root.TryGetProperty("primaryFailure", out var primaryFailure) ||
+            primaryFailure.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        if (primaryFailure.ValueKind != JsonValueKind.Object)
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} property 'primaryFailure' must be an object or null.");
+        }
+
+        return new ReplayOpenPrimaryFailureResult(
+            RequireString(primaryFailure, "sessionKind", sourcePath),
+            RequireString(primaryFailure, "sessionId", sourcePath),
+            RequireDateTimeOffset(primaryFailure, "startedAt", sourcePath),
+            RequireDateTimeOffset(primaryFailure, "endedAt", sourcePath),
+            RequireString(primaryFailure, "reason", sourcePath),
+            RequireInt32(primaryFailure, "exitCode", sourcePath),
+            RequireNullableString(primaryFailure, "target", sourcePath),
+            RequireNullableString(primaryFailure, "scenario", sourcePath),
+            RequireNullableString(primaryFailure, "step", sourcePath),
+            RequireNullableString(primaryFailure, "action", sourcePath),
+            RequireNullableString(primaryFailure, "message", sourcePath),
+            RequireNullableString(primaryFailure, "timelinePath", sourcePath),
+            RequireNullableString(primaryFailure, "failureCapsulePath", sourcePath),
+            RequireNullableString(primaryFailure, "sourceCommand", sourcePath));
+    }
+
+    private static RunSummaryFailureSnapshotResult? ReadFailureSnapshot(
+        JsonElement root,
+        ReplayOpenPrimaryFailureResult? primaryFailure,
+        string sourcePath)
+    {
+        if (primaryFailure is null)
+        {
+            return null;
+        }
+
+        if (!root.TryGetProperty("failureSnapshot", out var snapshot) ||
+            snapshot.ValueKind == JsonValueKind.Null)
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} is missing object property 'failureSnapshot' when primaryFailure is present.");
+        }
+
+        if (snapshot.ValueKind != JsonValueKind.Object)
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} property 'failureSnapshot' must be an object or null.");
+        }
+
+        var result = new RunSummaryFailureSnapshotResult(
+            RequireString(snapshot, "sessionId", sourcePath),
+            RequireString(snapshot, "reason", sourcePath),
+            RequireNullableString(snapshot, "target", sourcePath),
+            RequireNullableString(snapshot, "scenario", sourcePath),
+            RequireNullableString(snapshot, "step", sourcePath),
+            RequireNullableString(snapshot, "action", sourcePath),
+            RequireNullableString(snapshot, "message", sourcePath));
+
+        ValidateFailureSnapshotMatchesPrimaryFailure(result, primaryFailure, sourcePath);
+        return result;
+    }
+
+    private static RunSummaryFailureSnapshotResult? CreateFailureSnapshot(ReplayOpenPrimaryFailureResult? primaryFailure) =>
+        primaryFailure is null
+            ? null
+            : new RunSummaryFailureSnapshotResult(
+                primaryFailure.SessionId,
+                primaryFailure.Reason,
+                primaryFailure.Target,
+                primaryFailure.Scenario,
+                primaryFailure.Step,
+                primaryFailure.Action,
+                primaryFailure.Message);
+
+    private static void ValidateFailureSnapshotMatchesPrimaryFailure(
+        RunSummaryFailureSnapshotResult snapshot,
+        ReplayOpenPrimaryFailureResult primaryFailure,
+        string sourcePath)
+    {
+        if (!string.Equals(snapshot.SessionId, primaryFailure.SessionId, StringComparison.Ordinal) ||
+            !string.Equals(snapshot.Reason, primaryFailure.Reason, StringComparison.Ordinal) ||
+            !string.Equals(snapshot.Target, primaryFailure.Target, StringComparison.Ordinal) ||
+            !string.Equals(snapshot.Scenario, primaryFailure.Scenario, StringComparison.Ordinal) ||
+            !string.Equals(snapshot.Step, primaryFailure.Step, StringComparison.Ordinal) ||
+            !string.Equals(snapshot.Action, primaryFailure.Action, StringComparison.Ordinal) ||
+            !string.Equals(snapshot.Message, primaryFailure.Message, StringComparison.Ordinal))
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} failureSnapshot must match primaryFailure.");
+        }
+    }
+
+    private static DateTimeOffset RequireDateTimeOffset(JsonElement element, string propertyName, string sourcePath)
+    {
+        var value = RequireString(element, propertyName, sourcePath);
+        if (!DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var timestamp))
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} property '{propertyName}' must be an RFC 3339 timestamp.");
+        }
+
+        return timestamp;
+    }
+
     private static ReplayOutputMode ParseOutputMode(CliOptions options, string commandName)
     {
         var format = options.Get("format");
@@ -370,6 +1164,11 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
     private static bool IsOpenCommand(CliOptions options) =>
         options.Arguments.Count > 0 &&
         string.Equals(options.Arguments[0], "open", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsPacketCommand(CliOptions options) =>
+        options.Arguments.Count > 0 &&
+        (string.Equals(options.Arguments[0], "packet", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(options.Arguments[0], "triage", StringComparison.OrdinalIgnoreCase));
 
     private static bool IsScenarioDraftCommand(CliOptions options) =>
         options.Arguments.Count > 0 &&
@@ -421,6 +1220,17 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         return string.IsNullOrWhiteSpace(parent) ? artifactRoot : parent;
     }
 
+    private static string BuildTimelineSourceCommand(string artifactRoot, string timelinePath, int sequence)
+    {
+        var sourcePath = Path.IsPathRooted(timelinePath)
+            ? timelinePath
+            : Path.GetFullPath(Path.Join(artifactRoot, timelinePath));
+        return $"luotsi replay scrub --source-path {Quote(sourcePath)} --sequence {sequence} --context 3";
+    }
+
+    private static string BuildPacketCheckCommand(string artifactRoot) =>
+        $"luotsi replay packet --artifacts {Quote(artifactRoot)} --check";
+
     private static string Quote(string value) =>
         value.Contains(' ', StringComparison.Ordinal) ? "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"" : value;
 
@@ -471,6 +1281,7 @@ internal sealed record ReplayCommandHostDependencies(
     AppCommandEnvelopeWriter EnvelopeWriter,
     AppCommandJsonWriter JsonWriter,
     Routing.ReplayCommandDispatcher CommandDispatcher,
+    IFileSystem FileSystem,
     IProcessRunner ProcessRunner,
     ReplayScenarioDraftService ScenarioDraftService,
     ReplaySearchService SearchService,

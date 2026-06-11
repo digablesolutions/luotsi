@@ -11,13 +11,21 @@ internal sealed class ArtifactReplayWorkflowCommands(string root)
         var commands = new List<ReplayWorkflowCommandModel>
         {
             new(
-                "OPEN",
-                $"luotsi replay open --artifacts {ArtifactIndexPaths.Quote(_root)}",
-                "Start here: get the primary failure, recommended next action, and follow-up replay commands."),
+                "PACKET",
+                $"luotsi replay packet --artifacts {ArtifactIndexPaths.Quote(_root)}",
+                "Start here: write run-summary.json and run-summary.md with the first-minute triage packet."),
+            new(
+                "CHECK",
+                $"luotsi replay packet --artifacts {ArtifactIndexPaths.Quote(_root)} --check",
+                "Validate the durable packet before handing it to CI, support, or another agent."),
             new(
                 "CAPSULE",
                 $"luotsi replay capsule --artifacts {ArtifactIndexPaths.Quote(_root)} --write-readme --write-json",
-                "Write the bundle summary, primary failure, artifact manifest, and recommended replay next steps.")
+                "Write the bundle summary, primary failure, artifact manifest, and recommended replay next steps."),
+            new(
+                "OPEN",
+                $"luotsi replay open --artifacts {ArtifactIndexPaths.Quote(_root)}",
+                "Open the replay front door when a human also needs the browser-backed workbench.")
         };
 
         if (replaySummaries.Any(static summary => summary.HasFailureSignals))

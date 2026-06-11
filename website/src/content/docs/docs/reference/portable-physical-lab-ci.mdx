@@ -35,7 +35,7 @@ Both scripts read the same environment variables.
 | `LUOTSI_BIN` | `luotsi` | Luotsi executable. |
 | `LUOTSI_DRY_RUN` | `false` | Validate scripts and scenarios without claiming a device. |
 
-Normal execution validates scenarios, explains the selected lab target, claims one device for the run, writes JUnit plus Luotsi artifacts, and summarizes replay output.
+Normal execution validates scenarios, explains the selected lab target, claims one device for the run, writes JUnit plus Luotsi artifacts, and persists a replay run summary packet.
 
 ## GitHub Actions
 
@@ -68,7 +68,7 @@ luotsi lab status --device-query state=online,type=physical,availability=availab
 
 Use runner labels or runner groups to restrict access to trusted repositories. Avoid running physical-lab workflows from untrusted pull requests unless the runner is disposable and isolated.
 
-The workflow also fixes `LUOTSI_ARTIFACTS_DIR` to `artifacts/luotsi-lab`, fixes `LUOTSI_JUNIT_PATH` to `artifacts/luotsi-lab/junit.xml`, and uploads that directory as `luotsi-lab-<run_id>-<run_attempt>` after the job completes.
+The workflow also fixes `LUOTSI_ARTIFACTS_DIR` to `artifacts/luotsi-lab`, fixes `LUOTSI_JUNIT_PATH` to `artifacts/luotsi-lab/junit.xml`, uploads that directory as `luotsi-lab-<run_id>-<run_attempt>` after the job completes, and lets the scripts append `run-summary.md` to the GitHub Actions job summary when replay metadata is available.
 
 ## Current limits of the reusable pack
 
@@ -81,10 +81,12 @@ For example:
 ```bash
 luotsi lab plan --device-query "state=online,type=physical,availability=available,model=Pixel_9" --device-pool checkout --require-capabilities camera,nfc
 luotsi run --path examples/scenarios --device-query "state=online,type=physical,availability=available,model=Pixel_9" --claim-device --claim-wait-sec 300 --device-pool checkout --require-capabilities camera,nfc --owner "gh-actions-${GITHUB_RUN_ID:-local}" --ttl-sec 1800 --report-junit artifacts/luotsi-lab/junit.xml --artifacts artifacts/luotsi-lab
-luotsi replay open --artifacts artifacts/luotsi-lab --dry-run
+luotsi replay packet --artifacts artifacts/luotsi-lab
 ```
 
-`replay open --dry-run` is the CI handoff preview: it reports the primary failure, recommended next action, and follow-up replay commands without trying to launch a browser on the runner.
+`replay packet` is the CI handoff writer: it reports the At a Glance summary, primary failure, recommended next action, and follow-up replay commands without trying to launch a browser on the runner. It also writes `run-summary.json` and `run-summary.md`, which are the first files to inspect from an uploaded lab artifact bundle. Use `replay open --dry-run --write-json --write-markdown` when a human also wants the replay front-door response.
+
+The helper scripts preserve the scenario run exit code, but still attempt `replay packet`, `replay packet --check`, and the `run-summary.md` GitHub job-summary append after a failing run. The job stays red with the scenario run exit code, and the uploaded artifact bundle still has the first-minute packet. If packet writing or validation fails before `run-summary.md` exists, the scripts still append a fallback summary with exact `replay packet` and `replay packet --check` commands for the uploaded artifact root.
 
 Use that explicit form when the job must wait fairly for a leased device or when allocation has to respect durable pool and capability registration.
 
@@ -107,7 +109,7 @@ Run a device-free integration check with:
 LUOTSI_DRY_RUN=true bash ./eng/ci/run-lab-scenarios.sh
 ```
 
-When the generic CI job needs `--claim-wait-sec`, `--device-pool`, or `--require-capabilities`, bypass the helper script and call `luotsi lab plan`, `luotsi run`, and `luotsi replay open` directly so the job contract stays explicit.
+When the generic CI job needs `--claim-wait-sec`, `--device-pool`, or `--require-capabilities`, bypass the helper script and call `luotsi lab plan`, `luotsi run`, and `luotsi replay packet` directly so the job contract stays explicit.
 
 ## Docker
 
