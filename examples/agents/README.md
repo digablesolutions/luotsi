@@ -34,9 +34,10 @@ For one-shot commands and replay follow-ups, parse the standard envelope before 
 
 1. `data.recommended_next_action.command`
 2. Focused packet evidence: `data.primary_failure.source_command` / `primaryFailure.sourceCommand`
-3. Ordered handoff arrays: `data.recommended_next_steps`, `data.next_actions`, `data.suggested_commands`
-4. Command arrays: `data.commands`, `data.artifact_commands`, `data.recommended_commands`
-5. Fallback evidence pointer: `artifacts.artifact_root`, then run `luotsi replay packet --artifacts <artifact-root>`
+3. Packet checklist commands: `data.triage_checklist[].command` / `triageChecklist[].command`
+4. Ordered handoff arrays: `data.recommended_next_steps`, `data.next_actions`, `data.suggested_commands`
+5. Command arrays: `data.commands`, `data.artifact_commands`, `data.recommended_commands`
+6. Fallback evidence pointer: `artifacts.artifact_root`, then run `luotsi replay packet --artifacts <artifact-root>`
 
 Command arrays are not always ordered by the human-friendly first move, so the parser examples prefer a `replay_open` item when one appears in `data.commands`, `data.artifact_commands`, or `data.recommended_commands`. Use `open_artifacts` only when the next task is specifically browsing raw files.
 

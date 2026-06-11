@@ -27,6 +27,8 @@ commands return one JSON envelope, while `inspect` emits JSONL. After checking
 `ok` and the process exit code, command readers should look for
 `data.recommended_next_action.command`, focused packet evidence such as
 `data.primary_failure.source_command` or `data.primaryFailure.sourceCommand`,
+packet checklist commands such as `data.triage_checklist[].command` or
+`data.triageChecklist[].command`,
 ordered handoff arrays such as `data.recommended_next_steps`,
 `data.next_actions`, and `data.suggested_commands`, command arrays such as
 `data.commands`, `data.artifact_commands`, and `data.recommended_commands`,

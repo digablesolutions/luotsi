@@ -294,7 +294,8 @@ Output shapes:
 
 Next-action fields:
   Prefer data.recommended_next_action.command when present. Then check
-  primary_failure.source_command for focused packet evidence, followed by
+  primary_failure.source_command for focused packet evidence, then
+  triage_checklist[].command for packet checklist fallback, followed by
   recommended_next_steps, next_actions, suggested_commands, commands,
   artifact_commands, and recommended_commands. If no command field is present,
   use artifacts.artifact_root and run replay packet first; use artifacts open

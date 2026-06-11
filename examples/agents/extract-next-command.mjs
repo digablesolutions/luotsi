@@ -116,6 +116,11 @@ function extractNextCommandFromObject(value) {
     return evidence;
   }
 
+  const checklist = firstCommand(firstPresent(value, 'triage_checklist', 'triageChecklist'), { preferReplayOpen: false });
+  if (checklist) {
+    return checklist;
+  }
+
   for (const name of [
     'recommended_next_steps',
     'recommendedNextSteps',

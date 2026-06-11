@@ -111,6 +111,12 @@ def extract_next_command_from_mapping(value: dict[str, Any]) -> str | None:
         if command:
             return command
 
+    checklist = first_present(value, "triage_checklist", "triageChecklist")
+    if isinstance(checklist, list):
+        command = first_command(checklist, prefer_replay_open=False)
+        if command:
+            return command
+
     for name in (
         "recommended_next_steps",
         "recommendedNextSteps",
