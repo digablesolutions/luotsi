@@ -77,6 +77,8 @@ internal static class QuickstartCommand
         var quickstartHandoffCommand = $"luotsi quickstart {BuildCurrentOptionFlags(new QuickstartInputResult(suppliedDevice, package, artifacts, scenarioPath))} --write-json --write-markdown"
             .Replace("  ", " ", StringComparison.Ordinal)
             .Trim();
+        var deviceProofCommand = suppliedDevice is null ? "luotsi doctor" : $"luotsi doctor {deviceFlag} {packageFlag}";
+        var deviceTruthProofCommand = $"luotsi screen-state {deviceFlag} {artifactsFlag}";
 
         var steps = new[]
         {
@@ -178,29 +180,39 @@ internal static class QuickstartCommand
                 "install",
                 "Luotsi binary and bundled assets are discoverable.",
                 "luotsi version",
-                "Envelope includes runtime_version, command_path, install_root, and helper/bundled asset status."),
+                "Envelope includes runtime_version, command_path, install_root, and helper/bundled asset status.",
+                "ready_to_run",
+                null),
             new QuickstartProofCheckResult(
                 "device",
                 suppliedDevice is null
                     ? "At least one adb device can be selected for the readiness report."
                     : "The selected adb device is visible and stable.",
-                suppliedDevice is null ? "luotsi doctor" : $"luotsi doctor {deviceFlag} {packageFlag}",
-                "readiness_plan.status is ready, or blockers include exact remediation commands."),
+                deviceProofCommand,
+                "readiness_plan.status is ready, or blockers include exact remediation commands.",
+                ResolveProofCheckStatus(deviceProofCommand),
+                ResolveProofCheckBlockedReason(deviceProofCommand)),
             new QuickstartProofCheckResult(
                 "artifact_handoff",
                 "First-run handoff artifacts can be written for a human or AI operator.",
                 quickstartHandoffCommand,
-                "quickstart-plan.json, quickstart-plan.md, and artifact-index.json exist in the artifact root."),
+                "quickstart-plan.json, quickstart-plan.md, and artifact-index.json exist in the artifact root.",
+                "ready_to_run",
+                null),
             new QuickstartProofCheckResult(
                 "device_truth",
                 "The selected device can produce structured UI evidence.",
-                $"luotsi screen-state {deviceFlag} {artifactsFlag}",
-                "Screen-state output includes visible UI data and preserves the artifact root."),
+                deviceTruthProofCommand,
+                "Screen-state output includes visible UI data and preserves the artifact root.",
+                ResolveProofCheckStatus(deviceTruthProofCommand),
+                ResolveProofCheckBlockedReason(deviceTruthProofCommand)),
             new QuickstartProofCheckResult(
                 "replay",
                 "Captured evidence can be reopened without touching the device.",
                 $"luotsi replay open --last --artifacts {Quote(artifacts)} --dry-run",
-                "Replay output returns next actions and references the latest preserved artifact bundle.")
+                "Replay output returns next actions and references the latest preserved artifact bundle.",
+                "ready_after_artifact",
+                "Run the artifact handoff or a device/session command before expecting --last to resolve.")
         };
 
         return new QuickstartResult(
@@ -278,9 +290,13 @@ internal static class QuickstartCommand
         builder.AppendLine();
         foreach (var check in result.ProofChecks)
         {
-            builder.AppendLine($"- {check.Kind}: `{check.Command}`");
+            builder.AppendLine($"- {check.Kind} ({check.Status}): `{check.Command}`");
             builder.AppendLine($"  - Summary: {check.Summary}");
             builder.AppendLine($"  - Evidence: {check.Evidence}");
+            if (!string.IsNullOrWhiteSpace(check.BlockedReason))
+            {
+                builder.AppendLine($"  - Note: {check.BlockedReason}");
+            }
         }
 
         builder.AppendLine();
@@ -326,6 +342,32 @@ internal static class QuickstartCommand
 
     private static string? Normalize(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string ResolveProofCheckStatus(string command) =>
+        command.Contains('<', StringComparison.Ordinal) ? "needs_input" : "ready_to_run";
+
+    private static string? ResolveProofCheckBlockedReason(string command)
+    {
+        if (!command.Contains('<', StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var missing = new List<string>();
+        if (command.Contains("<adb serial>", StringComparison.Ordinal))
+        {
+            missing.Add("--device");
+        }
+
+        if (command.Contains("<app.id>", StringComparison.Ordinal))
+        {
+            missing.Add("--package");
+        }
+
+        return missing.Count == 0
+            ? "Replace placeholder values before running this proof check."
+            : $"Provide {string.Join(" and ", missing)} or run the earlier selection proof first.";
+    }
 
     private static string CombineCommandPath(string path, string fileName) =>
         path.TrimEnd('/', '\\') + "/" + fileName;
@@ -388,4 +430,6 @@ internal sealed record QuickstartProofCheckResult(
     string Kind,
     string Summary,
     string Command,
-    string Evidence);
+    string Evidence,
+    string Status,
+    string? BlockedReason);

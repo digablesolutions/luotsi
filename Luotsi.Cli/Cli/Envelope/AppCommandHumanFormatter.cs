@@ -263,18 +263,26 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
             return;
         }
 
-        lines.Add($"proof_checks: {checks.GetArrayLength()}");
-        var selectedChecks = checks
+        var checkItems = checks
             .EnumerateArray()
             .Where(static check => check.ValueKind == JsonValueKind.Object)
+            .ToArray();
+        var readyCount = checkItems.Count(static check => string.Equals(TryGetString(check, "status"), "ready_to_run", StringComparison.OrdinalIgnoreCase));
+        var needsInputCount = checkItems.Count(static check => string.Equals(TryGetString(check, "status"), "needs_input", StringComparison.OrdinalIgnoreCase));
+        var delayedCount = checkItems.Length - readyCount - needsInputCount;
+        var statusParts = new[] { $"ready={readyCount}", $"needs_input={needsInputCount}", delayedCount > 0 ? $"later={delayedCount}" : null }
+            .Where(static part => !string.IsNullOrWhiteSpace(part));
+        lines.Add($"proof_checks: {checks.GetArrayLength()} ({string.Join("; ", statusParts)})");
+        var selectedChecks = checkItems
             .OrderBy(static check => string.Equals(TryGetString(check, "kind"), "artifact_handoff", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
             .Take(1);
         foreach (var check in selectedChecks)
         {
             var kind = TryGetString(check, "kind");
+            var status = TryGetString(check, "status");
             var command = TryGetString(check, "command");
             var evidence = TryGetString(check, "evidence");
-            var summary = string.Join("; ", new[] { kind, command is null ? null : $"command={command}", evidence is null ? null : $"evidence={evidence}" }
+            var summary = string.Join("; ", new[] { kind, status is null ? null : $"status={status}", command is null ? null : $"command={command}", evidence is null ? null : $"evidence={evidence}" }
                 .Where(static part => !string.IsNullOrWhiteSpace(part)));
             if (!string.IsNullOrWhiteSpace(summary))
             {

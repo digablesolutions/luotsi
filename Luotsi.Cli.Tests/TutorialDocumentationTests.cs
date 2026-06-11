@@ -261,8 +261,14 @@ public sealed partial class AppTests
         var outputEnvelopes = File.ReadAllText(Path.Join(root, "website", "src", "content", "docs", "docs", "reference", "output-envelopes.mdx"));
         Assert.Contains("data.proof_checks[]", firstFiveMinutes, StringComparison.Ordinal);
         Assert.Contains("readiness evidence gates", firstFiveMinutes, StringComparison.Ordinal);
+        Assert.Contains("ready_to_run", firstFiveMinutes, StringComparison.Ordinal);
+        Assert.Contains("needs_input", firstFiveMinutes, StringComparison.Ordinal);
+        Assert.Contains("ready_after_artifact", firstFiveMinutes, StringComparison.Ordinal);
         Assert.Contains("data.proof_checks[]", outputEnvelopes, StringComparison.Ordinal);
         Assert.Contains("readiness evidence gates", outputEnvelopes, StringComparison.Ordinal);
+        Assert.Contains("ready_to_run", outputEnvelopes, StringComparison.Ordinal);
+        Assert.Contains("needs_input", outputEnvelopes, StringComparison.Ordinal);
+        Assert.Contains("ready_after_artifact", outputEnvelopes, StringComparison.Ordinal);
         Assert.Contains("command -> structured output -> artifact root -> replay command -> next action", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("luotsi help output", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("schema: \"luotsi-command.v1\"", aiAgentWorkflows, StringComparison.Ordinal);
