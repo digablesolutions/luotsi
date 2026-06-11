@@ -66,7 +66,7 @@ internal sealed class ViewConsoleEventWriter
                 WriteStarted(root);
                 break;
             case SessionEventTypes.View.CaptureBackendFallback:
-                _console.WriteLine($"{Warn()} Falling back from {GetString(root, \"failed_capture_backend\") ?? \"unknown\"} to {GetString(root, \"fallback_capture_backend\") ?? \"unknown\"}: {GetString(root, \"reason\") ?? \"no reason reported\"}");
+                _console.WriteLine($"{Warn()} Falling back from {GetString(root, "failed_capture_backend") ?? "unknown"} to {GetString(root, "fallback_capture_backend") ?? "unknown"}: {GetString(root, "reason") ?? "no reason reported"}");
                 break;
             case SessionEventTypes.View.Diagnostic:
                 _console.WriteLine($"{Warn()} {GetString(root, "message") ?? "View diagnostic reported."}");
