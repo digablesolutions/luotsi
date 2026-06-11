@@ -265,6 +265,13 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             }
 
             var runSummaryMarkdown = await _dependencies.FileSystem.ReadAllTextAsync(runSummaryMarkdownPath).ConfigureAwait(false);
+            var checkCommand = BuildPacketCheckCommand(artifacts.Root);
+            if (!runSummaryMarkdown.Contains("## Packet Gate", StringComparison.Ordinal) ||
+                !runSummaryMarkdown.Contains(checkCommand, StringComparison.Ordinal))
+            {
+                throw new UsageException($"{RunSummaryMarkdownFileName} is missing the packet validation gate command. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
+            }
+
             if (!runSummaryMarkdown.Contains("## Copy-Paste Triage Commands", StringComparison.Ordinal))
             {
                 throw new UsageException($"{RunSummaryMarkdownFileName} is missing the copy-paste triage command block. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
@@ -539,6 +546,14 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         builder.AppendLine($"Verdict: {EscapeMarkdown(result.Verdict)}");
         builder.AppendLine($"Sessions: `{result.SessionCount}`");
         builder.AppendLine($"Failures: `{result.FailureCount}`");
+        builder.AppendLine();
+        builder.AppendLine("## Packet Gate");
+        builder.AppendLine();
+        builder.AppendLine("Run this first when the packet came from CI, support, or another agent.");
+        builder.AppendLine();
+        builder.AppendLine("```bash");
+        builder.AppendLine(BuildPacketCheckCommand(result.ArtifactRoot));
+        builder.AppendLine("```");
         builder.AppendLine();
         builder.AppendLine("## Copy-Paste Triage Commands");
         builder.AppendLine();
@@ -1043,6 +1058,9 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
 
     private static string BuildTimelineSourceCommand(string timelinePath, int sequence) =>
         $"luotsi replay scrub --source-path {Quote(timelinePath)} --sequence {sequence} --context 3";
+
+    private static string BuildPacketCheckCommand(string artifactRoot) =>
+        $"luotsi replay packet --artifacts {Quote(artifactRoot)} --check";
 
     private static string Quote(string value) =>
         value.Contains(' ', StringComparison.Ordinal) ? "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"" : value;

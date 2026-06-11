@@ -522,6 +522,8 @@ public sealed partial class AppTests
         Assert.Contains("luotsi replay packet --artifacts <artifact-root>", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("recommendedNextAction.command", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("entryPoints", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("## Packet Gate", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("packet validation gate command", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("60-second triage checklist", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("`luotsi-run-summary-check.v1`", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("recommendedNextActionCommand", schemaGuide, StringComparison.Ordinal);
