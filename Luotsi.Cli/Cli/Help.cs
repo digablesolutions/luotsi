@@ -956,7 +956,7 @@ Design:
     {
         normalized = topic.ToLowerInvariant() switch
         {
-            "workflow" or "workflows" or "start" or "getting-started" or "gettingstarted" => "quickstart",
+            "workflow" or "workflows" or "start" or "getting-started" or "gettingstarted" or "quickstart-verify" => "quickstart",
             "outputs" or "envelope" or "envelopes" or "json" or "jsonl" => "output",
             "replay-summarize" => "replay",
             "version" => "update",

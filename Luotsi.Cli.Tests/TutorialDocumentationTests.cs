@@ -224,7 +224,7 @@ public sealed partial class AppTests
         Assert.Contains("examples/agents/extract-next-command.mjs", readme, StringComparison.Ordinal);
         Assert.Contains("saved JSONL-style log", readme, StringComparison.Ordinal);
         AssertContainsBefore(docsHub, "<Card title=\"First five minutes\">", "<Card title=\"Device readiness\">");
-        AssertContainsBefore(docsHub, "<Card title=\"First five minutes\">", "<Card title=\"Installation\">");
+        AssertContainsBefore(docsHub, "<Card title=\"First Five Minutes\">", "<Card title=\"Installation\">");
         AssertContainsBefore(docsHub, "<Card title=\"First five minutes\">", "<Card title=\"Quickstart\">");
         Assert.Contains("guide: artifact root is durable evidence; replay packet writes run-summary.json and run-summary.md", markdown, StringComparison.Ordinal);
         Assert.Contains("leads with the artifact path", markdown, StringComparison.Ordinal);
