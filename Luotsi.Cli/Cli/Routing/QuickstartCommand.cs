@@ -364,9 +364,15 @@ internal static class QuickstartCommand
             missing.Add("--package");
         }
 
-        return missing.Count == 0
-            ? "Replace placeholder values before running this proof check."
-            : $"Provide {string.Join(" and ", missing)} or run the earlier selection proof first.";
+        if (missing.Count == 0)
+        {
+            return "Replace placeholder values before running this proof check.";
+        }
+
+        var missingText = string.Join(" and ", missing);
+        return missing.Contains("--device")
+            ? $"Provide {missingText} or run the earlier selection proof first."
+            : $"Provide {missingText} before running this proof check.";
     }
 
     private static string CombineCommandPath(string path, string fileName) =>
