@@ -248,7 +248,6 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
         AddArraySummary(lines, value, "blocked_checks");
         AddArraySummary(lines, value, "ready_checks");
         AddArraySummary(lines, value, "later_checks");
-        AddRecommendedCommand(lines, value);
         return lines;
     }
 
