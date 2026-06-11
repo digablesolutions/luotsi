@@ -223,6 +223,7 @@ public interface IDeviceHostFactory
 
 public interface IConsoleIo
 {
+    bool SupportsAnsiStyling { get; }
     void WriteLine(string value);
     void WriteErrorLine(string value);
     string? ReadLine();

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.Infrastructure.System;
 using Luotsi.Cli.Models;
 using Luotsi.Cli.View.Contracts;
 
@@ -65,10 +66,10 @@ internal sealed class ViewConsoleEventWriter
                 WriteStarted(root);
                 break;
             case SessionEventTypes.View.CaptureBackendFallback:
-                _console.WriteLine($"WARN Falling back from {GetString(root, "failed_capture_backend") ?? "unknown"} to {GetString(root, "fallback_capture_backend") ?? "unknown"}: {GetString(root, "reason") ?? "no reason reported"}");
+                _console.WriteLine($"{Warn()} Falling back from {GetString(root, "failed_capture_backend") ?? "unknown"} to {GetString(root, "fallback_capture_backend") ?? "unknown"}: {GetString(root, "reason") ?? "no reason reported"}");
                 break;
             case SessionEventTypes.View.Diagnostic:
-                _console.WriteLine($"WARN {GetString(root, "message") ?? "View diagnostic reported."}");
+                _console.WriteLine($"{Warn()} {GetString(root, "message") ?? "View diagnostic reported."}");
                 WriteIndented("Next", GetString(root, "next_command"));
                 break;
             case SessionEventTypes.View.Error:
@@ -78,40 +79,40 @@ internal sealed class ViewConsoleEventWriter
                 _console.WriteLine($"View ended: {GetString(root, "reason") ?? "unknown"}");
                 break;
             case SessionEventTypes.View.Reconnected:
-                _console.WriteLine($"OK  View reconnected to {GetString(root, "device") ?? "device"}.");
+                _console.WriteLine($"{Ok()} View reconnected to {GetString(root, "device") ?? "device"}.");
                 break;
             case SessionEventTypes.View.ShareStarted:
-                _console.WriteLine($"OK  View sharing at {GetString(root, "endpoint") ?? "unknown endpoint"}.");
+                _console.WriteLine($"{Ok()} View sharing at {GetString(root, "endpoint") ?? "unknown endpoint"}.");
                 break;
             case SessionEventTypes.View.ShareClientConnected:
-                _console.WriteLine($"OK  Share client connected: {GetString(root, "remote_endpoint") ?? "unknown client"}.");
+                _console.WriteLine($"{Ok()} Share client connected: {GetString(root, "remote_endpoint") ?? "unknown client"}.");
                 break;
             case SessionEventTypes.View.ShareClientDisconnected:
-                _console.WriteLine($"--  Share client disconnected: {GetString(root, "remote_endpoint") ?? "unknown client"}.");
+                _console.WriteLine($"{Muted("-- ")} Share client disconnected: {GetString(root, "remote_endpoint") ?? "unknown client"}.");
                 break;
             case SessionEventTypes.View.RecordingStarted:
-                _console.WriteLine($"OK  Recording started: {GetRecordingPath(root) ?? "recording output"}.");
+                _console.WriteLine($"{Ok()} Recording started: {Accent(GetRecordingPath(root) ?? "recording output")}.");
                 break;
             case SessionEventTypes.View.RecordingStopped:
-                _console.WriteLine($"OK  Recording stopped: {GetRecordingPath(root) ?? "recording output"}.");
+                _console.WriteLine($"{Ok()} Recording stopped: {Accent(GetRecordingPath(root) ?? "recording output")}.");
                 break;
             case SessionEventTypes.View.ScreenshotCaptured:
-                _console.WriteLine($"OK  Screenshot captured: {GetString(root, "path") ?? "screenshot output"}.");
+                _console.WriteLine($"{Ok()} Screenshot captured: {Accent(GetString(root, "path") ?? "screenshot output")}.");
                 break;
             case SessionEventTypes.View.ReconnectRequested:
-                _console.WriteLine($"--  Reconnect requested: {GetString(root, "reason") ?? "no reason reported"}.");
+                _console.WriteLine($"{Muted("-- ")} Reconnect requested: {GetString(root, "reason") ?? "no reason reported"}.");
                 break;
             case SessionEventTypes.View.StreamPaused:
-                _console.WriteLine("--  View stream paused.");
+                _console.WriteLine($"{Muted("-- ")} View stream paused.");
                 break;
             case SessionEventTypes.View.StreamResumed:
-                _console.WriteLine("OK  View stream resumed.");
+                _console.WriteLine($"{Ok()} View stream resumed.");
                 break;
             case SessionEventTypes.View.InteractionFailed:
-                _console.WriteLine($"WARN Interaction failed: {GetString(root, "message") ?? GetString(root, "reason") ?? "no reason reported"}");
+                _console.WriteLine($"{Warn()} Interaction failed: {GetString(root, "message") ?? GetString(root, "reason") ?? "no reason reported"}");
                 break;
             case SessionEventTypes.View.InputBlocked:
-                _console.WriteLine($"WARN Input blocked: {GetString(root, "reason") ?? "read-only session"}.");
+                _console.WriteLine($"{Warn()} Input blocked: {GetString(root, "reason") ?? "read-only session"}.");
                 break;
             case SessionEventTypes.View.Stats:
             case SessionEventTypes.View.DeviceShelf:
@@ -119,7 +120,7 @@ internal sealed class ViewConsoleEventWriter
             default:
                 if (!string.IsNullOrWhiteSpace(type))
                 {
-                    _console.WriteLine($"--  {type}");
+                    _console.WriteLine($"{Muted("-- ")} {type}");
                 }
 
                 break;
@@ -132,10 +133,10 @@ internal sealed class ViewConsoleEventWriter
         var summary = GetString(root, "summary") ?? GetString(root, "phase") ?? "View startup phase.";
         var prefix = status switch
         {
-            ViewStartupPhaseStatus.Succeeded => "OK ",
-            ViewStartupPhaseStatus.Failed => "FAIL",
-            ViewStartupPhaseStatus.Skipped => "-- ",
-            _ => ".. "
+            ViewStartupPhaseStatus.Succeeded => Ok(),
+            ViewStartupPhaseStatus.Failed => Fail(),
+            ViewStartupPhaseStatus.Skipped => Muted("-- "),
+            _ => Muted(".. ")
         };
 
         _console.WriteLine($"{prefix} {summary}");
@@ -149,7 +150,7 @@ internal sealed class ViewConsoleEventWriter
 
     private void WriteStarted(JsonElement root)
     {
-        _console.WriteLine("View started");
+        _console.WriteLine(ConsoleStyling.Accent(_console, "View started"));
         WriteIndented("device", GetString(root, "device"));
         WriteIndented("backend", JoinNonEmpty(GetString(root, "capture_backend"), GetString(root, "backend")));
         WriteIndented("decoder", GetString(root, "decoder"));
@@ -159,20 +160,20 @@ internal sealed class ViewConsoleEventWriter
             WriteIndented("artifacts", GetString(artifacts, "artifact_root"));
         }
 
-        _console.WriteLine("  Press F10 for help. Ctrl+C closes the session.");
+        _console.WriteLine($"  {ConsoleStyling.Muted(_console, "Press F10 for help. Ctrl+C closes the session.")}");
     }
 
     private void WriteError(JsonElement root)
     {
         if (!TryGetProperty(root, "error", out var error))
         {
-            _console.WriteLine("FAIL View failed.");
+            _console.WriteLine($"{Fail()} View failed.");
             return;
         }
 
         var category = GetString(error, "category") ?? GetString(error, "type") ?? "error";
         var message = GetString(error, "message") ?? "View failed.";
-        _console.WriteLine($"FAIL {category}: {message}");
+        _console.WriteLine($"{Fail()} {category}: {message}");
     }
 
     private static string? FormatStream(JsonElement root)
@@ -200,9 +201,25 @@ internal sealed class ViewConsoleEventWriter
     {
         if (!string.IsNullOrWhiteSpace(value))
         {
-            _console.WriteLine($"  {label}: {value}");
+            _console.WriteLine($"  {ConsoleStyling.Muted(_console, label)}: {StyleIndentedValue(label, value)}");
         }
     }
+
+    private string Ok() => ConsoleStyling.Success(_console, "OK ");
+
+    private string Warn() => ConsoleStyling.Warning(_console, "WARN");
+
+    private string Fail() => ConsoleStyling.Failure(_console, "FAIL");
+
+    private string Muted(string value) => ConsoleStyling.Muted(_console, value);
+
+    private string Accent(string value) => ConsoleStyling.Accent(_console, value);
+
+    private string StyleIndentedValue(string label, string value)
+        => label.Equals("artifacts", StringComparison.OrdinalIgnoreCase) ||
+            label.Equals("Next", StringComparison.OrdinalIgnoreCase)
+                ? ConsoleStyling.Accent(_console, value)
+                : value;
 
     private static bool TryGetProperty(JsonElement element, string name, out JsonElement property)
     {

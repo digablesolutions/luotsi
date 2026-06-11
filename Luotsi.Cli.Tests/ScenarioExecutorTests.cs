@@ -1023,7 +1023,7 @@ public sealed partial class AppTests
     {
         var fileSystem = new FakeFileSystem();
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
-        var console = new FakeConsole();
+        var console = new FakeConsole { SupportsAnsiStyling = true };
         fileSystem.AddFile("/tmp/scenario.json", """
         {
           "name": "single",
@@ -1048,6 +1048,7 @@ public sealed partial class AppTests
         Assert.Equal(0, exitCode);
         Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
         Assert.NotEmpty(console.ErrorLines);
+        Assert.DoesNotContain(console.ErrorLines, static line => line.Contains("\u001b[", StringComparison.Ordinal));
         using var first = JsonDocument.Parse(console.ErrorLines[0]);
         Assert.Equal("luotsi-scenario-progress.v1", first.RootElement.GetProperty("schema").GetString());
         Assert.Equal("scenario_progress", first.RootElement.GetProperty("type").GetString());
