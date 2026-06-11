@@ -354,14 +354,12 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             throw new UsageException($"{RunSummaryMarkdownFileName} at-a-glance summary is missing the recommended next command. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
         }
 
-        if (primaryFailure is not null)
+        if (primaryFailure is not null &&
+            (!runSummaryMarkdown.Contains("Evidence command", StringComparison.Ordinal) ||
+             (!string.IsNullOrWhiteSpace(primaryFailure.SourceCommand) &&
+              !runSummaryMarkdown.Contains(primaryFailure.SourceCommand, StringComparison.Ordinal))))
         {
-            if (!runSummaryMarkdown.Contains("Evidence command", StringComparison.Ordinal) ||
-                string.IsNullOrWhiteSpace(primaryFailure.SourceCommand) ||
-                !runSummaryMarkdown.Contains(primaryFailure.SourceCommand, StringComparison.Ordinal))
-            {
-                throw new UsageException($"{RunSummaryMarkdownFileName} at-a-glance summary is missing primaryFailure.sourceCommand. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
-            }
+            throw new UsageException($"{RunSummaryMarkdownFileName} at-a-glance summary is missing primaryFailure.sourceCommand. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
         }
     }
 
