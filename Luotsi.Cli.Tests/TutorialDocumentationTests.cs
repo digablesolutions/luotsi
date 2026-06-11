@@ -171,7 +171,7 @@ public sealed partial class AppTests
         AssertContainsBefore(cliCommandGroups, "luotsi replay open --last --artifacts ./artifacts --dry-run", "luotsi artifacts open --last --artifacts ./artifacts");
         AssertContainsBefore(markdown, "`replay open --last` for the latest replay-specific next actions", "`artifacts open --last` only when you specifically need the latest generic browser");
         AssertContainsBefore(markdown, "start replay-specific triage with `replay open`", "Use `artifacts open` only when you specifically need the generic browser");
-        AssertContainsBefore(replayAndArtifacts, "`replay open` is the canonical first stop", "`replay capsule` is the deeper operator and CI handoff");
+        AssertContainsBefore(replayAndArtifacts, "`replay packet` is the canonical first stop", "`replay capsule` is the deeper operator and CI handoff");
         Assert.Contains("Start with `replay open --dry-run` after discovery", markdown, StringComparison.Ordinal);
     }
 
@@ -446,7 +446,7 @@ public sealed partial class AppTests
     }
 
     [Fact]
-    public void Website_Use_Cases_Start_Replay_Handoffs_With_Open_Dry_Run()
+    public void Website_Use_Cases_Start_Replay_Handoffs_With_Packet()
     {
         var pages = new[]
         {
@@ -459,16 +459,25 @@ public sealed partial class AppTests
         foreach (var page in pages)
         {
             var markdown = ReadWebsiteDocumentationPages(page);
+            var packetIndex = markdown.IndexOf("luotsi replay packet --artifacts ./artifacts/<run>", StringComparison.Ordinal);
+            var checkIndex = markdown.IndexOf("luotsi replay packet --artifacts ./artifacts/<run> --check", StringComparison.Ordinal);
             var openIndex = markdown.IndexOf("luotsi replay open --artifacts ./artifacts/<run> --dry-run", StringComparison.Ordinal);
             var summarizeIndex = markdown.IndexOf("luotsi replay summarize --artifacts ./artifacts/<run>", StringComparison.Ordinal);
 
-            Assert.True(openIndex >= 0, $"Expected {page} to show replay open --dry-run as the first replay handoff.");
+            Assert.True(packetIndex >= 0, $"Expected {page} to show replay packet as the first replay handoff.");
+            Assert.True(checkIndex >= 0, $"Expected {page} to show replay packet --check as the validation gate.");
             Assert.Contains("primary failure", markdown, StringComparison.Ordinal);
             Assert.Contains("recommended next action", markdown, StringComparison.Ordinal);
+            Assert.Contains("failure snapshot", markdown, StringComparison.Ordinal);
 
             if (summarizeIndex >= 0)
             {
-                Assert.True(openIndex < summarizeIndex, $"Expected {page} to put replay open --dry-run before replay summarize.");
+                Assert.True(packetIndex < summarizeIndex, $"Expected {page} to put replay packet before replay summarize.");
+            }
+
+            if (openIndex >= 0)
+            {
+                Assert.True(packetIndex < openIndex, $"Expected {page} to put replay packet before replay open --dry-run.");
             }
         }
     }
@@ -493,15 +502,15 @@ public sealed partial class AppTests
             "core-workflows/replay-and-artifacts.mdx",
             "reference/replay-graph-and-clusters.mdx");
 
-        Assert.Contains("The default action list starts with `replay open`", markdown, StringComparison.Ordinal);
-        Assert.Contains("`replay open` when you want the canonical front door", markdown, StringComparison.Ordinal);
-        Assert.Contains("`replay open` is the canonical first stop", markdown, StringComparison.Ordinal);
-        Assert.Contains("`replay packet` is the direct packet writer", markdown, StringComparison.Ordinal);
+        Assert.Contains("The default action list includes `replay open`", markdown, StringComparison.Ordinal);
+        Assert.Contains("`replay packet` is the canonical first stop", markdown, StringComparison.Ordinal);
+        Assert.Contains("`replay open` is the browser-free replay front door", markdown, StringComparison.Ordinal);
+        Assert.Contains("failure snapshot, packet gate, copy-paste triage commands", markdown, StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --artifacts ./artifacts/my-run", markdown, StringComparison.Ordinal);
         Assert.Contains("run-summary.json", markdown, StringComparison.Ordinal);
         Assert.Contains("docs/schemas/luotsi-run-summary-v1.md", markdown, StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --artifacts ./artifacts/my-run --check", markdown, StringComparison.Ordinal);
-        Assert.Contains("canonical replay front door", markdown, StringComparison.Ordinal);
+        Assert.Contains("browser-free replay front door", markdown, StringComparison.Ordinal);
         Assert.Contains("before raw artifact browsing", markdown, StringComparison.Ordinal);
         Assert.Contains("`replay capsule` is the shareable CI-triage summary after the replay front door", markdown, StringComparison.Ordinal);
         AssertContainsBefore(markdown, "luotsi replay open --artifacts ./artifacts/my-run --dry-run", "luotsi replay graph --artifacts ./artifacts/my-run");

@@ -93,13 +93,14 @@ or `entryPoints.indexHtmlPath`."
 `run-summary.md`. It exists so agents do not need to parse Markdown to follow
 the same 60-second path as humans.
 
-The Markdown packet starts with `## Packet Gate`, a fenced `bash` block
-containing the exact `luotsi replay packet --artifacts <artifact-root> --check`
-command for this artifact root. It is followed by
-`## Copy-Paste Triage Commands`, a fenced `bash` block containing the non-null
-checklist commands in order. This is the fastest human handoff surface.
-`replay packet --check` verifies that the gate command exists and that every
-non-null checklist command appears in the copy-paste block.
+The Markdown packet starts with `## Failure Snapshot`, then `## Packet Gate`, a
+fenced `bash` block containing the exact
+`luotsi replay packet --artifacts <artifact-root> --check` command for this
+artifact root. It is followed by `## Copy-Paste Triage Commands`, a fenced
+`bash` block containing the non-null checklist commands in order. This is the
+fastest human handoff surface. `replay packet --check` verifies that the
+snapshot and gate command exist and that every non-null checklist command
+appears in the copy-paste block.
 
 Each checklist item uses:
 

@@ -21,13 +21,14 @@ That lets triage stay host-side and asynchronous instead of forcing another live
 
 ```bash
 luotsi replay packet --artifacts ./artifacts/<run>
+luotsi replay packet --artifacts ./artifacts/<run> --check
 luotsi replay open --artifacts ./artifacts/<run> --dry-run --write-json --write-markdown
 luotsi replay summarize --artifacts ./artifacts/<run>
 luotsi replay search --artifacts ./artifacts/<run> --contains "error"
 luotsi replay capsule --artifacts ./artifacts/<run>
 ```
 
-Start with `replay packet` when CI or an agent needs the durable packet directly: it writes `run-summary.json` and `run-summary.md`, returns the same `luotsi-run-summary.v1` object, and never launches a browser. Use `replay open --dry-run --write-json --write-markdown` when a human also wants the replay front-door response and browser entrypoints.
+Start with `replay packet` when CI or an agent needs the durable packet directly: it writes `run-summary.json` and `run-summary.md`, returns the same `luotsi-run-summary.v1` object, includes the failure snapshot, primary failure, and recommended next action, and never launches a browser. Validate shared packets with `replay packet --check`. Use `replay open --dry-run --write-json --write-markdown` when a human also wants the replay front-door response and browser entrypoints.
 
 ## Strong fit when
 

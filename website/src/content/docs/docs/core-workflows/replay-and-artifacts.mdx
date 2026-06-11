@@ -57,7 +57,7 @@ luotsi replay search --artifacts ./artifacts/my-run --contains "timeout"
 - `replay scrub`: local previous/focused/next event view with exact commands to move through replay evidence, open the capsule, search, or graph the focused failure
 - `replay search`: text search across timelines and text-like artifacts with follow-up commands when matches are replay-relevant
 - `replay packet`: write `run-summary.json` and `run-summary.md`, return the `luotsi-run-summary.v1` packet, and stay non-interactive for CI and agents; use `--human` when a terminal reader needs the same first-minute triage path inline, use `--check` to validate an existing packet without rewriting artifacts, and use `--last` when the agent only has a search root
-- `replay open`: `replay open` is the canonical first stop for one artifact root; returns session counts, primary failure, recommended next action, and follow-up commands before raw artifact browsing, then opens the browser only when `--dry-run` is not supplied. Add `--write-json --write-markdown` to persist `run-summary.json` and `run-summary.md` as the stable production investigation packet.
+- `replay open`: browser-free replay front door for one artifact root when a human wants session counts, primary failure, recommended next action, and follow-up commands before raw artifact browsing; it opens the browser only when `--dry-run` is not supplied. Use `replay packet` to persist and validate `run-summary.json` and `run-summary.md` as the stable production investigation packet.
 - `replay capsule`: `replay capsule` is the shareable CI-triage summary after the replay front door, with primary failure reopen command, failure timeline with exact reopen commands, restored package intake audit when present, existing scenario draft artifacts and summary counts, ready draft run handoff, artifact manifest, and suggested next commands
 - `replay scenario-draft`: turn inspect or replay actions into a conservative starter scenario
 
@@ -82,14 +82,14 @@ Use `replay graph` when you want a stable node or edge model across sessions, fa
 
 The public distinction that matters is:
 
-- `replay open` is the canonical first stop for one failing artifact root
-- `replay packet` is the direct packet writer when CI or an agent wants `run-summary.json` without launching a browser
-- `run-summary.json` and `run-summary.md` are the stable packet files to attach to CI, reviews, and agent loops after `replay packet`; the Markdown starts with copy-paste triage commands followed by the 60-second checklist, and the source contract is documented in `docs/schemas/luotsi-run-summary-v1.md`
-- `replay capsule` is the deeper operator and CI handoff after the replay front door
+- `replay packet` is the canonical first stop for failed CI, reviews, and agent loops because it writes and returns the durable investigation packet without launching a browser
+- `run-summary.json` and `run-summary.md` are the stable packet files to attach after `replay packet`; the Markdown starts with a failure snapshot, packet gate, copy-paste triage commands, and the 60-second checklist, and the source contract is documented in `docs/schemas/luotsi-run-summary-v1.md`
+- `replay open` is the browser-free replay front door when a human also wants one artifact root summarized before opening the local index
+- `replay capsule` is the deeper operator and CI handoff after the packet/front door
 - `replay graph` is the agent- and debugger-facing node/edge model for that same root
 - `replay cluster` is the cross-run grouping view when the same failure shape keeps returning in CI
 
-`replay graph` returns a queryable graph for one artifact root with `query`, `agent_summary`, `taxonomy`, `total_node_count`, `matched_node_count`, `node_kinds`, `edge_kinds`, `insights`, `actions`, `evidence`, `facts`, `causal_chains`, `hypotheses`, optional artifact paths, and the returned `nodes` and `edges` arrays. The promoted node kinds that matter most in practice are `failure`, `action`, `selector`, `screen_state`, `telemetry_signal`, `scenario_draft`, and `generated_step`. Use `--failed`, `--node-kind`, `--edge-kind`, `--action`, `--selector`, `--contains`, `--insight`, `--severity`, `--evidence`, `--fact`, or `--node <id> --depth <n>` to narrow the view. Graph actions start with `replay open` so semantic context can route back to the canonical replay front door.
+`replay graph` returns a queryable graph for one artifact root with `query`, `agent_summary`, `taxonomy`, `total_node_count`, `matched_node_count`, `node_kinds`, `edge_kinds`, `insights`, `actions`, `evidence`, `facts`, `causal_chains`, `hypotheses`, optional artifact paths, and the returned `nodes` and `edges` arrays. The promoted node kinds that matter most in practice are `failure`, `action`, `selector`, `screen_state`, `telemetry_signal`, `scenario_draft`, and `generated_step`. Use `--failed`, `--node-kind`, `--edge-kind`, `--action`, `--selector`, `--contains`, `--insight`, `--severity`, `--evidence`, `--fact`, or `--node <id> --depth <n>` to narrow the view. Graph actions include `replay open` so semantic context can route back to the browser-free replay front door after the packet/check loop.
 
 `replay cluster` works one level up. Point it at a directory of replayable artifact roots when you need Luotsi to group failed sessions by normalized failure shape and return triage hints plus the next replay/search commands for the best representative bundle.
 
