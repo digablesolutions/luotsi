@@ -73,15 +73,15 @@ export function extractNextCommand(envelope) {
     }
   }
 
+  const artifactRoot = cleanCommand(envelope?.artifacts?.artifact_root);
   const data = envelope?.data;
   if (isObject(data)) {
-    const command = extractNextCommandFromObject(data);
+    const command = extractNextCommandFromObject(data, artifactRoot);
     if (command) {
       return command;
     }
   }
 
-  const artifactRoot = cleanCommand(envelope?.artifacts?.artifact_root);
   if (artifactRoot) {
     return `luotsi replay packet --artifacts ${quoteShellArg(artifactRoot)}`;
   }
@@ -104,7 +104,7 @@ function isLooseCommandEnvelope(value) {
     'artifacts' in value));
 }
 
-function extractNextCommandFromObject(value) {
+function extractNextCommandFromObject(value, fallbackArtifactRoot = null) {
   const directCommand = cleanCommand(firstPresent(value, 'recommended_next_action_command', 'recommendedNextActionCommand'));
   if (directCommand) {
     return directCommand;
@@ -132,16 +132,28 @@ function extractNextCommandFromObject(value) {
     'next_actions',
     'nextActions',
     'suggested_commands',
-    'suggestedCommands',
+    'suggestedCommands'
+  ]) {
+    const command = firstCommand(value[name], { preferReplayOpen: false });
+    if (command) {
+      return command;
+    }
+  }
+
+  const artifactRoot = cleanCommand(firstPresent(value, 'artifact_root', 'artifactRoot'));
+  const packetRoot = artifactRoot ?? fallbackArtifactRoot;
+  if (packetRoot) {
+    return `luotsi replay packet --artifacts ${quoteShellArg(packetRoot)}`;
+  }
+
+  for (const name of [
     'commands',
     'artifact_commands',
     'artifactCommands',
     'recommended_commands',
     'recommendedCommands'
   ]) {
-    const command = firstCommand(value[name], {
-      preferReplayOpen: ['commands', 'artifact_commands', 'artifactCommands', 'recommended_commands', 'recommendedCommands'].includes(name)
-    });
+    const command = firstCommand(value[name], { preferReplayOpen: true });
     if (command) {
       return command;
     }

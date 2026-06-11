@@ -263,7 +263,8 @@ public sealed partial class AppTests
         Assert.Contains("data.commands", examples, StringComparison.Ordinal);
         Assert.Contains("data.artifact_commands", examples, StringComparison.Ordinal);
         Assert.Contains("data.recommended_commands", examples, StringComparison.Ordinal);
-        Assert.Contains("prefer a `replay_open` item", examples, StringComparison.Ordinal);
+        Assert.Contains("prefer the artifact-root packet fallback before", examples, StringComparison.Ordinal);
+        Assert.Contains("When no artifact root is available, the examples still prefer a `replay_open` command", examples, StringComparison.Ordinal);
         Assert.Contains("run-summary.json", examples, StringComparison.Ordinal);
         Assert.Contains("luotsi-run-summary.v1", examples, StringComparison.Ordinal);
         Assert.Contains("recommendedNextAction.command", examples, StringComparison.Ordinal);
@@ -694,7 +695,7 @@ public sealed partial class AppTests
         var fixtureJson = File.ReadAllText(fixturePath);
         using var fixture = JsonDocument.Parse(fixtureJson);
         var artifactRoot = fixture.RootElement.GetProperty("artifacts").GetProperty("artifact_root").GetString();
-        var expectedFromFixture = $"luotsi replay open --artifacts {artifactRoot}";
+        var expectedFromFixture = $"luotsi replay packet --artifacts {artifactRoot}";
         const string directNextActionJson = """{"schema":"luotsi-command.v1","ok":true,"data":{"recommended_next_action":{"kind":"run_dry_run","command":"luotsi run --path scenarios/smoke.json --dry-run"},"artifact_commands":[{"kind":"replay_open","command":"luotsi replay open --artifacts /tmp/direct-root --dry-run"}]},"artifacts":{"artifact_root":"/tmp/direct-root"}}""";
         const string expectedFromDirectNextAction = "luotsi run --path scenarios/smoke.json --dry-run";
         const string fallbackJson = """{"ok":true,"data":{},"artifacts":{"artifact_root":"/tmp/only-root"}}""";
@@ -708,9 +709,9 @@ public sealed partial class AppTests
             """{"schema":"luotsi-command.v1","ok":true,"data":{"artifact_commands":[{"kind":"open_artifacts","command":"luotsi artifacts open /tmp/second-root"},{"kind":"replay_open","command":"luotsi replay open --artifacts /tmp/second-root"}]},"artifacts":{"artifact_root":"/tmp/second-root"}}""",
             """{"type":"command_result","id":"tap-1","ok":true}"""
         ]);
-        const string expectedFromJsonlLog = "luotsi replay open --artifacts /tmp/second-root";
+        const string expectedFromJsonlLog = "luotsi replay packet --artifacts /tmp/second-root";
         const string unorderedRecommendedCommandsJson = """{"schema":"luotsi-command.v1","ok":true,"data":{"recommended_commands":[{"kind":"open_artifacts","command":"luotsi artifacts open /tmp/recommended-root"},{"kind":"replay_open","command":"luotsi replay open --artifacts /tmp/recommended-root --dry-run"}]},"artifacts":{"artifact_root":"/tmp/recommended-root"}}""";
-        const string expectedFromRecommendedCommands = "luotsi replay open --artifacts /tmp/recommended-root --dry-run";
+        const string expectedFromRecommendedCommands = "luotsi replay packet --artifacts /tmp/recommended-root";
         const string runSummaryJson = """{"schema":"luotsi-run-summary.v1","status":"needs_triage","recommendedNextAction":{"kind":"scrub_failure","command":"luotsi replay scrub --artifacts /tmp/packet-root --failures --context 3 --write-markdown"},"commands":[{"kind":"capsule","command":"luotsi replay capsule --artifacts /tmp/packet-root --write-readme --write-json"}]}""";
         const string expectedFromRunSummary = "luotsi replay scrub --artifacts /tmp/packet-root --failures --context 3 --write-markdown";
         const string runSummaryEvidenceOnlyJson = """{"schema":"luotsi-run-summary.v1","status":"needs_triage","primaryFailure":{"scenario":"login smoke","sourceCommand":"luotsi replay capsule --artifacts /tmp/evidence-root --write-readme --write-json"},"commands":[{"kind":"open_artifacts","command":"luotsi artifacts open /tmp/evidence-root"}]}""";

@@ -83,22 +83,24 @@ def extract_next_command(envelope: dict[str, Any]) -> str | None:
         if command:
             return command
 
-    data = envelope.get("data")
-    if isinstance(data, dict):
-        command = extract_next_command_from_mapping(data)
-        if command:
-            return command
-
+    artifact_root = None
     artifacts = envelope.get("artifacts")
     if isinstance(artifacts, dict):
         artifact_root = clean_command(artifacts.get("artifact_root"))
-        if artifact_root:
-            return f"luotsi replay packet --artifacts {quote_shell_arg(artifact_root)}"
+
+    data = envelope.get("data")
+    if isinstance(data, dict):
+        command = extract_next_command_from_mapping(data, artifact_root)
+        if command:
+            return command
+
+    if artifact_root:
+        return f"luotsi replay packet --artifacts {quote_shell_arg(artifact_root)}"
 
     return None
 
 
-def extract_next_command_from_mapping(value: dict[str, Any]) -> str | None:
+def extract_next_command_from_mapping(value: dict[str, Any], fallback_artifact_root: str | None = None) -> str | None:
     direct_command = clean_command(first_present(value, "recommended_next_action_command", "recommendedNextActionCommand"))
     if direct_command:
         return direct_command
@@ -128,6 +130,19 @@ def extract_next_command_from_mapping(value: dict[str, Any]) -> str | None:
         "nextActions",
         "suggested_commands",
         "suggestedCommands",
+    ):
+        items = value.get(name)
+        if isinstance(items, list):
+            command = first_command(items, prefer_replay_open=False)
+            if command:
+                return command
+
+    artifact_root = clean_command(first_present(value, "artifact_root", "artifactRoot"))
+    packet_root = artifact_root or fallback_artifact_root
+    if packet_root:
+        return f"luotsi replay packet --artifacts {quote_shell_arg(packet_root)}"
+
+    for name in (
         "commands",
         "artifact_commands",
         "artifactCommands",
@@ -136,13 +151,7 @@ def extract_next_command_from_mapping(value: dict[str, Any]) -> str | None:
     ):
         items = value.get(name)
         if isinstance(items, list):
-            command = first_command(items, prefer_replay_open=name in (
-                "commands",
-                "artifact_commands",
-                "artifactCommands",
-                "recommended_commands",
-                "recommendedCommands",
-            ))
+            command = first_command(items, prefer_replay_open=True)
             if command:
                 return command
 
