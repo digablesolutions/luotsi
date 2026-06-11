@@ -41,9 +41,9 @@ luotsi run --path "$LUOTSI_SCENARIO_PATH" --device-query "$LUOTSI_DEVICE_QUERY" 
 luotsi replay packet --artifacts "$LUOTSI_ARTIFACTS_DIR"
 ```
 
-`replay packet` is the CI handoff writer: it reports the primary failure,
-recommended next action, and follow-up replay commands without trying to launch
-a browser on the runner. It also writes `run-summary.json` and `run-summary.md`
+`replay packet` is the CI handoff writer: it reports the At a Glance summary,
+primary failure, recommended next action, and follow-up replay commands without
+trying to launch a browser on the runner. It also writes `run-summary.json` and `run-summary.md`
 into `LUOTSI_ARTIFACTS_DIR`. On GitHub Actions, the scripts append
 `run-summary.md` to `GITHUB_STEP_SUMMARY` so the first triage packet is visible
 in the job summary before anyone downloads raw artifacts.

@@ -249,7 +249,7 @@ def write_artifact_handoff(args: argparse.Namespace) -> None:
 
     print(f"inspect-agent-loop artifacts: {args.artifacts}", file=sys.stderr)
     print(
-        f"inspect-agent-loop next: luotsi replay open --last --artifacts {quote_shell_arg(args.artifacts)} --dry-run",
+        f"inspect-agent-loop next: luotsi replay packet --last --artifacts {quote_shell_arg(args.artifacts)}",
         file=sys.stderr,
     )
 

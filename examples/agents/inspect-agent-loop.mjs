@@ -435,7 +435,7 @@ function writeArtifactHandoff(args) {
   }
 
   process.stderr.write(`inspect-agent-loop artifacts: ${args.artifacts}\n`);
-  process.stderr.write(`inspect-agent-loop next: luotsi replay open --last --artifacts ${quoteShellArg(args.artifacts)} --dry-run\n`);
+  process.stderr.write(`inspect-agent-loop next: luotsi replay packet --last --artifacts ${quoteShellArg(args.artifacts)}\n`);
 }
 
 function quoteShellArg(value) {

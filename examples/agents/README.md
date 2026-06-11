@@ -62,7 +62,7 @@ After a failed or interesting run, start from the artifacts instead of reconnect
 
 ```bash
 luotsi artifacts list --artifacts artifacts/agent-loop
-luotsi replay open --last --artifacts artifacts/agent-loop --dry-run
+luotsi replay packet --last --artifacts artifacts/agent-loop
 luotsi replay timeline --artifacts artifacts/agent-loop/<run-id> --type command_result
 ```
 

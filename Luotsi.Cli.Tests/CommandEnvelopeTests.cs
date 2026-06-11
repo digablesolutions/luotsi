@@ -5783,6 +5783,11 @@ public sealed partial class AppTests
         Assert.Equal(Path.Join(replayRoot, "index.html"), data.GetProperty("index_path").GetString());
         Assert.True(data.GetProperty("dry_run").GetBoolean());
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.html")));
+        var recommendedCommands = data.GetProperty("recommended_commands").EnumerateArray().ToArray();
+        Assert.Equal("replay_packet", recommendedCommands[0].GetProperty("kind").GetString());
+        Assert.Equal($"luotsi replay packet --artifacts {replayRoot}", recommendedCommands[0].GetProperty("command").GetString());
+        Assert.Equal("replay_packet_check", recommendedCommands[1].GetProperty("kind").GetString());
+        Assert.Equal($"luotsi replay packet --artifacts {replayRoot} --check", recommendedCommands[1].GetProperty("command").GetString());
         Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
             command.GetProperty("kind").GetString() == "pack_artifacts");
     }
@@ -5820,9 +5825,14 @@ public sealed partial class AppTests
         Assert.True(entry.GetProperty("has_replay_metadata").GetBoolean());
         Assert.Contains("artifacts info", entry.GetProperty("info_command").GetString(), StringComparison.Ordinal);
         Assert.Contains("artifacts open", entry.GetProperty("open_command").GetString(), StringComparison.Ordinal);
-        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+        var recommendedCommands = data.GetProperty("recommended_commands").EnumerateArray().ToArray();
+        Assert.Equal("replay_packet_latest", recommendedCommands[0].GetProperty("kind").GetString());
+        Assert.Equal($"luotsi replay packet --last --artifacts {searchRoot}", recommendedCommands[0].GetProperty("command").GetString());
+        Assert.Equal("replay_packet_check_latest", recommendedCommands[1].GetProperty("kind").GetString());
+        Assert.Equal($"luotsi replay packet --last --artifacts {searchRoot} --check", recommendedCommands[1].GetProperty("command").GetString());
+        Assert.Contains(recommendedCommands, command =>
             command.GetProperty("kind").GetString() == "info_artifacts");
-        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+        Assert.Contains(recommendedCommands, command =>
             command.GetProperty("kind").GetString() == "open_artifacts");
     }
 
@@ -5898,7 +5908,12 @@ public sealed partial class AppTests
         Assert.Equal(1, counts.GetProperty("reports").GetInt32());
         Assert.Equal(1, counts.GetProperty("logs").GetInt32());
         Assert.Equal(1, counts.GetProperty("timelines").GetInt32());
-        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+        var recommendedCommands = data.GetProperty("recommended_commands").EnumerateArray().ToArray();
+        Assert.Equal("replay_packet", recommendedCommands[0].GetProperty("kind").GetString());
+        Assert.Equal($"luotsi replay packet --artifacts {replayRoot}", recommendedCommands[0].GetProperty("command").GetString());
+        Assert.Equal("replay_packet_check", recommendedCommands[1].GetProperty("kind").GetString());
+        Assert.Equal($"luotsi replay packet --artifacts {replayRoot} --check", recommendedCommands[1].GetProperty("command").GetString());
+        Assert.Contains(recommendedCommands, command =>
             command.GetProperty("kind").GetString() == "replay_open");
     }
 
@@ -6051,16 +6066,22 @@ public sealed partial class AppTests
         Assert.Equal(1, manifest.GetProperty("redaction").GetProperty("text_file_count").GetInt32());
         Assert.Equal(1, manifest.GetProperty("redaction").GetProperty("redacted_file_count").GetInt32());
 
-        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+        var recommendedCommands = data.GetProperty("recommended_commands").EnumerateArray().ToArray();
+        Assert.Contains(recommendedCommands, command =>
             command.GetProperty("kind").GetString() == "unpack_artifacts" &&
             command.GetProperty("command").GetString() == $"luotsi artifacts unpack {packagePath} --output {defaultOutputDirectory} --require-lab-safe --sha256 {sha256}");
-        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+        Assert.Contains(recommendedCommands, command =>
             command.GetProperty("kind").GetString() == "unpack_artifacts_dry_run" &&
             command.GetProperty("command").GetString() == $"luotsi artifacts unpack {packagePath} --output {defaultOutputDirectory} --require-lab-safe --dry-run --sha256 {sha256}");
-        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+        var packetCheckIndex = Array.FindIndex(recommendedCommands, command => command.GetProperty("kind").GetString() == "replay_packet_check_after_unpack");
+        var replayOpenIndex = Array.FindIndex(recommendedCommands, command => command.GetProperty("kind").GetString() == "replay_open_after_unpack");
+        Assert.InRange(packetCheckIndex, 0, recommendedCommands.Length - 1);
+        Assert.InRange(replayOpenIndex, 0, recommendedCommands.Length - 1);
+        Assert.True(packetCheckIndex < replayOpenIndex);
+        Assert.Contains(recommendedCommands, command =>
             command.GetProperty("kind").GetString() == "replay_packet_check_after_unpack" &&
             command.GetProperty("command").GetString() == $"luotsi replay packet --artifacts {defaultOutputDirectory} --check");
-        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+        Assert.Contains(recommendedCommands, command =>
             command.GetProperty("kind").GetString() == "replay_open_after_unpack" &&
             command.GetProperty("command").GetString() == $"luotsi replay open --artifacts {defaultOutputDirectory}");
         Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>

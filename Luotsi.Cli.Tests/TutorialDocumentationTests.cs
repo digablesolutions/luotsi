@@ -272,7 +272,7 @@ public sealed partial class AppTests
         Assert.Contains("luotsi replay packet --artifacts <artifact-root> --check", examples, StringComparison.Ordinal);
         Assert.Contains("Bad input exits non-zero with an `extract-next-command:` message", examples, StringComparison.Ordinal);
         Assert.Contains("artifacts.artifact_root", examples, StringComparison.Ordinal);
-        Assert.Contains("luotsi replay open --last --artifacts artifacts/agent-loop --dry-run", examples, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --last --artifacts artifacts/agent-loop", examples, StringComparison.Ordinal);
         Assert.Contains("command -> structured output -> artifact root -> replay command -> next action", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("luotsi help output", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("schema: \"luotsi-command.v1\"", aiAgentWorkflows, StringComparison.Ordinal);
@@ -288,8 +288,8 @@ public sealed partial class AppTests
         Assert.Contains("run-summary.json", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", aiAgentWorkflows, StringComparison.Ordinal);
         AssertContainsBefore(aiAgentWorkflows, "luotsi replay packet --artifacts <artifact-root>", "luotsi replay open --artifacts <artifact-root> --dry-run");
-        Assert.Contains("luotsi replay open --last --artifacts", nodeExample, StringComparison.Ordinal);
-        Assert.Contains("luotsi replay open --last --artifacts", pythonExample, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --last --artifacts", nodeExample, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --last --artifacts", pythonExample, StringComparison.Ordinal);
         Assert.Contains("extract-next-command.py", examples, StringComparison.Ordinal);
         Assert.Contains("extract-next-command.mjs", examples, StringComparison.Ordinal);
         Assert.Contains("recommended_next_action_command", nodeNextCommandExample, StringComparison.Ordinal);
