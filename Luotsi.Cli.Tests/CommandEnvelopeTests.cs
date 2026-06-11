@@ -1404,6 +1404,43 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayPacket_Check_Human_Output_Gives_CopyPaste_Triage_Context()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var processRunner = new FakeProcessRunner();
+        var replayRoot = SeedReplaySummaryArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = processRunner,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var writeExitCode = await app.RunAsync(["replay", "packet", "--artifacts", replayRoot]);
+        console.OutputLines.Clear();
+        var checkExitCode = await app.RunAsync(["replay", "packet", "--check", "--artifacts", replayRoot, "--human"]);
+
+        Assert.Equal(0, writeExitCode);
+        Assert.Equal(0, checkExitCode);
+        Assert.DoesNotContain(console.OutputLines, static line => line.Contains("\"schema\"", StringComparison.Ordinal));
+        Assert.Contains("  status: valid", console.OutputLines);
+        Assert.Contains("  packet_status: needs_triage", console.OutputLines);
+        Assert.Contains("  triage: 1 failure signal across 1 session", console.OutputLines);
+        Assert.Contains("  primary_failure: view-session / error / error=transport: Unexpected end of stream", console.OutputLines);
+        var expectedSourcePath = Path.GetFullPath(Path.Join(replayRoot, "session-timeline.jsonl"));
+        Assert.Contains(console.OutputLines, line => line.Contains($"  evidence: luotsi replay scrub --source-path {expectedSourcePath}", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, static line => line.Contains("  next_step: Scrub the failure window", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, static line => line.Contains("  next: luotsi replay scrub", StringComparison.Ordinal));
+        Assert.Contains("  triage_checklist: 3", console.OutputLines);
+        Assert.Contains(console.OutputLines, static line => line.Contains("    - step=1; action=Run the recommended packet command; command=luotsi replay scrub", StringComparison.Ordinal));
+        Assert.Contains($"  packet: {Path.Join(replayRoot, "run-summary.json")}", console.OutputLines);
+        Assert.Contains($"  markdown: {Path.Join(replayRoot, "run-summary.md")}", console.OutputLines);
+        Assert.Empty(processRunner.Calls);
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayPacket_Check_MarkdownWithoutAtAGlance_ReturnsUsageError()
     {
         var console = new FakeConsole();
