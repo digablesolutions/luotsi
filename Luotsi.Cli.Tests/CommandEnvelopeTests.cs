@@ -176,11 +176,22 @@ public sealed partial class AppTests
         Assert.Contains(
             data.GetProperty("proof_checks").EnumerateArray(),
             check => check.GetProperty("kind").GetString() == "install" &&
+                check.GetProperty("status").GetString() == "ready_to_run" &&
                 check.GetProperty("command").GetString() == "luotsi version");
         Assert.Contains(
             data.GetProperty("proof_checks").EnumerateArray(),
             check => check.GetProperty("kind").GetString() == "artifact_handoff" &&
+                check.GetProperty("status").GetString() == "ready_to_run" &&
                 check.GetProperty("command").GetString() == "luotsi quickstart --artifacts artifacts/first-run --path scenarios --write-json --write-markdown");
+        Assert.Contains(
+            data.GetProperty("proof_checks").EnumerateArray(),
+            check => check.GetProperty("kind").GetString() == "device_truth" &&
+                check.GetProperty("status").GetString() == "needs_input" &&
+                check.GetProperty("blocked_reason").GetString() == "Provide --device or run the earlier selection proof first.");
+        Assert.Contains(
+            data.GetProperty("proof_checks").EnumerateArray(),
+            check => check.GetProperty("kind").GetString() == "replay" &&
+                check.GetProperty("status").GetString() == "ready_after_artifact");
     }
 
     [Fact]
@@ -218,10 +229,12 @@ public sealed partial class AppTests
         Assert.Contains(
             data.GetProperty("proof_checks").EnumerateArray(),
             check => check.GetProperty("kind").GetString() == "device" &&
+                check.GetProperty("status").GetString() == "ready_to_run" &&
                 check.GetProperty("command").GetString() == "luotsi doctor --device emulator-5554 --package dev.luotsi.demo");
         Assert.Contains(
             data.GetProperty("proof_checks").EnumerateArray(),
             check => check.GetProperty("kind").GetString() == "artifact_handoff" &&
+                check.GetProperty("status").GetString() == "ready_to_run" &&
                 check.GetProperty("command").GetString() == "luotsi quickstart --device emulator-5554 --package dev.luotsi.demo --artifacts artifacts/demo --path scenarios --write-json --write-markdown");
     }
 
@@ -262,7 +275,7 @@ public sealed partial class AppTests
         Assert.Contains("# Luotsi quickstart handoff", markdown, StringComparison.Ordinal);
         Assert.Contains("luotsi inspect --device emulator-5554 --artifacts /tmp/luotsi-first-run", markdown, StringComparison.Ordinal);
         Assert.Contains("## Proof checks", markdown, StringComparison.Ordinal);
-        Assert.Contains("artifact_handoff: `luotsi quickstart --device emulator-5554 --package dev.luotsi.demo --artifacts /tmp/luotsi-first-run --path scenarios --write-json --write-markdown`", markdown, StringComparison.Ordinal);
+        Assert.Contains("artifact_handoff (ready_to_run): `luotsi quickstart --device emulator-5554 --package dev.luotsi.demo --artifacts /tmp/luotsi-first-run --path scenarios --write-json --write-markdown`", markdown, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -285,8 +298,9 @@ public sealed partial class AppTests
         Assert.True(stepCount >= 6, $"Expected at least 6 steps but found {stepCount}.");
         Assert.Contains(console.OutputLines, static line => line.Contains("minute 2; Run the onboarding doctor", StringComparison.Ordinal) &&
             line.Contains("luotsi doctor --device emulator-5554 --package dev.luotsi.demo --fix", StringComparison.Ordinal));
-        Assert.Contains("  proof_checks: 5", console.OutputLines);
+        Assert.Contains("  proof_checks: 5 (ready=4; needs_input=0; later=1)", console.OutputLines);
         Assert.Contains(console.OutputLines, static line => line.Contains("artifact_handoff", StringComparison.Ordinal) &&
+            line.Contains("status=ready_to_run", StringComparison.Ordinal) &&
             line.Contains("quickstart --device emulator-5554 --package dev.luotsi.demo --artifacts artifacts/demo --path scenarios --write-json --write-markdown", StringComparison.Ordinal));
         Assert.Contains("  next: luotsi doctor --device emulator-5554 --package dev.luotsi.demo", console.OutputLines);
         Assert.Contains(console.OutputLines, static line => line.Contains("agent_prompt: Run Luotsi commands", StringComparison.Ordinal));
