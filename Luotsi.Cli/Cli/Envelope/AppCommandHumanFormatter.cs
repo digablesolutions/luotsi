@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text.Json;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Infrastructure.System;
@@ -852,12 +853,13 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
             return !string.IsNullOrWhiteSpace(command);
         }
 
-        foreach (var propertyName in new[] { "recommended_next_steps", "next_actions", "suggested_commands" })
+        var matchingPropertyName = new[] { "recommended_next_steps", "next_actions", "suggested_commands" }
+            .Where(propertyName => TryGetFirstCommandFromArray(value, propertyName, out _))
+            .FirstOrDefault();
+        if (matchingPropertyName is not null &&
+            TryGetFirstCommandFromArray(value, matchingPropertyName, out command))
         {
-            if (TryGetFirstCommandFromArray(value, propertyName, out command))
-            {
-                return true;
-            }
+            return true;
         }
 
         if (includeGenericCommandArrays && TryGetGenericCommand(value, out command))
