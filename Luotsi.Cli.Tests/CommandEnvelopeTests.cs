@@ -4390,6 +4390,10 @@ public sealed partial class AppTests
         var hints = clusters[0].GetProperty("hints").EnumerateArray().ToArray();
         Assert.Contains(hints, hint => hint.GetProperty("kind").GetString() == "same_failure_shape");
         Assert.Contains(hints, hint => hint.GetProperty("kind").GetString() == "likely_repeated_selector_or_screen_state_failure");
+        Assert.Equal("write_best_replay_packet", hints[2].GetProperty("kind").GetString());
+        Assert.Equal("luotsi replay packet --artifacts /tmp/replay-cluster-root\\run-b", hints[2].GetProperty("command").GetString());
+        Assert.Equal("check_best_replay_packet", hints[3].GetProperty("kind").GetString());
+        Assert.Equal("luotsi replay packet --artifacts /tmp/replay-cluster-root\\run-b --check", hints[3].GetProperty("command").GetString());
         Assert.Contains(hints, hint => hint.GetProperty("kind").GetString() == "inspect_best_failure_graph");
         Assert.Contains(hints, hint => hint.GetProperty("kind").GetString() == "scrub_best_failure");
         Assert.Contains(hints, hint =>
@@ -4408,6 +4412,10 @@ public sealed partial class AppTests
         var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "replay-clusters.md"));
         Assert.Contains("## Start Here", markdown, StringComparison.Ordinal);
         Assert.Contains("Top cluster:", markdown, StringComparison.Ordinal);
+        Assert.Contains("Write packet: `luotsi replay packet --artifacts /tmp/replay-cluster-root\\run-b`", markdown, StringComparison.Ordinal);
+        Assert.Contains("Check packet: `luotsi replay packet --artifacts /tmp/replay-cluster-root\\run-b --check`", markdown, StringComparison.Ordinal);
+        AssertContainsBefore(markdown, "Write packet: `luotsi replay packet --artifacts /tmp/replay-cluster-root\\run-b`", "Open front door: `luotsi replay open --artifacts /tmp/replay-cluster-root\\run-b`");
+        AssertContainsBefore(markdown, "Check packet: `luotsi replay packet --artifacts /tmp/replay-cluster-root\\run-b --check`", "Open front door: `luotsi replay open --artifacts /tmp/replay-cluster-root\\run-b`");
         Assert.Contains("Open front door: `luotsi replay open --artifacts /tmp/replay-cluster-root\\run-b`", markdown, StringComparison.Ordinal);
         Assert.Contains("Scrub failure: `luotsi replay scrub --artifacts /tmp/replay-cluster-root\\run-b --failures --context 3 --write-markdown`", markdown, StringComparison.Ordinal);
         Assert.Contains("Inspect graph: `luotsi replay graph --artifacts /tmp/replay-cluster-root\\run-b --failed --write-json --write-markdown`", markdown, StringComparison.Ordinal);
