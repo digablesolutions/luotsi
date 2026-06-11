@@ -11,6 +11,7 @@ namespace Luotsi.Cli.Cli.JourneyIntake;
 internal sealed class JourneyIntakeValidationService(IFileSystem fileSystem)
 {
     public const string CurrentSchema = "luotsi-journey-intake.v1";
+    private const string CurrentSchemaUrl = "https://digablesolutions.github.io/luotsi/schemas/luotsi-journey-intake.v1.schema.json";
 
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
 
@@ -29,6 +30,11 @@ internal sealed class JourneyIntakeValidationService(IFileSystem fileSystem)
 
     private async Task<JourneyIntakeInitResult> InitAsync(CliOptions options)
     {
+        if (options.HasFlag("write-readme"))
+        {
+            throw new UsageException("journey-intake init supports --write-markdown; --write-readme is only used by replay and artifact handoff commands.");
+        }
+
         var output = options.Get("output") ?? options.Get("file") ?? "journey-intake.json";
         var overwrite = options.HasFlag("force") || options.HasFlag("overwrite");
         if (_fileSystem.FileExists(output) && !overwrite)
@@ -51,22 +57,31 @@ internal sealed class JourneyIntakeValidationService(IFileSystem fileSystem)
             _fileSystem.CreateDirectory(directory);
         }
 
-        await _fileSystem.WriteAllTextAsync(output, JsonSerializer.Serialize(document, AppJson.Options) + Environment.NewLine, new UTF8Encoding(false)).ConfigureAwait(false);
-
         var markdownPath = default(string);
-        if (options.HasFlag("write-markdown") || options.HasFlag("write-readme"))
+        if (options.HasFlag("write-markdown"))
         {
             markdownPath = Path.Join(string.IsNullOrWhiteSpace(directory) ? "." : directory, "journey-intake.md");
+            if (_fileSystem.FileExists(markdownPath) && !overwrite)
+            {
+                throw new UsageException($"Journey intake markdown file '{markdownPath}' already exists. Use --force to overwrite it.");
+            }
+        }
+
+        await _fileSystem.WriteAllTextAsync(output, JsonSerializer.Serialize(document, AppJson.Options) + Environment.NewLine, new UTF8Encoding(false)).ConfigureAwait(false);
+
+        if (markdownPath is not null)
+        {
             await _fileSystem.WriteAllTextAsync(markdownPath, BuildInitMarkdown(output, runArtifactRoot, document), new UTF8Encoding(false)).ConfigureAwait(false);
         }
 
         var claimedRunCommand = document.LuotsiHandoff.ClaimedRunCommand ?? throw new InvalidOperationException("Journey intake init must include a claimed run command.");
+        var deviceToken = document.Device.Serial;
         var nextCommands = new[]
         {
             $"luotsi journey-intake validate --file {Quote(output)}",
             $"luotsi journey-intake draft-scenario --file {Quote(output)} --output {Quote(scenario)}",
             $"luotsi scenario-validate --file {Quote(scenario)}",
-            $"luotsi run --file {Quote(scenario)} --device {Quote(device)} --dry-run",
+            $"luotsi run --file {Quote(scenario)} --device {Quote(deviceToken)} --dry-run",
             claimedRunCommand,
             $"luotsi replay packet --artifacts {Quote(runArtifactRoot)}",
             $"luotsi replay capsule --artifacts {Quote(runArtifactRoot)} --write-readme --write-json"
@@ -368,7 +383,7 @@ internal sealed class JourneyIntakeValidationService(IFileSystem fileSystem)
         var deviceToken = string.IsNullOrWhiteSpace(device) ? "<serial>" : device;
         var packageToken = string.IsNullOrWhiteSpace(package) ? "com.example.app" : package;
         return new JourneyIntakeInitDocument(
-            "./luotsi-journey-intake.schema.json",
+            CurrentSchemaUrl,
             CurrentSchema,
             name,
             new JourneyIntakeInitSource(

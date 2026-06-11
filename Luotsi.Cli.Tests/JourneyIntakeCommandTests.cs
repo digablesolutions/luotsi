@@ -60,7 +60,7 @@ public sealed class JourneyIntakeCommandTests
             "luotsi replay capsule --artifacts \"artifacts/from journey run\" --write-readme --write-json",
             data.GetProperty("next_commands").EnumerateArray().Select(static command => command.GetString()));
         Assert.Equal("luotsi-journey-intake.v1", intake.RootElement.GetProperty("schema").GetString());
-        Assert.Equal("./luotsi-journey-intake.schema.json", intake.RootElement.GetProperty("$schema").GetString());
+        Assert.Equal("https://digablesolutions.github.io/luotsi/schemas/luotsi-journey-intake.v1.schema.json", intake.RootElement.GetProperty("$schema").GetString());
         Assert.True(intake.RootElement.GetProperty("guardrails").GetProperty("reviewRequired").GetBoolean());
         Assert.True(intake.RootElement.GetProperty("guardrails").GetProperty("doNotExecuteAsNaturalLanguage").GetBoolean());
         Assert.Equal("com.example.shop", intake.RootElement.GetProperty("app").GetProperty("package").GetString());
@@ -160,6 +160,73 @@ public sealed class JourneyIntakeCommandTests
         Assert.Equal(2, exitCode);
         Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
         Assert.Contains("already exists", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_JourneyIntakeInit_Existing_Markdown_Returns_Usage_Error_Without_Overwrite()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var markdownPath = Path.Join(Path.GetDirectoryName("/tmp/journey-intake.json"), "journey-intake.md");
+        fileSystem.AddFile(markdownPath, "existing markdown");
+        using var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            ViewProfileStore = new FakeViewProfileStore()
+        });
+
+        var exitCode = await app.RunAsync(["journey-intake", "init", "--output", "/tmp/journey-intake.json", "--write-markdown"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Contains("markdown file", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.False(fileSystem.FileExists("/tmp/journey-intake.json"));
+    }
+
+    [Fact]
+    public async Task RunAsync_JourneyIntakeInit_Blank_Device_Uses_Normalized_Device_In_Next_Commands()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        using var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            ViewProfileStore = new FakeViewProfileStore()
+        });
+
+        var exitCode = await app.RunAsync(["journey-intake", "init", "--output", "/tmp/journey-intake.json", "--device", " "]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var commands = envelope.RootElement.GetProperty("data").GetProperty("next_commands").EnumerateArray().Select(static command => command.GetString()).ToArray();
+        Assert.Contains("luotsi run --file scenarios/from-journey.json --device <serial> --dry-run", commands);
+    }
+
+    [Fact]
+    public async Task RunAsync_JourneyIntakeInit_WriteReadme_Returns_Usage_Error()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        using var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            ViewProfileStore = new FakeViewProfileStore()
+        });
+
+        var exitCode = await app.RunAsync(["journey-intake", "init", "--output", "/tmp/journey-intake.json", "--write-readme"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Contains("--write-markdown", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.False(fileSystem.FileExists("/tmp/journey-intake.json"));
     }
 
     [Fact]
