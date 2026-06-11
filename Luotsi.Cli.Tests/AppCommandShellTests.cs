@@ -557,7 +557,14 @@ public sealed class AppCommandShellTests
             1,
             1,
             "luotsi replay scrub --artifacts /tmp/replay-root --failures --context 3 --write-markdown",
-            null,
+            new RunSummaryFailureSnapshotResult(
+                "login-smoke-session",
+                "failed",
+                "emulator-5554",
+                "login smoke",
+                "wait login button",
+                "waitVisible",
+                "button not visible"),
             new ReplayOpenNextActionResult(
                 "scrub_failure",
                 "Scrub the failure window",
@@ -570,7 +577,21 @@ public sealed class AppCommandShellTests
                     "luotsi replay scrub --artifacts /tmp/replay-root --failures --context 3 --write-markdown",
                     "Highest-signal command.")
             ],
-            null,
+            new ReplayOpenPrimaryFailureResult(
+                "scenario",
+                "login-smoke-session",
+                DateTimeOffset.Parse("2026-05-18T09:59:58Z", null, System.Globalization.DateTimeStyles.RoundtripKind),
+                DateTimeOffset.Parse("2026-05-18T10:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind),
+                "failed",
+                1,
+                "emulator-5554",
+                "login smoke",
+                "wait login button",
+                "waitVisible",
+                "button not visible",
+                "session-timeline.jsonl",
+                "failure-capsule.json",
+                "luotsi replay scrub --source-path session-timeline.jsonl --sequence 1 --context 3"),
             "/tmp/replay-root/run-summary.md");
 
         writer.WriteSuccess(
@@ -584,6 +605,8 @@ public sealed class AppCommandShellTests
         Assert.Contains("  status: valid", console.OutputLines);
         Assert.Contains("  packet_status: needs_triage", console.OutputLines);
         Assert.Contains("  triage: 1 failure signal across 1 session", console.OutputLines);
+        Assert.Contains("  primary_failure: login smoke / wait login button (waitVisible) / button not visible", console.OutputLines);
+        Assert.Contains("  evidence: luotsi replay scrub --source-path session-timeline.jsonl --sequence 1 --context 3", console.OutputLines);
         Assert.Contains("  next_step: Scrub the failure window", console.OutputLines);
         Assert.Contains("  next: luotsi replay scrub --artifacts /tmp/replay-root --failures --context 3 --write-markdown", console.OutputLines);
         Assert.Contains("  triage_checklist: 1", console.OutputLines);
