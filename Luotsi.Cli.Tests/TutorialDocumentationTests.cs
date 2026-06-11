@@ -514,6 +514,9 @@ public sealed partial class AppTests
         Assert.Contains("recommendedNextAction.command", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("entryPoints", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("60-second triage checklist", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("`luotsi-run-summary-check.v1`", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("recommendedNextActionCommand", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("packetPath", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("Consumers should accept both camelCase artifact JSON fields and snake_case command-envelope fields", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("replay packet --check", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("must exit non-zero for missing JSON", schemaGuide, StringComparison.Ordinal);
