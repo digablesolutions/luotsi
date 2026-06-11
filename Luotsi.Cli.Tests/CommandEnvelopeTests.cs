@@ -343,7 +343,14 @@ public sealed partial class AppTests
     public async Task RunAsync_QuickstartVerify_Groups_Proof_Checks_By_Readiness()
     {
         var console = new FakeConsole();
-        var app = new App(new AppDependencies { Console = console });
+        var fileSystem = new FakeFileSystem();
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            TimeProvider = timeProvider
+        });
 
         var exitCode = await app.RunAsync(["quickstart-verify"]);
         using var envelope = console.ParseSingleOutputAsJson();
@@ -359,7 +366,17 @@ public sealed partial class AppTests
         Assert.Equal(3, data.GetProperty("ready_count").GetInt32());
         Assert.Equal(1, data.GetProperty("blocked_count").GetInt32());
         Assert.Equal(1, data.GetProperty("later_count").GetInt32());
+        Assert.Equal(2, data.GetProperty("local_proof_count").GetInt32());
+        Assert.Equal(2, data.GetProperty("passed_local_proof_count").GetInt32());
         Assert.Equal("luotsi version", data.GetProperty("next_command").GetString());
+        Assert.Contains(
+            data.GetProperty("local_proofs").EnumerateArray(),
+            proof => proof.GetProperty("kind").GetString() == "install" &&
+                proof.GetProperty("status").GetString() == "passed");
+        Assert.Contains(
+            data.GetProperty("local_proofs").EnumerateArray(),
+            proof => proof.GetProperty("kind").GetString() == "artifact_handoff" &&
+                proof.GetProperty("status").GetString() == "passed");
         Assert.Contains(
             data.GetProperty("blocked_checks").EnumerateArray(),
             check => check.GetProperty("kind").GetString() == "device_truth" &&
@@ -368,6 +385,14 @@ public sealed partial class AppTests
             data.GetProperty("recommended_commands").EnumerateArray(),
             command => command.GetProperty("kind").GetString() == "handoff" &&
                 command.GetProperty("command").GetString() == "luotsi quickstart --artifacts artifacts/first-run --path scenarios --write-json --write-markdown");
+
+        var artifactRoot = envelope.RootElement.GetProperty("artifacts").GetProperty("artifact_root").GetString();
+        Assert.Equal(Path.Join("/tmp", "luotsi", "20260515-120000-quickstart-verify"), artifactRoot);
+        Assert.True(fileSystem.FileExists(Path.Join(artifactRoot, "quickstart-plan.json")));
+        Assert.True(fileSystem.FileExists(Path.Join(artifactRoot, "quickstart-plan.md")));
+        Assert.True(fileSystem.FileExists(Path.Join(artifactRoot, "evaluation-proof-pack.json")));
+        Assert.True(fileSystem.FileExists(Path.Join(artifactRoot, "evaluation-proof-pack.md")));
+        Assert.True(fileSystem.FileExists(Path.Join(artifactRoot, ArtifactSession.ArtifactIndexFileName)));
     }
 
     [Fact]
@@ -385,6 +410,7 @@ public sealed partial class AppTests
         Assert.Equal(4, data.GetProperty("ready_count").GetInt32());
         Assert.Equal(0, data.GetProperty("blocked_count").GetInt32());
         Assert.Equal(1, data.GetProperty("later_count").GetInt32());
+        Assert.Equal(2, data.GetProperty("passed_local_proof_count").GetInt32());
         Assert.Equal("luotsi version", data.GetProperty("next_command").GetString());
         Assert.Empty(data.GetProperty("blocked_checks").EnumerateArray());
         Assert.Contains(
@@ -409,7 +435,10 @@ public sealed partial class AppTests
         Assert.Contains("  ready_count: 4", console.OutputLines);
         Assert.Contains("  blocked_count: 0", console.OutputLines);
         Assert.Contains("  later_count: 1", console.OutputLines);
+        Assert.Contains("  local_proof_count: 2", console.OutputLines);
+        Assert.Contains("  passed_local_proof_count: 2", console.OutputLines);
         Assert.Contains("  next_command: luotsi version", console.OutputLines);
+        Assert.Contains(console.OutputLines, static line => line.Contains("local_proofs: 2", StringComparison.Ordinal));
         Assert.Contains(console.OutputLines, static line => line.Contains("ready_checks: 4", StringComparison.Ordinal));
         Assert.DoesNotContain(console.OutputLines, static line => line.StartsWith("{", StringComparison.Ordinal));
     }

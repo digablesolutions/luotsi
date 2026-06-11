@@ -244,7 +244,10 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
         AddScalar(lines, value, "ready_count");
         AddScalar(lines, value, "blocked_count");
         AddScalar(lines, value, "later_count");
+        AddScalar(lines, value, "local_proof_count");
+        AddScalar(lines, value, "passed_local_proof_count");
         AddScalar(lines, value, "next_command");
+        AddArraySummary(lines, value, "local_proofs");
         AddArraySummary(lines, value, "blocked_checks");
         AddArraySummary(lines, value, "ready_checks");
         AddArraySummary(lines, value, "later_checks");
