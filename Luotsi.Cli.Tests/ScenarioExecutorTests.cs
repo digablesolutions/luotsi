@@ -952,6 +952,10 @@ public sealed partial class AppTests
         Assert.Equal(1, events[^1].GetProperty("metrics").GetProperty("action.sleep.count").GetInt32());
         Assert.Equal(1, Assert.Single(events, static evt => evt.GetProperty("event").GetString() == "scenario_step_passed").GetProperty("metrics").GetProperty("configured_delay_ms").GetInt32());
         Assert.NotNull(artifactRoot);
+        Assert.Equal("replay_packet", artifactCommands[0].GetProperty("kind").GetString());
+        Assert.Equal($"luotsi replay packet --artifacts {artifactRoot}", artifactCommands[0].GetProperty("command").GetString());
+        Assert.Equal("replay_packet_check", artifactCommands[1].GetProperty("kind").GetString());
+        Assert.Equal($"luotsi replay packet --artifacts {artifactRoot} --check", artifactCommands[1].GetProperty("command").GetString());
         Assert.Contains(artifactCommands, command => command.GetProperty("kind").GetString() == "open_artifacts");
         Assert.Contains(artifactCommands, command => command.GetProperty("kind").GetString() == "pack_artifacts");
         Assert.Contains(artifactCommands, command => command.GetProperty("command").GetString() == $"luotsi replay open --artifacts {artifactRoot}");

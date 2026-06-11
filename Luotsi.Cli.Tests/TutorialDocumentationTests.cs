@@ -686,8 +686,11 @@ public sealed partial class AppTests
         Assert.Equal("luotsi-command.v1", fixture.RootElement.GetProperty("schema").GetString());
         Assert.Equal("run", fixture.RootElement.GetProperty("command").GetString());
         Assert.False(string.IsNullOrWhiteSpace(root));
-        Assert.Equal("replay_open", artifactCommands[0].GetProperty("kind").GetString());
-        Assert.Equal($"luotsi replay open --artifacts {root}", artifactCommands[0].GetProperty("command").GetString());
+        Assert.Equal("replay_packet", artifactCommands[0].GetProperty("kind").GetString());
+        Assert.Equal($"luotsi replay packet --artifacts {root}", artifactCommands[0].GetProperty("command").GetString());
+        Assert.Equal("replay_packet_check", artifactCommands[1].GetProperty("kind").GetString());
+        Assert.Equal($"luotsi replay packet --artifacts {root} --check", artifactCommands[1].GetProperty("command").GetString());
+        Assert.Contains(artifactCommands, command => command.GetProperty("kind").GetString() == "replay_open");
         Assert.Contains(artifactCommands, command => command.GetProperty("kind").GetString() == "open_artifacts");
         Assert.Contains(artifactCommands, command => command.GetProperty("kind").GetString() == "pack_artifacts");
     }

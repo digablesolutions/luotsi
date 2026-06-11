@@ -266,9 +266,11 @@ internal sealed class ScenarioRunOrchestrator(
 
     private static IReadOnlyList<ScenarioArtifactCommandHint> CreateArtifactCommands(string artifactRoot) =>
     [
+        new("replay_packet", "Write the durable run-summary packet for this run.", $"luotsi replay packet --artifacts {Quote(artifactRoot)}"),
+        new("replay_packet_check", "Validate the durable run-summary packet before handoff.", $"luotsi replay packet --artifacts {Quote(artifactRoot)} --check"),
+        new("replay_open", "Open the replay workbench for this run.", $"luotsi replay open --artifacts {Quote(artifactRoot)}"),
         new("open_artifacts", "Open the artifact browser for this run.", $"luotsi artifacts open {Quote(artifactRoot)}"),
-        new("pack_artifacts", "Pack this run into a portable zip for CI upload or handoff.", $"luotsi artifacts pack {Quote(artifactRoot)}"),
-        new("replay_open", "Open the replay workbench for this run.", $"luotsi replay open --artifacts {Quote(artifactRoot)}")
+        new("pack_artifacts", "Pack this run into a portable zip for CI upload or handoff.", $"luotsi artifacts pack {Quote(artifactRoot)}")
     ];
 
     private static string FormatProgressMode(ScenarioProgressMode progressMode) =>
