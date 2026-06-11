@@ -179,6 +179,13 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
             return true;
         }
 
+        if (IsSchema(value, ResultSchemas.RunSummary) ||
+            IsSchema(value, ResultSchemas.RunSummaryCheck))
+        {
+            lines = BuildRunSummaryPacketSummary(value, artifacts);
+            return true;
+        }
+
         if (LooksLikeScenarioRunBatch(value))
         {
             lines = BuildScenarioRunBatchSummary(value, artifacts);
@@ -283,6 +290,67 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
         AddArraySummary(lines, value, "next_actions");
         AddArraySummary(lines, value, "suggested_commands");
         return lines;
+    }
+
+    private static IReadOnlyList<string> BuildRunSummaryPacketSummary(JsonElement value, ArtifactData artifacts)
+    {
+        var lines = new List<string>();
+        AddScalar(lines, value, "status");
+        AddScalar(lines, value, "packet_status");
+        AddTriageSummary(lines, value);
+        AddPrimaryFailureSummaryFromProperty(lines, value, "primary_failure");
+        AddNextStepTitle(lines, value);
+        AddRecommendedCommandWithFallback(lines, value, artifacts);
+        AddTriageChecklistSummary(lines, value);
+        AddRunSummaryEntryPointSummary(lines, value);
+        return lines;
+    }
+
+    private static void AddTriageChecklistSummary(List<string> lines, JsonElement value)
+    {
+        if (!value.TryGetProperty("triage_checklist", out var checklist) ||
+            checklist.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        var items = checklist.EnumerateArray().Where(static item => item.ValueKind == JsonValueKind.Object).ToArray();
+        lines.Add($"triage_checklist: {items.Length}");
+        foreach (var item in items.Take(3))
+        {
+            var parts = new List<string>();
+            AddPart(parts, item, "step");
+            AddPart(parts, item, "action");
+            AddPart(parts, item, "command");
+            if (parts.Count > 0)
+            {
+                lines.Add("  - " + string.Join("; ", parts));
+            }
+        }
+    }
+
+    private static void AddRunSummaryEntryPointSummary(List<string> lines, JsonElement value)
+    {
+        var packetPath = TryGetString(value, "packet_path");
+        var markdownPath = TryGetString(value, "run_summary_markdown_path");
+
+        if (string.IsNullOrWhiteSpace(packetPath) &&
+            value.TryGetProperty("entry_points", out var entryPoints) &&
+            entryPoints.ValueKind == JsonValueKind.Object)
+        {
+            packetPath = TryGetString(entryPoints, "run_summary_json_path");
+            markdownPath = TryGetString(entryPoints, "run_summary_markdown_path") ?? markdownPath;
+        }
+
+        if (!string.IsNullOrWhiteSpace(packetPath))
+        {
+            lines.Add($"packet: {packetPath}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(markdownPath))
+        {
+            lines.Add($"markdown: {markdownPath}");
+        }
     }
 
     private static IReadOnlyList<string> BuildScenarioRunBatchSummary(JsonElement value, ArtifactData artifacts)
