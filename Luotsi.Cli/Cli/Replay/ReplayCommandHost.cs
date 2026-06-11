@@ -289,6 +289,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
                 throw new UsageException($"{RunSummaryMarkdownFileName} does not include the recommended next action command from {RunSummaryJsonFileName}. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
             }
 
+            ValidateFailureSnapshot(primaryFailure, runSummaryMarkdown, artifacts.Root);
             ValidatePrimaryFailureHandoff(primaryFailure, triageChecklist, runSummaryMarkdown, packetPath, artifacts.Root);
 
             return new RunSummaryCheckResult(
@@ -378,6 +379,39 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         if (!runSummaryMarkdown.Contains(primaryFailure.SourceCommand, StringComparison.Ordinal))
         {
             throw new UsageException($"{RunSummaryMarkdownFileName} does not include primaryFailure.sourceCommand from {RunSummaryJsonFileName}. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+    }
+
+    private static void ValidateFailureSnapshot(
+        ReplayOpenPrimaryFailureResult? primaryFailure,
+        string runSummaryMarkdown,
+        string artifactRoot)
+    {
+        if (primaryFailure is null)
+        {
+            return;
+        }
+
+        if (!runSummaryMarkdown.Contains("## Failure Snapshot", StringComparison.Ordinal))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} is missing the failure snapshot. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        foreach (var value in new[]
+                 {
+                     primaryFailure.SessionId,
+                     primaryFailure.Reason,
+                     primaryFailure.Target,
+                     primaryFailure.Scenario,
+                     primaryFailure.Step,
+                     primaryFailure.Action,
+                     primaryFailure.Message
+                 }.Where(static value => !string.IsNullOrWhiteSpace(value)))
+        {
+            if (!runSummaryMarkdown.Contains(EscapeMarkdown(value!), StringComparison.Ordinal))
+            {
+                throw new UsageException($"{RunSummaryMarkdownFileName} failure snapshot is missing primary failure value '{value}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+            }
         }
     }
 
@@ -547,6 +581,10 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         builder.AppendLine($"Sessions: `{result.SessionCount}`");
         builder.AppendLine($"Failures: `{result.FailureCount}`");
         builder.AppendLine();
+        builder.AppendLine("## Failure Snapshot");
+        builder.AppendLine();
+        AppendFailureSnapshot(builder, result.PrimaryFailure);
+        builder.AppendLine();
         builder.AppendLine("## Packet Gate");
         builder.AppendLine();
         builder.AppendLine("Run this first when the packet came from CI, support, or another agent.");
@@ -643,6 +681,23 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         }
 
         return builder.ToString();
+    }
+
+    private static void AppendFailureSnapshot(StringBuilder builder, ReplayOpenPrimaryFailureResult? primaryFailure)
+    {
+        if (primaryFailure is null)
+        {
+            builder.AppendLine("No primary failure was found in replay metadata.");
+            return;
+        }
+
+        AppendField(builder, "Session", primaryFailure.SessionId);
+        AppendField(builder, "Reason", primaryFailure.Reason);
+        AppendField(builder, "Target", primaryFailure.Target);
+        AppendField(builder, "Scenario", primaryFailure.Scenario);
+        AppendField(builder, "Step", primaryFailure.Step);
+        AppendField(builder, "Action", primaryFailure.Action);
+        AppendField(builder, "Message", primaryFailure.Message);
     }
 
     private static void AppendField(StringBuilder builder, string label, string? value)
