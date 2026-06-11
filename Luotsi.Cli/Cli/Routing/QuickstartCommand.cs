@@ -334,6 +334,57 @@ internal static class QuickstartCommand
             recommendedCommands);
     }
 
+    public static QuickstartVerifyResult Verify(CliOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        var plan = Build(options);
+        var readyChecks = plan.ProofChecks
+            .Where(static check => string.Equals(check.Status, "ready_to_run", StringComparison.OrdinalIgnoreCase))
+            .Select(QuickstartVerifyCheckResult.FromProofCheck)
+            .ToArray();
+        var blockedChecks = plan.ProofChecks
+            .Where(static check => string.Equals(check.Status, "needs_input", StringComparison.OrdinalIgnoreCase))
+            .Select(QuickstartVerifyCheckResult.FromProofCheck)
+            .ToArray();
+        var laterChecks = plan.ProofChecks
+            .Where(static check =>
+                !string.Equals(check.Status, "ready_to_run", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(check.Status, "needs_input", StringComparison.OrdinalIgnoreCase))
+            .Select(QuickstartVerifyCheckResult.FromProofCheck)
+            .ToArray();
+        var status = blockedChecks.Length == 0 ? "ready_to_verify" : "blocked";
+        var nextCommand = readyChecks.FirstOrDefault()?.Command ??
+            blockedChecks.FirstOrDefault()?.Command ??
+            plan.FirstCommand;
+
+        return new QuickstartVerifyResult(
+            ResultSchemas.QuickstartVerify,
+            status,
+            status == "ready_to_verify"
+                ? "All immediate quickstart proof checks have concrete commands; run them in order, then complete later artifact-gated checks."
+                : "Some quickstart proof checks still need concrete input before the first-run proof path is executable.",
+            plan.Inputs,
+            plan.ProofChecks.Count,
+            readyChecks.Length,
+            blockedChecks.Length,
+            laterChecks.Length,
+            nextCommand,
+            readyChecks,
+            blockedChecks,
+            laterChecks,
+            [
+                new QuickstartRecommendedCommandResult(
+                    "plan",
+                    "Review the full five-minute path and proof-check evidence expectations.",
+                    $"luotsi quickstart {BuildCurrentOptionFlags(plan.Inputs)}".Replace("  ", " ", StringComparison.Ordinal).Trim()),
+                new QuickstartRecommendedCommandResult(
+                    "handoff",
+                    "Persist the first-run plan and proof checklist for a human or AI operator.",
+                    $"luotsi quickstart {BuildCurrentOptionFlags(plan.Inputs)} --write-json --write-markdown".Replace("  ", " ", StringComparison.Ordinal).Trim())
+            ]);
+    }
+
     private static string BuildMarkdown(QuickstartResult result)
     {
         var builder = new StringBuilder();
@@ -612,3 +663,29 @@ internal sealed record QuickstartProofCheckResult(
     string Evidence,
     string Status,
     string? BlockedReason);
+
+internal sealed record QuickstartVerifyResult(
+    string Schema,
+    string Status,
+    string Summary,
+    QuickstartInputResult Inputs,
+    int Total,
+    int ReadyCount,
+    int BlockedCount,
+    int LaterCount,
+    string NextCommand,
+    IReadOnlyList<QuickstartVerifyCheckResult> ReadyChecks,
+    IReadOnlyList<QuickstartVerifyCheckResult> BlockedChecks,
+    IReadOnlyList<QuickstartVerifyCheckResult> LaterChecks,
+    IReadOnlyList<QuickstartRecommendedCommandResult> RecommendedCommands);
+
+internal sealed record QuickstartVerifyCheckResult(
+    string Kind,
+    string Status,
+    string Command,
+    string Evidence,
+    string? BlockedReason)
+{
+    public static QuickstartVerifyCheckResult FromProofCheck(QuickstartProofCheckResult check) =>
+        new(check.Kind, check.Status, check.Command, check.Evidence, check.BlockedReason);
+}
