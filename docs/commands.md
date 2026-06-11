@@ -339,7 +339,7 @@ Scenario runner flags:
 
 Normal command mode returns a single JSON envelope with `schema`, `ok`, `command`, `started_at`, `ended_at`, `data`, `artifacts`, `provenance`, and `error`. Use `--human` or `--console-output human` on one-shot commands when local terminal readability matters; use `--quiet` or `--console-output quiet` to suppress successful command output while still printing failure envelopes; rerun with `--json` or omit the human flag for the full machine-readable envelope. Luotsi intentionally does not use a global `--output` mode for command envelopes because existing commands such as `record` and `replay scenario-draft` already use `--output` as a file path.
 
-Human output for artifact roots includes `guide: artifact root is durable evidence; replay packet writes run-summary.json and run-summary.md` plus a `next:` command when Luotsi can name the follow-up.
+Human output for artifact roots includes `guide: artifact root is durable evidence; replay packet writes run-summary.json and run-summary.md` plus a `next:` command when Luotsi can name the follow-up. When no direct next action is available, the fallback is `luotsi replay packet --artifacts <artifact-root>` before generic artifact-browser commands.
 
 Human output for artifact roots and replay capsules includes a compact `intake:` line when a restored package audit is present, so operators can see lab-safe and SHA verification status without opening the JSON envelope.
 

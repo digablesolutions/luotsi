@@ -250,7 +250,7 @@ public sealed class AppCommandShellTests
             new ArtifactData("/tmp/latest-run", "final"),
             AppCommandConsoleOutputMode.Human);
 
-        Assert.Contains("  next: luotsi artifacts open /tmp/latest-run", console.OutputLines);
+        Assert.Contains("  next: luotsi replay packet --artifacts /tmp/latest-run", console.OutputLines);
         Assert.Contains("  artifact_commands: 2", console.OutputLines);
         Assert.Contains("    - kind=open_artifacts; summary=Open the artifact browser for this run.; command=luotsi artifacts open /tmp/latest-run", console.OutputLines);
         Assert.Contains("  recommended_commands: 1", console.OutputLines);
@@ -313,7 +313,7 @@ public sealed class AppCommandShellTests
             AppCommandConsoleOutputMode.Human);
 
         Assert.Contains("  intake: status=restored; share_safety=lab_safe; sha_verified=true; package=/tmp/share/replay-lab-safe.zip", console.OutputLines);
-        Assert.Contains("  next: luotsi replay open --artifacts /tmp/replay-root", console.OutputLines);
+        Assert.Contains("  next: luotsi replay packet --artifacts /tmp/replay-root", console.OutputLines);
     }
 
     [Fact]
@@ -390,7 +390,7 @@ public sealed class AppCommandShellTests
         Assert.Contains("  summary: 1 selected; 0 passed; 1 failed; 0 sharded out", console.OutputLines);
         Assert.Contains("  primary_failure: login smoke / wait login button (waitVisible) / button not visible", console.OutputLines);
         Assert.Contains("  evidence: screenshots=1; hierarchies=1; screen_states=1; logcat=1", console.OutputLines);
-        Assert.Contains("  next: luotsi artifacts open /tmp/latest-run", console.OutputLines);
+        Assert.Contains("  next: luotsi replay packet --artifacts /tmp/latest-run", console.OutputLines);
         Assert.Contains("  artifact_commands: 2", console.OutputLines);
     }
 
@@ -725,7 +725,7 @@ public sealed class AppCommandShellTests
         Assert.Contains("  scope: command wait-visible", console.OutputLines);
         Assert.Contains("  failed_step: wait login button (waitVisible)", console.OutputLines);
         Assert.Contains("  evidence: screenshots=1; hierarchies=1; logcat=1", console.OutputLines);
-        Assert.Contains("  next: luotsi artifacts open /tmp/failure-root", console.OutputLines);
+        Assert.Contains("  next: luotsi replay packet --artifacts /tmp/failure-root", console.OutputLines);
     }
 
     [Fact]
