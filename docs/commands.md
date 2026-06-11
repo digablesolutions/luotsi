@@ -5,6 +5,7 @@ All commands run on the host machine and return a single JSON envelope unless no
 ```
 luotsi [--device <serial> | --device-query <query>] [--platform android] [--adb <path>] [--adb-timeout-sec <n>] <command> [flags]
 luotsi quickstart [--device <serial>] [--package <app.id>] [--artifacts <directory>] [--write-json] [--write-markdown]
+luotsi quickstart-verify [--device <serial>] [--package <app.id>] [--artifacts <directory>]
 luotsi --version
 luotsi version
 luotsi update [--version <tag>] [--channel stable|prerelease] [--dry-run] [--detach]
@@ -39,7 +40,7 @@ luotsi update [--version <tag>] [--channel stable|prerelease] [--dry-run] [--det
 
 Use these entry points when you want the shortest path into a real Luotsi workflow instead of scanning the full command surface.
 
-For a machine-readable five-minute plan, run `luotsi quickstart`. Add `--human` when you want the same plan as compact terminal text. Without `--device`, the plan starts with `luotsi doctor` so device selection and the exact selected-device next command come from live guidance. Pass `--device`, `--package`, and `--artifacts` when you already know the target and want the output to contain concrete commands for a specific app. The output includes `proof_checks`, a compact install/device/artifact/device-truth/replay checklist for deciding whether the first five minutes produced usable evidence; every proof check reports a status such as `ready_to_run`, `needs_input`, or `ready_after_artifact`. Add `--write-json --write-markdown` to persist `quickstart-plan.json` and `quickstart-plan.md` in the artifact root for a copy-paste handoff. For the human help topic, run `luotsi help quickstart` or jump directly to a command family with `luotsi help <topic>`.
+For a machine-readable five-minute plan, run `luotsi quickstart`. Add `--human` when you want the same plan as compact terminal text. Without `--device`, the plan starts with `luotsi doctor` so device selection and the exact selected-device next command come from live guidance. Pass `--device`, `--package`, and `--artifacts` when you already know the target and want the output to contain concrete commands for a specific app. The output includes `proof_checks`, a compact install/device/artifact/device-truth/replay checklist for deciding whether the first five minutes produced usable evidence; every proof check reports a status such as `ready_to_run`, `needs_input`, or `ready_after_artifact`. Run `luotsi quickstart-verify` with the same inputs when you want those checks grouped into ready, blocked, and later proof commands before starting the first-run path. Add `--write-json --write-markdown` to persist `quickstart-plan.json`, `quickstart-plan.md`, `evaluation-proof-pack.json`, and `evaluation-proof-pack.md` in the artifact root for a copy-paste handoff. For the human help topic, run `luotsi help quickstart` or jump directly to a command family with `luotsi help <topic>`.
 
 When `doctor --device <serial> --package <app.id>` reports `readiness_plan.status: ready`, the `next_command` now routes to `discover` first so a ready app immediately becomes review-required scenario candidates. The same `recommended_commands` list still includes package preflight, inspect, screen-state, persisted quickstart handoff, scenario validation, run, and live view commands.
 
@@ -47,6 +48,7 @@ When `doctor --device <serial> --package <app.id>` reports `readiness_plan.statu
 |---|---|
 | Get a five-minute first-run plan | `luotsi quickstart` or `luotsi quickstart --device <serial> --package <app.id> --artifacts artifacts/first-run` |
 | Read the first-run plan in the terminal | `luotsi quickstart --human` |
+| Check whether the proof path is runnable | `luotsi quickstart-verify --device <serial> --package <app.id> --artifacts artifacts/first-run` |
 | Persist a first-run handoff | `luotsi quickstart --artifacts artifacts/first-run --write-json --write-markdown` |
 | Confirm Luotsi can see your device | `luotsi devices` |
 | Choose a device and diagnose first-run issues | `luotsi doctor` then `luotsi doctor --device <serial>` |

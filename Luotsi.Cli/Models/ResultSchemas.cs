@@ -7,6 +7,7 @@ public static class ResultSchemas
 {
     public const string CommandEnvelope = "luotsi-command.v1";
     public const string Quickstart = "luotsi-quickstart.v1";
+    public const string QuickstartVerify = "luotsi-quickstart-verify.v1";
     public const string LogWait = "luotsi-log-wait.v1";
     public const string TelemetryTail = "luotsi-telemetry-tail.v1";
     public const string TelemetryWatch = "luotsi-telemetry-watch.v1";
