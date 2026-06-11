@@ -474,6 +474,15 @@ public sealed record ReplayOpenCommandHintResult(
     string Description,
     string Command);
 
+public sealed record RunSummaryFailureSnapshotResult(
+    string SessionId,
+    string Reason,
+    string? Target,
+    string? Scenario,
+    string? Step,
+    string? Action,
+    string? Message);
+
 public sealed record RunSummaryResult(
     string Schema,
     DateTimeOffset GeneratedAt,
@@ -483,6 +492,7 @@ public sealed record RunSummaryResult(
     int SessionCount,
     int FailureCount,
     IReadOnlyList<RunSummaryChecklistItemResult> TriageChecklist,
+    RunSummaryFailureSnapshotResult? FailureSnapshot,
     ReplayOpenPrimaryFailureResult? PrimaryFailure,
     ReplayOpenNextActionResult RecommendedNextAction,
     RunSummaryEntryPoints EntryPoints,
@@ -512,6 +522,7 @@ public sealed record RunSummaryCheckResult(
     int SessionCount,
     int FailureCount,
     string RecommendedNextActionCommand,
+    RunSummaryFailureSnapshotResult? FailureSnapshot,
     ReplayOpenNextActionResult RecommendedNextAction,
     IReadOnlyList<RunSummaryChecklistItemResult> TriageChecklist,
     ReplayOpenPrimaryFailureResult? PrimaryFailure,

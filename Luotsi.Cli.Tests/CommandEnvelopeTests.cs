@@ -991,6 +991,11 @@ public sealed partial class AppTests
         Assert.Equal(1, checklist[0].GetProperty("step").GetInt32());
         Assert.Equal("Run the recommended packet command", checklist[0].GetProperty("action").GetString());
         Assert.Equal(data.GetProperty("recommended_next_action").GetProperty("command").GetString(), checklist[0].GetProperty("command").GetString());
+        var failureSnapshot = data.GetProperty("failure_snapshot");
+        Assert.Equal("view-session", failureSnapshot.GetProperty("session_id").GetString());
+        Assert.Equal("error", failureSnapshot.GetProperty("reason").GetString());
+        Assert.Equal("192.168.0.134:5555", failureSnapshot.GetProperty("target").GetString());
+        Assert.Equal("error=transport: Unexpected end of stream", failureSnapshot.GetProperty("message").GetString());
         var primaryFailure = data.GetProperty("primary_failure");
         Assert.Equal("view", primaryFailure.GetProperty("session_kind").GetString());
         Assert.Equal("view-session", primaryFailure.GetProperty("session_id").GetString());
@@ -1002,6 +1007,11 @@ public sealed partial class AppTests
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "run-summary.md")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.html")));
         using var runSummaryJson = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "run-summary.json")));
+        var persistedFailureSnapshot = runSummaryJson.RootElement.GetProperty("failureSnapshot");
+        Assert.Equal("view-session", persistedFailureSnapshot.GetProperty("sessionId").GetString());
+        Assert.Equal("error", persistedFailureSnapshot.GetProperty("reason").GetString());
+        Assert.Equal("192.168.0.134:5555", persistedFailureSnapshot.GetProperty("target").GetString());
+        Assert.Equal("error=transport: Unexpected end of stream", persistedFailureSnapshot.GetProperty("message").GetString());
         var persistedPrimaryFailure = runSummaryJson.RootElement.GetProperty("primaryFailure");
         var persistedChecklist = runSummaryJson.RootElement.GetProperty("triageChecklist").EnumerateArray().ToArray();
         Assert.Equal(3, persistedChecklist.Length);
@@ -1104,6 +1114,11 @@ public sealed partial class AppTests
         Assert.Contains("luotsi replay scrub", data.GetProperty("recommended_next_action_command").GetString(), StringComparison.Ordinal);
         Assert.Equal("scrub_failure", data.GetProperty("recommended_next_action").GetProperty("kind").GetString());
         Assert.Equal(data.GetProperty("recommended_next_action_command").GetString(), data.GetProperty("recommended_next_action").GetProperty("command").GetString());
+        var failureSnapshot = data.GetProperty("failure_snapshot");
+        Assert.Equal("view-session", failureSnapshot.GetProperty("session_id").GetString());
+        Assert.Equal("error", failureSnapshot.GetProperty("reason").GetString());
+        Assert.Equal("192.168.0.134:5555", failureSnapshot.GetProperty("target").GetString());
+        Assert.Equal("error=transport: Unexpected end of stream", failureSnapshot.GetProperty("message").GetString());
         var checklist = data.GetProperty("triage_checklist").EnumerateArray().ToArray();
         Assert.Equal(3, checklist.Length);
         Assert.Equal(data.GetProperty("recommended_next_action_command").GetString(), checklist[0].GetProperty("command").GetString());
@@ -1203,6 +1218,68 @@ public sealed partial class AppTests
         Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
         Assert.Contains("failure snapshot", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
         Assert.Contains("Re-run `luotsi replay packet", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayPacket_Check_PrimaryFailureWithoutFailureSnapshot_ReturnsUsageError()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var processRunner = new FakeProcessRunner();
+        var replayRoot = SeedReplaySummaryArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = processRunner,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var writeExitCode = await app.RunAsync(["replay", "packet", "--artifacts", replayRoot]);
+        var packetPath = Path.Join(replayRoot, "run-summary.json");
+        var packet = JsonNode.Parse(await fileSystem.ReadAllTextAsync(packetPath))!.AsObject();
+        packet.Remove("failureSnapshot");
+        fileSystem.AddFile(packetPath, packet.ToJsonString());
+        console.OutputLines.Clear();
+        var checkExitCode = await app.RunAsync(["replay", "packet", "--check", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, writeExitCode);
+        Assert.Equal(2, checkExitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("failureSnapshot", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayPacket_Check_FailureSnapshotMismatch_ReturnsUsageError()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var processRunner = new FakeProcessRunner();
+        var replayRoot = SeedReplaySummaryArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = processRunner,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var writeExitCode = await app.RunAsync(["replay", "packet", "--artifacts", replayRoot]);
+        var packetPath = Path.Join(replayRoot, "run-summary.json");
+        var packet = JsonNode.Parse(await fileSystem.ReadAllTextAsync(packetPath))!.AsObject();
+        packet["failureSnapshot"]!.AsObject()["message"] = "different message";
+        fileSystem.AddFile(packetPath, packet.ToJsonString());
+        console.OutputLines.Clear();
+        var checkExitCode = await app.RunAsync(["replay", "packet", "--check", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, writeExitCode);
+        Assert.Equal(2, checkExitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("failureSnapshot must match primaryFailure", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]

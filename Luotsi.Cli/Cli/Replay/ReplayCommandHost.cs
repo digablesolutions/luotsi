@@ -234,6 +234,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             var recommendedNextActionResult = ReadRecommendedNextAction(recommendedNextAction, packetPath);
             var triageChecklist = ReadTriageChecklist(root, recommendedCommand, packetPath);
             var primaryFailure = ReadPrimaryFailure(root, packetPath);
+            var failureSnapshot = ReadFailureSnapshot(root, primaryFailure, packetPath);
             var entryPoints = RequireObject(root, "entryPoints", packetPath);
             var indexHtmlPath = RequireString(entryPoints, "indexHtmlPath", packetPath);
             if (!_dependencies.FileSystem.FileExists(indexHtmlPath))
@@ -302,6 +303,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
                 sessionCount,
                 failureCount,
                 recommendedCommand,
+                failureSnapshot,
                 recommendedNextActionResult,
                 triageChecklist,
                 primaryFailure,
@@ -501,6 +503,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             sessionCount,
             failureCount,
             triageChecklist,
+            CreateFailureSnapshot(primaryFailure),
             primaryFailure,
             recommendedNextAction,
             new RunSummaryEntryPoints(
@@ -1018,6 +1021,69 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             RequireNullableString(primaryFailure, "timelinePath", sourcePath),
             RequireNullableString(primaryFailure, "failureCapsulePath", sourcePath),
             RequireNullableString(primaryFailure, "sourceCommand", sourcePath));
+    }
+
+    private static RunSummaryFailureSnapshotResult? ReadFailureSnapshot(
+        JsonElement root,
+        ReplayOpenPrimaryFailureResult? primaryFailure,
+        string sourcePath)
+    {
+        if (primaryFailure is null)
+        {
+            return null;
+        }
+
+        if (!root.TryGetProperty("failureSnapshot", out var snapshot) ||
+            snapshot.ValueKind == JsonValueKind.Null)
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} is missing object property 'failureSnapshot' when primaryFailure is present.");
+        }
+
+        if (snapshot.ValueKind != JsonValueKind.Object)
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} property 'failureSnapshot' must be an object or null.");
+        }
+
+        var result = new RunSummaryFailureSnapshotResult(
+            RequireString(snapshot, "sessionId", sourcePath),
+            RequireString(snapshot, "reason", sourcePath),
+            RequireNullableString(snapshot, "target", sourcePath),
+            RequireNullableString(snapshot, "scenario", sourcePath),
+            RequireNullableString(snapshot, "step", sourcePath),
+            RequireNullableString(snapshot, "action", sourcePath),
+            RequireNullableString(snapshot, "message", sourcePath));
+
+        ValidateFailureSnapshotMatchesPrimaryFailure(result, primaryFailure, sourcePath);
+        return result;
+    }
+
+    private static RunSummaryFailureSnapshotResult? CreateFailureSnapshot(ReplayOpenPrimaryFailureResult? primaryFailure) =>
+        primaryFailure is null
+            ? null
+            : new RunSummaryFailureSnapshotResult(
+                primaryFailure.SessionId,
+                primaryFailure.Reason,
+                primaryFailure.Target,
+                primaryFailure.Scenario,
+                primaryFailure.Step,
+                primaryFailure.Action,
+                primaryFailure.Message);
+
+    private static void ValidateFailureSnapshotMatchesPrimaryFailure(
+        RunSummaryFailureSnapshotResult snapshot,
+        ReplayOpenPrimaryFailureResult primaryFailure,
+        string sourcePath)
+    {
+        if (!string.Equals(snapshot.SessionId, primaryFailure.SessionId, StringComparison.Ordinal) ||
+            !string.Equals(snapshot.Reason, primaryFailure.Reason, StringComparison.Ordinal) ||
+            !string.Equals(snapshot.Target, primaryFailure.Target, StringComparison.Ordinal) ||
+            !string.Equals(snapshot.Scenario, primaryFailure.Scenario, StringComparison.Ordinal) ||
+            !string.Equals(snapshot.Step, primaryFailure.Step, StringComparison.Ordinal) ||
+            !string.Equals(snapshot.Action, primaryFailure.Action, StringComparison.Ordinal) ||
+            !string.Equals(snapshot.Message, primaryFailure.Message, StringComparison.Ordinal))
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} failureSnapshot must match primaryFailure.");
+        }
     }
 
     private static DateTimeOffset RequireDateTimeOffset(JsonElement element, string propertyName, string sourcePath)

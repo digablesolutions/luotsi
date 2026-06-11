@@ -44,6 +44,7 @@ feed directly into the next agent command.
 | `sessionCount` | integer | yes | Number of replay sessions found in the artifact index. |
 | `failureCount` | integer | yes | Number of replay sessions with failure signals. |
 | `triageChecklist` | array | yes | Ordered machine-readable version of the 60-second triage checklist. |
+| `failureSnapshot` | object or null | yes | Compact first-screen summary copied from `primaryFailure` for agents and human job summaries. |
 | `primaryFailure` | object or null | yes | Best first failure to inspect, or `null` when no primary failure was found. |
 | `recommendedNextAction` | object | yes | One best next command for the first minute of triage. |
 | `entryPoints` | object | yes | Durable files written for this artifact root. |
@@ -69,6 +70,7 @@ validate the existing files and keep following `recommendedNextAction.command`,
 | `sessionCount` | integer | Session count copied from the packet. |
 | `failureCount` | integer | Failure count copied from the packet. |
 | `recommendedNextActionCommand` | string | Convenience copy of `recommendedNextAction.command`. |
+| `failureSnapshot` | object or null | Compact failure snapshot copied from the packet. |
 | `recommendedNextAction` | object | Next action copied from the packet. |
 | `triageChecklist` | array | Checklist copied from the packet. |
 | `primaryFailure` | object or null | Primary failure copied from the packet. |
@@ -109,6 +111,27 @@ Each checklist item uses:
 | `rationale` | string | yes | Why this step belongs in the first minute. |
 
 The first item must use `recommendedNextAction.command` as its `command`.
+
+## `failureSnapshot`
+
+`failureSnapshot` is the compact machine-readable form of the top Markdown
+section. It is `null` when `primaryFailure` is `null`; otherwise it repeats the
+fields a reviewer needs before choosing a deeper replay surface:
+
+| Field | Meaning |
+|---|---|
+| `sessionId` | Replay session identifier from `primaryFailure.sessionId`. |
+| `reason` | Session completion reason from `primaryFailure.reason`. |
+| `target` | Device, package, or other target when known. |
+| `scenario` | Scenario name or identifier when known. |
+| `step` | Scenario step name or index when known. |
+| `action` | Action that was running near the failure. |
+| `message` | Failure message or condensed reason. |
+
+`replay packet --check` requires `failureSnapshot` when `primaryFailure` is
+present, verifies that it matches `primaryFailure`, and repeats it in
+`luotsi-run-summary-check.v1` so an agent can answer "what failed?" directly
+from the check envelope.
 
 ## `primaryFailure`
 
@@ -267,5 +290,5 @@ belongs in the broader command list. Consumers should still prefer
 - If `primaryFailure` is `null`, do not assume the run passed. Check `status`, `verdict`, and `sessionCount`.
 - If `primaryFailure.sourceCommand` is present, use it as the focused evidence command after `recommendedNextAction.command`. It should not be treated as broad artifact browsing; it is the packet's best path back to the failure evidence.
 - If `runSummaryJsonPath` or `runSummaryMarkdownPath` is `null`, the packet was returned in-memory by a command path that did not persist both files. Run `luotsi replay packet --artifacts <artifact-root>` to write them.
-- A successful `luotsi-run-summary-check.v1` result repeats `recommendedNextAction`, `recommendedNextActionCommand`, `triageChecklist`, and `primaryFailure` from the packet so consumers can continue from the check envelope without reopening `run-summary.json`.
-- `replay packet --check` is the contract gate for an existing packet. It must exit non-zero for missing JSON, invalid JSON, unsupported schema, stale `artifactRoot`, missing index entry points, missing `triageChecklist`, a first checklist item that does not point at `recommendedNextAction.command`, missing `recommendedNextAction.command`, a primary failure without `primaryFailure.sourceCommand`, a checklist that omits `primaryFailure.sourceCommand`, missing `entryPoints.runSummaryJsonPath`, missing `entryPoints.runSummaryMarkdownPath`, a missing Markdown companion, Markdown without the failure snapshot, Markdown without the packet validation gate command, Markdown without the copy-paste triage command block, a copy-paste block that omits any non-null checklist command, Markdown without the 60-second triage checklist, Markdown that omits the JSON packet's recommended command, or Markdown that omits `primaryFailure.sourceCommand`.
+- A successful `luotsi-run-summary-check.v1` result repeats `recommendedNextAction`, `recommendedNextActionCommand`, `failureSnapshot`, `triageChecklist`, and `primaryFailure` from the packet so consumers can continue from the check envelope without reopening `run-summary.json`.
+- `replay packet --check` is the contract gate for an existing packet. It must exit non-zero for missing JSON, invalid JSON, unsupported schema, stale `artifactRoot`, missing index entry points, missing `triageChecklist`, a first checklist item that does not point at `recommendedNextAction.command`, missing `recommendedNextAction.command`, a primary failure without `failureSnapshot`, a `failureSnapshot` that does not match `primaryFailure`, a primary failure without `primaryFailure.sourceCommand`, a checklist that omits `primaryFailure.sourceCommand`, missing `entryPoints.runSummaryJsonPath`, missing `entryPoints.runSummaryMarkdownPath`, a missing Markdown companion, Markdown without the failure snapshot, Markdown without the packet validation gate command, Markdown without the copy-paste triage command block, a copy-paste block that omits any non-null checklist command, Markdown without the 60-second triage checklist, Markdown that omits the JSON packet's recommended command, or Markdown that omits `primaryFailure.sourceCommand`.

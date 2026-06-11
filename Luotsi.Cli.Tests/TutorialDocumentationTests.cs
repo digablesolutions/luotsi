@@ -523,6 +523,8 @@ public sealed partial class AppTests
         Assert.Contains("recommendedNextAction.command", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("entryPoints", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("## Failure Snapshot", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("`failureSnapshot`", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("matches `primaryFailure`", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("## Packet Gate", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("packet validation gate command", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("60-second triage checklist", schemaGuide, StringComparison.Ordinal);

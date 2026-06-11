@@ -484,6 +484,14 @@ public sealed class AppCommandShellTests
                     "luotsi replay scrub --source-path session-timeline.jsonl --sequence 1 --context 3",
                     "Focused evidence command.")
             ],
+            new RunSummaryFailureSnapshotResult(
+                "login-smoke-session",
+                "failed",
+                "emulator-5554",
+                "login smoke",
+                "wait login button",
+                "waitVisible",
+                "button not visible"),
             new ReplayOpenPrimaryFailureResult(
                 "scenario",
                 "login-smoke-session",
@@ -549,6 +557,7 @@ public sealed class AppCommandShellTests
             1,
             1,
             "luotsi replay scrub --artifacts /tmp/replay-root --failures --context 3 --write-markdown",
+            null,
             new ReplayOpenNextActionResult(
                 "scrub_failure",
                 "Scrub the failure window",
