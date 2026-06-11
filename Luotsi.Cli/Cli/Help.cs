@@ -145,16 +145,21 @@ Failure modes:
 Luotsi help: journey-intake
 
 Usage:
+  luotsi journey-intake init [--output <journey-intake.json>] [--name <name>] [--package <app.id>] [--activity <activity>] [--device <serial>] [--device-query <query>] [--scenario <scenario.json>] [--artifacts <directory>] [--run-artifacts <directory>] [--write-markdown] [--force]
   luotsi journey-intake validate --file <journey-intake.json>
   luotsi journey-intake draft-scenario --file <journey-intake.json> --output <scenario.json> [--force]
 
 Examples:
+  luotsi journey-intake init --output journey-intake.json --package com.example.app --device <serial> --write-markdown
   luotsi journey-intake validate --file journey-intake.json
   luotsi journey-intake draft-scenario --file journey-intake.json --output scenarios/from-journey.json
   luotsi journey-intake validate --file examples/journey-intake/evidence-backed-journey-intake.template.json
 
 Notes:
-  journey-intake validates the non-executable luotsi-journey-intake.v1 handoff
+  journey-intake init writes a non-executable luotsi-journey-intake.v1 handoff
+  from Luotsi itself, including review guardrails and next commands through
+  validation, scenario drafting, dry-run/run, and replay evidence handoff.
+  journey-intake validate checks the non-executable luotsi-journey-intake.v1 handoff
   contract used to turn Android CLI Journey-style intent into reviewed Luotsi
   exploration, replay scenario drafts, and scenario validation. It does not
   create scenarios or touch devices; invalid intake files return a non-zero exit
@@ -882,6 +887,7 @@ Command groups:
     update [--version <tag>] [--channel stable|prerelease] [--dry-run] [--detach]
 
   Scenarios and CI reports
+    journey-intake init [--output <journey-intake.json>] [--name <name>] [--package <app.id>] [--activity <activity>] [--device <serial>] [--device-query <query>] [--scenario <scenario.json>] [--artifacts <directory>] [--run-artifacts <directory>] [--write-markdown] [--force]
     journey-intake validate --file <journey-intake.json>
     journey-intake draft-scenario --file <journey-intake.json> --output <scenario.json> [--force]
     scenario-init [--file <scenario.json>] [--name <name>] [--package <app.id>] [--activity <activity>] [--width <px>] [--height <px>] [--orientation <name>] [--force]
