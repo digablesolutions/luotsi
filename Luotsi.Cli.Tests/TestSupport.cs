@@ -76,6 +76,8 @@ internal sealed class FakeConsole : IConsoleIo
 
     private readonly Queue<string?> _inputLines = new();
 
+    public bool SupportsAnsiStyling { get; set; }
+
     public void WriteLine(string value) => OutputLines.Add(value);
 
     public void WriteErrorLine(string value) => ErrorLines.Add(value);

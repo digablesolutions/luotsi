@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.Infrastructure.System;
 using Luotsi.Cli.Models;
 
 namespace Luotsi.Cli.Cli.Envelope;
@@ -36,20 +37,20 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
         var error = envelope.Error;
         var category = string.IsNullOrWhiteSpace(error?.Category) ? "error" : error.Category;
         var message = string.IsNullOrWhiteSpace(error?.Message) ? "Command failed." : error.Message;
-        _console.WriteLine($"FAIL {FormatCommand(envelope.Command)} failed in {envelope.DurationMs} ms.");
-        _console.WriteLine($"  {category}: {message}");
+        _console.WriteLine($"{ConsoleStyling.Failure(_console, "FAIL")} {FormatCommand(envelope.Command)} failed in {envelope.DurationMs} ms.");
+        _console.WriteLine($"  {ConsoleStyling.Failure(_console, category)}: {message}");
         WriteDataSummary(envelope.Data, envelope.Artifacts);
         WriteArtifactSummary(envelope.Artifacts);
     }
 
-    private static string FormatSuccessHeading(CommandEnvelope envelope)
+    private string FormatSuccessHeading(CommandEnvelope envelope)
     {
         if (TryResolveFailureStatus(envelope.Data))
         {
-            return $"FAIL {FormatCommand(envelope.Command)} finished in {envelope.DurationMs} ms.";
+            return $"{ConsoleStyling.Failure(_console, "FAIL")} {FormatCommand(envelope.Command)} finished in {envelope.DurationMs} ms.";
         }
 
-        return $"OK  {FormatCommand(envelope.Command)} completed in {envelope.DurationMs} ms.";
+        return $"{ConsoleStyling.Success(_console, "OK ")} {FormatCommand(envelope.Command)} completed in {envelope.DurationMs} ms.";
     }
 
     private static bool TryResolveFailureStatus(object? data)
@@ -75,13 +76,13 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
         var json = JsonSerializer.SerializeToElement(data, AppCommandJson.Options);
         if (json.ValueKind != JsonValueKind.Object)
         {
-            _console.WriteLine($"  result: {FormatScalar(json)}");
+            _console.WriteLine($"  result: {StyleScalar(json)}");
             return;
         }
 
         foreach (var line in SummarizeObject(json, artifacts).Take(MaxScalarLines))
         {
-            _console.WriteLine($"  {line}");
+            _console.WriteLine($"  {StyleSummaryLine(line)}");
         }
     }
 
@@ -89,9 +90,94 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
     {
         if (!string.IsNullOrWhiteSpace(artifacts.ArtifactRoot))
         {
-            _console.WriteLine($"  artifacts: {artifacts.ArtifactRoot}");
+            _console.WriteLine($"  {ConsoleStyling.Muted(_console, "artifacts")}: {ConsoleStyling.Accent(_console, artifacts.ArtifactRoot)}");
         }
     }
+
+    private string StyleSummaryLine(string line)
+    {
+        var separator = line.IndexOf(':', StringComparison.Ordinal);
+        if (separator < 0 || !IsSummaryLabel(line.AsSpan(0, separator)))
+        {
+            return line;
+        }
+
+        var label = line[..separator];
+        var value = line[(separator + 1)..].TrimStart();
+        var styledLabel = ConsoleStyling.Muted(_console, label);
+        var styledValue = label switch
+        {
+            "status" => StyleStatus(value),
+            "ready" or "fix" => StyleBoolean(value),
+            "passed" or "passed_count" => ConsoleStyling.Success(_console, value),
+            "failed" or "failed_count" or "failure_count" => value is "0"
+                ? ConsoleStyling.Success(_console, value)
+                : ConsoleStyling.Failure(_console, value),
+            "output" or "path" or "file" or "first_command" => ConsoleStyling.Accent(_console, value),
+            _ when label.Contains("command", StringComparison.OrdinalIgnoreCase) => ConsoleStyling.Accent(_console, value),
+            _ => value
+        };
+
+        return $"{styledLabel}: {styledValue}";
+    }
+
+    private static bool IsSummaryLabel(ReadOnlySpan<char> label)
+    {
+        if (label.IsEmpty)
+        {
+            return false;
+        }
+
+        foreach (var character in label)
+        {
+            if (character is not '_' && !char.IsAsciiLetterOrDigit(character))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private string StyleScalar(JsonElement scalar)
+        => scalar.ValueKind is JsonValueKind.True or JsonValueKind.False
+            ? StyleBoolean(FormatScalar(scalar))
+            : FormatScalar(scalar);
+
+    private string StyleStatus(string value)
+    {
+        if (value.StartsWith("ready", StringComparison.OrdinalIgnoreCase) ||
+            value.StartsWith("pass", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("valid", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("verified", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("installed", StringComparison.OrdinalIgnoreCase))
+        {
+            return ConsoleStyling.Success(_console, value);
+        }
+
+        if (value.StartsWith("fail", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("invalid", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("blocked", StringComparison.OrdinalIgnoreCase))
+        {
+            return ConsoleStyling.Failure(_console, value);
+        }
+
+        if (value.StartsWith("warn", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("needs_validation", StringComparison.OrdinalIgnoreCase))
+        {
+            return ConsoleStyling.Warning(_console, value);
+        }
+
+        return value;
+    }
+
+    private string StyleBoolean(string value)
+        => value switch
+        {
+            "true" => ConsoleStyling.Success(_console, value),
+            "false" => ConsoleStyling.Warning(_console, value),
+            _ => value
+        };
 
     private static IEnumerable<string> SummarizeObject(JsonElement value, ArtifactData artifacts)
     {

@@ -13,6 +13,21 @@ namespace Luotsi.Cli.Tests;
 public sealed partial class AppTests
 {
     [Fact]
+    public void ViewConsoleEventWriter_Human_Output_Uses_Ansi_Color_When_Console_Supports_It()
+    {
+        var console = new FakeConsole { SupportsAnsiStyling = true };
+        var writer = new ViewConsoleEventWriter(
+            console,
+            new ViewOptions("device", "adb", "h264", "ffmpeg", true, null, 1600, 60, "8M", false, false, ConsoleOutput: ViewConsoleOutputModes.Human));
+
+        writer.Write("""{"type":"view_recording_started","record_path":"C:\\tmp\\kick-smoke.mp4"}""");
+
+        var line = Assert.Single(console.OutputLines);
+        Assert.StartsWith("\u001b[32;1mOK \u001b[0m Recording started:", line, StringComparison.Ordinal);
+        Assert.Contains("\u001b[36;1mC:\\tmp\\kick-smoke.mp4\u001b[0m", line, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ViewRuntimeDiagnostic_Uses_JoinShare_Command_For_Share_Sessions()
     {
         var options = new ViewOptions("127.0.0.1:9000", "adb", "h264", "ffmpeg", true, null, 1600, 60, "8M", false, false, JoinShareEndpoint: "127.0.0.1:9000");

@@ -339,6 +339,38 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_Quickstart_Human_Uses_Ansi_Color_When_Console_Supports_It()
+    {
+        var console = new FakeConsole { SupportsAnsiStyling = true };
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["quickstart", "--human", "--device", "emulator-5554", "--package", "dev.luotsi.demo", "--artifacts", @"C:\tmp\luotsi-demo"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(console.ErrorLines);
+        Assert.Contains(console.OutputLines, static line => line.StartsWith("\u001b[32;1mOK \u001b[0m quickstart completed", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, static line => line.Contains("\u001b[90mstatus\u001b[0m: \u001b[32;1mready_to_start\u001b[0m", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, static line => line.Contains("\u001b[90mfirst_command\u001b[0m: \u001b[36;1mluotsi doctor --device emulator-5554 --package dev.luotsi.demo --fix\u001b[0m", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, static line => line.Contains(@"command=luotsi screen-state --device emulator-5554 --artifacts C:\tmp\luotsi-demo", StringComparison.Ordinal));
+        Assert.DoesNotContain(console.OutputLines, static line => line.Contains(@"C[0m: [36;1m\tmp", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_Quickstart_Json_Does_Not_Emit_Ansi_Color_When_Console_Supports_It()
+    {
+        var console = new FakeConsole { SupportsAnsiStyling = true };
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["quickstart", "--json", "--device", "emulator-5554", "--package", "dev.luotsi.demo", "--artifacts", "artifacts/demo"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(console.ErrorLines);
+        Assert.DoesNotContain("\u001b[", console.OutputLines.Single(), StringComparison.Ordinal);
+        using var envelope = JsonDocument.Parse(console.OutputLines.Single());
+        Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+    }
+
+    [Fact]
     public async Task RunAsync_QuickstartVerify_Groups_Proof_Checks_By_Readiness()
     {
         var console = new FakeConsole();
