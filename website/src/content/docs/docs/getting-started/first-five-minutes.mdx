@@ -75,12 +75,13 @@ For scripts and CI, treat `ok` plus the process exit code as the first gate, the
 
 To find the next command in structured output, check these fields in order:
 
-1. `data.recommended_next_action.command` when present.
-2. `data.primary_failure.source_command` or `data.primaryFailure.sourceCommand` when a packet/check result has focused failure evidence but no recommended action.
-3. `data.triage_checklist[].command` or `data.triageChecklist[].command` when a packet/check exposes a structured first-minute checklist.
-4. `data.recommended_next_steps[]`, `data.next_actions[]`, or `data.suggested_commands[]` for ordered handoffs.
-5. `data.commands[]`, `data.artifact_commands[]`, or `data.recommended_commands[]` for exact follow-up commands.
-6. `artifacts.artifact_root` when no richer command field exists, then run `luotsi replay packet --artifacts <artifact-root>` first so the loop has `run-summary.json` and `run-summary.md`. Use `luotsi replay open --artifacts <artifact-root> --dry-run` when a human needs the replay front door response, and use `luotsi artifacts open <artifact-root>` only when you specifically need the generic artifact browser.
+1. `data.recommended_next_action_command` or `data.recommendedNextActionCommand` when a check result exposes the direct continuation command.
+2. `data.recommended_next_action.command` when present.
+3. `data.primary_failure.source_command` or `data.primaryFailure.sourceCommand` when a packet/check result has focused failure evidence but no recommended action.
+4. `data.triage_checklist[].command` or `data.triageChecklist[].command` when a packet/check exposes a structured first-minute checklist.
+5. `data.recommended_next_steps[]`, `data.next_actions[]`, or `data.suggested_commands[]` for ordered handoffs.
+6. `data.commands[]`, `data.artifact_commands[]`, or `data.recommended_commands[]` for exact follow-up commands.
+7. `artifacts.artifact_root` when no richer command field exists, then run `luotsi replay packet --artifacts <artifact-root>` first so the loop has `run-summary.json` and `run-summary.md`. Use `luotsi replay open --artifacts <artifact-root> --dry-run` when a human needs the replay front door response, and use `luotsi artifacts open <artifact-root>` only when you specifically need the generic artifact browser.
 
 From source, the agent examples include tiny parsers that implement this same order:
 

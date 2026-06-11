@@ -293,8 +293,9 @@ Output shapes:
      replay timeline, replay graph, or artifacts open.
 
 Next-action fields:
-  Prefer data.recommended_next_action.command when present. Then check
-  primary_failure.source_command for focused packet evidence, then
+  Prefer data.recommended_next_action_command when a packet check returns the
+  direct continuation command. Then use data.recommended_next_action.command,
+  primary_failure.source_command for focused packet evidence,
   triage_checklist[].command for packet checklist fallback, followed by
   recommended_next_steps, next_actions, suggested_commands, commands,
   artifact_commands, and recommended_commands. If no command field is present,

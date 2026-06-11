@@ -253,6 +253,7 @@ public sealed partial class AppTests
         var llms = File.ReadAllText(Path.Join(root, "website", "public", "llms.txt"));
 
         Assert.Contains("command -> structured output -> artifact root -> replay command -> next action", examples, StringComparison.Ordinal);
+        Assert.Contains("data.recommended_next_action_command", examples, StringComparison.Ordinal);
         Assert.Contains("data.recommended_next_action.command", examples, StringComparison.Ordinal);
         Assert.Contains("primaryFailure.sourceCommand", examples, StringComparison.Ordinal);
         Assert.Contains("data.triage_checklist[].command", examples, StringComparison.Ordinal);
@@ -274,6 +275,7 @@ public sealed partial class AppTests
         Assert.Contains("command -> structured output -> artifact root -> replay command -> next action", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("luotsi help output", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("schema: \"luotsi-command.v1\"", aiAgentWorkflows, StringComparison.Ordinal);
+        Assert.Contains("data.recommended_next_action_command", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("data.recommended_next_action.command", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("data.primary_failure.source_command", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("data.primaryFailure.sourceCommand", aiAgentWorkflows, StringComparison.Ordinal);
@@ -289,6 +291,8 @@ public sealed partial class AppTests
         Assert.Contains("luotsi replay open --last --artifacts", pythonExample, StringComparison.Ordinal);
         Assert.Contains("extract-next-command.py", examples, StringComparison.Ordinal);
         Assert.Contains("extract-next-command.mjs", examples, StringComparison.Ordinal);
+        Assert.Contains("recommended_next_action_command", nodeNextCommandExample, StringComparison.Ordinal);
+        Assert.Contains("recommended_next_action_command", pythonNextCommandExample, StringComparison.Ordinal);
         Assert.Contains("recommended_next_action", nodeNextCommandExample, StringComparison.Ordinal);
         Assert.Contains("recommended_next_action", pythonNextCommandExample, StringComparison.Ordinal);
         Assert.Contains("luotsi-run-summary.v1", nodeNextCommandExample, StringComparison.Ordinal);
@@ -303,6 +307,7 @@ public sealed partial class AppTests
         Assert.Contains("luotsi replay packet --artifacts", pythonNextCommandExample, StringComparison.Ordinal);
         Assert.Contains("luotsi help output", agentGuide, StringComparison.Ordinal);
         Assert.Contains("Do not treat model confidence as validation", agentGuide, StringComparison.Ordinal);
+        Assert.Contains("data.recommended_next_action_command", agentGuide, StringComparison.Ordinal);
         Assert.Contains("data.recommended_next_action.command", agentGuide, StringComparison.Ordinal);
         Assert.Contains("data.primary_failure.source_command", agentGuide, StringComparison.Ordinal);
         Assert.Contains("data.triage_checklist", agentGuide, StringComparison.Ordinal);
@@ -310,6 +315,7 @@ public sealed partial class AppTests
         Assert.Contains("artifacts.artifact_root", agentGuide, StringComparison.Ordinal);
         Assert.Contains("command -> structured output -> artifact root -> replay command -> next action", copilotInstructions, StringComparison.Ordinal);
         Assert.Contains("luotsi help output", copilotInstructions, StringComparison.Ordinal);
+        Assert.Contains("data.recommended_next_action_command", copilotInstructions, StringComparison.Ordinal);
         Assert.Contains("data.recommended_next_action.command", copilotInstructions, StringComparison.Ordinal);
         Assert.Contains("data.primary_failure.source_command", copilotInstructions, StringComparison.Ordinal);
         Assert.Contains("data.triage_checklist", copilotInstructions, StringComparison.Ordinal);
@@ -320,6 +326,7 @@ public sealed partial class AppTests
         Assert.Contains("generic artifact browser", copilotInstructions, StringComparison.Ordinal);
         Assert.Contains("command -> structured output -> artifact root -> replay command -> next action", contributing, StringComparison.Ordinal);
         Assert.Contains("luotsi help output", contributing, StringComparison.Ordinal);
+        Assert.Contains("data.recommended_next_action_command", contributing, StringComparison.Ordinal);
         Assert.Contains("data.recommended_next_action.command", contributing, StringComparison.Ordinal);
         Assert.Contains("data.primary_failure.source_command", contributing, StringComparison.Ordinal);
         Assert.Contains("data.triage_checklist", contributing, StringComparison.Ordinal);
@@ -408,11 +415,13 @@ public sealed partial class AppTests
 
         foreach (var (name, text) in entryPoints)
         {
-            var outputGuidance = SliceFrom(name, text, "data.recommended_next_action.command");
+            var outputGuidance = SliceFrom(name, text, "data.recommended_next_action_command");
             Assert.Contains("artifacts.artifact_root", outputGuidance, StringComparison.Ordinal);
             Assert.Contains("replay packet", outputGuidance, StringComparison.Ordinal);
+            Assert.Contains("data.recommended_next_action.command", outputGuidance, StringComparison.Ordinal);
             Assert.Contains("primary_failure.source_command", outputGuidance, StringComparison.Ordinal);
             Assert.Contains("triage_checklist", outputGuidance, StringComparison.Ordinal);
+            AssertContainsBefore(name, outputGuidance, "data.recommended_next_action_command", "data.recommended_next_action.command");
             AssertContainsBefore(name, outputGuidance, "data.recommended_next_action.command", "artifacts.artifact_root");
             AssertContainsBefore(name, outputGuidance, "data.recommended_next_action.command", "primary_failure.source_command");
             AssertContainsBefore(name, outputGuidance, "primary_failure.source_command", "triage_checklist");
@@ -688,7 +697,7 @@ public sealed partial class AppTests
         const string expectedFromRunSummaryEvidenceOnly = "luotsi replay capsule --artifacts /tmp/evidence-root --write-readme --write-json";
         const string runSummaryChecklistOnlyJson = """{"schema":"luotsi-run-summary.v1","status":"needs_triage","triageChecklist":[{"step":1,"action":"Run the checklist command","command":"luotsi replay timeline --artifacts /tmp/checklist-root --failures --context 3","rationale":"Highest-signal structured fallback."}],"commands":[{"kind":"open_artifacts","command":"luotsi artifacts open /tmp/checklist-root"}]}""";
         const string expectedFromRunSummaryChecklistOnly = "luotsi replay timeline --artifacts /tmp/checklist-root --failures --context 3";
-        const string runSummaryCheckEnvelopeJson = """{"schema":"luotsi-command.v1","ok":true,"data":{"schema":"luotsi-run-summary-check.v1","status":"valid","recommended_next_action":{"kind":"scrub_failure","command":"luotsi replay scrub --artifacts /tmp/checked-root --failures --context 3 --write-markdown"},"triage_checklist":[{"step":1,"action":"Run the recommended packet command","command":"luotsi replay scrub --artifacts /tmp/checked-root --failures --context 3 --write-markdown","rationale":"Highest-signal command."}]},"artifacts":{"artifact_root":"/tmp/checked-root"}}""";
+        const string runSummaryCheckEnvelopeJson = """{"schema":"luotsi-command.v1","ok":true,"data":{"schema":"luotsi-run-summary-check.v1","status":"valid","recommended_next_action_command":"luotsi replay scrub --artifacts /tmp/checked-root --failures --context 3 --write-markdown","recommended_next_action":{"kind":"scrub_failure","command":"luotsi replay timeline --artifacts /tmp/checked-root --failures"},"triage_checklist":[{"step":1,"action":"Run the recommended packet command","command":"luotsi replay timeline --artifacts /tmp/checked-root --failures","rationale":"Nested fallback command."}]},"artifacts":{"artifact_root":"/tmp/checked-root"}}""";
         const string expectedFromRunSummaryCheck = "luotsi replay scrub --artifacts /tmp/checked-root --failures --context 3 --write-markdown";
         var runSummaryJsonlLog = string.Join(Environment.NewLine, [
             """{"schema":"luotsi-command.v1","ok":true,"data":{"artifact_commands":[{"kind":"replay_open","command":"luotsi replay open --artifacts /tmp/before-packet"}]},"artifacts":{"artifact_root":"/tmp/before-packet"}}""",

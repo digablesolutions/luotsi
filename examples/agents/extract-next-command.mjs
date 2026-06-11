@@ -105,6 +105,11 @@ function isLooseCommandEnvelope(value) {
 }
 
 function extractNextCommandFromObject(value) {
+  const directCommand = cleanCommand(firstPresent(value, 'recommended_next_action_command', 'recommendedNextActionCommand'));
+  if (directCommand) {
+    return directCommand;
+  }
+
   const direct = cleanCommand(firstPresent(value, 'recommended_next_action', 'recommendedNextAction')?.command);
   if (direct) {
     return direct;

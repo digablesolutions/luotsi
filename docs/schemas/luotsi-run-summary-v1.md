@@ -24,8 +24,9 @@ block, the 60-second triage checklist, and the same recommended command as
 `run-summary.json`. When `primaryFailure` is present, the check also requires
 `primaryFailure.sourceCommand` to be present in both the structured checklist
 and Markdown packet. A successful check returns `luotsi-run-summary-check.v1`
-with `recommendedNextAction`, `triageChecklist`, and `primaryFailure` copied
-from the packet so validation can feed directly into the next agent command.
+with `recommendedNextActionCommand`, `recommendedNextAction`,
+`triageChecklist`, and `primaryFailure` copied from the packet so validation can
+feed directly into the next agent command.
 
 ## Top-level fields
 

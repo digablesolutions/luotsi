@@ -25,6 +25,7 @@ command -> structured output -> artifact root -> replay command -> next action
 Use `luotsi help output` as the CLI-native source for that model. Normal
 commands return one JSON envelope, while `inspect` emits JSONL. After checking
 `ok` and the process exit code, command readers should look for
+`data.recommended_next_action_command` / `data.recommendedNextActionCommand`,
 `data.recommended_next_action.command`, focused packet evidence such as
 `data.primary_failure.source_command` or `data.primaryFailure.sourceCommand`,
 packet checklist commands such as `data.triage_checklist[].command` or

@@ -99,6 +99,10 @@ def extract_next_command(envelope: dict[str, Any]) -> str | None:
 
 
 def extract_next_command_from_mapping(value: dict[str, Any]) -> str | None:
+    direct_command = clean_command(first_present(value, "recommended_next_action_command", "recommendedNextActionCommand"))
+    if direct_command:
+        return direct_command
+
     next_action = first_present(value, "recommended_next_action", "recommendedNextAction")
     if isinstance(next_action, dict):
         command = clean_command(next_action.get("command"))

@@ -32,12 +32,13 @@ The `--artifacts` value is a base directory. The scripts create it if needed, an
 
 For one-shot commands and replay follow-ups, parse the standard envelope before making another device decision. Check `ok` and the process exit code first, then choose the next command in the same order as `luotsi help output`:
 
-1. `data.recommended_next_action.command`
-2. Focused packet evidence: `data.primary_failure.source_command` / `primaryFailure.sourceCommand`
-3. Packet checklist commands: `data.triage_checklist[].command` / `triageChecklist[].command`
-4. Ordered handoff arrays: `data.recommended_next_steps`, `data.next_actions`, `data.suggested_commands`
-5. Command arrays: `data.commands`, `data.artifact_commands`, `data.recommended_commands`
-6. Fallback evidence pointer: `artifacts.artifact_root`, then run `luotsi replay packet --artifacts <artifact-root>`
+1. `data.recommended_next_action_command` / `recommendedNextActionCommand`
+2. `data.recommended_next_action.command`
+3. Focused packet evidence: `data.primary_failure.source_command` / `primaryFailure.sourceCommand`
+4. Packet checklist commands: `data.triage_checklist[].command` / `triageChecklist[].command`
+5. Ordered handoff arrays: `data.recommended_next_steps`, `data.next_actions`, `data.suggested_commands`
+6. Command arrays: `data.commands`, `data.artifact_commands`, `data.recommended_commands`
+7. Fallback evidence pointer: `artifacts.artifact_root`, then run `luotsi replay packet --artifacts <artifact-root>`
 
 Command arrays are not always ordered by the human-friendly first move, so the parser examples prefer a `replay_open` item when one appears in `data.commands`, `data.artifact_commands`, or `data.recommended_commands`. Use `open_artifacts` only when the next task is specifically browsing raw files.
 
@@ -53,7 +54,7 @@ luotsi run --file scenarios/smoke.json --device <serial> --artifacts artifacts/s
 
 The parsers accept either one normal Luotsi JSON envelope or a saved JSONL-style log with multiple one-line JSON objects; in JSONL mode they use the last Luotsi command envelope they find. Bad input exits non-zero with an `extract-next-command:` message and no language runtime stack trace.
 
-They also accept the persisted `run-summary.json` packet written by `luotsi replay packet`. That packet uses the artifact JSON schema `luotsi-run-summary.v1` and camelCase fields such as `recommendedNextAction.command`, `primaryFailure.sourceCommand`, and `triageChecklist[].command`, so an agent can download a CI artifact, feed `run-summary.json` into the same parser, and continue with the recommended command, focused evidence command, or structured checklist command without scraping Markdown. The fallback `artifact_root` command writes that same durable packet before the loop tries broader replay exploration; use `luotsi replay open --artifacts <artifact-root> --dry-run` when a human needs the replay front door response. Run `luotsi replay packet --artifacts <artifact-root> --check` as the pass/fail gate when you receive an existing packet. The source-tree contract lives at `docs/schemas/luotsi-run-summary-v1.md`.
+They also accept the persisted `run-summary.json` packet written by `luotsi replay packet`. That packet uses the artifact JSON schema `luotsi-run-summary.v1` and camelCase fields such as `recommendedNextAction.command`, `primaryFailure.sourceCommand`, and `triageChecklist[].command`, so an agent can download a CI artifact, feed `run-summary.json` into the same parser, and continue with the recommended command, focused evidence command, or structured checklist command without scraping Markdown. Check envelopes can also expose `recommended_next_action_command` / `recommendedNextActionCommand` as the direct continuation command. The fallback `artifact_root` command writes that same durable packet before the loop tries broader replay exploration; use `luotsi replay open --artifacts <artifact-root> --dry-run` when a human needs the replay front door response. Run `luotsi replay packet --artifacts <artifact-root> --check` as the pass/fail gate when you receive an existing packet. The source-tree contract lives at `docs/schemas/luotsi-run-summary-v1.md`.
 
 If Luotsi reports a protocol, session, wait, tap, screenshot, post-action state, or inspect-process failure, the scripts exit non-zero and leave the artifact directory behind for replay.
 
