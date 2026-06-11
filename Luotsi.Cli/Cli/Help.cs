@@ -242,6 +242,8 @@ Common workflows:
     luotsi discover --device <adb serial> --package <app.id> --budget 5m
 
   Resume the latest local triage bundle
+    luotsi replay packet --last --artifacts artifacts
+    luotsi replay packet --last --artifacts artifacts --check
     luotsi artifacts open --last --artifacts artifacts
     luotsi replay open --last --artifacts artifacts --dry-run
 

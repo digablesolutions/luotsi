@@ -198,7 +198,11 @@ public sealed partial class AppTests
         Assert.Contains("One JSON envelope", markdown, StringComparison.Ordinal);
         Assert.Contains("JSONL session stream", markdown, StringComparison.Ordinal);
         Assert.Contains("Replay artifact root", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --last --artifacts ./artifacts/smoke-run", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --last --artifacts ./artifacts/smoke-run --check", markdown, StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --last --artifacts ./artifacts/smoke-run --dry-run", markdown, StringComparison.Ordinal);
+        AssertContainsBefore(markdown, "luotsi replay packet --last --artifacts ./artifacts/smoke-run", "luotsi replay open --last --artifacts ./artifacts/smoke-run --dry-run");
+        AssertContainsBefore(markdown, "luotsi replay packet --last --artifacts ./artifacts/smoke-run --check", "luotsi replay open --last --artifacts ./artifacts/smoke-run --dry-run");
         AssertContainsBefore(markdown, "luotsi replay open --artifacts ./artifacts/demo-run --dry-run", "luotsi replay summarize --artifacts ./artifacts/demo-run");
         AssertContainsBefore(markdown, "luotsi replay open --artifacts ./artifacts/buggy-demo --dry-run", "luotsi replay summarize --artifacts ./artifacts/buggy-demo");
         Assert.Contains("primary failure, recommended next action, and follow-up commands", markdown, StringComparison.Ordinal);

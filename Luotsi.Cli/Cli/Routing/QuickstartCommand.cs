@@ -186,8 +186,16 @@ internal static class QuickstartCommand
                 "Check the CI command shape before using a lab device.",
                 $"luotsi run --path {scenarioPathValue} {deviceFlag} {packageFlag} --dry-run"),
             new QuickstartRecommendedCommandResult(
-                "replay",
-                "Reopen the latest local artifact bundle instead of rerunning the device session.",
+                "replay_packet",
+                "Write run-summary.json and run-summary.md for the latest local artifact bundle instead of rerunning the device session.",
+                $"luotsi replay packet --last --artifacts {Quote(artifacts)}"),
+            new QuickstartRecommendedCommandResult(
+                "replay_packet_check",
+                "Validate the latest first-minute packet before handing it to a human or AI operator.",
+                $"luotsi replay packet --last --artifacts {Quote(artifacts)} --check"),
+            new QuickstartRecommendedCommandResult(
+                "replay_open",
+                "Open the latest replay front door after the packet exists.",
                 $"luotsi replay open --last --artifacts {Quote(artifacts)} --dry-run")
         };
 
@@ -224,10 +232,17 @@ internal static class QuickstartCommand
                 ResolveProofCheckStatus(deviceTruthProofCommand),
                 ResolveProofCheckBlockedReason(deviceTruthProofCommand)),
             new QuickstartProofCheckResult(
-                "replay",
-                "Captured evidence can be reopened without touching the device.",
-                $"luotsi replay open --last --artifacts {Quote(artifacts)} --dry-run",
-                "Replay output returns next actions and references the latest preserved artifact bundle.",
+                "replay_packet",
+                "Captured evidence can be packeted without touching the device.",
+                $"luotsi replay packet --last --artifacts {Quote(artifacts)}",
+                "Replay packet writes run-summary.json and run-summary.md for the latest preserved artifact bundle.",
+                "ready_after_artifact",
+                "Run the artifact handoff or a device/session command before expecting --last to resolve."),
+            new QuickstartProofCheckResult(
+                "replay_packet_check",
+                "Captured evidence has a validateable first-minute packet.",
+                $"luotsi replay packet --last --artifacts {Quote(artifacts)} --check",
+                "Replay packet --check proves the packet and Markdown companion are present before handoff.",
                 "ready_after_artifact",
                 "Run the artifact handoff or a device/session command before expecting --last to resolve.")
         };
@@ -316,9 +331,14 @@ internal static class QuickstartCommand
                     "Validation succeeds or reports reviewable authoring errors."),
                 new(
                     "replayable_handoff",
-                    "The artifact root can be reopened after device access is gone.",
-                    $"luotsi replay open --artifacts {Quote(artifactRoot)} --dry-run",
-                    "Replay returns the primary failure or an explicit no-failure summary plus follow-up commands."),
+                    "The artifact root has a durable first-minute packet after device access is gone.",
+                    $"luotsi replay packet --artifacts {Quote(artifactRoot)}",
+                    "Replay packet writes run-summary.json and run-summary.md with the primary failure, recommended next action, and checklist."),
+                new(
+                    "packet_validated",
+                    "The durable first-minute packet can be validated before handoff.",
+                    $"luotsi replay packet --artifacts {Quote(artifactRoot)} --check",
+                    "Replay packet --check proves the packet, Markdown companion, and first-minute commands are present."),
                 new(
                     "shareable_package",
                     "The evidence can be packaged and verified before team handoff.",
@@ -327,7 +347,7 @@ internal static class QuickstartCommand
             ],
             [
                 "At least one live-device command produced an artifact root.",
-                "A reviewer can reopen evidence with replay open without reconnecting the device.",
+                "A reviewer can start from run-summary.json or run-summary.md without reconnecting the device.",
                 "A CI candidate is either validated or explicitly deferred with a blocker.",
                 "Any shared bundle is packed with lab-safe redaction and verified before intake."
             ],

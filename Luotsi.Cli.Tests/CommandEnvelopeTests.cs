@@ -91,6 +91,8 @@ public sealed partial class AppTests
         Assert.Contains("Luotsi help: quickstart", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi doctor --device <adb serial>", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi scenario-init --file scenarios/smoke.json", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --last --artifacts artifacts", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --last --artifacts artifacts --check", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --last --artifacts artifacts --dry-run", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("run luotsi help output", console.ErrorLines[0], StringComparison.Ordinal);
     }
@@ -174,6 +176,17 @@ public sealed partial class AppTests
             data.GetProperty("recommended_commands").EnumerateArray(),
             command => command.GetProperty("kind").GetString() == "agent_loop" &&
                 command.GetProperty("command").GetString() == "luotsi inspect --device <adb serial> --artifacts artifacts/first-run");
+        var recommendedCommands = data.GetProperty("recommended_commands").EnumerateArray().ToArray();
+        Assert.Contains(recommendedCommands, command =>
+            command.GetProperty("kind").GetString() == "replay_packet" &&
+            command.GetProperty("command").GetString() == "luotsi replay packet --last --artifacts artifacts/first-run");
+        Assert.Contains(recommendedCommands, command =>
+            command.GetProperty("kind").GetString() == "replay_packet_check" &&
+            command.GetProperty("command").GetString() == "luotsi replay packet --last --artifacts artifacts/first-run --check");
+        AssertContainsBefore(
+            string.Join("\n", recommendedCommands.Select(command => command.GetProperty("command").GetString())),
+            "luotsi replay packet --last --artifacts artifacts/first-run",
+            "luotsi replay open --last --artifacts artifacts/first-run --dry-run");
         Assert.Contains(
             data.GetProperty("proof_checks").EnumerateArray(),
             check => check.GetProperty("kind").GetString() == "install" &&
@@ -191,14 +204,24 @@ public sealed partial class AppTests
                 check.GetProperty("blocked_reason").GetString() == "Provide --device or run the earlier selection proof first.");
         Assert.Contains(
             data.GetProperty("proof_checks").EnumerateArray(),
-            check => check.GetProperty("kind").GetString() == "replay" &&
+            check => check.GetProperty("kind").GetString() == "replay_packet" &&
+                check.GetProperty("command").GetString() == "luotsi replay packet --last --artifacts artifacts/first-run" &&
+                check.GetProperty("status").GetString() == "ready_after_artifact");
+        Assert.Contains(
+            data.GetProperty("proof_checks").EnumerateArray(),
+            check => check.GetProperty("kind").GetString() == "replay_packet_check" &&
+                check.GetProperty("command").GetString() == "luotsi replay packet --last --artifacts artifacts/first-run --check" &&
                 check.GetProperty("status").GetString() == "ready_after_artifact");
         var proofPack = data.GetProperty("proof_pack");
         Assert.Equal("luotsi-evaluation-proof-pack.v1", proofPack.GetProperty("schema").GetString());
         Assert.Contains(
             proofPack.GetProperty("gates").EnumerateArray(),
             gate => gate.GetProperty("id").GetString() == "replayable_handoff" &&
-                gate.GetProperty("command").GetString() == "luotsi replay open --artifacts artifacts/first-run --dry-run");
+                gate.GetProperty("command").GetString() == "luotsi replay packet --artifacts artifacts/first-run");
+        Assert.Contains(
+            proofPack.GetProperty("gates").EnumerateArray(),
+            gate => gate.GetProperty("id").GetString() == "packet_validated" &&
+                gate.GetProperty("command").GetString() == "luotsi replay packet --artifacts artifacts/first-run --check");
     }
 
     [Fact]
@@ -288,7 +311,7 @@ public sealed partial class AppTests
         using var persistedProofPackJson = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(proofPackJsonPath));
         Assert.Equal("luotsi-evaluation-proof-pack.v1", persistedProofPackJson.RootElement.GetProperty("schema").GetString());
         Assert.Equal(artifactRoot, persistedProofPackJson.RootElement.GetProperty("artifact_root").GetString());
-        Assert.Equal(8, persistedProofPackJson.RootElement.GetProperty("gates").GetArrayLength());
+        Assert.Equal(9, persistedProofPackJson.RootElement.GetProperty("gates").GetArrayLength());
         Assert.Contains(
             persistedProofPackJson.RootElement.GetProperty("gates").EnumerateArray(),
             gate => gate.GetProperty("id").GetString() == "shareable_package" &&
@@ -305,7 +328,8 @@ public sealed partial class AppTests
         var proofPackMarkdown = await fileSystem.ReadAllTextAsync(proofPackMarkdownPath);
         Assert.Contains("# Luotsi evaluation proof pack", proofPackMarkdown, StringComparison.Ordinal);
         Assert.Contains("### replayable_handoff", proofPackMarkdown, StringComparison.Ordinal);
-        Assert.Contains($"luotsi replay open --artifacts {artifactRoot} --dry-run", proofPackMarkdown, StringComparison.Ordinal);
+        Assert.Contains($"luotsi replay packet --artifacts {artifactRoot}", proofPackMarkdown, StringComparison.Ordinal);
+        Assert.Contains($"luotsi replay packet --artifacts {artifactRoot} --check", proofPackMarkdown, StringComparison.Ordinal);
         Assert.Contains("Any shared bundle is packed with lab-safe redaction and verified before intake.", proofPackMarkdown, StringComparison.Ordinal);
     }
 
