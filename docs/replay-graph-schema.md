@@ -143,6 +143,8 @@ Each `hypotheses[]` item has:
 ## Agent Queries
 
 ```text
+luotsi replay packet --artifacts artifacts/run
+luotsi replay packet --artifacts artifacts/run --check
 luotsi replay open --artifacts artifacts/run --dry-run
 luotsi replay capsule --artifacts artifacts/run --write-readme --write-json
 luotsi replay graph --artifacts artifacts/run --failed --write-markdown

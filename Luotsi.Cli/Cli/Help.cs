@@ -549,8 +549,8 @@ Notes:
   understand what failed and what to do next. With --format json or --format
   jsonl, replay graph writes raw machine output instead of the command envelope.
   With --write-jsonl, it persists replay-graph.jsonl for CI and agent consumers.
-  Graph actions start with replay open so semantic context can
-  route back to the canonical front door.
+  Graph actions start with replay packet and replay packet --check so semantic
+  context can be handed off before routing back to the canonical front door.
   Use --failed, --node-kind, --edge-kind, --action, --selector, --contains,
   --insight, --evidence, --fact,
   --severity, --node,
@@ -613,8 +613,8 @@ Examples:
 Artifacts:
   Runs can emit JSONL lifecycle events, JSON summaries, JUnit XML, failure
   bundles, screenshots, recordings, and a browsable artifact index. Successful
-  run results also include artifact_commands with exact replay open,
-  artifacts open, and artifacts pack commands for the run artifact root. With
+  run results also include artifact_commands with exact replay packet,
+  replay open, artifacts open, and artifacts pack commands for the run artifact root. With
   --human or --console-output human, failed runs are rendered as a compact
   triage capsule that surfaces the primary failure, evidence counts, and next
   command. JSON reports, JSONL lifecycle events, and failed run payloads also

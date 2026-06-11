@@ -60,6 +60,8 @@ When `doctor --device <serial> --package <app.id>` reports `readiness_plan.statu
 | Generate a starter scenario | `luotsi scenario-init --file scenarios/smoke.json --name "smoke"` |
 | Validate scenarios without using a device | `luotsi scenario-validate --path scenarios` |
 | Run scenarios with CI output | `luotsi run --path scenarios --device <serial> --report-junit junit.xml` |
+| Write the latest local triage packet | `luotsi replay packet --last --artifacts artifacts` |
+| Validate the latest local triage packet | `luotsi replay packet --last --artifacts artifacts --check` |
 | Resume the latest local triage bundle | `luotsi replay open --last --artifacts artifacts --dry-run` |
 | Check install metadata | `luotsi version` |
 | Update explicit install | `luotsi update --dry-run` then `luotsi update` |
