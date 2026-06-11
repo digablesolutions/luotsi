@@ -554,6 +554,8 @@ public sealed partial class AppTests
         Assert.Contains("run-summary.json", markdown, StringComparison.Ordinal);
         Assert.Contains("run-summary.md", markdown, StringComparison.Ordinal);
         Assert.Contains("GitHub Actions job summary", markdown, StringComparison.Ordinal);
+        Assert.Contains("fallback summary", markdown, StringComparison.Ordinal);
+        Assert.Contains("scenario run exit code", markdown, StringComparison.Ordinal);
         Assert.Contains("primary failure", markdown, StringComparison.Ordinal);
         Assert.Contains("recommended next action", markdown, StringComparison.Ordinal);
         Assert.Contains("do not yet surface `--claim-wait-sec`, `--device-pool`, or `--require-capabilities`", markdown, StringComparison.Ordinal);
@@ -569,13 +571,17 @@ public sealed partial class AppTests
         Assert.Contains("run_luotsi replay packet --artifacts \"$artifacts_dir\"", bashScript, StringComparison.Ordinal);
         Assert.Contains("run_luotsi replay packet --artifacts \"$artifacts_dir\" --check", bashScript, StringComparison.Ordinal);
         Assert.Contains("run_exit_code=$?", bashScript, StringComparison.Ordinal);
+        Assert.Contains("packet_exit_code=0", bashScript, StringComparison.Ordinal);
+        Assert.Contains("The durable packet was not available", bashScript, StringComparison.Ordinal);
         Assert.Contains("exit \"$run_exit_code\"", bashScript, StringComparison.Ordinal);
         Assert.Contains("append_run_summary_to_github_step_summary", bashScript, StringComparison.Ordinal);
         Assert.Contains("GITHUB_STEP_SUMMARY", bashScript, StringComparison.Ordinal);
         Assert.DoesNotContain("run_luotsi replay summarize", bashScript, StringComparison.Ordinal);
-        Assert.Contains("Invoke-Luotsi replay packet --artifacts $ArtifactsDir", powershellScript, StringComparison.Ordinal);
-        Assert.Contains("Invoke-Luotsi replay packet --artifacts $ArtifactsDir --check", powershellScript, StringComparison.Ordinal);
+        Assert.Contains("Invoke-LuotsiAllowFailure replay packet --artifacts $ArtifactsDir", powershellScript, StringComparison.Ordinal);
+        Assert.Contains("Invoke-LuotsiAllowFailure replay packet --artifacts $ArtifactsDir --check", powershellScript, StringComparison.Ordinal);
         Assert.Contains("Invoke-LuotsiAllowFailure run", powershellScript, StringComparison.Ordinal);
+        Assert.Contains("$packetExitCode = Invoke-LuotsiAllowFailure replay packet --artifacts $ArtifactsDir", powershellScript, StringComparison.Ordinal);
+        Assert.Contains("The durable packet was not available", powershellScript, StringComparison.Ordinal);
         Assert.Contains("exit $runExitCode", powershellScript, StringComparison.Ordinal);
         Assert.Contains("Add-RunSummaryToGitHubStepSummary", powershellScript, StringComparison.Ordinal);
         Assert.Contains("GITHUB_STEP_SUMMARY", powershellScript, StringComparison.Ordinal);

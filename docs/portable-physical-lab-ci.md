@@ -50,8 +50,11 @@ in the job summary before anyone downloads raw artifacts.
 
 The scripts preserve the scenario run exit code, but they still attempt
 `replay packet`, `replay packet --check`, and the GitHub job-summary append
-after a failing run. That keeps the uploaded artifact bundle useful when the
-job is red.
+after a failing run. The job stays red with the scenario run exit code, and the
+uploaded artifact bundle still has the first-minute packet. If packet writing
+or validation fails before `run-summary.md` exists, the scripts still append a
+fallback summary with exact `replay packet` and `replay packet --check`
+commands for the uploaded artifact root.
 
 Dry runs execute `scenario-validate` and `run --dry-run`, then stop before lab
 selection or device claiming.

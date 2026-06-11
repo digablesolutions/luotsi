@@ -41,14 +41,25 @@ function Invoke-LuotsiAllowFailure {
 
 function Add-RunSummaryToGitHubStepSummary {
     $summaryPath = Join-Path $ArtifactsDir "run-summary.md"
-    if ([string]::IsNullOrWhiteSpace($env:GITHUB_STEP_SUMMARY) -or -not (Test-Path -LiteralPath $summaryPath -PathType Leaf)) {
+    if ([string]::IsNullOrWhiteSpace($env:GITHUB_STEP_SUMMARY)) {
         return
     }
 
     Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ""
     Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "## Luotsi Run Summary"
     Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ""
-    Get-Content -LiteralPath $summaryPath | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+    if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
+        Get-Content -LiteralPath $summaryPath | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+    } else {
+        Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "The durable packet was not available in ``$summaryPath``."
+        Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ""
+        Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "Run these commands against the uploaded artifact root:"
+        Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ""
+        Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value '```powershell'
+        Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "luotsi replay packet --artifacts `"$ArtifactsDir`""
+        Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "luotsi replay packet --artifacts `"$ArtifactsDir`" --check"
+        Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value '```'
+    }
 }
 
 function Write-AndCheckRunSummaryPacket {
@@ -56,9 +67,13 @@ function Write-AndCheckRunSummaryPacket {
         return
     }
 
-    Invoke-Luotsi replay packet --artifacts $ArtifactsDir
-    Invoke-Luotsi replay packet --artifacts $ArtifactsDir --check
+    $packetExitCode = Invoke-LuotsiAllowFailure replay packet --artifacts $ArtifactsDir
+    if ($packetExitCode -eq 0) {
+        $packetExitCode = Invoke-LuotsiAllowFailure replay packet --artifacts $ArtifactsDir --check
+    }
+
     Add-RunSummaryToGitHubStepSummary
+    return $packetExitCode
 }
 
 $script:LuotsiBin = Get-EnvValue -Name "LUOTSI_BIN" -Default "luotsi"
@@ -105,5 +120,9 @@ $runExitCode = Invoke-LuotsiAllowFailure run `
     --ttl-sec $TtlSec `
     --report-junit $JunitPath `
     --artifacts $ArtifactsDir
-Write-AndCheckRunSummaryPacket
-exit $runExitCode
+$packetExitCode = Write-AndCheckRunSummaryPacket
+if ($runExitCode -ne 0) {
+    exit $runExitCode
+}
+
+exit $packetExitCode
