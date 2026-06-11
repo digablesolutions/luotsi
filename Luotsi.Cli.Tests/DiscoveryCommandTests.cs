@@ -152,6 +152,12 @@ public sealed class DiscoveryCommandTests
         Assert.Equal(2, data.GetProperty("visited_screen_count").GetInt32());
         Assert.Equal(1, data.GetProperty("attempted_action_count").GetInt32());
         Assert.Equal(2, data.GetProperty("max_depth").GetInt32());
+        var nextCommands = data.GetProperty("next_commands").EnumerateArray().Select(static command => command.GetString()).ToArray();
+        Assert.Equal($"luotsi replay packet --artifacts {artifactRoot}", nextCommands[0]);
+        Assert.Equal($"luotsi replay packet --artifacts {artifactRoot} --check", nextCommands[1]);
+        Assert.Contains(nextCommands, command => command == $"luotsi scenario-validate --file {scenarioPath}");
+        Assert.Contains(nextCommands, command => command == $"luotsi replay open --artifacts {artifactRoot} --dry-run");
+        Assert.Contains(nextCommands, command => command == $"luotsi artifacts open {artifactRoot}");
         Assert.Single(host.TapPointRequests);
         Assert.Contains("KEYCODE_BACK", host.KeyEventRequests);
         Assert.True(fileSystem.FileExists(Path.Join(artifactRoot, "discovery-map.json")));
