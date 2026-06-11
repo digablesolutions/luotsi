@@ -431,6 +431,10 @@ public sealed partial class AppTests
             AssertContainsBefore(name, outputGuidance, "artifacts.artifact_root", "replay packet");
         }
 
+        AssertContainsBefore(entryPoints["luotsi help output"], "artifacts.artifact_root", "commands,");
+        Assert.Contains("prefer the artifact-root packet fallback before", entryPoints["luotsi help output"], StringComparison.Ordinal);
+        Assert.Contains("next: luotsi replay packet --artifacts artifacts/smoke-run/<run-id>", entryPoints["luotsi help output"], StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --last --artifacts artifacts/smoke-run --check", entryPoints["luotsi help output"], StringComparison.Ordinal);
         Assert.Contains("generic artifact browser", entryPoints["README.md"], StringComparison.Ordinal);
         Assert.Contains("generic artifact browser", entryPoints["first-five-minutes.mdx"], StringComparison.Ordinal);
         Assert.Contains("generic artifact browser", entryPoints["output-envelopes.mdx"], StringComparison.Ordinal);
@@ -696,13 +700,15 @@ public sealed partial class AppTests
         var fixtureJson = File.ReadAllText(fixturePath);
         using var fixture = JsonDocument.Parse(fixtureJson);
         var artifactRoot = fixture.RootElement.GetProperty("artifacts").GetProperty("artifact_root").GetString();
-        var expectedFromFixture = $"luotsi replay packet --artifacts {artifactRoot}";
+        var expectedFromFixture = $"luotsi replay packet --artifacts '{artifactRoot}'";
         const string directNextActionJson = """{"schema":"luotsi-command.v1","ok":true,"data":{"recommended_next_action":{"kind":"run_dry_run","command":"luotsi run --path scenarios/smoke.json --dry-run"},"artifact_commands":[{"kind":"replay_open","command":"luotsi replay open --artifacts /tmp/direct-root --dry-run"}]},"artifacts":{"artifact_root":"/tmp/direct-root"}}""";
         const string expectedFromDirectNextAction = "luotsi run --path scenarios/smoke.json --dry-run";
         const string fallbackJson = """{"ok":true,"data":{},"artifacts":{"artifact_root":"/tmp/only-root"}}""";
         const string expectedFallback = "luotsi replay packet --artifacts /tmp/only-root";
         const string spacedFallbackJson = """{"ok":true,"data":{},"artifacts":{"artifact_root":"/tmp/only root"}}""";
         const string expectedSpacedFallback = "luotsi replay packet --artifacts '/tmp/only root'";
+        const string windowsFallbackJson = """{"ok":true,"data":{},"artifacts":{"artifact_root":"C:\\tmp\\artifacts"}}""";
+        const string expectedWindowsFallback = "luotsi replay packet --artifacts 'C:\\tmp\\artifacts'";
         var jsonlLog = string.Join(Environment.NewLine, [
             """{"type":"session_started","session_id":"inspect-session"}""",
             """{"schema":"luotsi-command.v1","ok":true,"data":{},"artifacts":{"artifact_root":"/tmp/first-root"}}""",
@@ -734,6 +740,7 @@ public sealed partial class AppTests
             Assert.Equal(expectedFromDirectNextAction, RunProcess(python, [script], directNextActionJson));
             Assert.Equal(expectedFallback, RunProcess(python, [script], fallbackJson));
             Assert.Equal(expectedSpacedFallback, RunProcess(python, [script], spacedFallbackJson));
+            Assert.Equal(expectedWindowsFallback, RunProcess(python, [script], windowsFallbackJson));
             Assert.Equal(expectedFromJsonlLog, RunProcess(python, [script], jsonlLog));
             Assert.Equal(expectedFromRecommendedCommands, RunProcess(python, [script], unorderedRecommendedCommandsJson));
             Assert.Equal(expectedFromRunSummary, RunProcess(python, [script], runSummaryJson));
@@ -754,6 +761,7 @@ public sealed partial class AppTests
             Assert.Equal(expectedFromDirectNextAction, RunProcess(node, [script], directNextActionJson));
             Assert.Equal(expectedFallback, RunProcess(node, [script], fallbackJson));
             Assert.Equal(expectedSpacedFallback, RunProcess(node, [script], spacedFallbackJson));
+            Assert.Equal(expectedWindowsFallback, RunProcess(node, [script], windowsFallbackJson));
             Assert.Equal(expectedFromJsonlLog, RunProcess(node, [script], jsonlLog));
             Assert.Equal(expectedFromRecommendedCommands, RunProcess(node, [script], unorderedRecommendedCommandsJson));
             Assert.Equal(expectedFromRunSummary, RunProcess(node, [script], runSummaryJson));

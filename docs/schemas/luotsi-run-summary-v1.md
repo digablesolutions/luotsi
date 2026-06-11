@@ -7,11 +7,11 @@ for CI job summaries, PR comments, and agent loops when a failed run needs to be
 understood before opening raw artifacts.
 
 `run-summary.md` is the human-readable companion generated from the same model.
-It starts with a failure snapshot, then a packet validation gate, then a
-copy-paste command block followed by a 60-second triage checklist so a new
-reviewer can see what failed, prove the packet is current, run the first
-command, and avoid broad artifact browsing until the focused failure window is
-understood. Agents should prefer `run-summary.json`; humans can start with the
+It starts with an At a Glance summary, then a failure snapshot, then a packet
+validation gate, then a copy-paste command block followed by a 60-second triage
+checklist so a new reviewer can see what failed, prove the packet is current,
+run the first command, and avoid broad artifact browsing until the focused
+failure window is understood. Agents should prefer `run-summary.json`; humans can start with the
 Markdown job summary and then follow the same command fields.
 
 Use `luotsi replay packet --artifacts <artifact-root> --check` when CI, support,

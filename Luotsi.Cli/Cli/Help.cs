@@ -297,12 +297,15 @@ Next-action fields:
   direct continuation command. Then use data.recommended_next_action.command,
   primary_failure.source_command for focused packet evidence,
   triage_checklist[].command for packet checklist fallback, followed by
-  recommended_next_steps, next_actions, suggested_commands, commands,
-  artifact_commands, and recommended_commands. If no command field is present,
-  use artifacts.artifact_root and run replay packet first; use artifacts open
-  only when you specifically need the generic artifact browser.
+  recommended_next_steps, next_actions, and suggested_commands. If no richer
+  command field is present, use artifacts.artifact_root and run replay packet
+  first so the loop has run-summary.json and run-summary.md. Use commands,
+  artifact_commands, and recommended_commands only when there is no artifact
+  root to packetize; use artifacts open only when you specifically need the
+  generic artifact browser.
   Command arrays are exact follow-ups but not always ordered by the best first
-  move, so parser examples prefer replay_open there when present.
+  move, so parser examples prefer the artifact-root packet fallback before
+  unordered command arrays.
 
 Parser examples:
   From source, pipe a one-shot envelope or saved JSONL-style log into
@@ -312,14 +315,15 @@ Parser examples:
 Human output cue:
   artifacts: artifacts/smoke-run/<run-id>
   guide: artifact root is durable evidence; replay packet writes run-summary.json and run-summary.md
-  next: luotsi replay open --artifacts artifacts/smoke-run/<run-id> --dry-run
+  next: luotsi replay packet --artifacts artifacts/smoke-run/<run-id>
 
 First commands:
   luotsi quickstart
   luotsi screen-state --device <adb serial>
   luotsi inspect --device <adb serial> --artifacts artifacts/inspect
   luotsi run --file scenarios/smoke.json --device <adb serial> --artifacts artifacts/smoke-run
-  luotsi replay open --last --artifacts artifacts/smoke-run --dry-run
+  luotsi replay packet --last --artifacts artifacts/smoke-run
+  luotsi replay packet --last --artifacts artifacts/smoke-run --check
   luotsi replay graph --artifacts artifacts/smoke-run/<run-id> --failed
 
 Reader guide:
