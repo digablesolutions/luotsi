@@ -57,7 +57,7 @@ Usage:
   luotsi artifacts info (<artifact-root-or-run-id-or-package.zip> | --last [--artifacts <directory>])
   luotsi artifacts open (<artifact-root-or-run-id> | --last [--artifacts <directory>]) [--dry-run]
   luotsi artifacts pack <artifact-root-or-run-id> [--output <file.zip>] [--force] [--dry-run] [--redact lab-safe|off]
-  luotsi artifacts verify <artifact.zip> [--output <directory>] [--require-lab-safe]
+  luotsi artifacts verify <artifact.zip> [--output <directory>] [--require-lab-safe] [--sha256 <digest>]
   luotsi artifacts unpack <artifact.zip> [--output <directory>] [--force] [--dry-run] [--require-lab-safe] [--sha256 <digest>]
   luotsi artifacts intake <artifact.zip> [--output <directory>] [--force] [--dry-run] [--require-lab-safe] [--sha256 <digest>] [--write-json] [--write-readme] [--open]
   luotsi run --path scenarios --report-json results.json --report-junit junit.xml
@@ -71,13 +71,14 @@ Artifacts:
   refreshes the index if needed and opens the local browser or file manager.
   artifacts info summarizes one artifact root without opening or changing it.
   When the target is a packed artifact zip, it validates the package manifest,
-  reports redaction metadata and SHA-256, and suggests unpack/replay commands
-  without extracting files.
+  reports redaction metadata and SHA-256, and suggests unpack/replay/capsule
+  commands without extracting files.
   artifacts pack writes a zip suitable for sharing or CI upload, embeds
   luotsi-artifact-package.json, and reports SHA-256 for handoff verification.
   artifacts verify validates a package manifest and archive entries, reports
-  SHA-256 and lab-safe redaction status, and returns exact unpack commands
-  without writing files.
+  SHA-256 and lab-safe redaction status, and returns exact unpack/replay/capsule
+  commands without writing files. Add --sha256 <digest> to require the expected
+  package checksum in the read-only gate.
   Add --require-lab-safe to make verify, unpack, or intake an enforcing handoff gate:
   packages that were not packed with --redact lab-safe return blocked status
   for verify or a usage error for unpack/intake before any files are extracted.
@@ -94,9 +95,9 @@ Artifacts:
   are extracted.
   artifacts intake is the received-package shortcut for support, CI, and
   agents: it applies the same unpack validation, restores the package, returns
-  exact info/open/replay commands, and can --open the refreshed index after a
-  successful restore. Add --write-json and --write-readme to persist an intake
-  audit summary beside the restored package. Use --dry-run for the same
+  exact info/open/replay/capsule commands, and can --open the refreshed index
+  after a successful restore. Add --write-json and --write-readme to persist an
+  intake audit summary beside the restored package. Use --dry-run for the same
   validation without writing.
   artifacts info/open also accept --last so you can jump straight back to the
   latest run artifact root under the default Luotsi run-artifact home or
@@ -116,7 +117,7 @@ Examples:
   luotsi artifacts pack artifacts/20260518-100000-run --output replay.zip --dry-run
   luotsi artifacts pack artifacts/20260518-100000-run --output replay.zip
   luotsi artifacts pack artifacts/20260518-100000-run --output replay-lab-safe.zip --redact lab-safe
-  luotsi artifacts verify replay-lab-safe.zip --require-lab-safe
+  luotsi artifacts verify replay-lab-safe.zip --require-lab-safe --sha256 <digest>
   luotsi artifacts intake replay-lab-safe.zip --output artifacts/replay --require-lab-safe --write-json --write-readme --sha256 <digest>
   luotsi artifacts unpack replay-lab-safe.zip --output artifacts/replay --require-lab-safe --sha256 <digest>
   luotsi artifacts unpack replay.zip --output artifacts/replay --dry-run
@@ -144,16 +145,21 @@ Failure modes:
 Luotsi help: journey-intake
 
 Usage:
+  luotsi journey-intake init [--output <journey-intake.json>] [--name <name>] [--package <app.id>] [--activity <activity>] [--device <serial>] [--device-query <query>] [--scenario <scenario.json>] [--artifacts <directory>] [--run-artifacts <directory>] [--write-markdown] [--force]
   luotsi journey-intake validate --file <journey-intake.json>
   luotsi journey-intake draft-scenario --file <journey-intake.json> --output <scenario.json> [--force]
 
 Examples:
+  luotsi journey-intake init --output journey-intake.json --package com.example.app --device <serial> --write-markdown
   luotsi journey-intake validate --file journey-intake.json
   luotsi journey-intake draft-scenario --file journey-intake.json --output scenarios/from-journey.json
   luotsi journey-intake validate --file examples/journey-intake/evidence-backed-journey-intake.template.json
 
 Notes:
-  journey-intake validates the non-executable luotsi-journey-intake.v1 handoff
+  journey-intake init writes a non-executable luotsi-journey-intake.v1 handoff
+  from Luotsi itself, including review guardrails and next commands through
+  validation, scenario drafting, dry-run/run, and replay evidence handoff.
+  journey-intake validate checks the non-executable luotsi-journey-intake.v1 handoff
   contract used to turn Android CLI Journey-style intent into reviewed Luotsi
   exploration, replay scenario drafts, and scenario validation. It does not
   create scenarios or touch devices; invalid intake files return a non-zero exit
@@ -206,6 +212,7 @@ First run:
   0. Ask Luotsi for a five-minute, machine-readable first-run plan
      luotsi quickstart
      luotsi quickstart --human
+     luotsi quickstart-verify
      luotsi quickstart --device <adb serial> --package <app.id> --artifacts artifacts/first-run
      luotsi quickstart --artifacts artifacts/first-run --write-json --write-markdown
 
@@ -219,7 +226,9 @@ First run:
      Without a selected device, doctor lists adb-visible devices and returns
      exact next commands. With --device or --device-query, Doctor JSON includes
      readiness_plan.status, blockers, next_command, and recommended_commands
-     for agent/operator handoff.
+     for agent/operator handoff. When ready, package-aware doctor results prefer
+     discover, package preflight, inspect, screen-state, persisted quickstart
+     handoff, scenario validation, run, and live view commands.
 
   3. Open a live mirror when you need operator feedback
      luotsi view --device <adb serial>
@@ -864,7 +873,7 @@ Command groups:
     artifacts info (<artifact-root-or-run-id-or-package.zip> | --last [--artifacts <directory>])
     artifacts open (<artifact-root-or-run-id> | --last [--artifacts <directory>]) [--dry-run]
     artifacts pack <artifact-root-or-run-id> [--output <file.zip>] [--force] [--dry-run] [--redact lab-safe|off]
-    artifacts verify <artifact.zip> [--output <directory>] [--require-lab-safe]
+    artifacts verify <artifact.zip> [--output <directory>] [--require-lab-safe] [--sha256 <digest>]
     artifacts unpack <artifact.zip> [--output <directory>] [--force] [--dry-run] [--require-lab-safe] [--sha256 <digest>]
     artifacts intake <artifact.zip> [--output <directory>] [--force] [--dry-run] [--require-lab-safe] [--sha256 <digest>] [--write-json] [--write-readme] [--open]
     replay summarize --artifacts <artifact-root> [--format json|jsonl]
@@ -880,10 +889,12 @@ Command groups:
 
   Install and update
     quickstart [--device <adb serial>] [--package <app.id>] [--artifacts <directory>] [--write-json] [--write-markdown]
+    quickstart-verify [--device <adb serial>] [--package <app.id>] [--artifacts <directory>]
     version
     update [--version <tag>] [--channel stable|prerelease] [--dry-run] [--detach]
 
   Scenarios and CI reports
+    journey-intake init [--output <journey-intake.json>] [--name <name>] [--package <app.id>] [--activity <activity>] [--device <serial>] [--device-query <query>] [--scenario <scenario.json>] [--artifacts <directory>] [--run-artifacts <directory>] [--write-markdown] [--force]
     journey-intake validate --file <journey-intake.json>
     journey-intake draft-scenario --file <journey-intake.json> --output <scenario.json> [--force]
     scenario-init [--file <scenario.json>] [--name <name>] [--package <app.id>] [--activity <activity>] [--width <px>] [--height <px>] [--orientation <name>] [--force]

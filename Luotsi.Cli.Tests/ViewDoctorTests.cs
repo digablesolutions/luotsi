@@ -377,9 +377,24 @@ public sealed partial class AppTests
         Assert.Contains("adb_server_status", envelope.RootElement.GetProperty("data").GetProperty("checks").EnumerateArray().Select(static item => item.GetProperty("name").GetString()));
         var readinessPlan = envelope.RootElement.GetProperty("data").GetProperty("readiness_plan");
         Assert.Equal("ready", readinessPlan.GetProperty("status").GetString());
-        Assert.Equal("luotsi run --path <scenarios> --device 192.168.0.134:5555 --package dev.luotsi.app", readinessPlan.GetProperty("next_command").GetString());
+        Assert.Equal("luotsi discover --device 192.168.0.134:5555 --package dev.luotsi.app --budget 5m --output-dir artifacts/first-run", readinessPlan.GetProperty("next_command").GetString());
         Assert.Empty(readinessPlan.GetProperty("blockers").EnumerateArray());
-        Assert.Contains(readinessPlan.GetProperty("recommended_commands").EnumerateArray(), command =>
+        var recommendedCommands = readinessPlan.GetProperty("recommended_commands").EnumerateArray().ToArray();
+        Assert.Equal("discover_app", recommendedCommands[0].GetProperty("kind").GetString());
+        Assert.Equal("luotsi discover --device 192.168.0.134:5555 --package dev.luotsi.app --budget 5m --output-dir artifacts/first-run", recommendedCommands[0].GetProperty("command").GetString());
+        Assert.Contains(recommendedCommands, command =>
+            command.GetProperty("kind").GetString() == "inspect_device" &&
+            command.GetProperty("command").GetString() == "luotsi inspect --device 192.168.0.134:5555 --artifacts artifacts/first-run");
+        Assert.Contains(recommendedCommands, command =>
+            command.GetProperty("kind").GetString() == "screen_state" &&
+            command.GetProperty("command").GetString() == "luotsi screen-state --device 192.168.0.134:5555 --artifacts artifacts/first-run");
+        Assert.Contains(recommendedCommands, command =>
+            command.GetProperty("kind").GetString() == "write_quickstart_handoff" &&
+            command.GetProperty("command").GetString() == "luotsi quickstart --device 192.168.0.134:5555 --package dev.luotsi.app --artifacts artifacts/first-run --write-json --write-markdown");
+        Assert.Contains(recommendedCommands, command =>
+            command.GetProperty("kind").GetString() == "scenario_validate" &&
+            command.GetProperty("command").GetString() == "luotsi scenario-validate --path scenarios");
+        Assert.Contains(recommendedCommands, command =>
             command.GetProperty("kind").GetString() == "view_device" &&
             command.GetProperty("command").GetString() == "luotsi view --device 192.168.0.134:5555 --preset safe");
         Assert.Equal(
@@ -576,7 +591,10 @@ public sealed partial class AppTests
         var readinessPlan = envelope.RootElement.GetProperty("data").GetProperty("readiness_plan");
         Assert.Equal("ready", readinessPlan.GetProperty("status").GetString());
         Assert.Contains("repairs completed", readinessPlan.GetProperty("summary").GetString(), StringComparison.Ordinal);
-        Assert.Equal("luotsi run --path <scenarios> --device 192.168.0.134:5555", readinessPlan.GetProperty("next_command").GetString());
+        Assert.Equal("luotsi inspect --device 192.168.0.134:5555 --artifacts artifacts/first-run", readinessPlan.GetProperty("next_command").GetString());
+        Assert.Contains(readinessPlan.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "write_quickstart_handoff" &&
+            command.GetProperty("command").GetString() == "luotsi quickstart --device 192.168.0.134:5555 --artifacts artifacts/first-run --write-json --write-markdown");
         var repairNames = envelope.RootElement.GetProperty("data").GetProperty("repairs").EnumerateArray().Select(static item => item.GetProperty("name").GetString()).ToArray();
         Assert.Collection(
             repairNames,

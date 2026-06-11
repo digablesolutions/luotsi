@@ -3,20 +3,23 @@ title: Quickstart
 description: Connect a device, run doctor, open live view, and execute a first scenario in a few commands.
 ---
 
-This is the shortest path from a connected Android device to a meaningful Luotsi workflow.
+This is the command detail behind [First Five Minutes](./first-five-minutes/). Use that page when you are evaluating Luotsi for the first time; use this page when you want the command sequence in more detail.
 
 ## 0. Ask for the five-minute plan
 
 ```bash
 luotsi quickstart
 luotsi quickstart --human
+luotsi quickstart-verify
 luotsi quickstart --device <serial> --package <app.id> --artifacts artifacts/first-run
 luotsi quickstart --artifacts artifacts/first-run --write-json --write-markdown
 ```
 
-The command returns a JSON envelope with a five-minute path, concrete commands, an AI-agent prompt, and the local-first/artifact-first boundary that explains where Luotsi fits beside automation frameworks and hosted device services.
+The command returns a JSON envelope with a five-minute path, concrete commands, `proof_checks`, an AI-agent prompt, an evaluation proof pack, and the local-first/artifact-first boundary that explains where Luotsi fits beside automation frameworks and hosted device services.
+Use `proof_checks` as the compact install/device/artifact/device-truth/replay checklist for deciding whether the first five minutes produced usable evidence; each proof check reports whether it is `ready_to_run`, `needs_input`, or `ready_after_artifact`.
+Run `luotsi quickstart-verify` with the same inputs when you want the checklist grouped into ready, blocked, and later proof commands before starting the first-run path; it also writes the local plan/proof-pack handoff artifacts and reports the local proofs that passed.
 Use `--human` when you want the same plan as compact terminal text while you are getting oriented.
-Use `--write-json --write-markdown` to persist `quickstart-plan.json` and `quickstart-plan.md` in the artifact root when a human or AI operator needs a durable handoff.
+Use `--write-json --write-markdown` to persist `quickstart-plan.json`, `quickstart-plan.md`, `evaluation-proof-pack.json`, and `evaluation-proof-pack.md` in the artifact root when a human or AI operator needs a durable handoff.
 If you do not pass `--device`, the first command is `luotsi doctor`.
 This allows Luotsi to list adb-visible devices and return the exact selected-device next command.
 

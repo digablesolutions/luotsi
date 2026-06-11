@@ -5,6 +5,7 @@ All commands run on the host machine and return a single JSON envelope unless no
 ```
 luotsi [--device <serial> | --device-query <query>] [--platform android] [--adb <path>] [--adb-timeout-sec <n>] <command> [flags]
 luotsi quickstart [--device <serial>] [--package <app.id>] [--artifacts <directory>] [--write-json] [--write-markdown]
+luotsi quickstart-verify [--device <serial>] [--package <app.id>] [--artifacts <directory>]
 luotsi --version
 luotsi version
 luotsi update [--version <tag>] [--channel stable|prerelease] [--dry-run] [--detach]
@@ -39,12 +40,15 @@ luotsi update [--version <tag>] [--channel stable|prerelease] [--dry-run] [--det
 
 Use these entry points when you want the shortest path into a real Luotsi workflow instead of scanning the full command surface.
 
-For a machine-readable five-minute plan, run `luotsi quickstart`. Add `--human` when you want the same plan as compact terminal text. Without `--device`, the plan starts with `luotsi doctor` so device selection and the exact selected-device next command come from live guidance. Pass `--device`, `--package`, and `--artifacts` when you already know the target and want the output to contain concrete commands for a specific app. Add `--write-json --write-markdown` to persist `quickstart-plan.json` and `quickstart-plan.md` in the artifact root for a copy-paste handoff. For the human help topic, run `luotsi help quickstart` or jump directly to a command family with `luotsi help <topic>`.
+For a machine-readable five-minute plan, run `luotsi quickstart`. Add `--human` when you want the same plan as compact terminal text. Without `--device`, the plan starts with `luotsi doctor` so device selection and the exact selected-device next command come from live guidance. Pass `--device`, `--package`, and `--artifacts` when you already know the target and want the output to contain concrete commands for a specific app. The output includes `proof_checks`, a compact install/device/artifact/device-truth/replay checklist for deciding whether the first five minutes produced usable evidence; every proof check reports a status such as `ready_to_run`, `needs_input`, or `ready_after_artifact`. Run `luotsi quickstart-verify` with the same inputs when you want those checks grouped into ready, blocked, and later proof commands before starting the first-run path; it also writes the local plan/proof-pack handoff artifacts and reports the local proofs that passed. Add `--write-json --write-markdown` to persist `quickstart-plan.json`, `quickstart-plan.md`, `evaluation-proof-pack.json`, and `evaluation-proof-pack.md` in the artifact root for a copy-paste handoff. For the human help topic, run `luotsi help quickstart` or jump directly to a command family with `luotsi help <topic>`.
+
+When `doctor --device <serial> --package <app.id>` reports `readiness_plan.status: ready`, the `next_command` now routes to `discover` first so a ready app immediately becomes review-required scenario candidates. The same `recommended_commands` list still includes package preflight, inspect, screen-state, persisted quickstart handoff, scenario validation, run, and live view commands.
 
 | Goal | Command |
 |---|---|
 | Get a five-minute first-run plan | `luotsi quickstart` or `luotsi quickstart --device <serial> --package <app.id> --artifacts artifacts/first-run` |
 | Read the first-run plan in the terminal | `luotsi quickstart --human` |
+| Check whether the proof path is runnable | `luotsi quickstart-verify --device <serial> --package <app.id> --artifacts artifacts/first-run` |
 | Persist a first-run handoff | `luotsi quickstart --artifacts artifacts/first-run --write-json --write-markdown` |
 | Confirm Luotsi can see your device | `luotsi devices` |
 | Choose a device and diagnose first-run issues | `luotsi doctor` then `luotsi doctor --device <serial>` |
@@ -104,7 +108,7 @@ Active quarantines are also honored by `--device-query`; use them for unhealthy 
 `lab inventory` persists per-device pool and capability metadata in the Luotsi workspace. `--device-pool` and `--require-capabilities` let `lab status`, `lab doctor`, `lab plan`, `lab claim`, and `run` require that durable inventory registration before allocating a device.
 When `lab plan` is ready, `recommended_commands` includes both an explicit `lab claim` command and a direct `run --path <scenarios> --claim-device ...` command for agents or CI jobs that want allocation and execution in one step. Blocked plans now also return additive scheduler hints such as `blocked_reason`, `next_capacity_at`, `suggested_wait_sec`, and `queue_depth`.
 
-`doctor` is the first-run entry point. Without `--device` or `--device-query`, it lists adb-visible devices and returns `status`, `blockers`, `next_command`, and `recommended_commands` for selecting the next doctor command. With one selected device, it reuses the existing adb/version checks, optional package-specific preflight, and the same live-view readiness report exposed by `view-doctor`. The selected-device result includes a `readiness_plan` with `status`, `blockers`, `next_command`, and `recommended_commands` so operators and agents can see whether the machine is ready, what still blocks it, and which exact command to run next. `doctor --fix` stages Luotsi-owned FFmpeg native libraries when the requested decoder is missing them, retrying transient setup/download failures before reporting a final setup result, then routes through the same helper/install readiness path as `view setup`. Published Luotsi bundles include those repair assets; source checkouts continue to resolve them from the repository layout.
+`doctor` is the first-run entry point. Without `--device` or `--device-query`, it lists adb-visible devices and returns `status`, `blockers`, `next_command`, and `recommended_commands` for selecting the next doctor command. With one selected device, it reuses the existing adb/version checks, optional package-specific preflight, and the same live-view readiness report exposed by `view-doctor`. The selected-device result includes a `readiness_plan` with `status`, `blockers`, `next_command`, and `recommended_commands` so operators and agents can see whether the machine is ready, what still blocks it, and which exact command to run next. When a package-aware report is ready, `next_command` points to `discover`; the same recommendation list includes package preflight, inspect, screen-state, persisted quickstart handoff, scenario validation, run, and live view commands. `doctor --fix` stages Luotsi-owned FFmpeg native libraries when the requested decoder is missing them, retrying transient setup/download failures before reporting a final setup result, then routes through the same helper/install readiness path as `view setup`. Published Luotsi bundles include those repair assets; source checkouts continue to resolve them from the repository layout.
 
 ---
 
@@ -277,6 +281,7 @@ Luotsi reads the `LUOTSI_DEVICE_TELEMETRY` logcat marker to parse structured sem
 
 | Command | Description |
 |---|---|
+| `journey-intake init [--output <path>] [--package <app.id>] [--device <serial>] [--scenario <scenario.json>] [--artifacts <directory>] [--run-artifacts <directory>] [--write-markdown]` | Create a non-executable Android CLI Journey-style intake handoff with review guardrails and next commands |
 | `journey-intake validate --file <path>` | Validate a non-executable Android CLI Journey-style intake handoff before Luotsi scenario drafting |
 | `journey-intake draft-scenario --file <path> --output <scenario.json>` | Convert a valid Journey intake into a review-required Luotsi evidence skeleton without creating a device host |
 | `scenario-init [--file <path>] [--name <name>] [--package <app.id>]` | Generate a starter scenario with metadata, setup, screenshot-oriented steps, teardown, docs link, and next commands |

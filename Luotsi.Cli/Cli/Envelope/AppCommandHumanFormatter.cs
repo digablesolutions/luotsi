@@ -167,6 +167,12 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
             return true;
         }
 
+        if (IsSchema(value, ResultSchemas.QuickstartVerify))
+        {
+            lines = BuildQuickstartVerifySummary(value);
+            return true;
+        }
+
         if (IsSchema(value, ResultSchemas.ReplayOpen))
         {
             lines = BuildReplayOpenSummary(value, artifacts);
@@ -231,7 +237,27 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
 
         AddQuickstartStepSummary(lines, value);
         AddRecommendedCommand(lines, value);
+        AddQuickstartProofChecks(lines, value);
         AddMultilineScalar(lines, value, "agent_prompt");
+        return lines;
+    }
+
+    private static IReadOnlyList<string> BuildQuickstartVerifySummary(JsonElement value)
+    {
+        var lines = new List<string>();
+        AddScalar(lines, value, "status");
+        AddScalar(lines, value, "summary");
+        AddScalar(lines, value, "total");
+        AddScalar(lines, value, "ready_count");
+        AddScalar(lines, value, "blocked_count");
+        AddScalar(lines, value, "later_count");
+        AddScalar(lines, value, "local_proof_count");
+        AddScalar(lines, value, "passed_local_proof_count");
+        AddScalar(lines, value, "next_command");
+        AddArraySummary(lines, value, "local_proofs");
+        AddArraySummary(lines, value, "blocked_checks");
+        AddArraySummary(lines, value, "ready_checks");
+        AddArraySummary(lines, value, "later_checks");
         return lines;
     }
 
@@ -254,6 +280,41 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
             var title = TryGetString(step, "title");
             var command = TryGetString(step, "command");
             var summary = string.Join("; ", new[] { minute, title, command is null ? null : $"command={command}" }
+                .Where(static part => !string.IsNullOrWhiteSpace(part)));
+            if (!string.IsNullOrWhiteSpace(summary))
+            {
+                lines.Add($"  - {summary}");
+            }
+        }
+    }
+
+    private static void AddQuickstartProofChecks(List<string> lines, JsonElement value)
+    {
+        if (!value.TryGetProperty("proof_checks", out var checks) || checks.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        var checkItems = checks
+            .EnumerateArray()
+            .Where(static check => check.ValueKind == JsonValueKind.Object)
+            .ToArray();
+        var readyCount = checkItems.Count(static check => string.Equals(TryGetString(check, "status"), "ready_to_run", StringComparison.OrdinalIgnoreCase));
+        var needsInputCount = checkItems.Count(static check => string.Equals(TryGetString(check, "status"), "needs_input", StringComparison.OrdinalIgnoreCase));
+        var delayedCount = checkItems.Length - readyCount - needsInputCount;
+        var statusParts = new[] { $"ready={readyCount}", $"needs_input={needsInputCount}", delayedCount > 0 ? $"later={delayedCount}" : null }
+            .Where(static part => !string.IsNullOrWhiteSpace(part));
+        lines.Add($"proof_checks: {checks.GetArrayLength()} ({string.Join("; ", statusParts)})");
+        var selectedChecks = checkItems
+            .OrderBy(static check => string.Equals(TryGetString(check, "kind"), "artifact_handoff", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .Take(1);
+        foreach (var check in selectedChecks)
+        {
+            var kind = TryGetString(check, "kind");
+            var status = TryGetString(check, "status");
+            var command = TryGetString(check, "command");
+            var evidence = TryGetString(check, "evidence");
+            var summary = string.Join("; ", new[] { kind, status is null ? null : $"status={status}", command is null ? null : $"command={command}", evidence is null ? null : $"evidence={evidence}" }
                 .Where(static part => !string.IsNullOrWhiteSpace(part)));
             if (!string.IsNullOrWhiteSpace(summary))
             {

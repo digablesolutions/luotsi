@@ -247,7 +247,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             CreatePackRecommendedCommands(artifactRoot, outputPath, labSafeOutputPath, redactionPolicy, sha256));
     }
 
-    public async Task<ArtifactVerifyResult> VerifyAsync(string packagePath, string? output, bool requireLabSafe)
+    public async Task<ArtifactVerifyResult> VerifyAsync(string packagePath, string? output, bool requireLabSafe, string? expectedSha256 = null)
     {
         if (string.IsNullOrWhiteSpace(packagePath))
         {
@@ -259,6 +259,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             throw new UsageException($"Artifact package '{packagePath}' does not exist.");
         }
 
+        var normalizedExpectedSha256 = NormalizeExpectedSha256(expectedSha256);
         var outputDirectory = ResolveUnpackOutputPath(packagePath, output);
         var packageManifest = ReadPackageManifest(packagePath);
         var entries = ValidateArtifactPackage(packagePath, outputDirectory, force: true, packageManifest);
@@ -266,6 +267,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         var blockers = ResolveVerifyBlockers(shareSafety, requireLabSafe);
         var status = blockers.Count > 0 ? "blocked" : "valid";
         var sha256 = await ComputeSha256Async(packagePath).ConfigureAwait(false);
+        var verification = VerifyPackageSha256(packagePath, normalizedExpectedSha256, sha256);
         var unpackForce = _fileSystem.DirectoryExists(outputDirectory) ? " --force" : string.Empty;
         var unpackLabSafe = string.Equals(shareSafety, "lab_safe", StringComparison.Ordinal) ? " --require-lab-safe" : string.Empty;
         var unpackCommand = $"luotsi artifacts unpack {Quote(packagePath)} --output {Quote(outputDirectory)}{unpackForce}{unpackLabSafe} --sha256 {sha256}";
@@ -277,6 +279,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             PackageManifestFileName,
             packageManifest,
             sha256,
+            verification,
             shareSafety,
             requireLabSafe,
             blockers,
@@ -337,7 +340,8 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
                 new ArtifactRecommendedCommandResult("info_artifacts", "Inspect the unpacked artifact root without mutating it.", $"luotsi artifacts info {Quote(outputDirectory)}"),
                 new ArtifactRecommendedCommandResult("replay_packet_check", "Validate the restored run summary packet before triage.", BuildReplayPacketCheckCommand(outputDirectory)),
                 new ArtifactRecommendedCommandResult("open_artifacts", "Open the unpacked artifact root.", $"luotsi artifacts open {Quote(outputDirectory)}"),
-                new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench for the unpacked artifact root.", $"luotsi replay open --artifacts {Quote(outputDirectory)}")
+                new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench for the unpacked artifact root.", $"luotsi replay open --artifacts {Quote(outputDirectory)}"),
+                CreateReplayCapsuleCommand("replay_capsule", "Write a replay capsule summary for handoff triage.", outputDirectory)
             ]);
     }
 
@@ -486,7 +490,8 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
                 new ArtifactRecommendedCommandResult("info_artifacts", "Inspect the unpacked artifact root without opening it.", "luotsi artifacts info <unpacked-artifact-root>"),
                 new ArtifactRecommendedCommandResult("replay_packet_check", "Validate the restored run summary packet before triage.", "luotsi replay packet --artifacts <unpacked-artifact-root> --check"),
                 new ArtifactRecommendedCommandResult("open_artifacts", "Open the unpacked artifact root locally.", "luotsi artifacts open <unpacked-artifact-root>"),
-                new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench for the unpacked artifact root.", "luotsi replay open --artifacts <unpacked-artifact-root>")
+                new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench for the unpacked artifact root.", "luotsi replay open --artifacts <unpacked-artifact-root>"),
+                new ArtifactRecommendedCommandResult("replay_capsule", "Write a replay capsule summary for handoff triage.", "luotsi replay capsule --artifacts <unpacked-artifact-root> --write-json --write-readme")
             ],
             relativeFiles,
             redaction);
@@ -1045,7 +1050,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         var unpackLabSafe = string.Equals(redactionMode, RedactionModeLabSafe, StringComparison.Ordinal)
             ? " --require-lab-safe"
             : string.Empty;
-        var verifyCommand = $"luotsi artifacts verify {Quote(outputPath)}";
+        var verifyCommand = $"luotsi artifacts verify {Quote(outputPath)} --sha256 {sha256}";
         if (string.Equals(redactionMode, RedactionModeLabSafe, StringComparison.Ordinal))
         {
             verifyCommand += " --require-lab-safe";
@@ -1111,12 +1116,13 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         var labSafeGate = string.Equals(shareSafety, "lab_safe", StringComparison.Ordinal) ? " --require-lab-safe" : string.Empty;
         return
         [
-            new("verify_artifacts", "Validate this package explicitly before handoff or restore.", $"luotsi artifacts verify {Quote(packagePath)} --output {Quote(outputDirectory)}{labSafeGate}"),
+            new("verify_artifacts", "Validate this package explicitly before handoff or restore.", $"luotsi artifacts verify {Quote(packagePath)} --output {Quote(outputDirectory)}{labSafeGate} --sha256 {sha256}"),
             new("unpack_artifacts", "Restore this validated package locally after verifying its SHA-256.", $"luotsi artifacts unpack {Quote(packagePath)} --output {Quote(outputDirectory)}{unpackForce}{labSafeGate} --sha256 {sha256}"),
             new("unpack_artifacts_dry_run", "Re-run package validation and SHA-256 verification without writing files.", $"luotsi artifacts unpack {Quote(packagePath)} --output {Quote(outputDirectory)}{unpackForce}{labSafeGate} --dry-run --sha256 {sha256}"),
             new("replay_packet_check_after_unpack", "Validate the restored run summary packet before triage.", BuildReplayPacketCheckCommand(outputDirectory)),
             new("open_artifacts_after_unpack", "Open the restored artifact root after unpacking.", $"luotsi artifacts open {Quote(outputDirectory)}"),
-            new("replay_open_after_unpack", "Open the replay workbench after unpacking.", $"luotsi replay open --artifacts {Quote(outputDirectory)}")
+            new("replay_open_after_unpack", "Open the replay workbench after unpacking.", $"luotsi replay open --artifacts {Quote(outputDirectory)}"),
+            CreateReplayCapsuleCommand("replay_capsule_after_unpack", "Write a replay capsule summary after unpacking.", outputDirectory)
         ];
     }
 
@@ -1143,6 +1149,9 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
 
         return commands;
     }
+
+    private static ArtifactRecommendedCommandResult CreateReplayCapsuleCommand(string kind, string summary, string artifactRoot) =>
+        new(kind, summary, $"luotsi replay capsule --artifacts {Quote(artifactRoot)} --write-json --write-readme");
 
     private static string BuildReplayPacketCheckCommand(string artifactRoot) =>
         $"luotsi replay packet --artifacts {Quote(artifactRoot)} --check";
@@ -1322,6 +1331,7 @@ internal sealed record ArtifactVerifyResult(
     string ManifestPath,
     ArtifactPackageManifestResult Manifest,
     string Sha256,
+    ArtifactPackageVerificationResult? Verification,
     string ShareSafety,
     bool LabSafeRequired,
     IReadOnlyList<string> Blockers,

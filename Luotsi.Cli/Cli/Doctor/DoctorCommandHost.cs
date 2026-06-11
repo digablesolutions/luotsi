@@ -226,8 +226,15 @@ internal sealed class DoctorCommandHost(
         var viewSetupCommand = $"luotsi view setup --device {Quote(deviceSelector)}{viewOptionSuffix}";
         var preflightCommand = BuildPreflightCommand(deviceSelector, package);
         var runCommand = BuildRunCommand(deviceSelector, package);
-        var inspectCommand = $"luotsi inspect --device {Quote(deviceSelector)}";
+        var artifacts = ResolveWorkflowArtifactRoot(options);
+        var artifactsFlag = $" --artifacts {Quote(artifacts)}";
+        var outputDirFlag = $" --output-dir {Quote(artifacts)}";
+        var inspectCommand = $"luotsi inspect --device {Quote(deviceSelector)}{artifactsFlag}";
+        var discoverCommand = BuildDiscoverCommand(deviceSelector, package, outputDirFlag);
+        var screenStateCommand = $"luotsi screen-state --device {Quote(deviceSelector)}{artifactsFlag}";
         var viewCommand = $"luotsi view --device {Quote(deviceSelector)}{viewOptionSuffix}";
+        var quickstartHandoffCommand = BuildQuickstartHandoffCommand(deviceSelector, package, artifacts);
+        var scenarioValidateCommand = "luotsi scenario-validate --path scenarios";
 
         var blockers = new List<DoctorReadinessBlocker>();
         blockers.AddRange(checks
@@ -268,13 +275,18 @@ internal sealed class DoctorCommandHost(
         var recommendedCommands = new List<DoctorRecommendedCommandResult>();
         if (ready)
         {
-            AddRecommendedCommand(recommendedCommands, "run_scenarios", "Run a reviewed scenario path on this device.", runCommand);
-            AddRecommendedCommand(recommendedCommands, "inspect_device", "Open an interactive inspect session on this device.", inspectCommand);
-            AddRecommendedCommand(recommendedCommands, "view_device", "Open live view for this device.", viewCommand);
             if (!string.IsNullOrWhiteSpace(package))
             {
+                AddRecommendedCommand(recommendedCommands, "discover_app", "Map the ready app into review-required scenario candidates.", discoverCommand);
                 AddRecommendedCommand(recommendedCommands, "preflight_package", "Recheck target app readiness before a run.", preflightCommand);
             }
+
+            AddRecommendedCommand(recommendedCommands, "inspect_device", "Open an interactive inspect session on this device.", inspectCommand);
+            AddRecommendedCommand(recommendedCommands, "screen_state", "Capture current device truth as a structured artifact.", screenStateCommand);
+            AddRecommendedCommand(recommendedCommands, "write_quickstart_handoff", "Persist the first-run handoff plan for a human or AI operator.", quickstartHandoffCommand);
+            AddRecommendedCommand(recommendedCommands, "scenario_validate", "Validate reviewed scenarios without touching the device.", scenarioValidateCommand);
+            AddRecommendedCommand(recommendedCommands, "run_scenarios", "Run a reviewed scenario path on this device.", runCommand);
+            AddRecommendedCommand(recommendedCommands, "view_device", "Open live view for this device.", viewCommand);
         }
         else
         {
@@ -355,6 +367,9 @@ internal sealed class DoctorCommandHost(
         return includeFix ? command + " --fix" : command;
     }
 
+    private static string ResolveWorkflowArtifactRoot(CliOptions options) =>
+        options.Get("artifacts") ?? options.Get("output-dir") ?? "artifacts/first-run";
+
     private static string BuildPreflightCommand(string deviceSelector, string? package)
     {
         var command = $"luotsi preflight --device {Quote(deviceSelector)}";
@@ -364,6 +379,28 @@ internal sealed class DoctorCommandHost(
         }
 
         return command;
+    }
+
+    private static string BuildDiscoverCommand(string deviceSelector, string? package, string outputDirFlag)
+    {
+        var command = $"luotsi discover --device {Quote(deviceSelector)}";
+        if (!string.IsNullOrWhiteSpace(package))
+        {
+            command += $" --package {Quote(package)}";
+        }
+
+        return command + $" --budget 5m{outputDirFlag}";
+    }
+
+    private static string BuildQuickstartHandoffCommand(string deviceSelector, string? package, string artifacts)
+    {
+        var command = $"luotsi quickstart --device {Quote(deviceSelector)}";
+        if (!string.IsNullOrWhiteSpace(package))
+        {
+            command += $" --package {Quote(package)}";
+        }
+
+        return command + $" --artifacts {Quote(artifacts)} --write-json --write-markdown";
     }
 
     private static string BuildRunCommand(string deviceSelector, string? package)
