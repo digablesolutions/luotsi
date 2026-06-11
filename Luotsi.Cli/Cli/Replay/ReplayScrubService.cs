@@ -74,6 +74,12 @@ internal sealed class ReplayScrubService(ReplayTimelineService timelineService)
         ReplayTimelineEventResult? next)
     {
         yield return new ReplayScrubCommandHint(
+            $"luotsi replay packet --artifacts {Quote(artifactRoot)}",
+            "Write the durable first-minute packet for this artifact root.");
+        yield return new ReplayScrubCommandHint(
+            $"luotsi replay packet --artifacts {Quote(artifactRoot)} --check",
+            "Validate the durable packet before handoff or deeper replay.");
+        yield return new ReplayScrubCommandHint(
             $"luotsi replay open --artifacts {Quote(artifactRoot)}",
             "Open the replay front door for this artifact root.");
         yield return new ReplayScrubCommandHint(

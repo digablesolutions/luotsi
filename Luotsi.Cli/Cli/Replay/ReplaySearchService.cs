@@ -81,6 +81,16 @@ internal sealed class ReplaySearchService(IFileSystem fileSystem)
         IReadOnlyCollection<ReplaySearchMatchResult> matches)
     {
         yield return new ReplaySearchCommandHint(
+            "write_replay_packet",
+            "Write the durable first-minute packet for the artifact root.",
+            $"luotsi replay packet --artifacts {Quote(artifactRoot)}");
+
+        yield return new ReplaySearchCommandHint(
+            "check_replay_packet",
+            "Validate the durable packet before handoff or deeper replay.",
+            $"luotsi replay packet --artifacts {Quote(artifactRoot)} --check");
+
+        yield return new ReplaySearchCommandHint(
             "open_replay_front_door",
             "Open the replay front door for the artifact root.",
             $"luotsi replay open --artifacts {Quote(artifactRoot)}");

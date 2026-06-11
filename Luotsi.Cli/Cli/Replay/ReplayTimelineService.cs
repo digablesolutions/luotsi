@@ -204,6 +204,16 @@ internal sealed class ReplayTimelineService(IFileSystem fileSystem)
         IReadOnlyList<ReplayTimelineEventResult> events)
     {
         yield return new ReplayTimelineCommandHint(
+            "write_replay_packet",
+            "Write the durable first-minute packet for this artifact root.",
+            $"luotsi replay packet --artifacts {Quote(artifactRoot)}");
+
+        yield return new ReplayTimelineCommandHint(
+            "check_replay_packet",
+            "Validate the durable packet before handoff or deeper replay.",
+            $"luotsi replay packet --artifacts {Quote(artifactRoot)} --check");
+
+        yield return new ReplayTimelineCommandHint(
             "open_replay_front_door",
             "Open the replay front door for this artifact root.",
             $"luotsi replay open --artifacts {Quote(artifactRoot)}");

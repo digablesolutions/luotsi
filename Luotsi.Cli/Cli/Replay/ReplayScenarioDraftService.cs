@@ -694,6 +694,14 @@ internal sealed class ReplayScenarioDraftService(IFileSystem fileSystem, Scenari
         ReplayScenarioDraftRunHandoff? runHandoff)
     {
         yield return new ReplayScenarioDraftCommandHint(
+            $"luotsi replay packet --artifacts {Quote(artifactRoot)}",
+            "Write the durable first-minute packet before editing or sharing the generated draft.");
+
+        yield return new ReplayScenarioDraftCommandHint(
+            $"luotsi replay packet --artifacts {Quote(artifactRoot)} --check",
+            "Validate the durable packet before handoff or deeper replay.");
+
+        yield return new ReplayScenarioDraftCommandHint(
             $"luotsi replay open --artifacts {Quote(artifactRoot)}",
             "Open the artifact browser for screenshots, timelines, and generated draft review files.");
 

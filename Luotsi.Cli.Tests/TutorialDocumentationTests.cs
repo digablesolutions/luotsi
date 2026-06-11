@@ -521,7 +521,8 @@ public sealed partial class AppTests
         Assert.Contains("browser-free replay front door", markdown, StringComparison.Ordinal);
         Assert.Contains("before raw artifact browsing", markdown, StringComparison.Ordinal);
         Assert.Contains("`replay capsule` is the shareable CI-triage summary after the replay front door", markdown, StringComparison.Ordinal);
-        AssertContainsBefore(markdown, "luotsi replay open --artifacts ./artifacts/my-run --dry-run", "luotsi replay graph --artifacts ./artifacts/my-run");
+        AssertContainsBefore(markdown, "luotsi replay packet --artifacts ./artifacts/my-run", "luotsi replay open --artifacts ./artifacts/my-run --dry-run");
+        AssertContainsBefore(markdown, "luotsi replay packet --artifacts ./artifacts/my-run --check", "luotsi replay open --artifacts ./artifacts/my-run --dry-run");
         AssertContainsBefore(markdown, "luotsi replay open --artifacts ./artifacts/failing-run --dry-run", "luotsi replay capsule --artifacts ./artifacts/failing-run");
         Assert.DoesNotContain("`replay capsule` is the operator-facing entry point", markdown, StringComparison.Ordinal);
         Assert.DoesNotContain("`replay capsule` is the CI-triage entry point", markdown, StringComparison.Ordinal);
