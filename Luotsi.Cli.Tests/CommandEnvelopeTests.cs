@@ -1002,7 +1002,8 @@ public sealed partial class AppTests
         Assert.Equal("error", primaryFailure.GetProperty("reason").GetString());
         Assert.Equal(1, primaryFailure.GetProperty("exit_code").GetInt32());
         Assert.Equal("192.168.0.134:5555", primaryFailure.GetProperty("target").GetString());
-        Assert.Contains("luotsi replay scrub --source-path", primaryFailure.GetProperty("source_command").GetString(), StringComparison.Ordinal);
+        var expectedSourcePath = Path.GetFullPath(Path.Join(replayRoot, "session-timeline.jsonl"));
+        Assert.Contains($"luotsi replay scrub --source-path {expectedSourcePath}", primaryFailure.GetProperty("source_command").GetString(), StringComparison.Ordinal);
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "run-summary.json")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "run-summary.md")));
         Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "index.html")));
@@ -1019,7 +1020,7 @@ public sealed partial class AppTests
         Assert.Equal("view", persistedPrimaryFailure.GetProperty("sessionKind").GetString());
         Assert.Equal("view-session", persistedPrimaryFailure.GetProperty("sessionId").GetString());
         Assert.Equal("192.168.0.134:5555", persistedPrimaryFailure.GetProperty("target").GetString());
-        Assert.Contains("luotsi replay scrub --source-path", persistedPrimaryFailure.GetProperty("sourceCommand").GetString(), StringComparison.Ordinal);
+        Assert.Contains($"luotsi replay scrub --source-path {expectedSourcePath}", persistedPrimaryFailure.GetProperty("sourceCommand").GetString(), StringComparison.Ordinal);
         var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "run-summary.md"));
         Assert.Contains("# Luotsi Run Summary", markdown, StringComparison.Ordinal);
         Assert.Contains("## Failure Snapshot", markdown, StringComparison.Ordinal);
@@ -1123,7 +1124,10 @@ public sealed partial class AppTests
         Assert.Equal(3, checklist.Length);
         Assert.Equal(data.GetProperty("recommended_next_action_command").GetString(), checklist[0].GetProperty("command").GetString());
         Assert.Equal("view-session", data.GetProperty("primary_failure").GetProperty("session_id").GetString());
-        Assert.Contains("luotsi replay scrub --source-path", data.GetProperty("primary_failure").GetProperty("source_command").GetString(), StringComparison.Ordinal);
+        Assert.Contains(
+            $"luotsi replay scrub --source-path {Path.GetFullPath(Path.Join(replayRoot, "session-timeline.jsonl"))}",
+            data.GetProperty("primary_failure").GetProperty("source_command").GetString(),
+            StringComparison.Ordinal);
         Assert.Empty(processRunner.Calls);
     }
 

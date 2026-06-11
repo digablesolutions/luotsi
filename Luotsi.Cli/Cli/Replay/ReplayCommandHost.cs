@@ -751,7 +751,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
     {
         if (failureHighlight is not null && !string.IsNullOrWhiteSpace(summary.TimelinePath))
         {
-            return BuildTimelineSourceCommand(summary.TimelinePath, failureHighlight.Sequence);
+            return BuildTimelineSourceCommand(artifactRoot, summary.TimelinePath, failureHighlight.Sequence);
         }
 
         if (!string.IsNullOrWhiteSpace(summary.FailureCapsulePath))
@@ -1177,8 +1177,13 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         return string.IsNullOrWhiteSpace(parent) ? artifactRoot : parent;
     }
 
-    private static string BuildTimelineSourceCommand(string timelinePath, int sequence) =>
-        $"luotsi replay scrub --source-path {Quote(timelinePath)} --sequence {sequence} --context 3";
+    private static string BuildTimelineSourceCommand(string artifactRoot, string timelinePath, int sequence)
+    {
+        var sourcePath = Path.IsPathRooted(timelinePath)
+            ? timelinePath
+            : Path.GetFullPath(Path.Join(artifactRoot, timelinePath));
+        return $"luotsi replay scrub --source-path {Quote(sourcePath)} --sequence {sequence} --context 3";
+    }
 
     private static string BuildPacketCheckCommand(string artifactRoot) =>
         $"luotsi replay packet --artifacts {Quote(artifactRoot)} --check";
