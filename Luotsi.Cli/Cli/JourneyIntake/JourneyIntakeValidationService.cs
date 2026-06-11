@@ -56,7 +56,7 @@ internal sealed class JourneyIntakeValidationService(IFileSystem fileSystem)
         var markdownPath = default(string);
         if (options.HasFlag("write-markdown") || options.HasFlag("write-readme"))
         {
-            markdownPath = Path.Combine(string.IsNullOrWhiteSpace(directory) ? "." : directory, "journey-intake.md");
+            markdownPath = Path.Join(string.IsNullOrWhiteSpace(directory) ? "." : directory, "journey-intake.md");
             await _fileSystem.WriteAllTextAsync(markdownPath, BuildInitMarkdown(output, runArtifactRoot, document), new UTF8Encoding(false)).ConfigureAwait(false);
         }
 
