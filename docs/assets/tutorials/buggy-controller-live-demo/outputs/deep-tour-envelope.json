@@ -263,6 +263,16 @@
     "file": "C:\\tmp\\device-e2e-lab\\artifacts\\live-demo-20260520-204309\\deep-tour-scenario.json",
     "artifact_commands": [
       {
+        "kind": "replay_packet",
+        "summary": "Write the durable run-summary packet for this run.",
+        "command": "luotsi replay packet --artifacts C:\\tmp\\device-e2e-lab\\artifacts\\live-demo-20260520-204309\\luotsi-artifacts\\20260520-175449-run"
+      },
+      {
+        "kind": "replay_packet_check",
+        "summary": "Validate the durable run-summary packet before handoff.",
+        "command": "luotsi replay packet --artifacts C:\\tmp\\device-e2e-lab\\artifacts\\live-demo-20260520-204309\\luotsi-artifacts\\20260520-175449-run --check"
+      },
+      {
         "kind": "replay_open",
         "summary": "Open the replay front door for this run.",
         "command": "luotsi replay open --artifacts C:\\tmp\\device-e2e-lab\\artifacts\\live-demo-20260520-204309\\luotsi-artifacts\\20260520-175449-run"
