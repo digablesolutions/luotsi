@@ -1,62 +1,57 @@
 ---
 title: Subsystems
-description: Use the subsystem map to understand which slice of the Luotsi codebase owns a behavior before you change it or debug it.
+description: Use the subsystem map to understand which slice of Luotsi owns a behavior before you change it or debug it.
 ---
 
-The subsystem view is the best bridge between the public docs and the actual code layout.
+The subsystem view is the bridge between public workflows and the code layout.
 
-## CLI and session subsystem
+## Command runtime
 
-- `App` dispatches one-shot commands and the two long-lived session modes
-- One-shot commands return exactly one final JSON envelope
-- `inspect` and `view` are JSONL sessions with startup and shutdown events
+- `App`, `CliOptions`, composition services, command routers, and envelope writers own parsing, dispatch, help, output envelopes, and failure responses.
+- One-shot commands return one final envelope unless human or quiet console output is selected.
+- `inspect` streams JSONL for agents; `view` is an operator session that can also stream JSONL.
 
-Relevant code:
+## Lab and device selection
 
-- `Luotsi.Cli/Cli/App.cs`
-- `Luotsi.Cli/Cli/CliOptions.cs`
-- `Luotsi.Cli/Cli/InspectSession.cs`
-- `Luotsi.Cli/View/ViewSession.cs`
+- Lab commands own durable inventory, leases, queued claims, quarantines, health summaries, and device-query selection.
+- Scenario runs share that model through `run --claim-device`.
+- Ready production handoffs should use claimed run commands when a concrete serial is available.
 
-## Host automation subsystem
+## Host automation
 
-- `IDeviceHost` is the host-side automation seam
-- The Android runtime stays adb first
-- Core device actions include tap, type, key events, screen-state capture, hierarchy capture, and telemetry or log collection
+- `IDeviceHost` is the host-side automation seam.
+- The Android implementation stays adb-first and translates typed actions into bounded device work.
+- Read-style probes can retry known transient transport failures; mutating actions are not blindly replayed.
 
-## Scenario subsystem
+## Scenario lifecycle
 
-- Scenario files live under `examples/scenarios/` and your own repo paths
-- `ScenarioExecutor` resolves templates, validates steps, and routes actions through host-side behaviors
-- Failure handling is artifact-heavy by design
+- Scenario playbooks are explicit JSON files with static validation before execution.
+- The scenario runner plans, allocates, executes, reports, and preserves replay handoffs.
+- Governance, device-health, CI-policy, and failure artifacts are part of the run output.
 
-## Telemetry subsystem
+## Authoring and exploration
 
-- Luotsi understands `LUOTSI_DEVICE_TELEMETRY` logcat lines
-- Telemetry powers both dedicated commands and semantic waits inside scenarios
+- `inspect` records structured action sessions for agents.
+- `discover` explores visible UI state conservatively and emits review-required scenario evidence.
+- `journey-intake` validates external Journey-style intent before drafting a Luotsi scenario skeleton.
+- `replay scenario-draft` recovers scenario drafts from persisted action events and can validate the draft immediately.
 
-## Artifact subsystem
+## Artifacts, packages, and replay
 
-- Each run or session gets its own artifact root
-- Runtime failures are expected to leave behind enough context to diagnose device, screen, log, and view state
+- Artifact roots are the durable boundary between live device work and later analysis.
+- Replay commands reopen packets, capsules, timelines, scrub views, graphs, clusters, searches, and scenario drafts.
+- Artifact packages support lab-safe redaction, verify, unpack, and intake without mutating the source artifacts.
 
-## View subsystem
+## Live view
 
-The live mirror is a real subsystem, not just an operator convenience.
-
-- `AndroidViewBootstrap` stages the helper package, configures the adb tunnel, and starts the helper or consent flow
-- `LocalhostViewStreamConnector` opens the forwarded socket
-- `ViewPacketStreamReader` parses the private packet protocol
-- `LibavViewBackend` decodes H.264 packets into BGRA frames
-- `NativeWindowViewRenderer` and `Sdl3ViewWindowSurface` own local presentation
-- Optional share relay publishes packets to observers and replays bootstrap packets for late joins
-
-## Why this page exists
-
-Use the subsystem map when a behavior is spread across public docs and multiple code areas. It helps you find the owning abstraction before you patch the wrong layer.
+- The live mirror stages or locates the Android helper, configures an adb tunnel, reads the private packet stream, decodes H.264 through libav, and renders through SDL3.
+- Optional sharing is read-only for observers.
+- Screenshots, recordings, startup diagnostics, and view stats are written into the artifact root.
 
 ## Related pages
 
 - [Architecture](../architecture/)
+- [Replay and artifacts](../../core-workflows/replay-and-artifacts/)
+- [Inspect and scenarios](../../core-workflows/inspect-and-scenarios/)
 - [Live view](../../core-workflows/live-view/)
 - [Contribution guide](../../contributing/guide/)
