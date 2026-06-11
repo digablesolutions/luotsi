@@ -279,6 +279,7 @@ Luotsi reads the `LUOTSI_DEVICE_TELEMETRY` logcat marker to parse structured sem
 
 | Command | Description |
 |---|---|
+| `journey-intake init [--output <path>] [--package <app.id>] [--device <serial>] [--scenario <scenario.json>] [--artifacts <directory>] [--run-artifacts <directory>] [--write-markdown]` | Create a non-executable Android CLI Journey-style intake handoff with review guardrails and next commands |
 | `journey-intake validate --file <path>` | Validate a non-executable Android CLI Journey-style intake handoff before Luotsi scenario drafting |
 | `journey-intake draft-scenario --file <path> --output <scenario.json>` | Convert a valid Journey intake into a review-required Luotsi evidence skeleton without creating a device host |
 | `scenario-init [--file <path>] [--name <name>] [--package <app.id>]` | Generate a starter scenario with metadata, setup, screenshot-oriented steps, teardown, docs link, and next commands |

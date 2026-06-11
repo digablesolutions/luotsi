@@ -96,20 +96,20 @@ On older Android builds or screens with weak hierarchy output, prefer explicit `
 ## Authoring flow
 
 When the starting point is an Android CLI Journey-style intent (a Journey objective; not an Android `Intent` object),
-capture that intent first with the repository's journey intake template, then promote reviewed
+generate a Journey intake handoff first, then promote reviewed
 behavior into an executable scenario:
 
 ```bash
-cp examples/journey-intake/evidence-backed-journey-intake.template.json journey-intake.json
+luotsi journey-intake init --output journey-intake.json --package <app.id> --device <serial> --write-markdown
 luotsi journey-intake validate --file journey-intake.json
 luotsi journey-intake draft-scenario --file journey-intake.json --output scenarios/from-journey.json
 ```
 
 The intake file is not executable scenario JSON. Use it to record app context,
 device assumptions, user goals, assertions, unsafe actions, and the review gate
-before generating or running a Luotsi scenario. The template points at the
-`luotsi-journey-intake.v1` JSON schema beside it so editors and agent tooling can
-check the handoff shape before promotion. The CLI validator performs the same
+before generating or running a Luotsi scenario. Generated intake files point at the
+hosted `luotsi-journey-intake.v1` JSON schema so editors and agent tooling can
+check the handoff shape from any output directory. The CLI validator performs the same
 required-field and command guardrail checks as a CI-friendly handoff gate.
 The draft command turns a valid intake into a review-required evidence skeleton
 that can be statically validated before humans replace capture checkpoints with

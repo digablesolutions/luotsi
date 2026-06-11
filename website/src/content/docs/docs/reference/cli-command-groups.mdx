@@ -110,6 +110,7 @@ This family is strongest when the app under test emits structured `LUOTSI_DEVICE
 Use scenario files when you want a repeatable run, and replay commands when you need to triage artifacts after the fact.
 
 ```bash
+luotsi journey-intake init --output journey-intake.json --package <app.id> --device <serial> --write-markdown
 luotsi journey-intake validate --file journey-intake.json
 luotsi journey-intake draft-scenario --file journey-intake.json --output scenarios/from-journey.json
 luotsi discover --device <serial> --package <app.id> --budget 5m
@@ -139,7 +140,7 @@ luotsi replay search --artifacts ./artifacts/my-run --contains timeout
 luotsi replay scenario-draft --artifacts ./artifacts/my-run --output scenarios/recovered.json --validate --write-markdown
 ```
 
-Use `journey-intake validate` when Android CLI Journey-style intent (a Journey objective; not an Android `Intent` object) needs a CI-friendly contract check before Luotsi scenario drafting. Use `journey-intake draft-scenario` when that valid intake should become a review-required evidence skeleton without touching a device.
+Use `journey-intake init` when Android CLI Journey-style intent (a Journey objective; not an Android `Intent` object) needs a first-party Luotsi handoff file with review guardrails and next commands. Use `journey-intake validate` when that handoff needs a CI-friendly contract check before Luotsi scenario drafting. Use `journey-intake draft-scenario` when that valid intake should become a review-required evidence skeleton without touching a device.
 
 Use `discover` when the app surface is not fully known yet and you want a real-device state map plus review-required JSON scenario candidates. Bound traversal with `--budget`, `--max-actions`, and `--max-depth`. Constrain tap selection with `--allow-text`, `--deny-text`, `--deny-resource-id`, and `--deny-class`. Discovery records the backtracks it uses to return through explored branches.
 
