@@ -266,6 +266,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             }
 
             var runSummaryMarkdown = await _dependencies.FileSystem.ReadAllTextAsync(runSummaryMarkdownPath).ConfigureAwait(false);
+            ValidateAtAGlanceSection(primaryFailure, recommendedCommand, runSummaryMarkdown, artifacts.Root);
             var checkCommand = BuildPacketCheckCommand(artifacts.Root);
             if (!runSummaryMarkdown.Contains("## Packet Gate", StringComparison.Ordinal) ||
                 !runSummaryMarkdown.Contains(checkCommand, StringComparison.Ordinal))
@@ -332,6 +333,34 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             if (!commandBlock.Contains(command, StringComparison.Ordinal))
             {
                 throw new UsageException($"{RunSummaryMarkdownFileName} copy-paste triage command block is missing checklist command '{command}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+            }
+        }
+    }
+
+    private static void ValidateAtAGlanceSection(
+        ReplayOpenPrimaryFailureResult? primaryFailure,
+        string recommendedCommand,
+        string runSummaryMarkdown,
+        string artifactRoot)
+    {
+        if (!runSummaryMarkdown.Contains("## At a Glance", StringComparison.Ordinal))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} is missing the at-a-glance triage summary. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        if (!runSummaryMarkdown.Contains("Next command", StringComparison.Ordinal) ||
+            !runSummaryMarkdown.Contains(recommendedCommand, StringComparison.Ordinal))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} at-a-glance summary is missing the recommended next command. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        if (primaryFailure is not null)
+        {
+            if (!runSummaryMarkdown.Contains("Evidence command", StringComparison.Ordinal) ||
+                string.IsNullOrWhiteSpace(primaryFailure.SourceCommand) ||
+                !runSummaryMarkdown.Contains(primaryFailure.SourceCommand, StringComparison.Ordinal))
+            {
+                throw new UsageException($"{RunSummaryMarkdownFileName} at-a-glance summary is missing primaryFailure.sourceCommand. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
             }
         }
     }
@@ -583,6 +612,15 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         builder.AppendLine($"Verdict: {EscapeMarkdown(result.Verdict)}");
         builder.AppendLine($"Sessions: `{result.SessionCount}`");
         builder.AppendLine($"Failures: `{result.FailureCount}`");
+        builder.AppendLine();
+        builder.AppendLine("## At a Glance");
+        builder.AppendLine();
+        builder.AppendLine($"- Status: `{EscapeMarkdown(result.Status)}`");
+        builder.AppendLine($"- Next command: `{EscapeMarkdown(result.RecommendedNextAction.Command)}`");
+        if (!string.IsNullOrWhiteSpace(result.PrimaryFailure?.SourceCommand))
+        {
+            builder.AppendLine($"- Evidence command: `{EscapeMarkdown(result.PrimaryFailure.SourceCommand)}`");
+        }
         builder.AppendLine();
         builder.AppendLine("## Failure Snapshot");
         builder.AppendLine();

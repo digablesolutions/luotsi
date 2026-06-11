@@ -532,6 +532,7 @@ public sealed partial class AppTests
         Assert.Contains("luotsi replay packet --artifacts <artifact-root>", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("recommendedNextAction.command", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("entryPoints", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("## At a Glance", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("## Failure Snapshot", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("`failureSnapshot`", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("matches `primaryFailure`", schemaGuide, StringComparison.Ordinal);

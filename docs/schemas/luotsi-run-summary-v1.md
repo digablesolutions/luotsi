@@ -18,10 +18,11 @@ Use `luotsi replay packet --artifacts <artifact-root> --check` when CI, support,
 or an agent receives an artifact root and needs to prove that the existing
 packet is present, readable, points at the checked artifact root, and has a
 Markdown companion before continuing. The check also verifies that the refreshed
-artifact index entry points exist and that `run-summary.md` contains both the
-`## Failure Snapshot` section with the primary failure's session, reason,
-target, scenario, step, action, and message values when present, the
-`## Packet Gate` section with the exact
+artifact index entry points exist and that `run-summary.md` contains the
+`## At a Glance` section with the status, recommended next command, and focused
+evidence command when a primary failure exists, the `## Failure Snapshot`
+section with the primary failure's session, reason, target, scenario, step,
+action, and message values when present, the `## Packet Gate` section with the exact
 `luotsi replay packet --artifacts <artifact-root> --check` command, the
 copy-paste triage command block, the non-null checklist commands inside that
 block, the 60-second triage checklist, and the same recommended command as
@@ -93,14 +94,14 @@ or `entryPoints.indexHtmlPath`."
 `run-summary.md`. It exists so agents do not need to parse Markdown to follow
 the same 60-second path as humans.
 
-The Markdown packet starts with `## Failure Snapshot`, then `## Packet Gate`, a
-fenced `bash` block containing the exact
+The Markdown packet starts with `## At a Glance`, then `## Failure Snapshot`,
+then `## Packet Gate`, a fenced `bash` block containing the exact
 `luotsi replay packet --artifacts <artifact-root> --check` command for this
 artifact root. It is followed by `## Copy-Paste Triage Commands`, a fenced
 `bash` block containing the non-null checklist commands in order. This is the
 fastest human handoff surface. `replay packet --check` verifies that the
-snapshot and gate command exist and that every non-null checklist command
-appears in the copy-paste block.
+at-a-glance summary, snapshot, and gate command exist and that every non-null
+checklist command appears in the copy-paste block.
 
 Each checklist item uses:
 
@@ -157,10 +158,11 @@ failure evidence:
 | `sourceCommand` | Best available command to reopen the focused evidence. Prefer an exact timeline event command when available; otherwise Luotsi falls back to a capsule or timeline command so the primary failure remains actionable. |
 
 When `primaryFailure` is present, `run-summary.md` also starts with
-`## Failure Snapshot` so a human reviewer sees the session, reason, target,
-scenario, step, action, and message before any command list. `replay packet
---check` verifies that every non-empty value in that snapshot appears in the
-Markdown companion.
+`## At a Glance` and `## Failure Snapshot` so a human reviewer sees the status,
+next command, focused evidence command, session, reason, target, scenario, step,
+action, and message before broader command lists. `replay packet --check`
+verifies that every non-empty value in that snapshot appears in the Markdown
+companion.
 
 ## `recommendedNextAction`
 
@@ -292,4 +294,4 @@ belongs in the broader command list. Consumers should still prefer
 - If `primaryFailure.sourceCommand` is present, use it as the focused evidence command after `recommendedNextAction.command`. It should not be treated as broad artifact browsing; it is the packet's best path back to the failure evidence.
 - If `runSummaryJsonPath` or `runSummaryMarkdownPath` is `null`, the packet was returned in-memory by a command path that did not persist both files. Run `luotsi replay packet --artifacts <artifact-root>` to write them.
 - A successful `luotsi-run-summary-check.v1` result repeats `recommendedNextAction`, `recommendedNextActionCommand`, `failureSnapshot`, `triageChecklist`, and `primaryFailure` from the packet so consumers can continue from the check envelope without reopening `run-summary.json`.
-- `replay packet --check` is the contract gate for an existing packet. It must exit non-zero for missing JSON, invalid JSON, unsupported schema, stale `artifactRoot`, missing index entry points, missing `triageChecklist`, a first checklist item that does not point at `recommendedNextAction.command`, missing `recommendedNextAction.command`, a primary failure without `failureSnapshot`, a `failureSnapshot` that does not match `primaryFailure`, a primary failure without `primaryFailure.sourceCommand`, a checklist that omits `primaryFailure.sourceCommand`, missing `entryPoints.runSummaryJsonPath`, missing `entryPoints.runSummaryMarkdownPath`, a missing Markdown companion, Markdown without the failure snapshot, Markdown without the packet validation gate command, Markdown without the copy-paste triage command block, a copy-paste block that omits any non-null checklist command, Markdown without the 60-second triage checklist, Markdown that omits the JSON packet's recommended command, or Markdown that omits `primaryFailure.sourceCommand`.
+- `replay packet --check` is the contract gate for an existing packet. It must exit non-zero for missing JSON, invalid JSON, unsupported schema, stale `artifactRoot`, missing index entry points, missing `triageChecklist`, a first checklist item that does not point at `recommendedNextAction.command`, missing `recommendedNextAction.command`, a primary failure without `failureSnapshot`, a `failureSnapshot` that does not match `primaryFailure`, a primary failure without `primaryFailure.sourceCommand`, a checklist that omits `primaryFailure.sourceCommand`, missing `entryPoints.runSummaryJsonPath`, missing `entryPoints.runSummaryMarkdownPath`, a missing Markdown companion, Markdown without the at-a-glance summary, Markdown whose at-a-glance summary omits the recommended command or primary failure evidence command, Markdown without the failure snapshot, Markdown without the packet validation gate command, Markdown without the copy-paste triage command block, a copy-paste block that omits any non-null checklist command, Markdown without the 60-second triage checklist, Markdown that omits the JSON packet's recommended command, or Markdown that omits `primaryFailure.sourceCommand`.

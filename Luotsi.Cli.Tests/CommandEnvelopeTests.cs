@@ -1023,6 +1023,10 @@ public sealed partial class AppTests
         Assert.Contains($"luotsi replay scrub --source-path {expectedSourcePath}", persistedPrimaryFailure.GetProperty("sourceCommand").GetString(), StringComparison.Ordinal);
         var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "run-summary.md"));
         Assert.Contains("# Luotsi Run Summary", markdown, StringComparison.Ordinal);
+        Assert.Contains("## At a Glance", markdown, StringComparison.Ordinal);
+        Assert.Contains("- Status: `needs_triage`", markdown, StringComparison.Ordinal);
+        Assert.Contains($"- Next command: `{data.GetProperty("recommended_next_action").GetProperty("command").GetString()}`", markdown, StringComparison.Ordinal);
+        Assert.Contains($"- Evidence command: `luotsi replay scrub --source-path {expectedSourcePath}", markdown, StringComparison.Ordinal);
         Assert.Contains("## Failure Snapshot", markdown, StringComparison.Ordinal);
         Assert.Contains("Session: `view-session`", markdown, StringComparison.Ordinal);
         Assert.Contains("Reason: `error`", markdown, StringComparison.Ordinal);
@@ -1132,6 +1136,64 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayPacket_Check_MarkdownWithoutAtAGlance_ReturnsUsageError()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplaySummaryArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = new FakeProcessRunner(),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var writeExitCode = await app.RunAsync(["replay", "packet", "--artifacts", replayRoot]);
+        var packet = JsonNode.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "run-summary.json")))!.AsObject();
+        var recommendedCommand = packet["recommendedNextAction"]!.AsObject()["command"]!.GetValue<string>();
+        var primarySourceCommand = packet["primaryFailure"]!.AsObject()["sourceCommand"]!.GetValue<string>();
+        fileSystem.AddFile(Path.Join(replayRoot, "run-summary.md"), $"""
+        # Luotsi Run Summary
+
+        ## Failure Snapshot
+
+        - Session: `view-session`
+        - Reason: `error`
+        - Target: `192.168.0.134:5555`
+        - Message: `error=transport: Unexpected end of stream`
+
+        ## Packet Gate
+
+        ```bash
+        luotsi replay packet --artifacts {replayRoot} --check
+        ```
+
+        ## Copy-Paste Triage Commands
+
+        ```bash
+        {recommendedCommand}
+        {primarySourceCommand}
+        ```
+
+        ## 60-Second Triage Checklist
+
+        1. Run `{recommendedCommand}`
+        2. Reopen `{primarySourceCommand}`
+        """);
+        console.OutputLines.Clear();
+        var checkExitCode = await app.RunAsync(["replay", "packet", "--check", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, writeExitCode);
+        Assert.Equal(2, checkExitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("at-a-glance triage summary", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("Re-run `luotsi replay packet", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayPacket_Check_MarkdownWithoutPacketGate_ReturnsUsageError()
     {
         var console = new FakeConsole();
@@ -1148,18 +1210,27 @@ public sealed partial class AppTests
         var writeExitCode = await app.RunAsync(["replay", "packet", "--artifacts", replayRoot]);
         var packet = JsonNode.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "run-summary.json")))!.AsObject();
         var recommendedCommand = packet["recommendedNextAction"]!.AsObject()["command"]!.GetValue<string>();
+        var primarySourceCommand = packet["primaryFailure"]!.AsObject()["sourceCommand"]!.GetValue<string>();
         fileSystem.AddFile(Path.Join(replayRoot, "run-summary.md"), $"""
         # Luotsi Run Summary
+
+        ## At a Glance
+
+        - Status: `needs_triage`
+        - Next command: `{recommendedCommand}`
+        - Evidence command: `{primarySourceCommand}`
 
         ## Copy-Paste Triage Commands
 
         ```bash
         {recommendedCommand}
+        {primarySourceCommand}
         ```
 
         ## 60-Second Triage Checklist
 
         1. Run `{recommendedCommand}`
+        2. Reopen `{primarySourceCommand}`
         """);
         console.OutputLines.Clear();
         var checkExitCode = await app.RunAsync(["replay", "packet", "--check", "--artifacts", replayRoot]);
@@ -1193,6 +1264,12 @@ public sealed partial class AppTests
         var primarySourceCommand = packet["primaryFailure"]!.AsObject()["sourceCommand"]!.GetValue<string>();
         fileSystem.AddFile(Path.Join(replayRoot, "run-summary.md"), $"""
         # Luotsi Run Summary
+
+        ## At a Glance
+
+        - Status: `needs_triage`
+        - Next command: `{recommendedCommand}`
+        - Evidence command: `{primarySourceCommand}`
 
         ## Packet Gate
 
@@ -1445,8 +1522,15 @@ public sealed partial class AppTests
         var writeExitCode = await app.RunAsync(["replay", "packet", "--artifacts", replayRoot]);
         var packet = JsonNode.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "run-summary.json")))!.AsObject();
         var recommendedCommand = packet["recommendedNextAction"]!.AsObject()["command"]!.GetValue<string>();
+        var primarySourceCommand = packet["primaryFailure"]!.AsObject()["sourceCommand"]!.GetValue<string>();
         fileSystem.AddFile(Path.Join(replayRoot, "run-summary.md"), $"""
         # Luotsi Run Summary
+
+        ## At a Glance
+
+        - Status: `needs_triage`
+        - Next command: `{recommendedCommand}`
+        - Evidence command: `{primarySourceCommand}`
 
         ## Failure Snapshot
 
@@ -1492,8 +1576,17 @@ public sealed partial class AppTests
         });
 
         var writeExitCode = await app.RunAsync(["replay", "packet", "--artifacts", replayRoot]);
+        var packet = JsonNode.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "run-summary.json")))!.AsObject();
+        var recommendedCommand = packet["recommendedNextAction"]!.AsObject()["command"]!.GetValue<string>();
+        var primarySourceCommand = packet["primaryFailure"]!.AsObject()["sourceCommand"]!.GetValue<string>();
         fileSystem.AddFile(Path.Join(replayRoot, "run-summary.md"), $"""
         # Luotsi Run Summary
+
+        ## At a Glance
+
+        - Status: `needs_triage`
+        - Next command: `{recommendedCommand}`
+        - Evidence command: `{primarySourceCommand}`
 
         ## Failure Snapshot
 
