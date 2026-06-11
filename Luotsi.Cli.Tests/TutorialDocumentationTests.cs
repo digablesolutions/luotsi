@@ -94,7 +94,7 @@ public sealed partial class AppTests
         Assert.Contains("Return the canonical replay front-door summary with session counts, primary failure, recommended next action, and follow-up commands", markdown, StringComparison.Ordinal);
         Assert.Contains("before raw artifact browsing", markdown, StringComparison.Ordinal);
         Assert.DoesNotContain("Refresh the artifact browser index, open `index.html` locally, and return the canonical replay front-door summary", markdown, StringComparison.Ordinal);
-        Assert.Contains("guide: artifact root is durable evidence; replay open explains failures and next actions", markdown, StringComparison.Ordinal);
+        Assert.Contains("guide: artifact root is durable evidence; replay packet writes run-summary.json and run-summary.md", markdown, StringComparison.Ordinal);
         Assert.Contains("examples/agents/extract-next-command.py", markdown, StringComparison.Ordinal);
         Assert.Contains("examples/agents/extract-next-command.mjs", markdown, StringComparison.Ordinal);
         Assert.Contains("one JSON envelope or a saved JSONL-style log", markdown, StringComparison.Ordinal);
@@ -226,14 +226,14 @@ public sealed partial class AppTests
         AssertContainsBefore(docsHub, "<Card title=\"First five minutes\">", "<Card title=\"Device readiness\">");
         AssertContainsBefore(docsHub, "<Card title=\"First five minutes\">", "<Card title=\"Installation\">");
         AssertContainsBefore(docsHub, "<Card title=\"First five minutes\">", "<Card title=\"Quickstart\">");
-        Assert.Contains("guide: artifact root is durable evidence; replay open explains failures and next actions", markdown, StringComparison.Ordinal);
+        Assert.Contains("guide: artifact root is durable evidence; replay packet writes run-summary.json and run-summary.md", markdown, StringComparison.Ordinal);
         Assert.Contains("leads with the artifact path", markdown, StringComparison.Ordinal);
         AssertWebsiteReplayOpenIsFirstReplayTriageCommand(markdown);
         Assert.Contains("docs/getting-started/first-five-minutes", astroConfig, StringComparison.Ordinal);
         Assert.Contains("firstFiveMinutesHref", landingPage, StringComparison.Ordinal);
         Assert.Contains("Understand the output", landingPage, StringComparison.Ordinal);
-        Assert.Contains("guide: replay open explains failures and next actions", landingPage, StringComparison.Ordinal);
-        Assert.Contains("next: luotsi replay open --artifacts ./artifacts/smoke-run --dry-run", landingPage, StringComparison.Ordinal);
+        Assert.Contains("guide: replay packet writes run-summary.json and run-summary.md", landingPage, StringComparison.Ordinal);
+        Assert.Contains("next: luotsi replay packet --artifacts ./artifacts/smoke-run", landingPage, StringComparison.Ordinal);
     }
 
     [Fact]

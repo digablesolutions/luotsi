@@ -133,7 +133,7 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
         AddScalar(lines, value, "view_extras");
 
         AddArtifactIntakeSummary(lines, value);
-        AddRecommendedCommand(lines, value);
+        AddRecommendedCommandWithGenericFallback(lines, value, artifacts);
         AddArraySummary(lines, value, "artifact_commands");
         AddArraySummary(lines, value, "recommended_commands");
 
@@ -607,7 +607,7 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
 
     private static void AddRecommendedCommand(List<string> lines, JsonElement value)
     {
-        if (TryGetRecommendedCommand(value, out var command))
+        if (TryGetRecommendedCommand(value, includeGenericCommandArrays: true, out var command))
         {
             lines.Add($"next: {command}");
         }
@@ -615,7 +615,7 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
 
     private static void AddRecommendedCommandWithFallback(List<string> lines, JsonElement value, ArtifactData artifacts)
     {
-        if (TryGetRecommendedCommand(value, out var command))
+        if (TryGetRecommendedCommand(value, includeGenericCommandArrays: false, out var command))
         {
             lines.Add($"next: {command}");
             return;
@@ -623,7 +623,33 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
 
         if (!string.IsNullOrWhiteSpace(artifacts.ArtifactRoot))
         {
-            lines.Add($"next: luotsi artifacts open {Quote(artifacts.ArtifactRoot)}");
+            lines.Add($"next: luotsi replay packet --artifacts {Quote(artifacts.ArtifactRoot)}");
+            return;
+        }
+
+        if (TryGetGenericCommand(value, out command))
+        {
+            lines.Add($"next: {command}");
+        }
+    }
+
+    private static void AddRecommendedCommandWithGenericFallback(List<string> lines, JsonElement value, ArtifactData artifacts)
+    {
+        if (TryGetRecommendedCommand(value, includeGenericCommandArrays: false, out var command))
+        {
+            lines.Add($"next: {command}");
+            return;
+        }
+
+        if (HasGenericCommand(value) && !string.IsNullOrWhiteSpace(artifacts.ArtifactRoot))
+        {
+            lines.Add($"next: luotsi replay packet --artifacts {Quote(artifacts.ArtifactRoot)}");
+            return;
+        }
+
+        if (TryGetGenericCommand(value, out command))
+        {
+            lines.Add($"next: {command}");
         }
     }
 
@@ -723,8 +749,14 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
         return false;
     }
 
-    private static bool TryGetRecommendedCommand(JsonElement value, out string? command)
+    private static bool TryGetRecommendedCommand(JsonElement value, bool includeGenericCommandArrays, out string? command)
     {
+        command = TryGetString(value, "recommended_next_action_command", "recommendedNextActionCommand");
+        if (!string.IsNullOrWhiteSpace(command))
+        {
+            return true;
+        }
+
         if (value.TryGetProperty("recommended_next_action", out var nextAction) &&
             nextAction.ValueKind == JsonValueKind.Object &&
             nextAction.TryGetProperty("command", out var nextCommand) &&
@@ -734,17 +766,28 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
             return !string.IsNullOrWhiteSpace(command);
         }
 
-        foreach (var propertyName in new[] { "artifact_commands", "recommended_commands", "commands", "recommended_next_steps", "next_actions", "suggested_commands" })
+        foreach (var propertyName in new[] { "recommended_next_steps", "next_actions", "suggested_commands" })
         {
-            if (!value.TryGetProperty(propertyName, out var commands) || commands.ValueKind != JsonValueKind.Array)
+            if (TryGetFirstCommandFromArray(value, propertyName, out command))
             {
-                continue;
+                return true;
             }
+        }
 
-            command = commands.EnumerateArray()
-                .Select(static item => item.ValueKind == JsonValueKind.Object && item.TryGetProperty("command", out var value) ? value.GetString() : null)
-                .FirstOrDefault(static item => !string.IsNullOrWhiteSpace(item));
-            if (!string.IsNullOrWhiteSpace(command))
+        if (includeGenericCommandArrays && TryGetGenericCommand(value, out command))
+        {
+            return true;
+        }
+
+        command = null;
+        return false;
+    }
+
+    private static bool TryGetGenericCommand(JsonElement value, out string? command)
+    {
+        foreach (var propertyName in new[] { "artifact_commands", "recommended_commands", "commands" })
+        {
+            if (TryGetFirstCommandFromArray(value, propertyName, out command))
             {
                 return true;
             }
@@ -752,6 +795,23 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
 
         command = null;
         return false;
+    }
+
+    private static bool HasGenericCommand(JsonElement value) =>
+        TryGetGenericCommand(value, out _);
+
+    private static bool TryGetFirstCommandFromArray(JsonElement value, string propertyName, out string? command)
+    {
+        if (!value.TryGetProperty(propertyName, out var commands) || commands.ValueKind != JsonValueKind.Array)
+        {
+            command = null;
+            return false;
+        }
+
+        command = commands.EnumerateArray()
+            .Select(static item => item.ValueKind == JsonValueKind.Object && item.TryGetProperty("command", out var value) ? value.GetString() : null)
+            .FirstOrDefault(static item => !string.IsNullOrWhiteSpace(item));
+        return !string.IsNullOrWhiteSpace(command);
     }
 
     private static bool TryGetPrimaryFailedScenario(JsonElement value, out JsonElement primaryFailure)

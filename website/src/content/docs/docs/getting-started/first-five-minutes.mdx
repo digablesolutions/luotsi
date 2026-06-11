@@ -67,8 +67,8 @@ If you run with `--human`, the same loop is compressed into terminal text:
 ```text
 OK  screen-state completed in 1000 ms.
   artifacts: artifacts/screen-state/20260608-101530
-  guide: artifact root is durable evidence; replay open explains failures and next actions
-  next: luotsi replay open --artifacts artifacts/screen-state/20260608-101530 --dry-run
+  guide: artifact root is durable evidence; replay packet writes run-summary.json and run-summary.md
+  next: luotsi replay packet --artifacts artifacts/screen-state/20260608-101530
 ```
 
 For scripts and CI, treat `ok` plus the process exit code as the first gate, then consume the command-specific `data` contract.
@@ -146,7 +146,7 @@ Use this sequence to answer:
 - Which screenshot, hierarchy, logcat, telemetry, or timeline event proves it?
 - Which command should run next?
 
-`replay open --dry-run` returns the primary failure, recommended next action, and follow-up commands without launching the local artifact browser.
+`replay packet` writes the production handoff files first. Use `replay open --dry-run` when a human also wants the browser-free replay front door without launching the local artifact browser.
 
 ## Pick The Reader
 
