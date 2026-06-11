@@ -91,6 +91,8 @@ public sealed partial class AppTests
         Assert.Contains("luotsi doctor --device <adb serial>", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi scenario-init --file scenarios/smoke.json", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --last --artifacts artifacts --dry-run", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("evaluation-proof-pack.json", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("evaluation-proof-pack.md", console.ErrorLines[0], StringComparison.Ordinal);
         Assert.Contains("run luotsi help output", console.ErrorLines[0], StringComparison.Ordinal);
     }
 
@@ -192,6 +194,12 @@ public sealed partial class AppTests
             data.GetProperty("proof_checks").EnumerateArray(),
             check => check.GetProperty("kind").GetString() == "replay" &&
                 check.GetProperty("status").GetString() == "ready_after_artifact");
+        var proofPack = data.GetProperty("proof_pack");
+        Assert.Equal("luotsi-evaluation-proof-pack.v1", proofPack.GetProperty("schema").GetString());
+        Assert.Contains(
+            proofPack.GetProperty("gates").EnumerateArray(),
+            gate => gate.GetProperty("id").GetString() == "replayable_handoff" &&
+                gate.GetProperty("command").GetString() == "luotsi replay open --artifacts artifacts/first-run --dry-run");
     }
 
     [Fact]
@@ -260,22 +268,46 @@ public sealed partial class AppTests
         var handoff = data.GetProperty("handoff");
         var jsonPath = Path.Join(artifactRoot, "quickstart-plan.json");
         var markdownPath = Path.Join(artifactRoot, "quickstart-plan.md");
+        var proofPackJsonPath = Path.Join(artifactRoot, "evaluation-proof-pack.json");
+        var proofPackMarkdownPath = Path.Join(artifactRoot, "evaluation-proof-pack.md");
         Assert.Equal(Path.Join("/tmp/luotsi-first-run", "20260515-120000-quickstart"), artifactRoot);
         Assert.Equal(jsonPath, handoff.GetProperty("json_path").GetString());
         Assert.Equal(markdownPath, handoff.GetProperty("markdown_path").GetString());
+        Assert.Equal(proofPackJsonPath, handoff.GetProperty("proof_pack_json_path").GetString());
+        Assert.Equal(proofPackMarkdownPath, handoff.GetProperty("proof_pack_markdown_path").GetString());
         Assert.True(fileSystem.FileExists(jsonPath));
         Assert.True(fileSystem.FileExists(markdownPath));
+        Assert.True(fileSystem.FileExists(proofPackJsonPath));
+        Assert.True(fileSystem.FileExists(proofPackMarkdownPath));
         Assert.True(fileSystem.FileExists(Path.Join(artifactRoot, ArtifactSession.ArtifactIndexFileName)));
 
         using var persistedJson = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(jsonPath));
         Assert.Equal("luotsi-quickstart.v1", persistedJson.RootElement.GetProperty("schema").GetString());
         Assert.Equal("luotsi doctor --device emulator-5554 --package dev.luotsi.demo --fix", persistedJson.RootElement.GetProperty("first_command").GetString());
+        Assert.Equal("luotsi-evaluation-proof-pack.v1", persistedJson.RootElement.GetProperty("proof_pack").GetProperty("schema").GetString());
+
+        using var persistedProofPackJson = JsonDocument.Parse(await fileSystem.ReadAllTextAsync(proofPackJsonPath));
+        Assert.Equal("luotsi-evaluation-proof-pack.v1", persistedProofPackJson.RootElement.GetProperty("schema").GetString());
+        Assert.Equal(artifactRoot, persistedProofPackJson.RootElement.GetProperty("artifact_root").GetString());
+        Assert.Equal(8, persistedProofPackJson.RootElement.GetProperty("gates").GetArrayLength());
+        Assert.Contains(
+            persistedProofPackJson.RootElement.GetProperty("gates").EnumerateArray(),
+            gate => gate.GetProperty("id").GetString() == "shareable_package" &&
+                gate.GetProperty("command").GetString() == $"luotsi artifacts pack {artifactRoot} --output {artifactRoot!.TrimEnd('/', '\\')}/first-run.zip --redact lab-safe");
 
         var markdown = await fileSystem.ReadAllTextAsync(markdownPath);
         Assert.Contains("# Luotsi quickstart handoff", markdown, StringComparison.Ordinal);
         Assert.Contains("luotsi inspect --device emulator-5554 --artifacts /tmp/luotsi-first-run", markdown, StringComparison.Ordinal);
         Assert.Contains("## Proof checks", markdown, StringComparison.Ordinal);
         Assert.Contains("artifact_handoff (ready_to_run): `luotsi quickstart --device emulator-5554 --package dev.luotsi.demo --artifacts /tmp/luotsi-first-run --path scenarios --write-json --write-markdown`", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Evaluation proof pack", markdown, StringComparison.Ordinal);
+        Assert.Contains($"JSON: `{proofPackJsonPath}`", markdown, StringComparison.Ordinal);
+
+        var proofPackMarkdown = await fileSystem.ReadAllTextAsync(proofPackMarkdownPath);
+        Assert.Contains("# Luotsi evaluation proof pack", proofPackMarkdown, StringComparison.Ordinal);
+        Assert.Contains("### replayable_handoff", proofPackMarkdown, StringComparison.Ordinal);
+        Assert.Contains($"luotsi replay open --artifacts {artifactRoot} --dry-run", proofPackMarkdown, StringComparison.Ordinal);
+        Assert.Contains("Any shared bundle is packed with lab-safe redaction and verified before intake.", proofPackMarkdown, StringComparison.Ordinal);
     }
 
     [Fact]

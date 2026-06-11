@@ -19,7 +19,7 @@ luotsi doctor
 luotsi doctor --device <serial> --fix
 ```
 
-Use `--human` while you are getting oriented in the terminal. Use `--write-json --write-markdown` when the evaluation needs a durable handoff: `quickstart-plan.json` for agents and scripts, `quickstart-plan.md` for humans.
+Use `--human` while you are getting oriented in the terminal. Use `--write-json --write-markdown` when the evaluation needs a durable handoff: `quickstart-plan.json` for agents and scripts, `quickstart-plan.md` for humans, and `evaluation-proof-pack.json` / `evaluation-proof-pack.md` for the evidence gates a teammate or AI operator should check before calling the first run production-ready.
 
 If you already know the target, make the plan concrete:
 
@@ -199,6 +199,8 @@ For CI or shared-lab review, package and verify the artifact root:
 luotsi artifacts pack artifacts/first-run --output artifacts/first-run.zip
 luotsi artifacts verify artifacts/first-run.zip
 ```
+
+The quickstart proof pack gives the same closure checklist in artifact form. It asks for install proof, selected-device readiness, screen-state evidence, inspect-session evidence, a scenario seed or explicit deferral, replay reopening, and a lab-safe package verification step.
 
 ## Pick The Reader
 

@@ -10,6 +10,8 @@ internal static class QuickstartCommand
 {
     private const string JsonFileName = "quickstart-plan.json";
     private const string MarkdownFileName = "quickstart-plan.md";
+    private const string ProofPackJsonFileName = "evaluation-proof-pack.json";
+    private const string ProofPackMarkdownFileName = "evaluation-proof-pack.md";
     private static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
 
     public static async Task<QuickstartResult> RunAsync(CliOptions options, ArtifactSession artifacts)
@@ -17,11 +19,14 @@ internal static class QuickstartCommand
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(artifacts);
 
-        var result = Build(options);
         var jsonPath = options.HasFlag("write-json") ? Path.Join(artifacts.Root, JsonFileName) : null;
         var markdownPath = options.HasFlag("write-markdown") ? Path.Join(artifacts.Root, MarkdownFileName) : null;
+        var proofPackJsonPath = options.HasFlag("write-json") ? Path.Join(artifacts.Root, ProofPackJsonFileName) : null;
+        var proofPackMarkdownPath = options.HasFlag("write-markdown") ? Path.Join(artifacts.Root, ProofPackMarkdownFileName) : null;
+        var writesArtifacts = jsonPath is not null || markdownPath is not null;
+        var result = Build(options, writesArtifacts ? artifacts.Root : null);
 
-        if (jsonPath is null && markdownPath is null)
+        if (!writesArtifacts)
         {
             return result;
         }
@@ -32,6 +37,8 @@ internal static class QuickstartCommand
                 artifacts.Root,
                 jsonPath,
                 markdownPath,
+                proofPackJsonPath,
+                proofPackMarkdownPath,
                 jsonPath is null || markdownPath is null
                     ? $"luotsi quickstart {BuildCurrentOptionFlags(result.Inputs)} --write-json --write-markdown".Replace("  ", " ", StringComparison.Ordinal).Trim()
                     : null)
@@ -47,11 +54,21 @@ internal static class QuickstartCommand
             await WriteTextArtifactAsync(artifacts, MarkdownFileName, BuildMarkdown(resultWithHandoff)).ConfigureAwait(false);
         }
 
+        if (proofPackJsonPath is not null)
+        {
+            await WriteTextArtifactAsync(artifacts, ProofPackJsonFileName, JsonSerializer.Serialize(resultWithHandoff.ProofPack, AppCommandJson.Options) + Environment.NewLine).ConfigureAwait(false);
+        }
+
+        if (proofPackMarkdownPath is not null)
+        {
+            await WriteTextArtifactAsync(artifacts, ProofPackMarkdownFileName, BuildProofPackMarkdown(resultWithHandoff.ProofPack)).ConfigureAwait(false);
+        }
+
         await artifacts.RefreshIndexAsync().ConfigureAwait(false);
         return resultWithHandoff;
     }
 
-    public static QuickstartResult Build(CliOptions options)
+    public static QuickstartResult Build(CliOptions options, string? proofPackArtifactRoot = null)
     {
         ArgumentNullException.ThrowIfNull(options);
 
@@ -196,7 +213,7 @@ internal static class QuickstartCommand
                 "artifact_handoff",
                 "First-run handoff artifacts can be written for a human or AI operator.",
                 quickstartHandoffCommand,
-                "quickstart-plan.json, quickstart-plan.md, and artifact-index.json exist in the artifact root.",
+                "quickstart-plan.json, quickstart-plan.md, evaluation-proof-pack.json, evaluation-proof-pack.md, and index.md exist in the artifact root.",
                 "ready_to_run",
                 null),
             new QuickstartProofCheckResult(
@@ -214,6 +231,8 @@ internal static class QuickstartCommand
                 "ready_after_artifact",
                 "Run the artifact handoff or a device/session command before expecting --last to resolve.")
         };
+
+        var proofPack = BuildProofPack(proofPackArtifactRoot ?? artifacts, device, packageValue, scenarioPath, scenarioFile, recommendedCommands);
 
         return new QuickstartResult(
             ResultSchemas.Quickstart,
@@ -241,7 +260,78 @@ internal static class QuickstartCommand
                 "cloud_device_infrastructure: Firebase Test Lab, BrowserStack App Automate",
                 "ai_test_authoring: BrowserStack Test Companion, LambdaTest KaneAI"
             ],
+            proofPack,
             Handoff: null);
+    }
+
+    private static QuickstartProofPackResult BuildProofPack(
+        string artifactRoot,
+        string device,
+        string packageValue,
+        string scenarioPath,
+        string scenarioFile,
+        IReadOnlyList<QuickstartRecommendedCommandResult> recommendedCommands)
+    {
+        var deviceFlag = $"--device {Quote(device)}";
+        var packageFlag = $"--package {Quote(packageValue)}";
+        var artifactFlag = $"--artifacts {Quote(artifactRoot)}";
+        var scenarioPathValue = Quote(scenarioPath);
+        var scenarioFileValue = Quote(scenarioFile);
+
+        return new QuickstartProofPackResult(
+            "luotsi-evaluation-proof-pack.v1",
+            "collecting",
+            artifactRoot,
+            "Use this checklist to decide whether the first Luotsi evaluation left enough evidence for production discussion.",
+            [
+                new(
+                    "install_verified",
+                    "Luotsi binary and bundled assets are visible.",
+                    "luotsi version",
+                    "The command succeeds and reports runtime_version, installed_tag, and install_root."),
+                new(
+                    "device_ready",
+                    "The selected real device is adb-visible and Luotsi can explain or fix readiness blockers.",
+                    $"luotsi doctor {deviceFlag} {packageFlag} --fix",
+                    "readiness_plan.status is ready, or blockers and next_command are explicit enough for handoff."),
+                new(
+                    "screen_state_evidence",
+                    "A one-shot real-device state snapshot exists.",
+                    $"luotsi screen-state {deviceFlag} {artifactFlag}",
+                    "The envelope includes ok=true, visible UI data, and artifacts.artifact_root."),
+                new(
+                    "agent_loop_evidence",
+                    "An agent-readable JSONL session can be opened and later replayed.",
+                    $"luotsi inspect {deviceFlag} {artifactFlag}",
+                    "The session writes screen_snapshot, command_result, screen_delta, and session_ended events."),
+                new(
+                    "scenario_seeded",
+                    "The first repeatable CI candidate exists or has been intentionally deferred.",
+                    $"luotsi scenario-init --file {scenarioFileValue} --name \"first-run smoke\"",
+                    "The scenario file is ready for review before device execution."),
+                new(
+                    "scenario_validated",
+                    "Scenario syntax is validated without touching a device.",
+                    $"luotsi scenario-validate --path {scenarioPathValue}",
+                    "Validation succeeds or reports reviewable authoring errors."),
+                new(
+                    "replayable_handoff",
+                    "The artifact root can be reopened after device access is gone.",
+                    $"luotsi replay open --artifacts {Quote(artifactRoot)} --dry-run",
+                    "Replay returns the primary failure or an explicit no-failure summary plus follow-up commands."),
+                new(
+                    "shareable_package",
+                    "The evidence can be packaged and verified before team handoff.",
+                    $"luotsi artifacts pack {Quote(artifactRoot)} --output {Quote(CombineCommandPath(artifactRoot, "first-run.zip"))} --redact lab-safe",
+                    "The package reports SHA-256 and can pass artifacts verify --require-lab-safe.")
+            ],
+            [
+                "At least one live-device command produced an artifact root.",
+                "A reviewer can reopen evidence with replay open without reconnecting the device.",
+                "A CI candidate is either validated or explicitly deferred with a blocker.",
+                "Any shared bundle is packed with lab-safe redaction and verified before intake."
+            ],
+            recommendedCommands);
     }
 
     private static string BuildMarkdown(QuickstartResult result)
@@ -300,9 +390,74 @@ internal static class QuickstartCommand
         }
 
         builder.AppendLine();
+        builder.AppendLine("## Evaluation proof pack");
+        builder.AppendLine();
+        builder.AppendLine("Use the proof pack when a teammate or AI operator needs to decide whether this first run produced production-grade evidence.");
+        if (result.Handoff?.ProofPackJsonPath is not null)
+        {
+            builder.AppendLine($"- JSON: `{result.Handoff.ProofPackJsonPath}`");
+        }
+
+        if (result.Handoff?.ProofPackMarkdownPath is not null)
+        {
+            builder.AppendLine($"- Markdown: `{result.Handoff.ProofPackMarkdownPath}`");
+        }
+
+        builder.AppendLine();
+        foreach (var gate in result.ProofPack.Gates)
+        {
+            builder.AppendLine($"- {gate.Id}: `{gate.Command}`");
+        }
+
+        builder.AppendLine();
         builder.AppendLine("## Agent prompt");
         builder.AppendLine();
         builder.AppendLine(result.AgentPrompt);
+        builder.AppendLine();
+        return builder.ToString();
+    }
+
+    private static string BuildProofPackMarkdown(QuickstartProofPackResult proofPack)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("# Luotsi evaluation proof pack");
+        builder.AppendLine();
+        builder.AppendLine(proofPack.Goal);
+        builder.AppendLine();
+        builder.AppendLine($"- Status: {proofPack.Status}");
+        builder.AppendLine($"- Artifact root: {proofPack.ArtifactRoot}");
+        builder.AppendLine();
+        builder.AppendLine("## Evidence gates");
+        builder.AppendLine();
+        foreach (var gate in proofPack.Gates)
+        {
+            builder.AppendLine($"### {gate.Id}");
+            builder.AppendLine();
+            builder.AppendLine(gate.Description);
+            builder.AppendLine();
+            builder.AppendLine("```bash");
+            builder.AppendLine(gate.Command);
+            builder.AppendLine("```");
+            builder.AppendLine();
+            builder.AppendLine($"Success signal: {gate.SuccessSignal}");
+            builder.AppendLine();
+        }
+
+        builder.AppendLine("## Production-ready when");
+        builder.AppendLine();
+        foreach (var criterion in proofPack.ProductionReadyWhen)
+        {
+            builder.AppendLine($"- {criterion}");
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("## Recommended commands");
+        builder.AppendLine();
+        foreach (var command in proofPack.RecommendedCommands)
+        {
+            builder.AppendLine($"- {command.Kind}: `{command.Command}`");
+        }
+
         builder.AppendLine();
         return builder.ToString();
     }
@@ -404,13 +559,31 @@ internal sealed record QuickstartResult(
     string AgentPrompt,
     IReadOnlyList<string> Differentiators,
     IReadOnlyList<string> SimilarToolCategories,
+    QuickstartProofPackResult ProofPack,
     QuickstartHandoffResult? Handoff);
 
 internal sealed record QuickstartHandoffResult(
     string ArtifactRoot,
     string? JsonPath,
     string? MarkdownPath,
+    string? ProofPackJsonPath,
+    string? ProofPackMarkdownPath,
     string? RecommendedCommand);
+
+internal sealed record QuickstartProofPackResult(
+    string Schema,
+    string Status,
+    string ArtifactRoot,
+    string Goal,
+    IReadOnlyList<QuickstartProofGateResult> Gates,
+    IReadOnlyList<string> ProductionReadyWhen,
+    IReadOnlyList<QuickstartRecommendedCommandResult> RecommendedCommands);
+
+internal sealed record QuickstartProofGateResult(
+    string Id,
+    string Description,
+    string Command,
+    string SuccessSignal);
 
 internal sealed record QuickstartInputResult(
     string? Device,
