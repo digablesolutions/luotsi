@@ -196,7 +196,7 @@ def clean_command(value: Any) -> str | None:
 
 
 def quote_shell_arg(value: str) -> str:
-    safe = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./:=-" + "\\"
+    safe = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./:=-"
     if value and all(character in safe for character in value):
         return value
 

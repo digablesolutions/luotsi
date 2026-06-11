@@ -961,6 +961,35 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayOpen_WriteJson_PersistsCompleteRunSummaryPacket()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var processRunner = new FakeProcessRunner();
+        var replayRoot = SeedReplaySummaryArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = processRunner,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var exitCode = await app.RunAsync(["replay", "open", "--artifacts", replayRoot, "--dry-run", "--write-json"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal(Path.Join(replayRoot, "replay-open-summary.json"), data.GetProperty("json_path").GetString());
+        Assert.False(data.TryGetProperty("markdown_path", out _));
+        Assert.Equal(Path.Join(replayRoot, "run-summary.json"), data.GetProperty("run_summary_json_path").GetString());
+        Assert.Equal(Path.Join(replayRoot, "run-summary.md"), data.GetProperty("run_summary_markdown_path").GetString());
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "run-summary.json")));
+        Assert.True(fileSystem.FileExists(Path.Join(replayRoot, "run-summary.md")));
+        Assert.False(fileSystem.FileExists(Path.Join(replayRoot, "replay-open.md")));
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayPacket_WritesRunSummaryWithoutOpeningBrowser()
     {
         var console = new FakeConsole();

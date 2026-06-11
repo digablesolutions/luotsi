@@ -204,7 +204,7 @@ function cleanCommand(value) {
 
 function quoteShellArg(value) {
   const text = String(value);
-  const safe = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./:=-\\';
+  const safe = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./:=-';
   if (text.length > 0 && [...text].every((character) => safe.includes(character))) {
     return text;
   }

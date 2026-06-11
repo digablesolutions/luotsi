@@ -138,11 +138,12 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         var markdownPath = options.HasFlag("write-markdown")
             ? Path.Join(artifacts.Root, ReplayOpenSummaryMarkdownFileName)
             : null;
+        var writeRunSummaryPacket = options.HasFlag("write-json") || options.HasFlag("write-markdown");
         var packet = await CreateRunSummaryAsync(
             started,
             artifacts,
-            writeJson: options.HasFlag("write-json"),
-            writeMarkdown: options.HasFlag("write-markdown"),
+            writeJson: writeRunSummaryPacket,
+            writeMarkdown: writeRunSummaryPacket,
             replayOpenJsonPath: jsonPath,
             replayOpenMarkdownPath: markdownPath).ConfigureAwait(false);
         var command = BuildOpenCommand(packet.EntryPoints.IndexHtmlPath);
