@@ -239,6 +239,15 @@ belongs in the broader command list. Consumers should still prefer
       "rationale": "Follow-up commands are useful after the first failure window is clear."
     }
   ],
+  "failureSnapshot": {
+    "sessionId": "checkout-20260610",
+    "reason": "failed",
+    "target": "emulator-5554",
+    "scenario": "checkout",
+    "step": "submit payment",
+    "action": "tap",
+    "message": "Expected confirmation text was not visible."
+  },
   "primaryFailure": {
     "sessionKind": "scenario",
     "sessionId": "checkout-20260610",
