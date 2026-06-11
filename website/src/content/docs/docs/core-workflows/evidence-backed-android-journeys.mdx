@@ -34,15 +34,15 @@ Use `doctor` output to resolve adb visibility, helper provisioning, and live-vie
 
 Use Android CLI and Android skills to help an agent understand the app and describe the core user experience. Keep the output as intent until a human or policy gate has reviewed what the agent plans to do.
 
-For a concrete handoff shape, start from the repository template:
+For a concrete handoff shape, start from Luotsi's product-native intake command:
 
 ```bash
-cp examples/journey-intake/evidence-backed-journey-intake.template.json journey-intake.json
+luotsi journey-intake init --output journey-intake.json --package <app.id> --device <serial> --write-markdown
 luotsi journey-intake validate --file journey-intake.json
 luotsi journey-intake draft-scenario --file journey-intake.json --output scenarios/from-journey.json
 ```
 
-The template uses the `luotsi-journey-intake.v1` schema so editors and agents can check that the handoff includes app context, device assumptions, Journey steps, assertions, guardrails, Luotsi commands, and review fields. `journey-intake validate` checks the production-critical handoff fields from the Luotsi CLI and exits non-zero when required guardrails or commands are missing. `journey-intake draft-scenario` writes a review-required evidence skeleton; it preserves Journey assertions as metadata and capture checkpoints instead of executing natural language as UI assertions.
+`journey-intake init` writes the `luotsi-journey-intake.v1` handoff plus optional Markdown review packet from Luotsi itself, including app context, device assumptions, Journey placeholders, assertions, guardrails, Luotsi commands, and review fields. `journey-intake validate` checks the production-critical handoff fields from the Luotsi CLI and exits non-zero when required guardrails or commands are missing. `journey-intake draft-scenario` writes a review-required evidence skeleton; it preserves Journey assertions as metadata and capture checkpoints instead of executing natural language as UI assertions.
 
 Examples of useful Journey intent:
 

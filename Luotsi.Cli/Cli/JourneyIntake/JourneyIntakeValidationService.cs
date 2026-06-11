@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Infrastructure.Contracts;
 using Luotsi.Cli.Infrastructure.Serialization;
@@ -19,10 +20,69 @@ internal sealed class JourneyIntakeValidationService(IFileSystem fileSystem)
 
         return ResolveAction(options).ToLowerInvariant() switch
         {
+            "init" => await InitAsync(options).ConfigureAwait(false),
             "validate" => await ValidateFileAsync(options.Require("file")).ConfigureAwait(false),
             "draft-scenario" => await DraftScenarioAsync(options).ConfigureAwait(false),
-            _ => throw new UsageException("journey-intake requires subcommand validate or draft-scenario.")
+            _ => throw new UsageException("journey-intake requires subcommand init, validate, or draft-scenario.")
         };
+    }
+
+    private async Task<JourneyIntakeInitResult> InitAsync(CliOptions options)
+    {
+        var output = options.Get("output") ?? options.Get("file") ?? "journey-intake.json";
+        var overwrite = options.HasFlag("force") || options.HasFlag("overwrite");
+        if (_fileSystem.FileExists(output) && !overwrite)
+        {
+            throw new UsageException($"Journey intake file '{output}' already exists. Use --force to overwrite it.");
+        }
+
+        var name = options.Get("name") ?? "evidence-backed-journey";
+        var package = options.Get("package") ?? "com.example.app";
+        var activity = options.Get("activity") ?? ".MainActivity";
+        var device = options.Get("device") ?? "<serial>";
+        var deviceQuery = options.Get("device-query") ?? "state=online,type=physical,availability=available";
+        var scenario = options.Get("scenario") ?? options.Get("scenario-file") ?? "scenarios/from-journey.json";
+        var artifactRoot = options.Get("artifacts") ?? "artifacts/journey-intake";
+        var runArtifactRoot = options.Get("run-artifacts") ?? "artifacts/from-journey-run";
+        var document = BuildInitDocument(name, package, activity, device, deviceQuery, scenario, artifactRoot, runArtifactRoot);
+        var directory = Path.GetDirectoryName(output);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            _fileSystem.CreateDirectory(directory);
+        }
+
+        await _fileSystem.WriteAllTextAsync(output, JsonSerializer.Serialize(document, AppJson.Options) + Environment.NewLine, new UTF8Encoding(false)).ConfigureAwait(false);
+
+        var markdownPath = default(string);
+        if (options.HasFlag("write-markdown") || options.HasFlag("write-readme"))
+        {
+            markdownPath = Path.Combine(string.IsNullOrWhiteSpace(directory) ? "." : directory, "journey-intake.md");
+            await _fileSystem.WriteAllTextAsync(markdownPath, BuildInitMarkdown(output, runArtifactRoot, document), new UTF8Encoding(false)).ConfigureAwait(false);
+        }
+
+        var nextCommands = new[]
+        {
+            $"luotsi journey-intake validate --file {Quote(output)}",
+            $"luotsi journey-intake draft-scenario --file {Quote(output)} --output {Quote(scenario)}",
+            $"luotsi scenario-validate --file {Quote(scenario)}",
+            $"luotsi run --file {Quote(scenario)} --device {Quote(device)} --dry-run",
+            document.LuotsiHandoff.ClaimedRunCommand,
+            $"luotsi replay packet --artifacts {Quote(runArtifactRoot)}",
+            $"luotsi replay capsule --artifacts {Quote(runArtifactRoot)} --write-readme --write-json"
+        };
+        return new JourneyIntakeInitResult(
+            CurrentSchema,
+            "initialized",
+            true,
+            output,
+            markdownPath,
+            document.Name,
+            document.App.Package,
+            document.Device.Serial,
+            document.Device.Query,
+            document.LuotsiHandoff,
+            nextCommands,
+            "Fill in the Journey intent, keep reviewRequired true, then validate and draft the reviewed scenario.");
     }
 
     private async Task<JourneyIntakeValidationResult> ValidateFileAsync(string file)
@@ -294,6 +354,102 @@ internal sealed class JourneyIntakeValidationService(IFileSystem fileSystem)
                 : "Fix the journey intake contract errors before creating or running a Luotsi scenario.");
     }
 
+    private static JourneyIntakeInitDocument BuildInitDocument(
+        string name,
+        string package,
+        string activity,
+        string device,
+        string deviceQuery,
+        string scenario,
+        string artifactRoot,
+        string runArtifactRoot)
+    {
+        var deviceToken = string.IsNullOrWhiteSpace(device) ? "<serial>" : device;
+        var packageToken = string.IsNullOrWhiteSpace(package) ? "com.example.app" : package;
+        return new JourneyIntakeInitDocument(
+            "./luotsi-journey-intake.schema.json",
+            CurrentSchema,
+            name,
+            new JourneyIntakeInitSource(
+                "android-cli-journey-intent",
+                "Paste or summarize the Android CLI Journey-style intent here before converting it into Luotsi exploration or scenario work."),
+            new JourneyIntakeInitApp(packageToken, string.IsNullOrWhiteSpace(activity) ? null : activity, string.Empty),
+            new JourneyIntakeInitDevice(
+                deviceToken,
+                deviceQuery,
+                string.Empty,
+                string.Empty,
+                string.Empty,
+                "portrait"),
+            new JourneyIntakeInitJourney(
+                "Describe the user goal this Journey should prove.",
+                "Describe the expected app, account, and device state before the flow starts.",
+                [
+                    "Start the app.",
+                    "Explore the target flow with Android CLI Journey intent or Luotsi inspect.",
+                    "Capture evidence for each business-critical transition."
+                ],
+                [
+                    "The expected end state is visible.",
+                    "No critical error message is visible.",
+                    "A screenshot or replay artifact proves the result."
+                ]),
+            new JourneyIntakeInitGuardrails(
+                true,
+                true,
+                [
+                    "Do not use production accounts.",
+                    "Do not make purchases.",
+                    "Do not delete user data unless the test app and account are disposable."
+                ],
+                [
+                    "Prefer resourceId, contentDescription, className, or exact text selectors.",
+                    "Prefer semantic waits and assertions over raw coordinates when hierarchy output is reliable.",
+                    "Keep generated scenarios review-required until selectors and waits are explicit."
+                ]),
+            new JourneyIntakeHandoff(
+                $"luotsi doctor --device {Quote(deviceToken)} --fix",
+                $"luotsi inspect --device {Quote(deviceToken)} --artifacts {Quote(artifactRoot)}",
+                $"luotsi discover --device {Quote(deviceToken)} --package {Quote(packageToken)} --budget 5m --artifacts {Quote(artifactRoot)}",
+                $"luotsi replay scenario-draft --artifacts {Quote($"{artifactRoot}/<run-id>")} --output {Quote(scenario)} --validate --write-markdown",
+                $"luotsi run --file {Quote(scenario)} --device {Quote(deviceToken)} --dry-run",
+                $"luotsi run --file {Quote(scenario)} --device {Quote(deviceToken)} --output-dir {Quote(runArtifactRoot)} --report-junit {Quote($"{runArtifactRoot}/junit.xml")}",
+                $"luotsi run --file {Quote(scenario)} --device-query {Quote(deviceQuery)} --claim-device --claim-wait-sec 60 --output-dir {Quote(runArtifactRoot)} --report-junit {Quote($"{runArtifactRoot}/junit.xml")}",
+                $"luotsi replay open --artifacts {Quote(runArtifactRoot)} --dry-run"),
+            new JourneyIntakeInitReview(string.Empty, string.Empty, string.Empty));
+    }
+
+    private static string BuildInitMarkdown(string output, string runArtifactRoot, JourneyIntakeInitDocument document)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("# Luotsi Journey Intake");
+        builder.AppendLine();
+        builder.AppendLine($"Intake file: `{output}`");
+        builder.AppendLine($"Schema: `{document.Schema}`");
+        builder.AppendLine($"Name: `{document.Name}`");
+        builder.AppendLine($"Package: `{document.App.Package}`");
+        builder.AppendLine();
+        builder.AppendLine("## Next Commands");
+        builder.AppendLine();
+        builder.AppendLine($"1. Validate the intake: `luotsi journey-intake validate --file {Quote(output)}`");
+        builder.AppendLine($"2. Prove device readiness: `{document.LuotsiHandoff.ReadinessCommand}`");
+        builder.AppendLine($"3. Explore the real device: `{document.LuotsiHandoff.ExploreCommand}`");
+        builder.AppendLine($"4. Draft a reviewed scenario: `{document.LuotsiHandoff.DraftCommand}`");
+        builder.AppendLine($"5. Dry-run the scenario: `{document.LuotsiHandoff.DryRunCommand}`");
+        builder.AppendLine($"6. Run through the lab-safe path: `{document.LuotsiHandoff.ClaimedRunCommand}`");
+        builder.AppendLine($"7. Reopen evidence: `{document.LuotsiHandoff.ReplayCommand}`");
+        builder.AppendLine($"8. Write a replay packet: `luotsi replay packet --artifacts {Quote(runArtifactRoot)}`");
+        builder.AppendLine($"9. Write a replay capsule: `luotsi replay capsule --artifacts {Quote(runArtifactRoot)} --write-readme --write-json`");
+        builder.AppendLine();
+        builder.AppendLine("## Review Guardrails");
+        builder.AppendLine();
+        builder.AppendLine("- Keep `reviewRequired` true.");
+        builder.AppendLine("- Keep `doNotExecuteAsNaturalLanguage` true.");
+        builder.AppendLine("- Convert Journey assertions into explicit Luotsi waits, selectors, screenshots, telemetry checks, or replay-reviewed evidence before unattended runs.");
+        builder.AppendLine("- Use replay packet/capsule output as the durable CI or agent handoff after execution.");
+        return builder.ToString();
+    }
+
     private static void ValidateObject(JsonElement root, string propertyName, string path, List<string> errors, Action<JsonElement> validate)
     {
         if (!root.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.Object)
@@ -511,6 +667,20 @@ public sealed record JourneyIntakeHandoff(
     string? ClaimedRunCommand,
     string? ReplayCommand);
 
+public sealed record JourneyIntakeInitResult(
+    string Schema,
+    string Status,
+    bool Written,
+    string Output,
+    string? MarkdownPath,
+    string Name,
+    string Package,
+    string? DeviceSerial,
+    string? DeviceQuery,
+    JourneyIntakeHandoff Handoff,
+    IReadOnlyList<string> NextCommands,
+    string NextAction);
+
 public sealed record JourneyIntakeDraftScenarioResult(
     string Schema,
     string Status,
@@ -549,3 +719,42 @@ internal sealed record JourneyIntakeDocument(
     IReadOnlyList<string> Assertions,
     IReadOnlyList<string> UnsafeActionsToAvoid,
     IReadOnlyList<string> PreferredSelectors);
+
+internal sealed record JourneyIntakeInitDocument(
+    [property: JsonPropertyName("$schema")]
+    string JsonSchema,
+    string Schema,
+    string Name,
+    JourneyIntakeInitSource Source,
+    JourneyIntakeInitApp App,
+    JourneyIntakeInitDevice Device,
+    JourneyIntakeInitJourney Journey,
+    JourneyIntakeInitGuardrails Guardrails,
+    JourneyIntakeHandoff LuotsiHandoff,
+    JourneyIntakeInitReview Review);
+
+internal sealed record JourneyIntakeInitSource(string Kind, string Notes);
+
+internal sealed record JourneyIntakeInitApp(string Package, string? Activity, string StartUri);
+
+internal sealed record JourneyIntakeInitDevice(
+    string Serial,
+    string Query,
+    string Model,
+    string AndroidRelease,
+    string Sdk,
+    string Orientation);
+
+internal sealed record JourneyIntakeInitJourney(
+    string UserGoal,
+    string StartingState,
+    IReadOnlyList<string> Steps,
+    IReadOnlyList<string> Assertions);
+
+internal sealed record JourneyIntakeInitGuardrails(
+    bool ReviewRequired,
+    bool DoNotExecuteAsNaturalLanguage,
+    IReadOnlyList<string> UnsafeActionsToAvoid,
+    IReadOnlyList<string> PreferredSelectors);
+
+internal sealed record JourneyIntakeInitReview(string Owner, string ApprovedAt, string Notes);

@@ -100,7 +100,7 @@ capture that intent first with the repository's journey intake template, then pr
 behavior into an executable scenario:
 
 ```bash
-cp examples/journey-intake/evidence-backed-journey-intake.template.json journey-intake.json
+luotsi journey-intake init --output journey-intake.json --package <app.id> --device <serial> --write-markdown
 luotsi journey-intake validate --file journey-intake.json
 luotsi journey-intake draft-scenario --file journey-intake.json --output scenarios/from-journey.json
 ```

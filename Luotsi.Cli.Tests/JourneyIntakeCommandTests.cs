@@ -7,6 +7,161 @@ namespace Luotsi.Cli.Tests;
 public sealed class JourneyIntakeCommandTests
 {
     [Fact]
+    public async Task RunAsync_JourneyIntakeInit_Writes_Reviewable_Intake_And_Markdown_Without_Creating_Runner()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var deviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost());
+        using var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = deviceHostFactory,
+            ViewProfileStore = new FakeViewProfileStore()
+        });
+
+        var exitCode = await app.RunAsync([
+            "journey-intake",
+            "init",
+            "--output",
+            "/tmp/journey-intake.json",
+            "--name",
+            "checkout-smoke",
+            "--package",
+            "com.example.shop",
+            "--activity",
+            ".CheckoutActivity",
+            "--device",
+            "emulator-5554",
+            "--scenario",
+            "scenarios/checkout smoke.json",
+            "--artifacts",
+            "artifacts/checkout-intake",
+            "--run-artifacts",
+            "artifacts/from journey run",
+            "--write-markdown"
+        ]);
+        using var envelope = console.ParseSingleOutputAsJson();
+        using var intake = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/journey-intake.json"));
+        var markdown = await fileSystem.ReadAllTextAsync("/tmp/journey-intake.md");
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(0, deviceHostFactory.CreateCallCount);
+        Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("initialized", data.GetProperty("status").GetString());
+        Assert.True(data.GetProperty("written").GetBoolean());
+        Assert.Equal("/tmp/journey-intake.json", data.GetProperty("output").GetString());
+        Assert.Equal("/tmp/journey-intake.md", data.GetProperty("markdown_path").GetString());
+        Assert.Equal("com.example.shop", data.GetProperty("package").GetString());
+        Assert.Equal("emulator-5554", data.GetProperty("device_serial").GetString());
+        Assert.Equal("luotsi run --file \"scenarios/checkout smoke.json\" --device emulator-5554 --dry-run", data.GetProperty("handoff").GetProperty("dry_run_command").GetString());
+        Assert.Contains(
+            "luotsi replay capsule --artifacts \"artifacts/from journey run\" --write-readme --write-json",
+            data.GetProperty("next_commands").EnumerateArray().Select(static command => command.GetString()));
+        Assert.Equal("luotsi-journey-intake.v1", intake.RootElement.GetProperty("schema").GetString());
+        Assert.Equal("./luotsi-journey-intake.schema.json", intake.RootElement.GetProperty("$schema").GetString());
+        Assert.True(intake.RootElement.GetProperty("guardrails").GetProperty("reviewRequired").GetBoolean());
+        Assert.True(intake.RootElement.GetProperty("guardrails").GetProperty("doNotExecuteAsNaturalLanguage").GetBoolean());
+        Assert.Equal("com.example.shop", intake.RootElement.GetProperty("app").GetProperty("package").GetString());
+        Assert.Equal("luotsi replay scenario-draft --artifacts artifacts/checkout-intake/<run-id> --output \"scenarios/checkout smoke.json\" --validate --write-markdown", intake.RootElement.GetProperty("luotsiHandoff").GetProperty("draftCommand").GetString());
+        Assert.Contains("Keep `reviewRequired` true.", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi journey-intake validate --file /tmp/journey-intake.json", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --artifacts \"artifacts/from journey run\"", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay capsule --artifacts \"artifacts/from journey run\" --write-readme --write-json", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_JourneyIntakeInit_Output_Validates_And_Drafts_Scenario()
+    {
+        var fileSystem = new FakeFileSystem();
+        var deviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost());
+        using (var app = new App(new AppDependencies
+        {
+            Console = new FakeConsole(),
+            FileSystem = fileSystem,
+            DeviceHostFactory = deviceHostFactory,
+            ViewProfileStore = new FakeViewProfileStore()
+        }))
+        {
+            var initExitCode = await app.RunAsync([
+                "journey-intake",
+                "init",
+                "--output",
+                "/tmp/journey-intake.json",
+                "--package",
+                "com.example.shop",
+                "--device",
+                "emulator-5554",
+                "--scenario",
+                "/tmp/scenarios/checkout.json"
+            ]);
+
+            Assert.Equal(0, initExitCode);
+        }
+
+        var validateConsole = new FakeConsole();
+        using (var app = new App(new AppDependencies
+        {
+            Console = validateConsole,
+            FileSystem = fileSystem,
+            DeviceHostFactory = deviceHostFactory,
+            ViewProfileStore = new FakeViewProfileStore()
+        }))
+        {
+            var validateExitCode = await app.RunAsync(["journey-intake", "validate", "--file", "/tmp/journey-intake.json"]);
+            using var envelope = validateConsole.ParseSingleOutputAsJson();
+
+            Assert.Equal(0, validateExitCode);
+            Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+            Assert.Equal("validated", envelope.RootElement.GetProperty("data").GetProperty("status").GetString());
+        }
+
+        var draftConsole = new FakeConsole();
+        using (var app = new App(new AppDependencies
+        {
+            Console = draftConsole,
+            FileSystem = fileSystem,
+            DeviceHostFactory = deviceHostFactory,
+            ViewProfileStore = new FakeViewProfileStore()
+        }))
+        {
+            var draftExitCode = await app.RunAsync(["journey-intake", "draft-scenario", "--file", "/tmp/journey-intake.json", "--output", "/tmp/scenarios/checkout.json"]);
+            using var envelope = draftConsole.ParseSingleOutputAsJson();
+            using var scenario = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/scenarios/checkout.json"));
+
+            Assert.Equal(0, draftExitCode);
+            Assert.Equal("drafted", envelope.RootElement.GetProperty("data").GetProperty("status").GetString());
+            Assert.Equal("evidence-backed-journey", scenario.RootElement.GetProperty("name").GetString());
+            Assert.Contains("journey-intake", scenario.RootElement.GetProperty("tags").EnumerateArray().Select(static tag => tag.GetString()));
+        }
+
+        Assert.Equal(0, deviceHostFactory.CreateCallCount);
+    }
+
+    [Fact]
+    public async Task RunAsync_JourneyIntakeInit_Existing_Output_Returns_Usage_Error_Without_Overwrite()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        fileSystem.AddFile("/tmp/journey-intake.json", "{}");
+        using var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost()),
+            ViewProfileStore = new FakeViewProfileStore()
+        });
+
+        var exitCode = await app.RunAsync(["journey-intake", "init", "--output", "/tmp/journey-intake.json"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(2, exitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Contains("already exists", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_JourneyIntakeValidate_Returns_Handoff_Without_Creating_Runner()
     {
         var console = new FakeConsole();

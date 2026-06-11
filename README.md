@@ -243,6 +243,7 @@ Use the public [CLI command groups](https://digablesolutions.github.io/luotsi/do
 | Diagnose selected-device readiness | `luotsi doctor --device <serial> --fix` |
 | Mirror a device for a human operator | `luotsi view --device <serial>` |
 | Open an agent JSONL inspection loop | `luotsi inspect --device <serial>` |
+| Create a Journey intake handoff | `luotsi journey-intake init --output journey-intake.json --package <app.id> --device <serial> --write-markdown` |
 | Create a scenario skeleton | `luotsi scenario-init --file scenarios/smoke.json --name smoke` |
 | Validate scenarios without a device | `luotsi scenario-validate --path scenarios` |
 | Run scenarios in CI/lab mode | `luotsi run --path scenarios --device <serial> --claim-device --claim-wait-sec 60 --report-junit junit.xml` |
