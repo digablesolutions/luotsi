@@ -257,12 +257,12 @@ Tips:
   agent_prompt that can be handed to an AI operator. proof_checks is the
   compact install/device/artifact/device-truth/replay checklist for deciding
   whether the first five minutes produced usable evidence; each check includes
-  a status such as ready_to_run, needs_input, or ready_after_artifact. Run
-  luotsi quickstart-verify with the same --device, --package, and --artifacts
-  inputs when you want that checklist grouped into ready, blocked, and later
-  proof commands before starting the first-run path. Add --human when you want
-  a compact terminal plan with the first command, selected inputs,
-  minute-by-minute next steps, and the handoff proof command.
+  a status such as ready_to_run, needs_input, or ready_after_artifact. Use
+  the quickstart-verify command with the same --device, --package, and
+  --artifacts inputs when you want that checklist grouped into ready, blocked,
+  and later proof commands before starting the first-run path. Add --human
+  when you want a compact terminal plan with the first command, selected
+  inputs, minute-by-minute next steps, and the handoff proof command.
   Add --write-json and --write-markdown to persist quickstart-plan.json,
   quickstart-plan.md, evaluation-proof-pack.json, and evaluation-proof-pack.md
   in the artifact root.
@@ -943,7 +943,7 @@ Design:
     {
         normalized = topic.ToLowerInvariant() switch
         {
-            "workflow" or "workflows" or "start" or "getting-started" or "gettingstarted" => "quickstart",
+            "workflow" or "workflows" or "start" or "getting-started" or "gettingstarted" or "quickstart-verify" => "quickstart",
             "outputs" or "envelope" or "envelopes" or "json" or "jsonl" => "output",
             "replay-summarize" => "replay",
             "version" => "update",
