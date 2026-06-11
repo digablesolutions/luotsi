@@ -14,7 +14,7 @@ public sealed class SystemConsoleIo : IConsoleIo
 
     private static bool SupportsAnsiStylingCore()
     {
-        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("NO_COLOR")))
+        if (Environment.GetEnvironmentVariable("NO_COLOR") is not null)
         {
             return false;
         }
