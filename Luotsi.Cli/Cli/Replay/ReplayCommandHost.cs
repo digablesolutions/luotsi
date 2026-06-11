@@ -265,6 +265,11 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             }
 
             var runSummaryMarkdown = await _dependencies.FileSystem.ReadAllTextAsync(runSummaryMarkdownPath).ConfigureAwait(false);
+            if (!runSummaryMarkdown.Contains("## Copy-Paste Triage Commands", StringComparison.Ordinal))
+            {
+                throw new UsageException($"{RunSummaryMarkdownFileName} is missing the copy-paste triage command block. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
+            }
+
             if (!runSummaryMarkdown.Contains("## 60-Second Triage Checklist", StringComparison.Ordinal))
             {
                 throw new UsageException($"{RunSummaryMarkdownFileName} is missing the 60-second triage checklist. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
@@ -487,6 +492,30 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         builder.AppendLine($"Verdict: {EscapeMarkdown(result.Verdict)}");
         builder.AppendLine($"Sessions: `{result.SessionCount}`");
         builder.AppendLine($"Failures: `{result.FailureCount}`");
+        builder.AppendLine();
+        builder.AppendLine("## Copy-Paste Triage Commands");
+        builder.AppendLine();
+        var firstMinuteCommands = result.TriageChecklist
+            .OrderBy(static item => item.Step)
+            .Select(static item => item.Command)
+            .Where(static command => !string.IsNullOrWhiteSpace(command))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (firstMinuteCommands.Length == 0)
+        {
+            builder.AppendLine("No command-only triage path is available in this packet.");
+        }
+        else
+        {
+            builder.AppendLine("```bash");
+            foreach (var command in firstMinuteCommands)
+            {
+                builder.AppendLine(command);
+            }
+
+            builder.AppendLine("```");
+        }
+
         builder.AppendLine();
         builder.AppendLine("## 60-Second Triage Checklist");
         builder.AppendLine();

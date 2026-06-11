@@ -1008,6 +1008,8 @@ public sealed partial class AppTests
         Assert.Contains("luotsi replay scrub --source-path", persistedPrimaryFailure.GetProperty("sourceCommand").GetString(), StringComparison.Ordinal);
         var markdown = await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "run-summary.md"));
         Assert.Contains("# Luotsi Run Summary", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Copy-Paste Triage Commands", markdown, StringComparison.Ordinal);
+        Assert.Contains("```bash", markdown, StringComparison.Ordinal);
         Assert.Contains("## 60-Second Triage Checklist", markdown, StringComparison.Ordinal);
         Assert.Contains("3. Use the commands section only after the focused failure window is understood", markdown, StringComparison.Ordinal);
         Assert.Contains("Session ID", markdown, StringComparison.Ordinal);
@@ -1242,6 +1244,42 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayPacket_Check_MarkdownWithoutCopyPasteCommands_ReturnsUsageError()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplaySummaryArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = new FakeProcessRunner(),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var writeExitCode = await app.RunAsync(["replay", "packet", "--artifacts", replayRoot]);
+        var packet = JsonNode.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "run-summary.json")))!.AsObject();
+        var recommendedCommand = packet["recommendedNextAction"]!.AsObject()["command"]!.GetValue<string>();
+        fileSystem.AddFile(Path.Join(replayRoot, "run-summary.md"), $"""
+        # Luotsi Run Summary
+
+        ## 60-Second Triage Checklist
+
+        1. Run `{recommendedCommand}`
+        """);
+        console.OutputLines.Clear();
+        var checkExitCode = await app.RunAsync(["replay", "packet", "--check", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, writeExitCode);
+        Assert.Equal(2, checkExitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("copy-paste triage command block", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("Re-run `luotsi replay packet", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayPacket_Check_MarkdownWithoutRecommendedCommand_ReturnsUsageError()
     {
         var console = new FakeConsole();
@@ -1258,6 +1296,12 @@ public sealed partial class AppTests
         var writeExitCode = await app.RunAsync(["replay", "packet", "--artifacts", replayRoot]);
         fileSystem.AddFile(Path.Join(replayRoot, "run-summary.md"), """
         # Luotsi Run Summary
+
+        ## Copy-Paste Triage Commands
+
+        ```bash
+        luotsi artifacts open /tmp/replay-root
+        ```
 
         ## 60-Second Triage Checklist
 
