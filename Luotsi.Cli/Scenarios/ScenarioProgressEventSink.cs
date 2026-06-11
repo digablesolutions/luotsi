@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Luotsi.Cli.Infrastructure.Contracts;
+using Luotsi.Cli.Infrastructure.System;
 
 namespace Luotsi.Cli.Scenarios;
 
@@ -91,26 +92,41 @@ internal sealed class ConsoleScenarioProgressEventSink(IConsoleIo console, Scena
         switch (scenarioEvent.Event)
         {
             case "scenario_run_started":
-                _console.WriteErrorLine($"Run started: {scenarioEvent.Path ?? "scenario"}{FormatSelection(scenarioEvent)}");
+                _console.WriteErrorLine($"{ConsoleStyling.Accent(_console, "Run started")}: {scenarioEvent.Path ?? "scenario"}{FormatSelection(scenarioEvent)}");
                 break;
             case "scenario_started":
-                _console.WriteErrorLine($"Scenario started: {scenarioEvent.Scenario ?? scenarioEvent.File ?? "scenario"}");
+                _console.WriteErrorLine($"{ConsoleStyling.Accent(_console, "Scenario started")}: {scenarioEvent.Scenario ?? scenarioEvent.File ?? "scenario"}");
                 break;
             case "scenario_step_started":
-                _console.WriteErrorLine($"  [{scenarioEvent.StepIndex ?? 0}] {scenarioEvent.Step ?? scenarioEvent.Action ?? "step"} started");
+                _console.WriteErrorLine($"  {ConsoleStyling.Muted(_console, $"[{scenarioEvent.StepIndex ?? 0}]")} {scenarioEvent.Step ?? scenarioEvent.Action ?? "step"} {ConsoleStyling.Muted(_console, "started")}");
                 break;
             case "scenario_step_passed":
             case "scenario_step_failed":
             case "scenario_step_continued_on_error":
-                _console.WriteErrorLine($"  [{scenarioEvent.StepIndex ?? 0}] {scenarioEvent.Step ?? scenarioEvent.Action ?? "step"} {StatusOrEvent(scenarioEvent)}{FormatDurationSuffix(scenarioEvent.DurationMs)}");
+                _console.WriteErrorLine($"  {ConsoleStyling.Muted(_console, $"[{scenarioEvent.StepIndex ?? 0}]")} {scenarioEvent.Step ?? scenarioEvent.Action ?? "step"} {StyleProgressStatus(StatusOrEvent(scenarioEvent))}{FormatDurationSuffix(scenarioEvent.DurationMs)}");
                 break;
             case "scenario_ended":
-                _console.WriteErrorLine($"Scenario {scenarioEvent.Status ?? "ended"}: {scenarioEvent.Scenario ?? scenarioEvent.File ?? "scenario"}{FormatDurationSuffix(scenarioEvent.DurationMs)}");
+                _console.WriteErrorLine($"Scenario {StyleProgressStatus(scenarioEvent.Status ?? "ended")}: {scenarioEvent.Scenario ?? scenarioEvent.File ?? "scenario"}{FormatDurationSuffix(scenarioEvent.DurationMs)}");
                 break;
             case "scenario_run_ended":
-                _console.WriteErrorLine($"Run {scenarioEvent.Status ?? "ended"}: {scenarioEvent.PassedCount ?? 0} passed, {scenarioEvent.FailedCount ?? 0} failed");
+                _console.WriteErrorLine($"Run {StyleProgressStatus(scenarioEvent.Status ?? "ended")}: {ConsoleStyling.Success(_console, (scenarioEvent.PassedCount ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture))} passed, {StyleFailureCount(scenarioEvent.FailedCount ?? 0)} failed");
                 break;
         }
+    }
+
+    private string StyleProgressStatus(string status)
+        => status switch
+        {
+            "passed" or "pass" => ConsoleStyling.Success(_console, status),
+            "failed" or "fail" => ConsoleStyling.Failure(_console, status),
+            "continued_on_error" => ConsoleStyling.Warning(_console, status),
+            _ => ConsoleStyling.Muted(_console, status)
+        };
+
+    private string StyleFailureCount(int count)
+    {
+        var value = count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return count == 0 ? ConsoleStyling.Success(_console, value) : ConsoleStyling.Failure(_console, value);
     }
 
     private static string StatusOrEvent(ScenarioEvent scenarioEvent) =>
