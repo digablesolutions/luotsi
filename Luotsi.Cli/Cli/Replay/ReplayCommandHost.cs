@@ -852,6 +852,14 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         ReplayOpenPrimaryFailureResult? primaryFailure)
     {
         yield return new ReplayOpenCommandHintResult(
+            "replay_packet",
+            "Write run-summary.json and run-summary.md for the durable first-minute packet.",
+            $"luotsi replay packet --artifacts {Quote(artifactRoot)}");
+        yield return new ReplayOpenCommandHintResult(
+            "replay_packet_check",
+            "Validate the durable first-minute packet before handoff.",
+            BuildPacketCheckCommand(artifactRoot));
+        yield return new ReplayOpenCommandHintResult(
             "pack_artifacts",
             "Pack this artifact root for CI upload or replay handoff.",
             $"luotsi artifacts pack {Quote(artifactRoot)}");

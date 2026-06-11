@@ -1066,15 +1066,20 @@ public sealed partial class AppTests
         Assert.Equal(1, data.GetProperty("session_count").GetInt32());
         Assert.Equal(1, data.GetProperty("failure_count").GetInt32());
         Assert.Equal("scrub_failure", data.GetProperty("recommended_next_action").GetProperty("kind").GetString());
-        Assert.Contains(data.GetProperty("commands").EnumerateArray(), command =>
+        var commands = data.GetProperty("commands").EnumerateArray().ToArray();
+        Assert.Equal("replay_packet", commands[0].GetProperty("kind").GetString());
+        Assert.Equal($"luotsi replay packet --artifacts {replayRoot}", commands[0].GetProperty("command").GetString());
+        Assert.Equal("replay_packet_check", commands[1].GetProperty("kind").GetString());
+        Assert.Equal($"luotsi replay packet --artifacts {replayRoot} --check", commands[1].GetProperty("command").GetString());
+        Assert.Contains(commands, command =>
             command.GetProperty("kind").GetString() == "capsule" &&
             command.GetProperty("command").GetString() == $"luotsi replay capsule --artifacts {replayRoot} --write-readme --write-json");
-        Assert.Contains(data.GetProperty("commands").EnumerateArray(), command =>
+        Assert.Contains(commands, command =>
             command.GetProperty("kind").GetString() == "scrub" &&
             command.GetProperty("command").GetString() == $"luotsi replay scrub --artifacts {replayRoot} --failures --context 3 --write-markdown");
-        Assert.Contains(data.GetProperty("commands").EnumerateArray(), command =>
+        Assert.Contains(commands, command =>
             command.GetProperty("kind").GetString() == "graph");
-        Assert.Contains(data.GetProperty("commands").EnumerateArray(), command =>
+        Assert.Contains(commands, command =>
             command.GetProperty("kind").GetString() == "scenario_draft");
         Assert.Equal("error=transport: Unexpected end of stream", data.GetProperty("primary_failure").GetProperty("message").GetString());
         Assert.EndsWith("index.html", data.GetProperty("index_html_path").GetString(), StringComparison.OrdinalIgnoreCase);
