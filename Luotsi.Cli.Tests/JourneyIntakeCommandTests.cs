@@ -56,6 +56,9 @@ public sealed class JourneyIntakeCommandTests
         Assert.Equal("com.example.shop", data.GetProperty("package").GetString());
         Assert.Equal("emulator-5554", data.GetProperty("device_serial").GetString());
         Assert.Equal("luotsi run --file \"scenarios/checkout smoke.json\" --device emulator-5554 --dry-run", data.GetProperty("handoff").GetProperty("dry_run_command").GetString());
+        Assert.Equal(
+            "luotsi replay packet --artifacts \"artifacts/from journey run\"",
+            data.GetProperty("handoff").GetProperty("replay_command").GetString());
         Assert.Contains(
             "luotsi replay capsule --artifacts \"artifacts/from journey run\" --write-readme --write-json",
             data.GetProperty("next_commands").EnumerateArray().Select(static command => command.GetString()));
@@ -69,6 +72,7 @@ public sealed class JourneyIntakeCommandTests
         Assert.Contains("Keep `reviewRequired` true.", markdown, StringComparison.Ordinal);
         Assert.Contains("luotsi journey-intake validate --file /tmp/journey-intake.json", markdown, StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --artifacts \"artifacts/from journey run\"", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --artifacts \"artifacts/from journey run\" --check", markdown, StringComparison.Ordinal);
         Assert.Contains("luotsi replay capsule --artifacts \"artifacts/from journey run\" --write-readme --write-json", markdown, StringComparison.Ordinal);
     }
 
@@ -396,6 +400,12 @@ public sealed class JourneyIntakeCommandTests
         Assert.Contains(
             "luotsi scenario-validate --file \"/tmp/scenarios/settings \\\"draft\\\".json\"",
             data.GetProperty("next_commands").EnumerateArray().Select(static command => command.GetString()));
+        Assert.Contains(
+            "luotsi replay packet --artifacts <artifact-root>",
+            data.GetProperty("next_commands").EnumerateArray().Select(static command => command.GetString()));
+        Assert.Contains(
+            "luotsi replay packet --artifacts <artifact-root> --check",
+            data.GetProperty("next_commands").EnumerateArray().Select(static command => command.GetString()));
         Assert.Equal("settings-smoke", scenario.RootElement.GetProperty("name").GetString());
         Assert.Contains("review-required", scenario.RootElement.GetProperty("tags").EnumerateArray().Select(static tag => tag.GetString()));
         Assert.Equal("com.example.app", scenario.RootElement.GetProperty("metadata").GetProperty("package").GetString());
@@ -473,7 +483,7 @@ public sealed class JourneyIntakeCommandTests
         "dryRunCommand": "luotsi run --file scenarios/settings.json --device <serial> --dry-run",
         "runCommand": "luotsi run --file scenarios/settings.json --device <serial>",
         "claimedRunCommand": "luotsi run --file scenarios/settings.json --device-query \"state=online,type=physical,availability=available\" --claim-device",
-        "replayCommand": "luotsi replay open --artifacts artifacts/settings-run --dry-run"
+        "replayCommand": "luotsi replay packet --artifacts artifacts/settings-run"
       },
       "review": {
         "owner": "",

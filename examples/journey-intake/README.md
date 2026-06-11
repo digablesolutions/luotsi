@@ -38,7 +38,8 @@ luotsi scenario-validate --file scenarios/from-journey.json
 luotsi replay scenario-draft --artifacts artifacts/journey-intake/<run-id> --output scenarios/from-replay.json --validate --write-markdown
 luotsi run --file scenarios/from-journey.json --device <serial> --dry-run
 luotsi run --file scenarios/from-journey.json --device <serial> --output-dir artifacts/from-journey-run
-luotsi replay open --artifacts artifacts/from-journey-run --dry-run
+luotsi replay packet --artifacts artifacts/from-journey-run
+luotsi replay packet --artifacts artifacts/from-journey-run --check
 ```
 
 Keep generated scenarios review-required. Luotsi scenarios are explicit JSON

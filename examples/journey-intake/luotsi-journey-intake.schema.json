@@ -203,7 +203,7 @@
         },
         "replayCommand": {
           "type": "string",
-          "pattern": "^luotsi replay open "
+          "pattern": "^luotsi replay (packet|open) "
         }
       }
     },
