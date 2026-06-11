@@ -77,7 +77,7 @@ internal static class QuickstartCommand
         var quickstartHandoffCommand = $"luotsi quickstart {BuildCurrentOptionFlags(new QuickstartInputResult(suppliedDevice, package, artifacts, scenarioPath))} --write-json --write-markdown"
             .Replace("  ", " ", StringComparison.Ordinal)
             .Trim();
-        var deviceProofCommand = suppliedDevice is null ? "luotsi doctor" : $"luotsi doctor {deviceFlag} {packageFlag}";
+        var deviceProofCommand = doctorCommand;
         var deviceTruthProofCommand = $"luotsi screen-state {deviceFlag} {artifactsFlag}";
 
         var steps = new[]
