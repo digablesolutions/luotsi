@@ -60,13 +60,14 @@ internal sealed class JourneyIntakeValidationService(IFileSystem fileSystem)
             await _fileSystem.WriteAllTextAsync(markdownPath, BuildInitMarkdown(output, runArtifactRoot, document), new UTF8Encoding(false)).ConfigureAwait(false);
         }
 
+        var claimedRunCommand = document.LuotsiHandoff.ClaimedRunCommand ?? throw new InvalidOperationException("Journey intake init must include a claimed run command.");
         var nextCommands = new[]
         {
             $"luotsi journey-intake validate --file {Quote(output)}",
             $"luotsi journey-intake draft-scenario --file {Quote(output)} --output {Quote(scenario)}",
             $"luotsi scenario-validate --file {Quote(scenario)}",
             $"luotsi run --file {Quote(scenario)} --device {Quote(device)} --dry-run",
-            document.LuotsiHandoff.ClaimedRunCommand,
+            claimedRunCommand,
             $"luotsi replay packet --artifacts {Quote(runArtifactRoot)}",
             $"luotsi replay capsule --artifacts {Quote(runArtifactRoot)} --write-readme --write-json"
         };

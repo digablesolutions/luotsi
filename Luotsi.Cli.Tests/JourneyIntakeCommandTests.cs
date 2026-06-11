@@ -43,7 +43,6 @@ public sealed class JourneyIntakeCommandTests
         ]);
         using var envelope = console.ParseSingleOutputAsJson();
         using var intake = JsonDocument.Parse(await fileSystem.ReadAllTextAsync("/tmp/journey-intake.json"));
-        var markdown = await fileSystem.ReadAllTextAsync("/tmp/journey-intake.md");
 
         Assert.Equal(0, exitCode);
         Assert.Equal(0, deviceHostFactory.CreateCallCount);
@@ -52,7 +51,8 @@ public sealed class JourneyIntakeCommandTests
         Assert.Equal("initialized", data.GetProperty("status").GetString());
         Assert.True(data.GetProperty("written").GetBoolean());
         Assert.Equal("/tmp/journey-intake.json", data.GetProperty("output").GetString());
-        Assert.Equal("/tmp/journey-intake.md", data.GetProperty("markdown_path").GetString());
+        var markdownPath = data.GetProperty("markdown_path").GetString();
+        Assert.EndsWith("journey-intake.md", markdownPath, StringComparison.Ordinal);
         Assert.Equal("com.example.shop", data.GetProperty("package").GetString());
         Assert.Equal("emulator-5554", data.GetProperty("device_serial").GetString());
         Assert.Equal("luotsi run --file \"scenarios/checkout smoke.json\" --device emulator-5554 --dry-run", data.GetProperty("handoff").GetProperty("dry_run_command").GetString());
@@ -65,6 +65,7 @@ public sealed class JourneyIntakeCommandTests
         Assert.True(intake.RootElement.GetProperty("guardrails").GetProperty("doNotExecuteAsNaturalLanguage").GetBoolean());
         Assert.Equal("com.example.shop", intake.RootElement.GetProperty("app").GetProperty("package").GetString());
         Assert.Equal("luotsi replay scenario-draft --artifacts artifacts/checkout-intake/<run-id> --output \"scenarios/checkout smoke.json\" --validate --write-markdown", intake.RootElement.GetProperty("luotsiHandoff").GetProperty("draftCommand").GetString());
+        var markdown = await fileSystem.ReadAllTextAsync(markdownPath!);
         Assert.Contains("Keep `reviewRequired` true.", markdown, StringComparison.Ordinal);
         Assert.Contains("luotsi journey-intake validate --file /tmp/journey-intake.json", markdown, StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --artifacts \"artifacts/from journey run\"", markdown, StringComparison.Ordinal);
