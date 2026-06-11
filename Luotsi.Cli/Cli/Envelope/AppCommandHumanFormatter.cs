@@ -167,6 +167,12 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
             return true;
         }
 
+        if (IsSchema(value, ResultSchemas.QuickstartVerify))
+        {
+            lines = BuildQuickstartVerifySummary(value);
+            return true;
+        }
+
         if (IsSchema(value, ResultSchemas.ReplayOpen))
         {
             lines = BuildReplayOpenSummary(value, artifacts);
@@ -226,6 +232,22 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
         AddRecommendedCommand(lines, value);
         AddQuickstartProofChecks(lines, value);
         AddMultilineScalar(lines, value, "agent_prompt");
+        return lines;
+    }
+
+    private static IReadOnlyList<string> BuildQuickstartVerifySummary(JsonElement value)
+    {
+        var lines = new List<string>();
+        AddScalar(lines, value, "status");
+        AddScalar(lines, value, "summary");
+        AddScalar(lines, value, "total");
+        AddScalar(lines, value, "ready_count");
+        AddScalar(lines, value, "blocked_count");
+        AddScalar(lines, value, "later_count");
+        AddScalar(lines, value, "next_command");
+        AddArraySummary(lines, value, "blocked_checks");
+        AddArraySummary(lines, value, "ready_checks");
+        AddArraySummary(lines, value, "later_checks");
         return lines;
     }
 

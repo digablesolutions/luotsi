@@ -116,7 +116,7 @@ luotsi run --file scenarios/smoke.json --device <serial> --artifacts ./artifacts
   | node examples/agents/extract-next-command.mjs
 ```
 
-`luotsi quickstart` also returns `data.proof_checks[]`. Treat those checks as readiness evidence gates, not as the next-command priority order: they name the install, device, artifact handoff, device-truth, and replay proofs that show the first five minutes produced usable evidence. Each proof check carries a status such as `ready_to_run`, `needs_input`, or `ready_after_artifact` so agents can tell which commands still need concrete input.
+`luotsi quickstart` also returns `data.proof_checks[]`. Treat those checks as readiness evidence gates, not as the next-command priority order: they name the install, device, artifact handoff, device-truth, and replay proofs that show the first five minutes produced usable evidence. Each proof check carries a status such as `ready_to_run`, `needs_input`, or `ready_after_artifact` so agents can tell which commands still need concrete input. Run `luotsi quickstart-verify` with the same inputs when you want those checks grouped into ready, blocked, and later commands before starting.
 
 ## Agent Sessions
 

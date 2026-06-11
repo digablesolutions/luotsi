@@ -340,6 +340,81 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_QuickstartVerify_Groups_Proof_Checks_By_Readiness()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["quickstart-verify"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(console.ErrorLines);
+        Assert.True(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("quickstart-verify", envelope.RootElement.GetProperty("command").GetString());
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("luotsi-quickstart-verify.v1", data.GetProperty("schema").GetString());
+        Assert.Equal("blocked", data.GetProperty("status").GetString());
+        Assert.Equal(5, data.GetProperty("total").GetInt32());
+        Assert.Equal(3, data.GetProperty("ready_count").GetInt32());
+        Assert.Equal(1, data.GetProperty("blocked_count").GetInt32());
+        Assert.Equal(1, data.GetProperty("later_count").GetInt32());
+        Assert.Equal("luotsi version", data.GetProperty("next_command").GetString());
+        Assert.Contains(
+            data.GetProperty("blocked_checks").EnumerateArray(),
+            check => check.GetProperty("kind").GetString() == "device_truth" &&
+                check.GetProperty("blocked_reason").GetString() == "Provide --device or run the earlier selection proof first.");
+        Assert.Contains(
+            data.GetProperty("recommended_commands").EnumerateArray(),
+            command => command.GetProperty("kind").GetString() == "handoff" &&
+                command.GetProperty("command").GetString() == "luotsi quickstart --artifacts artifacts/first-run --path scenarios --write-json --write-markdown");
+    }
+
+    [Fact]
+    public async Task RunAsync_QuickstartVerify_Uses_Device_And_Package_When_Supplied()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["quickstart-verify", "--device", "emulator-5554", "--package", "dev.luotsi.demo", "--artifacts", "artifacts/demo"]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, exitCode);
+        var data = envelope.RootElement.GetProperty("data");
+        Assert.Equal("ready_to_verify", data.GetProperty("status").GetString());
+        Assert.Equal(4, data.GetProperty("ready_count").GetInt32());
+        Assert.Equal(0, data.GetProperty("blocked_count").GetInt32());
+        Assert.Equal(1, data.GetProperty("later_count").GetInt32());
+        Assert.Equal("luotsi version", data.GetProperty("next_command").GetString());
+        Assert.Empty(data.GetProperty("blocked_checks").EnumerateArray());
+        Assert.Contains(
+            data.GetProperty("ready_checks").EnumerateArray(),
+            check => check.GetProperty("kind").GetString() == "device_truth" &&
+                check.GetProperty("command").GetString() == "luotsi screen-state --device emulator-5554 --artifacts artifacts/demo");
+    }
+
+    [Fact]
+    public async Task RunAsync_QuickstartVerify_Human_Writes_Proof_Gate()
+    {
+        var console = new FakeConsole();
+        var app = new App(new AppDependencies { Console = console });
+
+        var exitCode = await app.RunAsync(["quickstart-verify", "--human", "--device", "emulator-5554", "--package", "dev.luotsi.demo", "--artifacts", "artifacts/demo"]);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(console.ErrorLines);
+        Assert.Contains(console.OutputLines, static line => line.StartsWith("OK  quickstart-verify completed", StringComparison.Ordinal));
+        Assert.Contains("  status: ready_to_verify", console.OutputLines);
+        Assert.Contains("  total: 5", console.OutputLines);
+        Assert.Contains("  ready_count: 4", console.OutputLines);
+        Assert.Contains("  blocked_count: 0", console.OutputLines);
+        Assert.Contains("  later_count: 1", console.OutputLines);
+        Assert.Contains("  next_command: luotsi version", console.OutputLines);
+        Assert.Contains(console.OutputLines, static line => line.Contains("ready_checks: 4", StringComparison.Ordinal));
+        Assert.DoesNotContain(console.OutputLines, static line => line.StartsWith("{", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task RunAsync_Help_Command_Writes_Replay_Topic()
     {
         var console = new FakeConsole();

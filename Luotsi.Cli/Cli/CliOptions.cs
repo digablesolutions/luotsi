@@ -19,6 +19,7 @@ public sealed class CliOptions
         "artifacts",
         "help",
         "quickstart",
+        "quickstart-verify",
         "version",
         "update",
         "devices",
