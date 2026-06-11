@@ -2,7 +2,7 @@
 
 `luotsi-artifact-package.json` is the manifest embedded at the root of every `luotsi artifacts pack` zip. It is the durable handoff contract for replayable artifact packages. Use `luotsi artifacts verify <artifact.zip>` to validate the manifest, archive entries, SHA-256, and redaction status without extracting the package. Use `luotsi artifacts verify <artifact.zip> --require-lab-safe` or `luotsi artifacts unpack <artifact.zip> --require-lab-safe` when support or CI must reject unredacted packages before unpacking.
 
-Use `luotsi artifacts info <artifact.zip>` to inspect and validate a package manifest, redaction metadata, SHA-256, and unpack/replay commands before extracting files. Use `luotsi artifacts intake <artifact.zip> --require-lab-safe --write-json --write-readme --sha256 <digest>` to enforce lab-safe redaction, verify package bytes, restore the artifact root, persist the intake audit summary, and return info/open/replay commands in one step. The lower-level `luotsi artifacts unpack <artifact.zip> --require-lab-safe --sha256 <digest>` command enforces the same gates before extraction; failures happen before files are written.
+Use `luotsi artifacts info <artifact.zip>` to inspect and validate a package manifest, redaction metadata, SHA-256, and unpack/packet-check/replay commands before extracting files. Use `luotsi artifacts intake <artifact.zip> --require-lab-safe --write-json --write-readme --sha256 <digest>` to enforce lab-safe redaction, verify package bytes, restore the artifact root, persist the intake audit summary, and return info/packet-check/open/replay commands in one step. The lower-level `luotsi artifacts unpack <artifact.zip> --require-lab-safe --sha256 <digest>` command enforces the same gates before extraction; failures happen before files are written.
 
 ## Top-level fields
 
@@ -73,19 +73,24 @@ Each `recommended_commands` item is an object with:
   },
   "recommended_commands": [
     {
-      "kind": "replay_open",
-      "summary": "Open the replay front door for the unpacked artifact root.",
-      "command": "luotsi replay open --artifacts <unpacked-artifact-root>"
-    },
-    {
       "kind": "info_artifacts",
       "summary": "Inspect the unpacked artifact root without opening it.",
       "command": "luotsi artifacts info <unpacked-artifact-root>"
     },
     {
+      "kind": "replay_packet_check",
+      "summary": "Validate the restored run summary packet before triage.",
+      "command": "luotsi replay packet --artifacts <unpacked-artifact-root> --check"
+    },
+    {
       "kind": "open_artifacts",
-      "summary": "Open the unpacked artifact root in the generic artifact browser.",
+      "summary": "Open the unpacked artifact root locally.",
       "command": "luotsi artifacts open <unpacked-artifact-root>"
+    },
+    {
+      "kind": "replay_open",
+      "summary": "Open the replay workbench for the unpacked artifact root.",
+      "command": "luotsi replay open --artifacts <unpacked-artifact-root>"
     }
   ],
   "files": [
@@ -98,8 +103,8 @@ Each `recommended_commands` item is an object with:
 ## Compatibility rules
 
 - Unknown fields must be ignored.
-- The first command should be `replay_open` so humans and agents see the replay front door before the generic artifact browser.
-- Use `info_artifacts` for a non-mutating file/category check, and `open_artifacts` only when you specifically need the generic artifact browser.
+- Use `info_artifacts` for a non-mutating file/category check, then `replay_packet_check` to validate the restored `run-summary.json` before broad triage.
+- Use `replay_open` for the replay workbench, and `open_artifacts` only when you specifically need the generic artifact browser.
 - Missing `redaction` means the package was created before redaction metadata existed or with the default exact-copy policy.
 - `artifacts verify --require-lab-safe` treats missing `redaction` or any non-`lab-safe` mode as a blocked handoff gate and exits non-zero while still reporting manifest/SHA details.
 - `artifacts unpack --require-lab-safe` treats missing `redaction` or any non-`lab-safe` mode as a usage error before files are extracted.

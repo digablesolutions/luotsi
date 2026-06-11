@@ -562,12 +562,14 @@ public sealed partial class AppTests
         Assert.Equal(2, fixture.RootElement.GetProperty("source_file_count").GetInt32());
         Assert.Equal(2, fixture.RootElement.GetProperty("files").GetArrayLength());
         var recommendedCommands = fixture.RootElement.GetProperty("recommended_commands").EnumerateArray().ToArray();
-        Assert.Equal("replay_open", recommendedCommands[0].GetProperty("kind").GetString());
-        Assert.Equal("Open the replay front door for the unpacked artifact root.", recommendedCommands[0].GetProperty("summary").GetString());
+        Assert.Equal("info_artifacts", recommendedCommands[0].GetProperty("kind").GetString());
+        Assert.Contains(recommendedCommands, command =>
+            command.GetProperty("kind").GetString() == "replay_packet_check" &&
+            command.GetProperty("command").GetString() == "luotsi replay packet --artifacts <unpacked-artifact-root> --check");
         Assert.Contains(recommendedCommands, command =>
             command.GetProperty("kind").GetString() == "open_artifacts" &&
-            command.GetProperty("summary").GetString() == "Open the unpacked artifact root in the generic artifact browser.");
-        Assert.Contains("The first command should be `replay_open`", schemaGuide, StringComparison.Ordinal);
+            command.GetProperty("summary").GetString() == "Open the unpacked artifact root locally.");
+        Assert.Contains("then `replay_packet_check` to validate the restored `run-summary.json`", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("Use `info_artifacts` for a non-mutating file/category check", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("`open_artifacts` only when you specifically need the generic artifact browser", schemaGuide, StringComparison.Ordinal);
 

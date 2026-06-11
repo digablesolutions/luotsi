@@ -5509,6 +5509,9 @@ public sealed partial class AppTests
             command.GetProperty("kind").GetString() == "unpack_artifacts_dry_run" &&
             command.GetProperty("command").GetString() == $"luotsi artifacts unpack {packagePath} --output {defaultOutputDirectory} --require-lab-safe --dry-run --sha256 {sha256}");
         Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "replay_packet_check_after_unpack" &&
+            command.GetProperty("command").GetString() == $"luotsi replay packet --artifacts {defaultOutputDirectory} --check");
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
             command.GetProperty("kind").GetString() == "replay_open_after_unpack" &&
             command.GetProperty("command").GetString() == $"luotsi replay open --artifacts {defaultOutputDirectory}");
         Assert.False(fileSystem.DirectoryExists(defaultOutputDirectory));
@@ -5798,6 +5801,9 @@ public sealed partial class AppTests
             Assert.Equal("20260526-120000-run", manifest.RootElement.GetProperty("run_id").GetString());
             Assert.Equal(2, manifest.RootElement.GetProperty("source_file_count").GetInt32());
             Assert.Contains(manifest.RootElement.GetProperty("recommended_commands").EnumerateArray(), command =>
+                command.GetProperty("kind").GetString() == "replay_packet_check" &&
+                command.GetProperty("command").GetString() == "luotsi replay packet --artifacts <unpacked-artifact-root> --check");
+            Assert.Contains(manifest.RootElement.GetProperty("recommended_commands").EnumerateArray(), command =>
                 command.GetProperty("kind").GetString() == "replay_open");
         }
         Assert.Contains(archive.Entries, entry => entry.FullName == "index.html");
@@ -6002,6 +6008,9 @@ public sealed partial class AppTests
         Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
             command.GetProperty("kind").GetString() == "unpack_artifacts" &&
             command.GetProperty("command").GetString() == $"luotsi artifacts unpack {packagePath} --output {suggestedOutput} --require-lab-safe --sha256 {sha256}");
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "replay_packet_check" &&
+            command.GetProperty("command").GetString() == $"luotsi replay packet --artifacts {suggestedOutput} --check");
         Assert.False(fileSystem.DirectoryExists(suggestedOutput));
         Assert.False(fileSystem.FileExists(Path.Join(suggestedOutput, "index.html")));
     }
@@ -6639,6 +6648,9 @@ public sealed partial class AppTests
         Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
             command.GetProperty("kind").GetString() == "replay_open" &&
             command.GetProperty("command").GetString() == "luotsi replay open --artifacts /tmp/intake");
+        Assert.Contains(data.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("kind").GetString() == "replay_packet_check" &&
+            command.GetProperty("command").GetString() == "luotsi replay packet --artifacts /tmp/intake --check");
     }
 
     [Fact]
@@ -7083,6 +7095,8 @@ public sealed partial class AppTests
         Assert.Equal("20260526-120000-run", unpackData.GetProperty("manifest").GetProperty("run_id").GetString());
         Assert.Contains(unpackData.GetProperty("recommended_commands").EnumerateArray(), command =>
             command.GetProperty("command").GetString() == $"luotsi artifacts open {unpackedRoot}");
+        Assert.Contains(unpackData.GetProperty("recommended_commands").EnumerateArray(), command =>
+            command.GetProperty("command").GetString() == $"luotsi replay packet --artifacts {unpackedRoot} --check");
         Assert.Contains(unpackData.GetProperty("recommended_commands").EnumerateArray(), command =>
             command.GetProperty("command").GetString() == $"luotsi replay open --artifacts {unpackedRoot}");
 
