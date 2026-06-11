@@ -204,6 +204,7 @@ public sealed partial class AppTests
         Assert.Contains("\"artifact_root\":", markdown, StringComparison.Ordinal);
         Assert.Contains("artifacts.artifact_root", markdown, StringComparison.Ordinal);
         Assert.Contains("data.recommended_next_action.command", markdown, StringComparison.Ordinal);
+        Assert.Contains("data.primary_failure.source_command", markdown, StringComparison.Ordinal);
         Assert.Contains("data.artifact_commands", markdown, StringComparison.Ordinal);
         Assert.Contains("examples/agents/extract-next-command.py", markdown, StringComparison.Ordinal);
         Assert.Contains("examples/agents/extract-next-command.mjs", markdown, StringComparison.Ordinal);
@@ -212,6 +213,7 @@ public sealed partial class AppTests
         Assert.Contains("\"poll_artifacts\":", readme, StringComparison.Ordinal);
         AssertContainsBefore(readme, "First five minutes: [docs/getting-started/first-five-minutes]", "Installation: [docs/getting-started/installation]");
         Assert.Contains("data.recommended_next_action.command", readme, StringComparison.Ordinal);
+        Assert.Contains("data.primary_failure.source_command", readme, StringComparison.Ordinal);
         Assert.Contains("data.artifact_commands", readme, StringComparison.Ordinal);
         Assert.Contains("Human output leads with the artifact root", readme, StringComparison.Ordinal);
         Assert.Contains("guide:` reminder that the root is durable evidence", readme, StringComparison.Ordinal);
@@ -250,6 +252,7 @@ public sealed partial class AppTests
 
         Assert.Contains("command -> structured output -> artifact root -> replay command -> next action", examples, StringComparison.Ordinal);
         Assert.Contains("data.recommended_next_action.command", examples, StringComparison.Ordinal);
+        Assert.Contains("primaryFailure.sourceCommand", examples, StringComparison.Ordinal);
         Assert.Contains("data.recommended_next_steps", examples, StringComparison.Ordinal);
         Assert.Contains("data.next_actions", examples, StringComparison.Ordinal);
         Assert.Contains("data.suggested_commands", examples, StringComparison.Ordinal);
@@ -269,6 +272,8 @@ public sealed partial class AppTests
         Assert.Contains("luotsi help output", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("schema: \"luotsi-command.v1\"", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("data.recommended_next_action.command", aiAgentWorkflows, StringComparison.Ordinal);
+        Assert.Contains("data.primary_failure.source_command", aiAgentWorkflows, StringComparison.Ordinal);
+        Assert.Contains("data.primaryFailure.sourceCommand", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("data.artifact_commands", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("artifacts.artifact_root", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --artifacts <artifact-root>", aiAgentWorkflows, StringComparison.Ordinal);
@@ -293,11 +298,13 @@ public sealed partial class AppTests
         Assert.Contains("luotsi help output", agentGuide, StringComparison.Ordinal);
         Assert.Contains("Do not treat model confidence as validation", agentGuide, StringComparison.Ordinal);
         Assert.Contains("data.recommended_next_action.command", agentGuide, StringComparison.Ordinal);
+        Assert.Contains("data.primary_failure.source_command", agentGuide, StringComparison.Ordinal);
         Assert.Contains("data.artifact_commands", agentGuide, StringComparison.Ordinal);
         Assert.Contains("artifacts.artifact_root", agentGuide, StringComparison.Ordinal);
         Assert.Contains("command -> structured output -> artifact root -> replay command -> next action", copilotInstructions, StringComparison.Ordinal);
         Assert.Contains("luotsi help output", copilotInstructions, StringComparison.Ordinal);
         Assert.Contains("data.recommended_next_action.command", copilotInstructions, StringComparison.Ordinal);
+        Assert.Contains("data.primary_failure.source_command", copilotInstructions, StringComparison.Ordinal);
         Assert.Contains("data.artifact_commands", copilotInstructions, StringComparison.Ordinal);
         Assert.Contains("artifacts.artifact_root", copilotInstructions, StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --artifacts <artifact-root>", copilotInstructions, StringComparison.Ordinal);
@@ -306,6 +313,7 @@ public sealed partial class AppTests
         Assert.Contains("command -> structured output -> artifact root -> replay command -> next action", contributing, StringComparison.Ordinal);
         Assert.Contains("luotsi help output", contributing, StringComparison.Ordinal);
         Assert.Contains("data.recommended_next_action.command", contributing, StringComparison.Ordinal);
+        Assert.Contains("data.primary_failure.source_command", contributing, StringComparison.Ordinal);
         Assert.Contains("data.artifact_commands", contributing, StringComparison.Ordinal);
         Assert.Contains("artifacts.artifact_root", contributing, StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --artifacts <artifact-root>", contributing, StringComparison.Ordinal);
@@ -314,6 +322,7 @@ public sealed partial class AppTests
         Assert.Contains("command -> structured output -> artifact root -> replay command -> next action", contributionGuide, StringComparison.Ordinal);
         Assert.Contains("luotsi help output", contributionGuide, StringComparison.Ordinal);
         Assert.Contains("data.recommended_next_action.command", contributionGuide, StringComparison.Ordinal);
+        Assert.Contains("data.primary_failure.source_command", contributionGuide, StringComparison.Ordinal);
         Assert.Contains("data.artifact_commands", contributionGuide, StringComparison.Ordinal);
         Assert.Contains("artifacts.artifact_root", contributionGuide, StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --artifacts <artifact-root>", contributionGuide, StringComparison.Ordinal);
@@ -390,7 +399,10 @@ public sealed partial class AppTests
             var outputGuidance = SliceFrom(name, text, "data.recommended_next_action.command");
             Assert.Contains("artifacts.artifact_root", outputGuidance, StringComparison.Ordinal);
             Assert.Contains("replay packet", outputGuidance, StringComparison.Ordinal);
+            Assert.Contains("primary_failure.source_command", outputGuidance, StringComparison.Ordinal);
             AssertContainsBefore(name, outputGuidance, "data.recommended_next_action.command", "artifacts.artifact_root");
+            AssertContainsBefore(name, outputGuidance, "data.recommended_next_action.command", "primary_failure.source_command");
+            AssertContainsBefore(name, outputGuidance, "primary_failure.source_command", "artifacts.artifact_root");
             AssertContainsBefore(name, outputGuidance, "artifacts.artifact_root", "replay packet");
         }
 
@@ -652,6 +664,8 @@ public sealed partial class AppTests
         const string expectedFromRecommendedCommands = "luotsi replay open --artifacts /tmp/recommended-root --dry-run";
         const string runSummaryJson = """{"schema":"luotsi-run-summary.v1","status":"needs_triage","recommendedNextAction":{"kind":"scrub_failure","command":"luotsi replay scrub --artifacts /tmp/packet-root --failures --context 3 --write-markdown"},"commands":[{"kind":"capsule","command":"luotsi replay capsule --artifacts /tmp/packet-root --write-readme --write-json"}]}""";
         const string expectedFromRunSummary = "luotsi replay scrub --artifacts /tmp/packet-root --failures --context 3 --write-markdown";
+        const string runSummaryEvidenceOnlyJson = """{"schema":"luotsi-run-summary.v1","status":"needs_triage","primaryFailure":{"scenario":"login smoke","sourceCommand":"luotsi replay capsule --artifacts /tmp/evidence-root --write-readme --write-json"},"commands":[{"kind":"open_artifacts","command":"luotsi artifacts open /tmp/evidence-root"}]}""";
+        const string expectedFromRunSummaryEvidenceOnly = "luotsi replay capsule --artifacts /tmp/evidence-root --write-readme --write-json";
         const string runSummaryCheckEnvelopeJson = """{"schema":"luotsi-command.v1","ok":true,"data":{"schema":"luotsi-run-summary-check.v1","status":"valid","recommended_next_action":{"kind":"scrub_failure","command":"luotsi replay scrub --artifacts /tmp/checked-root --failures --context 3 --write-markdown"},"triage_checklist":[{"step":1,"action":"Run the recommended packet command","command":"luotsi replay scrub --artifacts /tmp/checked-root --failures --context 3 --write-markdown","rationale":"Highest-signal command."}]},"artifacts":{"artifact_root":"/tmp/checked-root"}}""";
         const string expectedFromRunSummaryCheck = "luotsi replay scrub --artifacts /tmp/checked-root --failures --context 3 --write-markdown";
         var runSummaryJsonlLog = string.Join(Environment.NewLine, [
@@ -670,6 +684,7 @@ public sealed partial class AppTests
             Assert.Equal(expectedFromJsonlLog, RunProcess(python, [script], jsonlLog));
             Assert.Equal(expectedFromRecommendedCommands, RunProcess(python, [script], unorderedRecommendedCommandsJson));
             Assert.Equal(expectedFromRunSummary, RunProcess(python, [script], runSummaryJson));
+            Assert.Equal(expectedFromRunSummaryEvidenceOnly, RunProcess(python, [script], runSummaryEvidenceOnlyJson));
             Assert.Equal(expectedFromRunSummaryCheck, RunProcess(python, [script], runSummaryCheckEnvelopeJson));
             Assert.Equal(expectedFromRunSummary, RunProcess(python, [script], runSummaryJsonlLog));
             var failure = RunProcessExpectingFailure(python, [script], "not json");
@@ -688,6 +703,7 @@ public sealed partial class AppTests
             Assert.Equal(expectedFromJsonlLog, RunProcess(node, [script], jsonlLog));
             Assert.Equal(expectedFromRecommendedCommands, RunProcess(node, [script], unorderedRecommendedCommandsJson));
             Assert.Equal(expectedFromRunSummary, RunProcess(node, [script], runSummaryJson));
+            Assert.Equal(expectedFromRunSummaryEvidenceOnly, RunProcess(node, [script], runSummaryEvidenceOnlyJson));
             Assert.Equal(expectedFromRunSummaryCheck, RunProcess(node, [script], runSummaryCheckEnvelopeJson));
             Assert.Equal(expectedFromRunSummary, RunProcess(node, [script], runSummaryJsonlLog));
             var failure = RunProcessExpectingFailure(node, [script], "not json");

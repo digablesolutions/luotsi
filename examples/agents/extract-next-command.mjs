@@ -110,6 +110,12 @@ function extractNextCommandFromObject(value) {
     return direct;
   }
 
+  const evidence = cleanCommand(firstPresent(value, 'primary_failure', 'primaryFailure')?.source_command ??
+    firstPresent(value, 'primary_failure', 'primaryFailure')?.sourceCommand);
+  if (evidence) {
+    return evidence;
+  }
+
   for (const name of [
     'recommended_next_steps',
     'recommendedNextSteps',

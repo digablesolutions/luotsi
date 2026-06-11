@@ -380,6 +380,12 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
         {
             lines.Add($"primary_failure: {summary}");
         }
+
+        var sourceCommand = TryGetString(value, "source_command", "sourceCommand") ?? TryGetString(detailSource, "source_command", "sourceCommand");
+        if (!string.IsNullOrWhiteSpace(sourceCommand))
+        {
+            lines.Add($"evidence: {sourceCommand}");
+        }
     }
 
     private static string? BuildPrimaryFailureSummary(JsonElement value, JsonElement detailSource)
@@ -794,6 +800,9 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
 
     private static string? TryGetString(JsonElement value, string propertyName) =>
         TryGetScalarProperty(value, propertyName, out var property) ? property.GetString() : null;
+
+    private static string? TryGetString(JsonElement value, string firstPropertyName, string secondPropertyName) =>
+        TryGetString(value, firstPropertyName) ?? TryGetString(value, secondPropertyName);
 
     private static string? TryGetNestedString(JsonElement value, string objectPropertyName, string nestedPropertyName)
     {

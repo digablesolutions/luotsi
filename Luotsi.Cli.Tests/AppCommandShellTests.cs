@@ -451,6 +451,7 @@ public sealed class AppCommandShellTests
         Assert.Equal("OK  replay completed in 1000 ms.", console.OutputLines[0]);
         Assert.Contains("  triage: 1 failure signal across 1 session", console.OutputLines);
         Assert.Contains("  primary_failure: login smoke / wait login button (waitVisible) / button not visible", console.OutputLines);
+        Assert.Contains("  evidence: luotsi replay scrub --source-path session-timeline.jsonl --sequence 1 --context 3", console.OutputLines);
         Assert.Contains("  next_step: Scrub the failure window", console.OutputLines);
         Assert.Contains("  next: luotsi replay scrub --artifacts /tmp/replay-root --failures --context 3 --write-markdown", console.OutputLines);
         Assert.Contains("  commands: 1", console.OutputLines);
@@ -520,6 +521,7 @@ public sealed class AppCommandShellTests
         Assert.Equal("OK  replay completed in 1000 ms.", console.OutputLines[0]);
         Assert.Contains("  triage: 1 failure signal across 1 session", console.OutputLines);
         Assert.Contains("  primary_failure: login smoke / wait login button (waitVisible) / button not visible", console.OutputLines);
+        Assert.Contains("  evidence: luotsi replay timeline --artifacts /tmp/replay-root --source-path session-timeline.jsonl --sequence 8", console.OutputLines);
         Assert.Contains("  evidence: screenshots=1; logs=1; hierarchies=1; screen_states=1; reports=1; timelines=1", console.OutputLines);
         Assert.Contains("  intake: status=restored; share_safety=lab_safe; sha_verified=true; package=/tmp/share/replay-lab-safe.zip", console.OutputLines);
         Assert.Contains("  next_step: Scrub the failure window", console.OutputLines);

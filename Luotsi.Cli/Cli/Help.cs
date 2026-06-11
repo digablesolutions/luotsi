@@ -294,10 +294,11 @@ Output shapes:
 
 Next-action fields:
   Prefer data.recommended_next_action.command when present. Then check
+  primary_failure.source_command for focused packet evidence, followed by
   recommended_next_steps, next_actions, suggested_commands, commands,
   artifact_commands, and recommended_commands. If no command field is present,
-  use artifacts.artifact_root and run replay open --dry-run first; use
-  artifacts open only when you specifically need the generic artifact browser.
+  use artifacts.artifact_root and run replay packet first; use artifacts open
+  only when you specifically need the generic artifact browser.
   Command arrays are exact follow-ups but not always ordered by the best first
   move, so parser examples prefer replay_open there when present.
 

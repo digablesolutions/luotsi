@@ -105,6 +105,12 @@ def extract_next_command_from_mapping(value: dict[str, Any]) -> str | None:
         if command:
             return command
 
+    primary_failure = first_present(value, "primary_failure", "primaryFailure")
+    if isinstance(primary_failure, dict):
+        command = clean_command(first_present(primary_failure, "source_command", "sourceCommand"))
+        if command:
+            return command
+
     for name in (
         "recommended_next_steps",
         "recommendedNextSteps",

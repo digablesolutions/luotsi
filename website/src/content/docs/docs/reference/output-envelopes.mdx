@@ -28,9 +28,10 @@ For local terminal readability, one-shot commands also accept `--human` or `--co
 When an agent or CI job needs the next action, read command hints in this order:
 
 1. `data.recommended_next_action.command` when the command can name one best action.
-2. `data.recommended_next_steps[]`, `data.next_actions[]`, or `data.suggested_commands[]` when the workflow returns an ordered handoff.
-3. `data.commands[]`, `data.artifact_commands[]`, or `data.recommended_commands[]` when the result exposes exact follow-up commands.
-4. `artifacts.artifact_root` as the fallback evidence pointer; run `replay packet` first so the loop has `run-summary.json` and `run-summary.md`, and use `artifacts open` only when you specifically need the generic artifact browser.
+2. `data.primary_failure.source_command` or `data.primaryFailure.sourceCommand` when a packet/check result has focused failure evidence but no recommended action.
+3. `data.recommended_next_steps[]`, `data.next_actions[]`, or `data.suggested_commands[]` when the workflow returns an ordered handoff.
+4. `data.commands[]`, `data.artifact_commands[]`, or `data.recommended_commands[]` when the result exposes exact follow-up commands.
+5. `artifacts.artifact_root` as the fallback evidence pointer; run `replay packet` first so the loop has `run-summary.json` and `run-summary.md`, and use `artifacts open` only when you specifically need the generic artifact browser.
 
 The source tree includes executable examples of this priority order at `examples/agents/extract-next-command.py` and `examples/agents/extract-next-command.mjs`. The same parsers accept persisted `run-summary.json` packets with schema `luotsi-run-summary.v1`; the source contract is documented at `docs/schemas/luotsi-run-summary-v1.md`, and `replay packet --check` is the pass/fail gate for an existing packet.
 
