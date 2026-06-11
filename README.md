@@ -246,6 +246,7 @@ Use the public [CLI command groups](https://digablesolutions.github.io/luotsi/do
 | Create a scenario skeleton | `luotsi scenario-init --file scenarios/smoke.json --name smoke` |
 | Validate scenarios without a device | `luotsi scenario-validate --path scenarios` |
 | Run scenarios in CI/lab mode | `luotsi run --path scenarios --device <serial> --claim-device --claim-wait-sec 60 --report-junit junit.xml` |
+| Write the first-minute evidence packet | `luotsi replay packet --artifacts <artifact-root>` |
 | Reopen saved evidence | `luotsi replay open --artifacts <artifact-root> --dry-run` |
 | Verify a shared artifact zip | `luotsi artifacts verify <artifact.zip> --require-lab-safe --sha256 <digest>` |
 

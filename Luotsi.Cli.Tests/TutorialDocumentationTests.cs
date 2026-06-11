@@ -221,6 +221,7 @@ public sealed partial class AppTests
         Assert.Contains("data.artifact_commands", readme, StringComparison.Ordinal);
         Assert.Contains("Human output leads with the artifact root", readme, StringComparison.Ordinal);
         Assert.Contains("guide:` reminder that the root is durable evidence", readme, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --artifacts <artifact-root>", readme, StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", readme, StringComparison.Ordinal);
         Assert.Contains("examples/agents/extract-next-command.py", readme, StringComparison.Ordinal);
         Assert.Contains("examples/agents/extract-next-command.mjs", readme, StringComparison.Ordinal);

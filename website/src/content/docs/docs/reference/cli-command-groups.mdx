@@ -120,6 +120,10 @@ luotsi run --path scenarios --output-dir ./artifacts/my-run --dry-run --include-
 luotsi run --path scenarios --device <serial> --report-junit junit.xml
 luotsi artifacts list --artifacts ./artifacts
 luotsi artifacts info ./artifacts/my-run
+luotsi replay packet --artifacts ./artifacts/my-run
+luotsi replay packet --artifacts ./artifacts/my-run --check
+luotsi replay packet --last --artifacts ./artifacts
+luotsi replay packet --last --artifacts ./artifacts --check
 luotsi replay open --artifacts ./artifacts/my-run --dry-run
 luotsi replay open --last --artifacts ./artifacts --dry-run
 luotsi artifacts open ./artifacts/my-run
@@ -146,7 +150,7 @@ Use `discover` when the app surface is not fully known yet and you want a real-d
 
 Use `scenario-validate`, `scenario-explain`, or `run --dry-run` before you execute device work.
 
-Use `artifacts list` when you need to rediscover a recent run id. Use `artifacts info` when you want a non-mutating summary of one root or package zip; restored roots with an intake audit include compact status, share-safety, and SHA verification fields. Use `artifacts open` or `artifacts open --last` when you want the generic artifact browser. Use `artifacts verify --require-lab-safe` when you received a package and need a read-only manifest/SHA/redaction gate before unpacking. Use `artifacts intake --require-lab-safe --write-json --write-readme --sha256 <digest>` when you are ready to validate, restore, persist an intake audit, and get the exact packet-check command in one step. Use `replay open` or `replay open --last` when you want the replay-specific front door with next actions.
+Use `artifacts list` when you need to rediscover a recent run id. Use `artifacts info` when you want a non-mutating summary of one root or package zip; restored roots with an intake audit include compact status, share-safety, and SHA verification fields. Use `replay packet` or `replay packet --last` when you want the durable first-minute packet with `run-summary.json`, `run-summary.md`, and checkable triage commands. Use `replay open` or `replay open --last` after the packet when a human wants the replay-specific front door with next actions. Use `artifacts open` or `artifacts open --last` when you want the generic artifact browser. Use `artifacts verify --require-lab-safe` when you received a package and need a read-only manifest/SHA/redaction gate before unpacking. Use `artifacts intake --require-lab-safe --write-json --write-readme --sha256 <digest>` when you are ready to validate, restore, persist an intake audit, and get the exact packet-check command in one step.
 
 Successful `artifacts pack` results recommend unpacking with `--sha256`. Lab-safe pack/info/verify handoffs preserve `--require-lab-safe` on unpack commands so CI or support can enforce the gate at extraction time. `artifacts info <package.zip>` validates the manifest, reports redaction metadata and SHA-256, and suggests checksum-verified unpack plus `replay packet --check` commands before broad replay without extracting files.
 
