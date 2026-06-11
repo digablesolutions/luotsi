@@ -744,6 +744,12 @@ public sealed partial class AppTests
             """{"schema":"luotsi-command.v1","ok":true,"data":{"artifact_commands":[{"kind":"replay_open","command":"luotsi replay open --artifacts /tmp/before-packet"}]},"artifacts":{"artifact_root":"/tmp/before-packet"}}""",
             runSummaryJson
         ]);
+        var looseJsonlLog = string.Join(Environment.NewLine, [
+            "agent preface",
+            """{"ok":true,"data":{},"artifacts":{"artifact_root":"/tmp/loose-jsonl-root"}}""",
+            """{"type":"command_result","id":"tap-1","ok":true}"""
+        ]);
+        const string expectedFromLooseJsonlLog = "luotsi replay packet --artifacts /tmp/loose-jsonl-root";
 
         var executed = 0;
         if (TryFindExecutable("python3", "python", out var python))
@@ -761,6 +767,7 @@ public sealed partial class AppTests
             Assert.Equal(expectedFromRunSummaryChecklistOnly, RunProcess(python, [script], runSummaryChecklistOnlyJson));
             Assert.Equal(expectedFromRunSummaryCheck, RunProcess(python, [script], runSummaryCheckEnvelopeJson));
             Assert.Equal(expectedFromRunSummary, RunProcess(python, [script], runSummaryJsonlLog));
+            Assert.Equal(expectedFromLooseJsonlLog, RunProcess(python, [script], looseJsonlLog));
             var failure = RunProcessExpectingFailure(python, [script], "not json");
             Assert.Contains("extract-next-command: stdin did not contain a Luotsi command envelope or run summary", failure.StandardError, StringComparison.Ordinal);
             Assert.DoesNotContain("Traceback", failure.StandardError, StringComparison.Ordinal);
@@ -782,6 +789,7 @@ public sealed partial class AppTests
             Assert.Equal(expectedFromRunSummaryChecklistOnly, RunProcess(node, [script], runSummaryChecklistOnlyJson));
             Assert.Equal(expectedFromRunSummaryCheck, RunProcess(node, [script], runSummaryCheckEnvelopeJson));
             Assert.Equal(expectedFromRunSummary, RunProcess(node, [script], runSummaryJsonlLog));
+            Assert.Equal(expectedFromLooseJsonlLog, RunProcess(node, [script], looseJsonlLog));
             var failure = RunProcessExpectingFailure(node, [script], "not json");
             Assert.Contains("extract-next-command: stdin did not contain a Luotsi command envelope or run summary", failure.StandardError, StringComparison.Ordinal);
             Assert.DoesNotContain("Error:", failure.StandardError, StringComparison.Ordinal);
