@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace Luotsi.Cli.Telemetry;
 
 /// <summary>
-/// Default parser for the kiosk telemetry logcat contract.
+/// Default parser for the device telemetry logcat contract.
 /// Temporarily also accepts the legacy marker during migration.
 /// </summary>
 public sealed class LuotsiDeviceTelemetryParser : ITelemetryParser

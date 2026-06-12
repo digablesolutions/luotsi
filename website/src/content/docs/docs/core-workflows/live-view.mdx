@@ -40,8 +40,8 @@ luotsi view --last
 luotsi view setup --device <serial>
 luotsi view-doctor --device <serial>
 luotsi view-doctor --device <serial> --fix
-luotsi view --device <serial> --save-profile kiosk
-luotsi reconnect --profile kiosk
+luotsi view --device <serial> --save-profile lab-device
+luotsi reconnect --profile lab-device
 ```
 
 Use `view setup --dry-run` when you want Luotsi to explain what it would stage without changing the selected device. Use `view-doctor --fix` when you want the diagnostic entry point to continue into setup/repair instead of only reporting readiness.

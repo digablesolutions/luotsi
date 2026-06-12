@@ -151,7 +151,7 @@ When optional parameters are omitted, these defaults apply:
   "selector": {
     "text": "Files",
     "textMatch": "exact",
-    "resourceId": "com.elotouch.home:id/tvAppName",
+    "resourceId": "com.example.app:id/itemTitle",
     "className": "android.widget.TextView",
     "region": { "left": 0, "top": 0, "right": 1000, "bottom": 600 }
   }
