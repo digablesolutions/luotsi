@@ -561,6 +561,7 @@ public sealed partial class AppTests
         Assert.Contains("## Packet Gate", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("packet validation gate command", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("60-second triage checklist", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("packet identity values for artifact root, status, session count, and failure count", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("`luotsi-run-summary-check.v1`", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("Because the check result is returned inside the normal Luotsi command envelope", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("`recommended_next_action_command`", schemaGuide, StringComparison.Ordinal);
@@ -580,6 +581,7 @@ public sealed partial class AppTests
         Assert.Contains("`## Primary Failure` section carries the detailed primary failure values", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("verifies that the evidence file exists before handoff", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("a primary failure whose `primaryFailure.timelinePath` or `primaryFailure.failureCapsulePath` points at a missing evidence file", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("Markdown without packet identity values for artifact root, status, session count, or failure count", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("Markdown checklist that omits structured checklist actions or rationales", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("Markdown without the first action explanation", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("Markdown without the primary failure detail section", schemaGuide, StringComparison.Ordinal);

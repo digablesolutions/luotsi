@@ -1507,6 +1507,40 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayPacket_Check_MarkdownWithStaleIdentity_ReturnsUsageError()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplaySummaryArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = new FakeProcessRunner(),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var writeExitCode = await app.RunAsync(["replay", "packet", "--artifacts", replayRoot]);
+        var markdownPath = Path.Join(replayRoot, "run-summary.md");
+        var markdown = await fileSystem.ReadAllTextAsync(markdownPath);
+        fileSystem.AddFile(markdownPath, markdown.Replace(
+            $"Artifact root: `{replayRoot}`",
+            "Artifact root: `/tmp/other-replay-root`",
+            StringComparison.Ordinal));
+        console.OutputLines.Clear();
+        var checkExitCode = await app.RunAsync(["replay", "packet", "--check", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, writeExitCode);
+        Assert.Equal(2, checkExitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("packet identity value", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains($"Artifact root: `{replayRoot}`", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("Re-run `luotsi replay packet", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayPacket_Check_MarkdownWithoutPacketGate_ReturnsUsageError()
     {
         var console = new FakeConsole();

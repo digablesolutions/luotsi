@@ -268,6 +268,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             }
 
             var runSummaryMarkdown = await _dependencies.FileSystem.ReadAllTextAsync(runSummaryMarkdownPath).ConfigureAwait(false);
+            ValidateMarkdownPacketIdentity(packetStatus, sessionCount, failureCount, runSummaryMarkdown, artifacts.Root);
             ValidateAtAGlanceSection(primaryFailure, recommendedCommand, runSummaryMarkdown, artifacts.Root);
             var checkCommand = BuildPacketCheckCommand(artifacts.Root);
             if (!runSummaryMarkdown.Contains("## Packet Gate", StringComparison.Ordinal) ||
@@ -412,6 +413,26 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
               !runSummaryMarkdown.Contains(primaryFailure.SourceCommand, StringComparison.Ordinal))))
         {
             throw new UsageException($"{RunSummaryMarkdownFileName} at-a-glance summary is missing primaryFailure.sourceCommand. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+    }
+
+    private static void ValidateMarkdownPacketIdentity(
+        string packetStatus,
+        int sessionCount,
+        int failureCount,
+        string runSummaryMarkdown,
+        string artifactRoot)
+    {
+        foreach (var value in new[]
+                 {
+                     $"Artifact root: `{EscapeMarkdown(artifactRoot)}`",
+                     $"Status: `{EscapeMarkdown(packetStatus)}`",
+                     $"Sessions: `{sessionCount.ToString(System.Globalization.CultureInfo.InvariantCulture)}`",
+                     $"Failures: `{failureCount.ToString(System.Globalization.CultureInfo.InvariantCulture)}`"
+                 }
+                 .Where(value => !runSummaryMarkdown.Contains(value, StringComparison.Ordinal)))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} is missing packet identity value '{value}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
         }
     }
 
