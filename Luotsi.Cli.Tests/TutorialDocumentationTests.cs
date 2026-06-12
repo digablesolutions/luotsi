@@ -537,6 +537,7 @@ public sealed partial class AppTests
         Assert.Contains("`replay open` is the browser-free replay front door", markdown, StringComparison.Ordinal);
         Assert.Contains("At a Glance summary, failure snapshot, focused evidence files", markdown, StringComparison.Ordinal);
         Assert.Contains("packet gate, copy-paste triage commands", markdown, StringComparison.Ordinal);
+        Assert.Contains("copy_paste` block that starts with the packet validation gate command", markdown, StringComparison.Ordinal);
         Assert.Contains("focused evidence files", markdown, StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --artifacts ./artifacts/my-run", markdown, StringComparison.Ordinal);
         Assert.Contains("run-summary.json", markdown, StringComparison.Ordinal);
