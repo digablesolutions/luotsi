@@ -287,6 +287,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
 
             ValidateCopyPasteTriageCommands(triageChecklist, runSummaryMarkdown, artifacts.Root);
 
+            ValidateMarkdownCommands(commands, runSummaryMarkdown, artifacts.Root);
             ValidateMarkdownTriageChecklist(triageChecklist, runSummaryMarkdown, artifacts.Root);
             ValidateFirstActionSection(recommendedNextActionResult, runSummaryMarkdown, artifacts.Root);
 
@@ -338,6 +339,30 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
                      .Where(command => !commandBlock.Contains(command, StringComparison.Ordinal)))
         {
             throw new UsageException($"{RunSummaryMarkdownFileName} copy-paste triage command block is missing checklist command '{command}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+    }
+
+    private static void ValidateMarkdownCommands(
+        IReadOnlyList<ReplayOpenCommandHintResult> commands,
+        string runSummaryMarkdown,
+        string artifactRoot)
+    {
+        var commandsSection = ExtractMarkdownSection(runSummaryMarkdown, "## Commands");
+        if (string.IsNullOrWhiteSpace(commandsSection))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} is missing the commands section. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        foreach (var command in commands
+                     .Where(command => !commandsSection.Contains(EscapeMarkdown(command.Command), StringComparison.Ordinal)))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} commands section is missing command '{command.Command}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        foreach (var command in commands
+                     .Where(command => !commandsSection.Contains(EscapeMarkdown(command.Description), StringComparison.Ordinal)))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} commands section is missing command description '{command.Description}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
         }
     }
 

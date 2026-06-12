@@ -1318,6 +1318,9 @@ public sealed partial class AppTests
         Assert.Contains("session-timeline.jsonl", markdown, StringComparison.Ordinal);
         Assert.Contains("Reopen", markdown, StringComparison.Ordinal);
         Assert.Contains("luotsi replay scrub", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Commands", markdown, StringComparison.Ordinal);
+        Assert.Contains("Write the replay capsule summary and README for this bundle.", markdown, StringComparison.Ordinal);
+        Assert.Contains($"luotsi replay packet --artifacts {replayRoot} --check", markdown, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2107,6 +2110,38 @@ public sealed partial class AppTests
         Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
         Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
         Assert.Contains("copy-paste triage command block is missing checklist command", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("Re-run `luotsi replay packet", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayPacket_Check_MarkdownWithoutCommandsSection_ReturnsUsageError()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplaySummaryArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = new FakeProcessRunner(),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var writeExitCode = await app.RunAsync(["replay", "packet", "--artifacts", replayRoot]);
+        var markdownPath = Path.Join(replayRoot, "run-summary.md");
+        var markdown = await fileSystem.ReadAllTextAsync(markdownPath);
+        var commandsSectionIndex = markdown.IndexOf("## Commands", StringComparison.Ordinal);
+        Assert.True(commandsSectionIndex > 0);
+        fileSystem.AddFile(markdownPath, markdown[..commandsSectionIndex]);
+        console.OutputLines.Clear();
+        var checkExitCode = await app.RunAsync(["replay", "packet", "--check", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, writeExitCode);
+        Assert.Equal(2, checkExitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("commands section", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
         Assert.Contains("Re-run `luotsi replay packet", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 

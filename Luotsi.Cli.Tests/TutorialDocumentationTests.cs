@@ -561,6 +561,7 @@ public sealed partial class AppTests
         Assert.Contains("## Packet Gate", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("packet validation gate command", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("60-second triage checklist", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("`## Commands` section with every structured command and description", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("packet identity values for generated timestamp, artifact root, status, verdict, session count, and failure count", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("`luotsi-run-summary-check.v1`", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("Because the check result is returned inside the normal Luotsi command envelope", schemaGuide, StringComparison.Ordinal);
@@ -586,6 +587,7 @@ public sealed partial class AppTests
         Assert.Contains("missing `commands`", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("Markdown without packet identity values for generated timestamp, artifact root, status, verdict, session count, or failure count", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("Markdown checklist that omits structured checklist actions or rationales", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("Markdown without the commands section or any structured command value", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("Markdown without the first action explanation", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("Markdown without the primary failure detail section", schemaGuide, StringComparison.Ordinal);
     }
