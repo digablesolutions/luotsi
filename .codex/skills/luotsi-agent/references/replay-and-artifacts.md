@@ -10,7 +10,7 @@ luotsi replay packet --artifacts <artifact-root> --check
 luotsi replay open --artifacts <artifact-root> --dry-run
 ```
 
-`replay packet` writes the durable production handoff: `run-summary.json` and `run-summary.md`. It includes At a Glance, primary failure, recommended next action, and a 60-second checklist. `--check` validates an existing packet as a pass/fail gate.
+`replay packet` writes the durable production handoff: `run-summary.json` and `run-summary.md`. It includes an “At a Glance” summary, primary failure, recommended next action, and a 60-second checklist. `--check` validates an existing packet as a pass/fail gate.
 
 Use `replay open --dry-run` when a human needs the browser-free replay front door. Use `artifacts open` only when raw file browsing is the explicit goal.
 
