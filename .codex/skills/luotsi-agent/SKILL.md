@@ -10,7 +10,7 @@ Use this skill when the task touches Luotsi as a product or as a tool in another
 Default loop:
 
 ```text
-command -> structured output -> artifact root -> replay packet -> next action
+command -> structured output -> artifact root -> replay command -> next action
 ```
 
 ## First Moves
