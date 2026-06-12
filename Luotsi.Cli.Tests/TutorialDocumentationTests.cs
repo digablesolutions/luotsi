@@ -575,6 +575,12 @@ public sealed partial class AppTests
         Assert.Contains("Consumers should accept both camelCase artifact JSON fields and snake_case command-envelope fields", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("replay packet --check", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("must exit non-zero for missing JSON", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("Markdown checklist contains the structured checklist actions", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("`## First Action` section repeats the recommended action title, kind, reason", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("`## Primary Failure` section carries the detailed primary failure values", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("Markdown checklist that omits structured checklist actions", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("Markdown without the first action explanation", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("Markdown without the primary failure detail section", schemaGuide, StringComparison.Ordinal);
     }
 
     [Fact]
