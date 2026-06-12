@@ -1,5 +1,4 @@
 ---
-import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import DefaultSocialIcons from '@astrojs/starlight/components/SocialIcons.astro';
 
@@ -8,7 +7,6 @@ const filePath = route.entry.filePath;
 const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(process.cwd(), filePath);
 const websiteRelativePath = path.relative(process.cwd(), absolutePath).split(path.sep).join('/');
 const repositoryPath = `website/${websiteRelativePath}`;
-const rawMarkdown = readFileSync(absolutePath, 'utf8');
 const title = route.entry.data.title;
 const pageUrl = new URL(Astro.url.pathname, Astro.site ?? Astro.url).toString();
 const sourceUrl = `https://raw.githubusercontent.com/digablesolutions/luotsi/main/${repositoryPath}`;
@@ -25,20 +23,21 @@ const claudeUrl = `https://claude.ai/new?q=${encodeURIComponent(chatPrompt)}`;
 <div class="docs-copy-menu" data-docs-copy-menu>
 	<button
 		type="button"
+		id="docs-copy-trigger"
 		class="docs-copy-trigger"
-		aria-haspopup="menu"
+		aria-controls="docs-copy-panel"
 		aria-expanded="false"
 		data-docs-copy-trigger
 	>
 		Copy Page
 	</button>
-	<div class="docs-copy-panel" role="menu" data-docs-copy-panel>
-		<button type="button" role="menuitem" data-copy-markdown={rawMarkdown} data-copy-title={title}>
+	<div id="docs-copy-panel" class="docs-copy-panel" aria-labelledby="docs-copy-trigger" data-docs-copy-panel>
+		<button type="button" aria-label={`Copy ${title} as Markdown`} data-copy-source-url={sourceUrl} data-copy-title={title}>
 			Copy as Markdown
 		</button>
-		<a href={sourceUrl} role="menuitem" target="_blank" rel="noopener noreferrer">View as Markdown</a>
-		<a href={chatGptUrl} role="menuitem" target="_blank" rel="noopener noreferrer">Open in ChatGPT</a>
-		<a href={claudeUrl} role="menuitem" target="_blank" rel="noopener noreferrer">Open in Claude</a>
+		<a href={sourceUrl} target="_blank" rel="noopener noreferrer" aria-label="View as Markdown (opens in new tab)">View as Markdown</a>
+		<a href={chatGptUrl} target="_blank" rel="noopener noreferrer" aria-label="Open in ChatGPT (opens in new tab)">Open in ChatGPT</a>
+		<a href={claudeUrl} target="_blank" rel="noopener noreferrer" aria-label="Open in Claude (opens in new tab)">Open in Claude</a>
 	</div>
 </div>
 
@@ -66,17 +65,21 @@ const claudeUrl = `https://claude.ai/new?q=${encodeURIComponent(chatPrompt)}`;
 			return;
 		}
 
-		const copyButton = target.closest<HTMLButtonElement>('[data-copy-markdown]');
+		const copyButton = target.closest<HTMLButtonElement>('[data-copy-source-url]');
 		if (copyButton) {
-			const markdown = copyButton.dataset.copyMarkdown ?? '';
+			const sourceUrl = copyButton.dataset.copySourceUrl ?? '';
 			const title = copyButton.dataset.copyTitle ?? 'page';
 			try {
+				const response = await fetch(sourceUrl);
+				if (!response.ok) throw new Error(`HTTP ${response.status}`);
+				const markdown = await response.text();
 				await navigator.clipboard.writeText(markdown);
 				copyButton.textContent = 'Copied Markdown';
 				copyButton.setAttribute('aria-label', `Copied ${title} as Markdown`);
 				window.setTimeout(() => {
 					copyButton.textContent = 'Copy as Markdown';
 					copyButton.removeAttribute('aria-label');
+					closeMenus();
 				}, 1800);
 			} catch {
 				copyButton.textContent = 'Copy failed';
@@ -84,7 +87,6 @@ const claudeUrl = `https://claude.ai/new?q=${encodeURIComponent(chatPrompt)}`;
 					copyButton.textContent = 'Copy as Markdown';
 				}, 1800);
 			}
-			closeMenus();
 			return;
 		}
 
