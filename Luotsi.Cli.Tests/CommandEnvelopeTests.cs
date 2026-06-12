@@ -1929,6 +1929,70 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayPacket_Check_MarkdownChecklistWithoutStructuredActions_ReturnsUsageError()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplaySummaryArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = new FakeProcessRunner(),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var writeExitCode = await app.RunAsync(["replay", "packet", "--artifacts", replayRoot]);
+        var packet = JsonNode.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "run-summary.json")))!.AsObject();
+        var recommendedCommand = packet["recommendedNextAction"]!.AsObject()["command"]!.GetValue<string>();
+        var primarySourceCommand = packet["primaryFailure"]!.AsObject()["sourceCommand"]!.GetValue<string>();
+        fileSystem.AddFile(Path.Join(replayRoot, "run-summary.md"), $"""
+        # Luotsi Run Summary
+
+        ## At a Glance
+
+        - Status: `needs_triage`
+        - Next command: `{recommendedCommand}`
+        - Evidence command: `{primarySourceCommand}`
+
+        ## Failure Snapshot
+
+        - Session: `view-session`
+        - Reason: `error`
+        - Target: `192.168.0.134:5555`
+        - Message: `error=transport: Unexpected end of stream`
+
+        ## Packet Gate
+
+        ```bash
+        luotsi replay packet --artifacts {replayRoot} --check
+        ```
+
+        ## Copy-Paste Triage Commands
+
+        ```bash
+        {recommendedCommand}
+        {primarySourceCommand}
+        ```
+
+        ## 60-Second Triage Checklist
+
+        1. Open the artifact browser only.
+        """);
+        console.OutputLines.Clear();
+        var checkExitCode = await app.RunAsync(["replay", "packet", "--check", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, writeExitCode);
+        Assert.Equal(2, checkExitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("60-second triage checklist is missing checklist action", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("Run the recommended packet command", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("Re-run `luotsi replay packet", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayPacket_Check_MissingStructuredChecklist_ReturnsUsageError()
     {
         var console = new FakeConsole();

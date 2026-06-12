@@ -282,10 +282,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
 
             ValidateCopyPasteTriageCommands(triageChecklist, runSummaryMarkdown, artifacts.Root);
 
-            if (!runSummaryMarkdown.Contains("## 60-Second Triage Checklist", StringComparison.Ordinal))
-            {
-                throw new UsageException($"{RunSummaryMarkdownFileName} is missing the 60-second triage checklist. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
-            }
+            ValidateMarkdownTriageChecklist(triageChecklist, runSummaryMarkdown, artifacts.Root);
 
             if (!runSummaryMarkdown.Contains(recommendedCommand, StringComparison.Ordinal))
             {
@@ -336,6 +333,25 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         }
     }
 
+    private static void ValidateMarkdownTriageChecklist(
+        IReadOnlyList<RunSummaryChecklistItemResult> triageChecklist,
+        string runSummaryMarkdown,
+        string artifactRoot)
+    {
+        var checklistSection = ExtractMarkdownSection(runSummaryMarkdown, "## 60-Second Triage Checklist");
+        if (string.IsNullOrWhiteSpace(checklistSection))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} is missing the 60-second triage checklist. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        foreach (var item in triageChecklist
+                     .OrderBy(static item => item.Step)
+                     .Where(item => !checklistSection.Contains(item.Action, StringComparison.Ordinal)))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} 60-second triage checklist is missing checklist action '{item.Action}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+    }
+
     private static void ValidateAtAGlanceSection(
         ReplayOpenPrimaryFailureResult? primaryFailure,
         string recommendedCommand,
@@ -380,6 +396,21 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         blockStart += "```bash".Length;
         var blockEnd = runSummaryMarkdown.IndexOf("```", blockStart, StringComparison.Ordinal);
         return blockEnd < 0 ? null : runSummaryMarkdown[blockStart..blockEnd];
+    }
+
+    private static string? ExtractMarkdownSection(string markdown, string heading)
+    {
+        var headingIndex = markdown.IndexOf(heading, StringComparison.Ordinal);
+        if (headingIndex < 0)
+        {
+            return null;
+        }
+
+        var contentStart = headingIndex + heading.Length;
+        var nextSectionIndex = markdown.IndexOf("\n## ", contentStart, StringComparison.Ordinal);
+        return nextSectionIndex < 0
+            ? markdown[contentStart..]
+            : markdown[contentStart..nextSectionIndex];
     }
 
     private static void ValidatePrimaryFailureHandoff(
