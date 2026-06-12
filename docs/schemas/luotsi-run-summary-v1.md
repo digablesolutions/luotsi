@@ -29,8 +29,8 @@ block, the 60-second triage checklist, and the same recommended command as
 `run-summary.json`. When `primaryFailure` is present, the check also requires
 `primaryFailure.sourceCommand` to be present in both the structured checklist
 and Markdown packet. A successful check returns `luotsi-run-summary-check.v1`
-with `recommendedNextActionCommand`, `recommendedNextAction`,
-`triageChecklist`, and `primaryFailure` copied from the packet so validation can
+with `recommended_next_action_command`, `recommended_next_action`,
+`triage_checklist`, and `primary_failure` copied from the packet so validation can
 feed directly into the next agent command.
 
 ## Top-level fields
@@ -306,5 +306,5 @@ belongs in the broader command list. Consumers should still prefer
 - If `primaryFailure` is `null`, do not assume the run passed. Check `status`, `verdict`, and `sessionCount`.
 - If `primaryFailure.sourceCommand` is present, use it as the focused evidence command after `recommendedNextAction.command`. It should not be treated as broad artifact browsing; it is the packet's best path back to the failure evidence.
 - If `runSummaryJsonPath` or `runSummaryMarkdownPath` is `null`, the packet was returned in-memory by a command path that did not persist both files. Run `luotsi replay packet --artifacts <artifact-root>` to write them.
-- A successful `luotsi-run-summary-check.v1` result repeats `recommendedNextAction`, `recommendedNextActionCommand`, `failureSnapshot`, `triageChecklist`, and `primaryFailure` from the packet so consumers can continue from the check envelope without reopening `run-summary.json`.
+- A successful `luotsi-run-summary-check.v1` result repeats `recommended_next_action`, `recommended_next_action_command`, `failure_snapshot`, `triage_checklist`, and `primary_failure` from the packet so consumers can continue from the check envelope without reopening `run-summary.json`.
 - `replay packet --check` is the contract gate for an existing packet. It must exit non-zero for missing JSON, invalid JSON, unsupported schema, stale `artifactRoot`, missing index entry points, missing `triageChecklist`, a first checklist item that does not point at `recommendedNextAction.command`, missing `recommendedNextAction.command`, a primary failure without `failureSnapshot`, a `failureSnapshot` that does not match `primaryFailure`, a primary failure without `primaryFailure.sourceCommand`, a checklist that omits `primaryFailure.sourceCommand`, missing `entryPoints.runSummaryJsonPath`, missing `entryPoints.runSummaryMarkdownPath`, a missing Markdown companion, Markdown without the at-a-glance summary, Markdown whose at-a-glance summary omits the recommended command or primary failure evidence command, Markdown without the failure snapshot, Markdown without the packet validation gate command, Markdown without the copy-paste triage command block, a copy-paste block that omits any non-null checklist command, Markdown without the 60-second triage checklist, Markdown that omits the JSON packet's recommended command, or Markdown that omits `primaryFailure.sourceCommand`.

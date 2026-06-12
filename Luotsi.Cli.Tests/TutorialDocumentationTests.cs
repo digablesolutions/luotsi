@@ -558,6 +558,10 @@ public sealed partial class AppTests
         Assert.Contains("`recommended_next_action_command`", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("`packet_path`", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("`primary_failure`", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("with `recommended_next_action_command`, `recommended_next_action`,", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("repeats `recommended_next_action`, `recommended_next_action_command`, `failure_snapshot`, `triage_checklist`, and `primary_failure`", schemaGuide, StringComparison.Ordinal);
+        Assert.DoesNotContain("with `recommendedNextActionCommand`,", schemaGuide, StringComparison.Ordinal);
+        Assert.DoesNotContain("repeats `recommendedNextAction`, `recommendedNextActionCommand`", schemaGuide, StringComparison.Ordinal);
         Assert.DoesNotContain("| `recommendedNextActionCommand` |", schemaGuide, StringComparison.Ordinal);
         Assert.DoesNotContain("| `packetPath` |", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("Consumers should accept both camelCase artifact JSON fields and snake_case command-envelope fields", schemaGuide, StringComparison.Ordinal);
