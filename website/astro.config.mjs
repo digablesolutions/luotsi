@@ -16,6 +16,9 @@ export default defineConfig({
 				alt: 'Luotsi',
 			},
 			customCss: ['./src/styles/site.css'],
+			components: {
+				SocialIcons: './src/components/DocsHeaderActions.astro',
+			},
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/digablesolutions/luotsi' }],
 			sidebar: [
 				{

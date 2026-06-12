@@ -62,6 +62,104 @@ html .sl-markdown-content :is(p, li, td, th) code {
 	overflow-wrap: anywhere;
 }
 
+.docs-copy-menu {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+}
+
+.docs-copy-trigger {
+	display: inline-flex;
+	align-items: center;
+	min-height: 2rem;
+	padding: 0.38rem 0.62rem;
+	border: 1px solid var(--sl-color-gray-5);
+	border-radius: 8px;
+	background: rgba(15, 23, 42, 0.38);
+	color: var(--sl-color-white);
+	font: inherit;
+	font-size: 0.82rem;
+	font-weight: 700;
+	line-height: 1;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.docs-copy-trigger::after {
+	content: "";
+	width: 0.42rem;
+	height: 0.42rem;
+	margin-inline-start: 0.45rem;
+	border-inline-end: 2px solid currentColor;
+	border-block-end: 2px solid currentColor;
+	transform: translateY(-0.12rem) rotate(45deg);
+}
+
+.docs-copy-trigger:hover,
+.docs-copy-menu[data-open] .docs-copy-trigger {
+	border-color: var(--sl-color-accent);
+	background: rgba(14, 165, 233, 0.18);
+	color: var(--sl-color-white);
+}
+
+.docs-copy-trigger:focus-visible,
+.docs-copy-panel :is(a, button):focus-visible {
+	outline: 3px solid rgba(14, 165, 233, 0.55);
+	outline-offset: 3px;
+}
+
+.docs-copy-panel {
+	position: absolute;
+	z-index: 30;
+	inset-block-start: calc(100% + 0.5rem);
+	inset-inline-end: 0;
+	display: none;
+	min-width: 12.5rem;
+	padding: 0.35rem;
+	border: 1px solid var(--sl-color-gray-5);
+	border-radius: 8px;
+	background: var(--sl-color-black);
+	box-shadow: 0 18px 38px rgba(2, 6, 23, 0.34);
+}
+
+.docs-copy-menu[data-open] .docs-copy-panel {
+	display: grid;
+}
+
+.docs-copy-panel :is(a, button) {
+	display: flex;
+	align-items: center;
+	width: 100%;
+	min-height: 2.25rem;
+	padding: 0.52rem 0.62rem;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--sl-color-gray-1);
+	font: inherit;
+	font-size: 0.86rem;
+	font-weight: 700;
+	line-height: 1.2;
+	text-align: start;
+	text-decoration: none;
+	cursor: pointer;
+}
+
+.docs-copy-panel :is(a, button):hover {
+	background: var(--sl-color-gray-6);
+	color: var(--sl-color-white);
+}
+
+@media (max-width: 49.999rem) {
+	.docs-copy-menu {
+		margin-block-start: 0.75rem;
+	}
+
+	.docs-copy-panel {
+		inset-inline: 0 auto;
+	}
+}
+
 	.landing-page {
 		position: relative;
 		min-height: 100vh;
