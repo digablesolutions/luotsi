@@ -228,6 +228,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             }
 
             var packetStatus = RequireString(root, "status", packetPath);
+            var verdict = RequireString(root, "verdict", packetPath);
             var sessionCount = RequireInt32(root, "sessionCount", packetPath);
             var failureCount = RequireInt32(root, "failureCount", packetPath);
             var recommendedNextAction = RequireObject(root, "recommendedNextAction", packetPath);
@@ -268,7 +269,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             }
 
             var runSummaryMarkdown = await _dependencies.FileSystem.ReadAllTextAsync(runSummaryMarkdownPath).ConfigureAwait(false);
-            ValidateMarkdownPacketIdentity(packetStatus, sessionCount, failureCount, runSummaryMarkdown, artifacts.Root);
+            ValidateMarkdownPacketIdentity(packetStatus, verdict, sessionCount, failureCount, runSummaryMarkdown, artifacts.Root);
             ValidateAtAGlanceSection(primaryFailure, recommendedCommand, runSummaryMarkdown, artifacts.Root);
             var checkCommand = BuildPacketCheckCommand(artifacts.Root);
             if (!runSummaryMarkdown.Contains("## Packet Gate", StringComparison.Ordinal) ||
@@ -418,6 +419,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
 
     private static void ValidateMarkdownPacketIdentity(
         string packetStatus,
+        string verdict,
         int sessionCount,
         int failureCount,
         string runSummaryMarkdown,
@@ -427,6 +429,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
                  {
                      $"Artifact root: `{EscapeMarkdown(artifactRoot)}`",
                      $"Status: `{EscapeMarkdown(packetStatus)}`",
+                     $"Verdict: {EscapeMarkdown(verdict)}",
                      $"Sessions: `{sessionCount.ToString(System.Globalization.CultureInfo.InvariantCulture)}`",
                      $"Failures: `{failureCount.ToString(System.Globalization.CultureInfo.InvariantCulture)}`"
                  }
