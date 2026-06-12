@@ -602,6 +602,35 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
         {
             lines.Add($"evidence: {sourceCommand}");
         }
+
+        AddPrimaryFailureEvidenceFiles(lines, value, detailSource);
+    }
+
+    private static void AddPrimaryFailureEvidenceFiles(List<string> lines, JsonElement value, JsonElement detailSource)
+    {
+        var parts = new List<string>();
+        AddPrimaryFailureEvidenceFilePart(parts, value, detailSource, "timeline", "timeline_path", "timelinePath");
+        AddPrimaryFailureEvidenceFilePart(parts, value, detailSource, "failure_capsule", "failure_capsule_path", "failureCapsulePath");
+        if (parts.Count > 0)
+        {
+            lines.Add("evidence_files: " + string.Join("; ", parts));
+        }
+    }
+
+    private static void AddPrimaryFailureEvidenceFilePart(
+        List<string> parts,
+        JsonElement value,
+        JsonElement detailSource,
+        string label,
+        string snakeCasePropertyName,
+        string camelCasePropertyName)
+    {
+        var path = TryGetString(value, snakeCasePropertyName, camelCasePropertyName)
+            ?? TryGetString(detailSource, snakeCasePropertyName, camelCasePropertyName);
+        if (!string.IsNullOrWhiteSpace(path))
+        {
+            parts.Add($"{label}={path}");
+        }
     }
 
     private static string? BuildPrimaryFailureSummary(JsonElement value, JsonElement detailSource)
