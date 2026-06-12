@@ -1,0 +1,112 @@
+---
+import path from 'node:path';
+import DefaultSocialIcons from '@astrojs/starlight/components/SocialIcons.astro';
+
+const route = Astro.locals.starlightRoute;
+const filePath = route.entry.filePath;
+const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(process.cwd(), filePath);
+const websiteRelativePath = path.relative(process.cwd(), absolutePath).split(path.sep).join('/');
+const repositoryPath = `website/${websiteRelativePath}`;
+const title = route.entry.data.title;
+const pageUrl = new URL(Astro.url.pathname, Astro.site ?? Astro.url).toString();
+const sourceUrl = `https://raw.githubusercontent.com/digablesolutions/luotsi/main/${repositoryPath}`;
+const chatPrompt = [
+	`Please help me work with this Luotsi documentation page: ${pageUrl}`,
+	'Use the page source if needed:',
+	sourceUrl,
+].join('\n\n');
+const chatGptUrl = `https://chatgpt.com/?q=${encodeURIComponent(chatPrompt)}`;
+const claudeUrl = `https://claude.ai/new?q=${encodeURIComponent(chatPrompt)}`;
+---
+
+<DefaultSocialIcons />
+<div class="docs-copy-menu" data-docs-copy-menu>
+	<button
+		type="button"
+		class="docs-copy-trigger"
+		aria-expanded="false"
+		data-docs-copy-trigger
+	>
+		Copy Page
+	</button>
+	<div class="docs-copy-panel" data-docs-copy-panel>
+		<button type="button" aria-label={`Copy ${title} as Markdown`} data-copy-source-url={sourceUrl} data-copy-title={title}>
+			Copy as Markdown
+		</button>
+		<a href={sourceUrl} target="_blank" rel="noopener noreferrer" aria-label="View as Markdown (opens in new tab)">View as Markdown</a>
+		<a href={chatGptUrl} target="_blank" rel="noopener noreferrer" aria-label="Open in ChatGPT (opens in new tab)">Open in ChatGPT</a>
+		<a href={claudeUrl} target="_blank" rel="noopener noreferrer" aria-label="Open in Claude (opens in new tab)">Open in Claude</a>
+	</div>
+</div>
+
+<script>
+	document.querySelectorAll<HTMLElement>('[data-docs-copy-menu]').forEach((menu, index) => {
+		const trigger = menu.querySelector<HTMLElement>('[data-docs-copy-trigger]');
+		const panel = menu.querySelector<HTMLElement>('[data-docs-copy-panel]');
+		if (!trigger || !panel) return;
+		const suffix = String(index + 1);
+		const triggerId = `docs-copy-trigger-${suffix}`;
+		const panelId = `docs-copy-panel-${suffix}`;
+		trigger.id = triggerId;
+		trigger.setAttribute('aria-controls', panelId);
+		panel.id = panelId;
+		panel.setAttribute('aria-labelledby', triggerId);
+	});
+
+	const closeMenus = (except?: HTMLElement) => {
+		document.querySelectorAll<HTMLElement>('[data-docs-copy-menu]').forEach((menu) => {
+			if (menu === except) return;
+			menu.removeAttribute('data-open');
+			menu.querySelector('[data-docs-copy-trigger]')?.setAttribute('aria-expanded', 'false');
+		});
+	};
+
+	document.addEventListener('click', async (event) => {
+		const target = event.target;
+		if (!(target instanceof Element)) return;
+
+		const trigger = target.closest<HTMLElement>('[data-docs-copy-trigger]');
+		if (trigger) {
+			const menu = trigger.closest<HTMLElement>('[data-docs-copy-menu]');
+			if (!menu) return;
+			const isOpen = menu.hasAttribute('data-open');
+			closeMenus(menu);
+			menu.toggleAttribute('data-open', !isOpen);
+			trigger.setAttribute('aria-expanded', String(!isOpen));
+			return;
+		}
+
+		const copyButton = target.closest<HTMLButtonElement>('[data-copy-source-url]');
+		if (copyButton) {
+			const sourceUrl = copyButton.dataset.copySourceUrl ?? '';
+			const title = copyButton.dataset.copyTitle ?? 'page';
+			try {
+				const response = await fetch(sourceUrl);
+				if (!response.ok) throw new Error(`HTTP ${response.status}`);
+				const markdown = await response.text();
+				await navigator.clipboard.writeText(markdown);
+				copyButton.textContent = 'Copied Markdown';
+				copyButton.setAttribute('aria-label', `Copied ${title} as Markdown`);
+				window.setTimeout(() => {
+					copyButton.textContent = 'Copy as Markdown';
+					copyButton.removeAttribute('aria-label');
+					closeMenus();
+				}, 1800);
+			} catch {
+				copyButton.textContent = 'Copy failed';
+				window.setTimeout(() => {
+					copyButton.textContent = 'Copy as Markdown';
+				}, 1800);
+			}
+			return;
+		}
+
+		if (!target.closest('[data-docs-copy-menu]')) {
+			closeMenus();
+		}
+	});
+
+	document.addEventListener('keydown', (event) => {
+		if (event.key === 'Escape') closeMenus();
+	});
+</script>
