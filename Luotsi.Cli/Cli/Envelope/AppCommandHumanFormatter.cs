@@ -8,7 +8,7 @@ namespace Luotsi.Cli.Cli.Envelope;
 
 internal sealed class AppCommandHumanFormatter(IConsoleIo console)
 {
-    private const int MaxScalarLines = 16;
+    private const int MaxScalarLines = 24;
     private const int MaxArrayItems = 5;
 
     private readonly IConsoleIo _console = console ?? throw new ArgumentNullException(nameof(console));
@@ -449,10 +449,45 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
         AddPrimaryFailureSummaryFromProperty(lines, value, "primary_failure");
         AddNextStepTitle(lines, value);
         AddRecommendedCommandWithFallback(lines, value, artifacts);
+        AddRunSummaryCopyPasteCommands(lines, value, artifacts);
         AddTriageChecklistSummary(lines, value);
         AddCommandHintSummary(lines, value);
         AddRunSummaryEntryPointSummary(lines, value);
         return lines;
+    }
+
+    private static void AddRunSummaryCopyPasteCommands(List<string> lines, JsonElement value, ArtifactData artifacts)
+    {
+        var artifactRoot = TryGetString(value, "artifact_root", "artifactRoot") ?? artifacts.ArtifactRoot;
+        if (string.IsNullOrWhiteSpace(artifactRoot))
+        {
+            return;
+        }
+
+        var commands = new List<string>
+        {
+            $"luotsi replay packet --artifacts {Quote(artifactRoot)} --check"
+        };
+        if (value.TryGetProperty("triage_checklist", out var checklist) &&
+            checklist.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var command in checklist.EnumerateArray()
+                         .Where(static item => item.ValueKind == JsonValueKind.Object)
+                         .Select(static item => TryGetString(item, "command"))
+                         .Where(static command => !string.IsNullOrWhiteSpace(command))
+                         .Select(static command => command!)
+                         .Distinct(StringComparer.Ordinal)
+                         .Take(3))
+            {
+                commands.Add(command);
+            }
+        }
+
+        lines.Add("copy_paste:");
+        foreach (var command in commands)
+        {
+            lines.Add($"  {command}");
+        }
     }
 
     private static void AddCommandHintSummary(List<string> lines, JsonElement value)

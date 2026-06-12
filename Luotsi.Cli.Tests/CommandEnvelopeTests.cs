@@ -1404,7 +1404,7 @@ public sealed partial class AppTests
         using var envelope = console.ParseSingleOutputAsJson();
 
         Assert.Equal(0, writeExitCode);
-        Assert.Equal(0, checkExitCode);
+        Assert.True(checkExitCode == 0, string.Join(Environment.NewLine, console.OutputLines));
         var data = envelope.RootElement.GetProperty("data");
         Assert.Equal("luotsi-run-summary-check.v1", data.GetProperty("schema").GetString());
         Assert.Equal("valid", data.GetProperty("status").GetString());
@@ -1474,6 +1474,11 @@ public sealed partial class AppTests
         Assert.Contains(console.OutputLines, static line => line.Contains("  next: luotsi replay scrub", StringComparison.Ordinal));
         Assert.Contains("  triage_checklist: 3", console.OutputLines);
         Assert.Contains(console.OutputLines, static line => line.Contains("    - step=1; action=Run the recommended packet command; command=luotsi replay scrub", StringComparison.Ordinal));
+        Assert.Contains(console.OutputLines, static line => line.StartsWith("  copy_paste:", StringComparison.Ordinal));
+        AssertContainsBefore(
+            string.Join(Environment.NewLine, console.OutputLines),
+            $"  luotsi replay packet --artifacts {replayRoot} --check",
+            "  luotsi replay scrub");
         Assert.Contains("  commands: 10", console.OutputLines);
         Assert.Contains($"  packet: {Path.Join(replayRoot, "run-summary.json")}", console.OutputLines);
         Assert.Contains($"  markdown: {Path.Join(replayRoot, "run-summary.md")}", console.OutputLines);
