@@ -724,6 +724,116 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public void Portable_Ci_PowerShell_Script_Preserves_Run_Failure_And_Appends_Checked_Run_Summary()
+    {
+        if (!TryFindExecutable("pwsh", out var pwsh))
+        {
+            return;
+        }
+
+        var root = FindRepositoryRoot();
+        var tempRoot = Path.Join(Path.GetTempPath(), $"luotsi-ci-script-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempRoot);
+        try
+        {
+            var fakeLuotsi = Path.Join(tempRoot, "luotsi-fake");
+            var commandLog = Path.Join(tempRoot, "commands.log");
+            var stepSummary = Path.Join(tempRoot, "github-step-summary.md");
+            File.WriteAllText(fakeLuotsi, """
+                #!/usr/bin/env bash
+                set -euo pipefail
+
+                printf '%s\n' "$*" >> "$LUOTSI_FAKE_LOG"
+
+                artifact_root=""
+                previous=""
+                for argument in "$@"; do
+                  if [[ "$previous" == "--artifacts" ]]; then
+                    artifact_root="$argument"
+                  fi
+                  previous="$argument"
+                done
+
+                if [[ "$1" == "version" || "$1 $2" == "lab status" || "$1 $2" == "lab plan" || "$1" == "scenario-validate" ]]; then
+                  exit 0
+                fi
+
+                if [[ "$1" == "run" ]]; then
+                  mkdir -p "$artifact_root"
+                  exit 23
+                fi
+
+                if [[ "$1 $2" == "replay packet" ]]; then
+                  mkdir -p "$artifact_root"
+                  if [[ " $* " == *" --check "* ]]; then
+                    test -f "$artifact_root/run-summary.md"
+                    exit 0
+                  fi
+
+                  cat > "$artifact_root/run-summary.md" <<'SUMMARY'
+                # Luotsi Run Summary
+
+                ## At a Glance
+
+                - Status: `needs_triage`
+                - Next command: `luotsi replay scrub --artifacts artifacts/luotsi-lab --failures --context 3 --write-markdown`
+
+                ## Packet Gate
+
+                ```bash
+                luotsi replay packet --artifacts artifacts/luotsi-lab --check
+                ```
+
+                ## 60-Second Triage Checklist
+
+                1. Run the recommended packet command.
+                SUMMARY
+                  exit 0
+                fi
+
+                echo "unexpected fake luotsi command: $*" >&2
+                exit 64
+                """);
+            MakeExecutable(fakeLuotsi);
+
+            var result = RunProcessCore(
+                pwsh,
+                ["-NoLogo", "-NoProfile", "-File", Path.Join(root, "eng", "ci", "run-lab-scenarios.ps1")],
+                string.Empty,
+                tempRoot,
+                new Dictionary<string, string?>
+                {
+                    ["LUOTSI_BIN"] = fakeLuotsi,
+                    ["LUOTSI_FAKE_LOG"] = commandLog,
+                    ["LUOTSI_ARTIFACTS_DIR"] = "artifacts/luotsi-lab",
+                    ["LUOTSI_SCENARIO_PATH"] = "scenarios",
+                    ["LUOTSI_DEVICE_QUERY"] = "state=online",
+                    ["GITHUB_STEP_SUMMARY"] = stepSummary
+                });
+
+            Assert.Equal(23, result.ExitCode);
+            var log = File.ReadAllText(commandLog);
+            Assert.Contains("run --path scenarios --device-query state=online --claim-device", log, StringComparison.Ordinal);
+            Assert.Contains("replay packet --artifacts artifacts/luotsi-lab", log, StringComparison.Ordinal);
+            Assert.Contains("replay packet --artifacts artifacts/luotsi-lab --check", log, StringComparison.Ordinal);
+            AssertContainsBefore(log, "run --path scenarios", "replay packet --artifacts artifacts/luotsi-lab");
+            AssertContainsBefore(log, "replay packet --artifacts artifacts/luotsi-lab", "replay packet --artifacts artifacts/luotsi-lab --check");
+            var summary = File.ReadAllText(stepSummary);
+            Assert.Contains("## Luotsi Run Summary", summary, StringComparison.Ordinal);
+            Assert.Contains("## At a Glance", summary, StringComparison.Ordinal);
+            Assert.Contains("## Packet Gate", summary, StringComparison.Ordinal);
+            Assert.Contains("## 60-Second Triage Checklist", summary, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task Artifact_Package_Manifest_Fixture_Parses_And_Passes_Unpack_Validation()
     {
         var manifestPath = Path.Join(FindRepositoryRoot(), "Luotsi.Cli.Tests", "Fixtures", "artifacts", "package-manifest-v1.json");
