@@ -56,26 +56,30 @@ feed directly into the next agent command.
 `luotsi replay packet --artifacts <artifact-root> --check` returns a normal
 Luotsi command envelope whose `data.schema` is `luotsi-run-summary-check.v1`.
 The check result is intentionally shaped like a continuation packet: agents can
-validate the existing files and keep following `recommendedNextAction.command`,
-`primaryFailure.sourceCommand`, or `triageChecklist[].command` without reopening
+validate the existing files and keep following `recommended_next_action.command`,
+`primary_failure.source_command`, or `triage_checklist[].command` without reopening
 `run-summary.json`.
+
+Because the check result is returned inside the normal Luotsi command envelope,
+its `data` fields use snake_case. The persisted `run-summary.json` packet uses
+the camelCase fields documented in the rest of this page.
 
 | Field | Type | Meaning |
 |---|---|---|
 | `schema` | string | Exact schema identifier. Current value: `luotsi-run-summary-check.v1`. |
-| `checkedAt` | string | RFC 3339 timestamp for when validation ran. |
-| `artifactRoot` | string | Artifact root that was checked. |
-| `packetPath` | string | Validated `run-summary.json` path. |
+| `checked_at` | string | RFC 3339 timestamp for when validation ran. |
+| `artifact_root` | string | Artifact root that was checked. |
+| `packet_path` | string | Validated `run-summary.json` path. |
 | `status` | string | Check status. Current success value: `valid`. |
-| `packetStatus` | string | Original packet `status`, such as `needs_triage`. |
-| `sessionCount` | integer | Session count copied from the packet. |
-| `failureCount` | integer | Failure count copied from the packet. |
-| `recommendedNextActionCommand` | string | Convenience copy of `recommendedNextAction.command`. |
-| `failureSnapshot` | object or null | Compact failure snapshot copied from the packet. |
-| `recommendedNextAction` | object | Next action copied from the packet. |
-| `triageChecklist` | array | Checklist copied from the packet. |
-| `primaryFailure` | object or null | Primary failure copied from the packet. |
-| `runSummaryMarkdownPath` | string | Validated `run-summary.md` path. |
+| `packet_status` | string | Original packet `status`, such as `needs_triage`. |
+| `session_count` | integer | Session count copied from the packet. |
+| `failure_count` | integer | Failure count copied from the packet. |
+| `recommended_next_action_command` | string | Convenience copy of `recommended_next_action.command`. |
+| `failure_snapshot` | object or null | Compact failure snapshot copied from the packet. |
+| `recommended_next_action` | object | Next action copied from the packet. |
+| `triage_checklist` | array | Checklist copied from the packet. |
+| `primary_failure` | object or null | Primary failure copied from the packet. |
+| `run_summary_markdown_path` | string | Validated `run-summary.md` path. |
 
 ## `status`
 

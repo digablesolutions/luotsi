@@ -554,8 +554,12 @@ public sealed partial class AppTests
         Assert.Contains("packet validation gate command", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("60-second triage checklist", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("`luotsi-run-summary-check.v1`", schemaGuide, StringComparison.Ordinal);
-        Assert.Contains("recommendedNextActionCommand", schemaGuide, StringComparison.Ordinal);
-        Assert.Contains("packetPath", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("Because the check result is returned inside the normal Luotsi command envelope", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("`recommended_next_action_command`", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("`packet_path`", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("`primary_failure`", schemaGuide, StringComparison.Ordinal);
+        Assert.DoesNotContain("| `recommendedNextActionCommand` |", schemaGuide, StringComparison.Ordinal);
+        Assert.DoesNotContain("| `packetPath` |", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("Consumers should accept both camelCase artifact JSON fields and snake_case command-envelope fields", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("replay packet --check", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("must exit non-zero for missing JSON", schemaGuide, StringComparison.Ordinal);
