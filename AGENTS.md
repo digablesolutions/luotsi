@@ -26,6 +26,8 @@ luotsi help quickstart
 luotsi help output
 ```
 
+This repository also ships an installable agent skill at `.codex/skills/luotsi-agent`. Use it as `$luotsi-agent` when an assistant needs Luotsi command selection, artifact-backed replay triage, scenario promotion, or shared-lab/CI-safe workflow guidance.
+
 ## Output Contracts
 
 Preserve these contracts unless the task explicitly changes them:

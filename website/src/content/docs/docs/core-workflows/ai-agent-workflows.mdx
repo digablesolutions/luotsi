@@ -25,6 +25,16 @@ command -> structured output -> artifact root -> replay command -> next action
 
 When the agent starts from Android CLI Journey-style intent, use [Evidence-Backed Android Journeys](../evidence-backed-android-journeys/) to keep natural-language flow authoring separate from Luotsi's reviewed scenario and replay evidence path.
 
+## Install the Luotsi agent skill
+
+This repository ships a repo-local skill at `.codex/skills/luotsi-agent`. Install or copy that folder into an assistant skill directory, then invoke `$luotsi-agent` when Codex, Claude Code, or another skill-aware assistant needs Luotsi command selection, artifact-backed replay triage, scenario promotion, or shared-lab/CI-safe workflow guidance.
+
+The skill bundles focused references for first-run workflows, `inspect` JSONL loops, scenario and CI handoffs, replay/artifact package triage, and Luotsi source ownership. It is meant to teach the agent the product loop before it starts guessing commands:
+
+```text
+command -> structured output -> artifact root -> replay command -> next action
+```
+
 ## Recommended agent loop
 
 ### 1. Prove the device path first
