@@ -2664,7 +2664,7 @@ public sealed partial class AppTests
         fileSystem.CreateDirectory(replayRoot);
         fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), """
         {"type":"session_started","session_id":"inspect-session","started_at":"2026-05-18T10:00:00Z"}
-        {"type":"command_result","session_id":"inspect-session","id":"1","command":"tap_text","ok":true,"started_at":"2026-05-18T10:00:01Z","ended_at":"2026-05-18T10:00:02Z","selector":{"text":"Files","text_match":"exact","resource_id":"com.elotouch.home:id/tvAppName","resource_id_match":"exact","class_name":"android.widget.TextView","class_name_match":"exact"},"data":{"x":814,"y":315}}
+        {"type":"command_result","session_id":"inspect-session","id":"1","command":"tap_text","ok":true,"started_at":"2026-05-18T10:00:01Z","ended_at":"2026-05-18T10:00:02Z","selector":{"text":"Files","text_match":"exact","resource_id":"com.example.app:id/itemTitle","resource_id_match":"exact","class_name":"android.widget.TextView","class_name_match":"exact"},"data":{"x":814,"y":315}}
         {"type":"session_ended","session_id":"inspect-session","ended_at":"2026-05-18T10:00:09Z","reason":"client_exit"}
         """);
         var app = new App(new AppDependencies
@@ -2688,11 +2688,11 @@ public sealed partial class AppTests
         var selector = steps[0].GetProperty("selector");
         Assert.Equal("Files", selector.GetProperty("text").GetString());
         Assert.Equal("exact", selector.GetProperty("text_match").GetString());
-        Assert.Equal("com.elotouch.home:id/tvAppName", selector.GetProperty("resource_id").GetString());
+        Assert.Equal("com.example.app:id/itemTitle", selector.GetProperty("resource_id").GetString());
         Assert.Equal("android.widget.TextView", selector.GetProperty("class_name").GetString());
         var origin = data.GetProperty("step_origins")[0];
         Assert.Contains("inserted waitElement before tapElement", origin.GetProperty("detail").GetString(), StringComparison.Ordinal);
-        Assert.Contains("resource_id:exact=com.elotouch.home:id/tvAppName", origin.GetProperty("detail").GetString(), StringComparison.Ordinal);
+        Assert.Contains("resource_id:exact=com.example.app:id/itemTitle", origin.GetProperty("detail").GetString(), StringComparison.Ordinal);
         var normalizations = data.GetProperty("normalizations").EnumerateArray().ToArray();
         var normalization = Assert.Single(normalizations);
         Assert.Equal("inserted_pre_tap_wait", normalization.GetProperty("kind").GetString());
@@ -2704,7 +2704,7 @@ public sealed partial class AppTests
         Assert.Contains(reviewItems, item =>
             item.GetProperty("category").GetString() == "normalization" &&
             item.GetProperty("message").GetString()!.Contains("Inserted waitElement before tapElement", StringComparison.Ordinal));
-        Assert.Contains("resource_id:exact=com.elotouch.home:id/tvAppName", await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "scenario-draft.md")), StringComparison.Ordinal);
+        Assert.Contains("resource_id:exact=com.example.app:id/itemTitle", await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "scenario-draft.md")), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2716,7 +2716,7 @@ public sealed partial class AppTests
         fileSystem.CreateDirectory(replayRoot);
         fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), """
         {"type":"session_started","session_id":"inspect-session","started_at":"2026-05-18T10:00:00Z"}
-        {"type":"command_result","session_id":"inspect-session","id":"1","command":"tap_text","ok":true,"started_at":"2026-05-18T10:00:01Z","ended_at":"2026-05-18T10:00:02Z","selector":{"text":"Files","resource_id":"com.elotouch.home:id/tvAppName","class_name":"android.widget.TextView"},"data":{"x":814,"y":315}}
+        {"type":"command_result","session_id":"inspect-session","id":"1","command":"tap_text","ok":true,"started_at":"2026-05-18T10:00:01Z","ended_at":"2026-05-18T10:00:02Z","selector":{"text":"Files","resource_id":"com.example.app:id/itemTitle","class_name":"android.widget.TextView"},"data":{"x":814,"y":315}}
         {"type":"session_ended","session_id":"inspect-session","ended_at":"2026-05-18T10:00:09Z","reason":"client_exit"}
         """);
         var app = new App(new AppDependencies
@@ -2736,7 +2736,7 @@ public sealed partial class AppTests
             .GetProperty("detail")
             .GetString();
         Assert.Contains("text:contains=Files", originDetail, StringComparison.Ordinal);
-        Assert.Contains("resource_id:exact=com.elotouch.home:id/tvAppName", originDetail, StringComparison.Ordinal);
+        Assert.Contains("resource_id:exact=com.example.app:id/itemTitle", originDetail, StringComparison.Ordinal);
         Assert.Contains("class_name:exact=android.widget.TextView", originDetail, StringComparison.Ordinal);
         var selector = envelope.RootElement
             .GetProperty("data")
@@ -3141,7 +3141,7 @@ public sealed partial class AppTests
         var inspectRoot = Path.Join(replayRoot, "inspect");
         fileSystem.CreateDirectory(inspectRoot);
         fileSystem.AddFile(Path.Join(inspectRoot, "session-timeline.jsonl"), """
-        {"type":"command_result","session_id":"inspect-session","id":"1","command":"tap_element","ok":true,"selector":{"text":"Files","text_match":"exact","resource_id":"com.elotouch.home:id/tvAppName"},"data":{"x":814,"y":315}}
+        {"type":"command_result","session_id":"inspect-session","id":"1","command":"tap_element","ok":true,"selector":{"text":"Files","text_match":"exact","resource_id":"com.example.app:id/itemTitle"},"data":{"x":814,"y":315}}
         """);
         var app = new App(new AppDependencies
         {
@@ -3550,7 +3550,7 @@ public sealed partial class AppTests
         var replayRoot = "/tmp/inspect-selector-timeline-root";
         fileSystem.CreateDirectory(replayRoot);
         fileSystem.AddFile(Path.Join(replayRoot, "session-timeline.jsonl"), """
-        {"type":"command_result","session_id":"inspect-session","id":"1","command":"tap_text","ok":true,"started_at":"2026-05-18T10:00:01Z","ended_at":"2026-05-18T10:00:02Z","selector":{"text":"Files","text_match":"exact","resource_id":"com.elotouch.home:id/tvAppName","resource_id_match":"exact","class_name":"android.widget.TextView","class_name_match":"exact","region":{"left":0,"top":0,"right":1000,"bottom":600}},"data":{"x":814,"y":315}}
+        {"type":"command_result","session_id":"inspect-session","id":"1","command":"tap_text","ok":true,"started_at":"2026-05-18T10:00:01Z","ended_at":"2026-05-18T10:00:02Z","selector":{"text":"Files","text_match":"exact","resource_id":"com.example.app:id/itemTitle","resource_id_match":"exact","class_name":"android.widget.TextView","class_name_match":"exact","region":{"left":0,"top":0,"right":1000,"bottom":600}},"data":{"x":814,"y":315}}
         """);
         var app = new App(new AppDependencies
         {
@@ -3559,16 +3559,16 @@ public sealed partial class AppTests
             DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
         });
 
-        var exitCode = await app.RunAsync(["replay", "timeline", "--artifacts", replayRoot, "--type", "command_result", "--contains", "tvAppName"]);
+        var exitCode = await app.RunAsync(["replay", "timeline", "--artifacts", replayRoot, "--type", "command_result", "--contains", "itemTitle"]);
         using var envelope = console.ParseSingleOutputAsJson();
 
         Assert.Equal(0, exitCode);
         var evt = Assert.Single(envelope.RootElement.GetProperty("data").GetProperty("events").EnumerateArray());
-        Assert.Contains("resource_id:exact=com.elotouch.home:id/tvAppName", evt.GetProperty("detail").GetString(), StringComparison.Ordinal);
+        Assert.Contains("resource_id:exact=com.example.app:id/itemTitle", evt.GetProperty("detail").GetString(), StringComparison.Ordinal);
         var properties = evt.GetProperty("properties");
         Assert.Equal("Files", properties.GetProperty("selector.text").GetString());
         Assert.Equal("exact", properties.GetProperty("selector.text_match").GetString());
-        Assert.Equal("com.elotouch.home:id/tvAppName", properties.GetProperty("selector.resource_id").GetString());
+        Assert.Equal("com.example.app:id/itemTitle", properties.GetProperty("selector.resource_id").GetString());
         Assert.Equal("0", properties.GetProperty("selector.region.left").GetString());
     }
 
@@ -5579,15 +5579,15 @@ public sealed partial class AppTests
         var fileSystem = new FakeFileSystem();
         var console = new FakeConsole();
         console.EnqueueInput(
-            "{\"id\":\"1\",\"command\":\"wait_visible\",\"text\":\"Files\",\"text_match\":\"exact\",\"resource_id\":\"com.elotouch.home:id/tvAppName\",\"class_name\":\"android.widget.TextView\",\"region\":{\"left\":0,\"top\":0,\"right\":1000,\"bottom\":600},\"timeout_sec\":5}",
-            "{\"id\":\"2\",\"command\":\"tap_text\",\"text\":\"Files\",\"text_match\":\"exact\",\"resource_id\":\"com.elotouch.home:id/tvAppName\",\"class_name\":\"android.widget.TextView\",\"timeout_sec\":5}",
+            "{\"id\":\"1\",\"command\":\"wait_visible\",\"text\":\"Files\",\"text_match\":\"exact\",\"resource_id\":\"com.example.app:id/itemTitle\",\"class_name\":\"android.widget.TextView\",\"region\":{\"left\":0,\"top\":0,\"right\":1000,\"bottom\":600},\"timeout_sec\":5}",
+            "{\"id\":\"2\",\"command\":\"tap_text\",\"text\":\"Files\",\"text_match\":\"exact\",\"resource_id\":\"com.example.app:id/itemTitle\",\"class_name\":\"android.widget.TextView\",\"timeout_sec\":5}",
             "{\"id\":\"3\",\"command\":\"exit\"}");
         var state = new ScreenState(
             timeProvider.GetUtcNow(),
             2,
             [
                 new ScreenElement("Large files", null, null, "android.widget.CompoundButton", true, true, 420, 168, 594, 240),
-                new ScreenElement("Files", null, "com.elotouch.home:id/tvAppName", "android.widget.TextView", true, false, 697, 296, 931, 335)
+                new ScreenElement("Files", null, "com.example.app:id/itemTitle", "android.widget.TextView", true, false, 697, 296, 931, 335)
             ]);
         var host = new FakeDeviceHost(state, state, state, state, state);
         var app = new App(new AppDependencies
@@ -5607,7 +5607,7 @@ public sealed partial class AppTests
         {
             Assert.Equal("Files", selector.Text);
             Assert.Equal(ScreenElementMatchModes.Exact, selector.TextMatch);
-            Assert.Equal("com.elotouch.home:id/tvAppName", selector.ResourceId);
+            Assert.Equal("com.example.app:id/itemTitle", selector.ResourceId);
             Assert.Equal("android.widget.TextView", selector.ClassName);
         });
         using var waitResult = JsonDocument.Parse(console.OutputLines[2]);
@@ -5616,7 +5616,7 @@ public sealed partial class AppTests
         var selector = waitResult.RootElement.GetProperty("selector");
         Assert.Equal("Files", selector.GetProperty("text").GetString());
         Assert.Equal("exact", selector.GetProperty("text_match").GetString());
-        Assert.Equal("com.elotouch.home:id/tvAppName", selector.GetProperty("resource_id").GetString());
+        Assert.Equal("com.example.app:id/itemTitle", selector.GetProperty("resource_id").GetString());
         Assert.False(selector.TryGetProperty("has_criteria", out _));
     }
 
@@ -5631,7 +5631,7 @@ public sealed partial class AppTests
         var state = new ScreenState(
             timeProvider.GetUtcNow(),
             1,
-            [new ScreenElement("Files", null, "com.elotouch.home:id/tvAppName", "android.widget.TextView", true, false, 697, 296, 931, 335)]);
+            [new ScreenElement("Files", null, "com.example.app:id/itemTitle", "android.widget.TextView", true, false, 697, 296, 931, 335)]);
         var host = new FakeDeviceHost(state);
         var app = new App(new AppDependencies
         {
@@ -5662,7 +5662,7 @@ public sealed partial class AppTests
         var state = new ScreenState(
             timeProvider.GetUtcNow(),
             1,
-            [new ScreenElement("Files", null, "com.elotouch.home:id/tvAppName", "android.widget.TextView", true, false, 697, 296, 931, 335)]);
+            [new ScreenElement("Files", null, "com.example.app:id/itemTitle", "android.widget.TextView", true, false, 697, 296, 931, 335)]);
         var host = new FakeDeviceHost(state);
         var app = new App(new AppDependencies
         {

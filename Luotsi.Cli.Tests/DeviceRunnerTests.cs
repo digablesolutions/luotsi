@@ -194,7 +194,7 @@ public sealed partial class AppTests
         adb.EnqueueShellResult(new ProcessResult(
             0,
             CreateUiDumpWithNodes(
-                CreateUiNode(text: "Files", contentDescription: string.Empty, resourceId: "com.elotouch.home:id/tvAppName", className: "android.widget.TextView", clickable: false, left: 50, top: 100, right: 250, bottom: 140),
+                CreateUiNode(text: "Files", contentDescription: string.Empty, resourceId: "com.example.app:id/itemTitle", className: "android.widget.TextView", clickable: false, left: 50, top: 100, right: 250, bottom: 140),
                 CreateUiNode(text: "Files", contentDescription: string.Empty, resourceId: "android:id/title", className: "android.widget.TextView", clickable: false, left: 96, top: 555, right: 372, bottom: 584)),
             string.Empty));
         adb.EnqueueShellResult(new ProcessResult(0, string.Empty, string.Empty));
@@ -203,7 +203,7 @@ public sealed partial class AppTests
         var tap = await runner.TapElementAsync(new ScreenElementSelector(
             Text: "Files",
             TextMatch: ScreenElementMatchModes.Exact,
-            ResourceId: "com.elotouch.home:id/tvAppName",
+            ResourceId: "com.example.app:id/itemTitle",
             ClassName: "android.widget.TextView",
             Region: new Bounds(0, 0, 400, 300)), 1);
 
