@@ -1305,7 +1305,10 @@ public sealed partial class AppTests
         Assert.Contains("## Copy-Paste Triage Commands", markdown, StringComparison.Ordinal);
         Assert.Contains("```bash", markdown, StringComparison.Ordinal);
         Assert.Contains("## 60-Second Triage Checklist", markdown, StringComparison.Ordinal);
+        Assert.Contains("Why: This is the highest-signal next command computed from replay metadata.", markdown, StringComparison.Ordinal);
+        Assert.Contains("Why: Session identity and focused timeline evidence should be understood before broad artifact browsing.", markdown, StringComparison.Ordinal);
         Assert.Contains("3. Use the commands section only after the focused failure window is understood", markdown, StringComparison.Ordinal);
+        Assert.Contains("Why: Follow-up commands are useful after the first failure window is clear.", markdown, StringComparison.Ordinal);
         Assert.Contains("## First Action", markdown, StringComparison.Ordinal);
         Assert.Contains("Scrub the failure window", markdown, StringComparison.Ordinal);
         Assert.Contains("Start with the focused previous/current/next timeline view.", markdown, StringComparison.Ordinal);
@@ -2060,6 +2063,40 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayPacket_Check_MarkdownChecklistWithoutStructuredRationale_ReturnsUsageError()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplaySummaryArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = new FakeProcessRunner(),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var writeExitCode = await app.RunAsync(["replay", "packet", "--artifacts", replayRoot]);
+        var markdownPath = Path.Join(replayRoot, "run-summary.md");
+        var markdown = await fileSystem.ReadAllTextAsync(markdownPath);
+        fileSystem.AddFile(markdownPath, markdown.Replace(
+            "   - Why: This is the highest-signal next command computed from replay metadata.\n",
+            string.Empty,
+            StringComparison.Ordinal));
+        console.OutputLines.Clear();
+        var checkExitCode = await app.RunAsync(["replay", "packet", "--check", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, writeExitCode);
+        Assert.Equal(2, checkExitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("60-second triage checklist is missing checklist rationale", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("This is the highest-signal next command computed from replay metadata.", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("Re-run `luotsi replay packet", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayPacket_Check_MarkdownWithoutFirstAction_ReturnsUsageError()
     {
         var console = new FakeConsole();
@@ -2109,8 +2146,11 @@ public sealed partial class AppTests
         ## 60-Second Triage Checklist
 
         1. Run the recommended packet command `{recommendedCommand}`
+           - Why: This is the highest-signal next command computed from replay metadata.
         2. Read the primary failure fields before opening broad artifacts `{primarySourceCommand}`
+           - Why: Session identity and focused timeline evidence should be understood before broad artifact browsing.
         3. Use the commands section only after the focused failure window is understood
+           - Why: Follow-up commands are useful after the first failure window is clear.
 
         ## Primary Failure
 
@@ -2182,8 +2222,11 @@ public sealed partial class AppTests
         ## 60-Second Triage Checklist
 
         1. Run the recommended packet command `{recommendedCommand}`
+           - Why: This is the highest-signal next command computed from replay metadata.
         2. Read the primary failure fields before opening broad artifacts `{primarySourceCommand}`
+           - Why: Session identity and focused timeline evidence should be understood before broad artifact browsing.
         3. Use the commands section only after the focused failure window is understood
+           - Why: Follow-up commands are useful after the first failure window is clear.
 
         ## First Action
 

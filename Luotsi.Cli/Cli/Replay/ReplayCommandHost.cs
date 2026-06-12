@@ -353,6 +353,14 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         {
             throw new UsageException($"{RunSummaryMarkdownFileName} 60-second triage checklist is missing checklist action '{item.Action}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
         }
+
+        foreach (var item in triageChecklist
+                     .OrderBy(static item => item.Step)
+                     .Where(item => !string.IsNullOrWhiteSpace(item.Rationale))
+                     .Where(item => !checklistSection.Contains(item.Rationale, StringComparison.Ordinal)))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} 60-second triage checklist is missing checklist rationale '{item.Rationale}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
     }
 
     private static void ValidateFirstActionSection(
@@ -802,6 +810,8 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             {
                 builder.AppendLine($"{item.Step}. {EscapeMarkdown(item.Action)} `{EscapeMarkdown(item.Command)}`");
             }
+
+            builder.AppendLine($"   - Why: {EscapeMarkdown(item.Rationale)}");
         }
 
         builder.AppendLine();
