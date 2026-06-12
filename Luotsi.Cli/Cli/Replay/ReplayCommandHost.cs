@@ -292,6 +292,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
 
             ValidateFailureSnapshot(primaryFailure, runSummaryMarkdown, artifacts.Root);
             ValidatePrimaryFailureHandoff(primaryFailure, triageChecklist, runSummaryMarkdown, packetPath, artifacts.Root);
+            ValidatePrimaryFailureSection(primaryFailure, runSummaryMarkdown, artifacts.Root);
 
             return new RunSummaryCheckResult(
                 ResultSchemas.RunSummaryCheck,
@@ -465,6 +466,50 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         if (!runSummaryMarkdown.Contains(primaryFailure.SourceCommand, StringComparison.Ordinal))
         {
             throw new UsageException($"{RunSummaryMarkdownFileName} does not include primaryFailure.sourceCommand from {RunSummaryJsonFileName}. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+    }
+
+    private static void ValidatePrimaryFailureSection(
+        ReplayOpenPrimaryFailureResult? primaryFailure,
+        string runSummaryMarkdown,
+        string artifactRoot)
+    {
+        var primaryFailureSection = ExtractMarkdownSection(runSummaryMarkdown, "## Primary Failure");
+        if (string.IsNullOrWhiteSpace(primaryFailureSection))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} is missing the primary failure detail section. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        if (primaryFailure is null)
+        {
+            if (!primaryFailureSection.Contains("No primary failure", StringComparison.Ordinal))
+            {
+                throw new UsageException($"{RunSummaryMarkdownFileName} primary failure detail section must state that no primary failure was found. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+            }
+
+            return;
+        }
+
+        foreach (var value in new[]
+                 {
+                     primaryFailure.SessionKind,
+                     primaryFailure.SessionId,
+                     primaryFailure.Reason,
+                     primaryFailure.ExitCode.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                     primaryFailure.Target,
+                     primaryFailure.Scenario,
+                     primaryFailure.Step,
+                     primaryFailure.Action,
+                     primaryFailure.Message,
+                     primaryFailure.TimelinePath,
+                     primaryFailure.FailureCapsulePath,
+                     primaryFailure.SourceCommand
+                 }
+                 .Where(static value => !string.IsNullOrWhiteSpace(value))
+                 .Select(static value => value!)
+                 .Where(value => !primaryFailureSection.Contains(EscapeMarkdown(value), StringComparison.Ordinal)))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} primary failure detail section is missing primary failure value '{value}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
         }
     }
 
