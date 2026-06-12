@@ -85,6 +85,25 @@ public sealed class ViewTransportTests
     }
 
     [Fact]
+    public async Task ReadPacketsAsync_Skips_Unknown_Packets_And_Continues()
+    {
+        var stream = new ViewPacketStreamHarness()
+            .WriteHeader("h264", 1080, 1920)
+            .WritePacket((ViewPacketType)99, 6, 111_000, false, [0xCA, 0xFE])
+            .WritePacket(ViewPacketType.Frame, 7, 123_000, true, [0x03, 0x04, 0x05])
+            .Build();
+        var reader = new ViewPacketStreamReader();
+
+        await reader.ReadHeaderAsync(stream);
+        var packet = Assert.Single(await ReadAllAsync(reader.ReadPacketsAsync(stream)));
+
+        Assert.Equal(ViewPacketType.Frame, packet.PacketType);
+        Assert.Equal(7, packet.Sequence);
+        Assert.True(packet.IsKeyFrame);
+        Assert.Equal([0x03, 0x04, 0x05], packet.Payload.ToArray());
+    }
+
+    [Fact]
     public async Task AndroidViewBootstrap_StartAsync_Pushes_Forwards_And_Starts_Helper()
     {
         var adb = new FakeAdbClient();
