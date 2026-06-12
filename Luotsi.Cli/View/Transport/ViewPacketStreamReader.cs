@@ -76,13 +76,13 @@ public sealed class ViewPacketStreamReader : IViewPacketStreamReader
             var payload = payloadSize == 0 ? Array.Empty<byte>() : new byte[payloadSize];
             if (payloadSize > 0)
             {
-                var knownTypeName = packetType.HasValue ? packetType.Value.ToString() : $"unknown(0x{headerBuffer[0]:X2})";
                 try
                 {
                     await ReadExactAsync(stream, payload, cancellationToken).ConfigureAwait(false);
                 }
                 catch (InvalidOperationException ex) when (ex.Message.Contains("view packet payload", StringComparison.Ordinal))
                 {
+                    var knownTypeName = packetType.HasValue ? packetType.Value.ToString() : $"unknown(0x{headerBuffer[0]:X2})";
                     throw new InvalidOperationException(
                         $"Unexpected end of stream while reading payload for '{knownTypeName}' packet sequence {sequence} with advertised size {payloadSize}.",
                         ex);
