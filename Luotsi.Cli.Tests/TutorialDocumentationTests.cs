@@ -397,9 +397,9 @@ public sealed partial class AppTests
     public void Output_Fallback_Guidance_Is_Replay_First_Across_Entry_Points()
     {
         var root = FindRepositoryRoot();
+        var readme = File.ReadAllText(Path.Join(root, "README.md"));
         var entryPoints = new Dictionary<string, string>
         {
-            ["README.md"] = File.ReadAllText(Path.Join(root, "README.md")),
             ["AGENTS.md"] = File.ReadAllText(Path.Join(root, "AGENTS.md")),
             ["examples/agents/README.md"] = File.ReadAllText(Path.Join(root, "examples", "agents", "README.md")),
             ["first-five-minutes.mdx"] = File.ReadAllText(Path.Join(root, "website", "src", "content", "docs", "docs", "getting-started", "first-five-minutes.mdx")),
@@ -429,7 +429,9 @@ public sealed partial class AppTests
         Assert.Contains("prefer the artifact-root packet fallback before", entryPoints["luotsi help output"], StringComparison.Ordinal);
         Assert.Contains("next: luotsi replay packet --artifacts artifacts/smoke-run/<run-id>", entryPoints["luotsi help output"], StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --last --artifacts artifacts/smoke-run --check", entryPoints["luotsi help output"], StringComparison.Ordinal);
-        Assert.Contains("generic artifact browser", entryPoints["README.md"], StringComparison.Ordinal);
+        Assert.Contains("Output envelopes", readme, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", readme, StringComparison.Ordinal);
+        Assert.Contains("Artifact roots are durable evidence", readme, StringComparison.Ordinal);
         Assert.Contains("generic artifact browser", entryPoints["first-five-minutes.mdx"], StringComparison.Ordinal);
         Assert.Contains("generic artifact browser", entryPoints["output-envelopes.mdx"], StringComparison.Ordinal);
         Assert.Contains("examples/agents/extract-next-command.py", entryPoints["first-five-minutes.mdx"], StringComparison.Ordinal);
