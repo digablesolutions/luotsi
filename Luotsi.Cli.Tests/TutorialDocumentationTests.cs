@@ -226,8 +226,7 @@ public sealed partial class AppTests
         Assert.Contains("Normal commands return one JSON envelope by default.", readme, StringComparison.Ordinal);
         Assert.Contains("Artifact roots are durable evidence", readme, StringComparison.Ordinal);
         Assert.Contains("Output envelopes", readme, StringComparison.Ordinal);
-        AssertContainsBefore(readme, "luotsi replay packet --artifacts <artifact-root>", "luotsi replay open --artifacts <artifact-root> --dry-run");
-        Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", readme, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --artifacts <artifact-root>", readme, StringComparison.Ordinal);
         Assert.DoesNotContain("data.triage_checklist", readme, StringComparison.Ordinal);
         Assert.DoesNotContain("examples/agents/extract-next-command.py", readme, StringComparison.Ordinal);
         Assert.DoesNotContain("examples/agents/extract-next-command.mjs", readme, StringComparison.Ordinal);

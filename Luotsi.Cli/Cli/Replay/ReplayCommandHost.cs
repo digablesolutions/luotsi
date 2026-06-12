@@ -335,9 +335,12 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             throw new UsageException($"{RunSummaryMarkdownFileName} is missing the copy-paste triage command block. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
         }
 
-        if (!commandBlock.Contains(checkCommand, StringComparison.Ordinal))
+        var firstCommand = commandBlock
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault();
+        if (!string.Equals(firstCommand, checkCommand, StringComparison.Ordinal))
         {
-            throw new UsageException($"{RunSummaryMarkdownFileName} copy-paste triage command block is missing the packet validation gate command. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+            throw new UsageException($"{RunSummaryMarkdownFileName} copy-paste triage command block must start with the packet validation gate command. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
         }
 
         foreach (var command in triageChecklist
