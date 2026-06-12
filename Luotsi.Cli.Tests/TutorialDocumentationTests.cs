@@ -269,6 +269,9 @@ public sealed partial class AppTests
         Assert.Contains("artifacts.artifact_root", examples, StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --last --artifacts artifacts/agent-loop", examples, StringComparison.Ordinal);
         Assert.Contains("command -> structured output -> artifact root -> replay command -> next action", aiAgentWorkflows, StringComparison.Ordinal);
+        Assert.Contains(".codex/skills/luotsi-agent", aiAgentWorkflows, StringComparison.Ordinal);
+        Assert.Contains("$luotsi-agent", aiAgentWorkflows, StringComparison.Ordinal);
+        Assert.Contains("Codex, Claude Code, or another skill-aware assistant", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("luotsi help output", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("schema: \"luotsi-command.v1\"", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("data.recommended_next_action_command", aiAgentWorkflows, StringComparison.Ordinal);

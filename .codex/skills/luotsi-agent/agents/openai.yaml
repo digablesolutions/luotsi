@@ -1,0 +1,4 @@
+interface:
+  display_name: "Luotsi Agent"
+  short_description: "Use Luotsi commands, loops, and replay triage"
+  default_prompt: "Use $luotsi-agent to choose the right Luotsi commands and artifact-backed workflow for this Android automation task."
