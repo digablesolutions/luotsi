@@ -283,6 +283,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             ValidateCopyPasteTriageCommands(triageChecklist, runSummaryMarkdown, artifacts.Root);
 
             ValidateMarkdownTriageChecklist(triageChecklist, runSummaryMarkdown, artifacts.Root);
+            ValidateFirstActionSection(recommendedNextActionResult, runSummaryMarkdown, artifacts.Root);
 
             if (!runSummaryMarkdown.Contains(recommendedCommand, StringComparison.Ordinal))
             {
@@ -349,6 +350,32 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
                      .Where(item => !checklistSection.Contains(item.Action, StringComparison.Ordinal)))
         {
             throw new UsageException($"{RunSummaryMarkdownFileName} 60-second triage checklist is missing checklist action '{item.Action}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+    }
+
+    private static void ValidateFirstActionSection(
+        ReplayOpenNextActionResult recommendedNextAction,
+        string runSummaryMarkdown,
+        string artifactRoot)
+    {
+        var firstActionSection = ExtractMarkdownSection(runSummaryMarkdown, "## First Action");
+        if (string.IsNullOrWhiteSpace(firstActionSection))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} is missing the first action explanation. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        foreach (var value in new[]
+                 {
+                     recommendedNextAction.Title,
+                     recommendedNextAction.Kind,
+                     recommendedNextAction.Reason,
+                     recommendedNextAction.Command
+                 }
+                 .Where(static value => !string.IsNullOrWhiteSpace(value))
+                 .Select(static value => value!)
+                 .Where(value => !firstActionSection.Contains(EscapeMarkdown(value), StringComparison.Ordinal)))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} first action explanation is missing recommended action value '{value}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
         }
     }
 
