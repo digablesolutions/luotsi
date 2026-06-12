@@ -373,6 +373,7 @@ internal sealed class ViewPacketStreamWriter
         ViewPacketType.RotationReset => ViewTransportConstants.RotationResetPacketTypeId,
         ViewPacketType.StreamEnd => ViewTransportConstants.StreamEndPacketTypeId,
         ViewPacketType.ServerError => ViewTransportConstants.ServerErrorPacketTypeId,
+        ViewPacketType.Diagnostic => ViewTransportConstants.DiagnosticPacketTypeId,
         _ => throw new InvalidOperationException($"Unsupported shared-stream packet type '{packetType}'.")
     };
 }

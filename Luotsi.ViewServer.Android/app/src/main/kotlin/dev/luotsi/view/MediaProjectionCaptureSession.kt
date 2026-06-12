@@ -37,8 +37,34 @@ internal class MediaProjectionCaptureSession(
             val captureSize = DisplayCaptureSize.resolve(context, options.maxSize)
             Log.i(TAG, "MediaProjection session starting ${captureSize.width}x${captureSize.height}@${options.maxFps} bitrate=${options.videoBitRate}")
             packetizer.writeHeader("h264", captureSize.width, captureSize.height)
+            packetizer.writeDiagnostic(
+                phase = "socket_client_connected",
+                status = "succeeded",
+                message = "Host stream client connected to the MediaProjection helper.",
+                captureBackend = "mediaprojection",
+                socketName = options.socketName,
+                codec = options.codec,
+                width = captureSize.width,
+                height = captureSize.height,
+                maxFps = options.maxFps,
+                videoBitRate = options.videoBitRate,
+            )
+            packetizer.writeDiagnostic(
+                phase = "foreground_service",
+                status = "succeeded",
+                message = "MediaProjection foreground service is running.",
+                captureBackend = "mediaprojection",
+            )
 
             if (!options.codec.equals("h264", ignoreCase = true)) {
+                packetizer.writeDiagnostic(
+                    phase = "codec_preflight",
+                    status = "failed",
+                    message = "The MediaProjection helper rejected the requested codec.",
+                    captureBackend = "mediaprojection",
+                    codec = options.codec,
+                    error = "unsupported_codec",
+                )
                 packetizer.writeServerError("The Android MediaProjection helper currently supports only h264 capture.")
                 packetizer.writeStreamEnd()
                 packetizer.flush()
@@ -46,10 +72,17 @@ internal class MediaProjectionCaptureSession(
             }
 
             try {
-                startProjection(captureSize)
+                startProjection(captureSize, packetizer)
                 drainEncoder(packetizer)
             } catch (error: Exception) {
                 Log.e(TAG, "MediaProjection session failed", error)
+                packetizer.writeDiagnostic(
+                    phase = "mediaprojection_session",
+                    status = "failed",
+                    message = "MediaProjection capture failed.",
+                    captureBackend = "mediaprojection",
+                    error = error.message ?: error::class.java.simpleName,
+                )
                 packetizer.writeServerError(error.message ?: error::class.java.simpleName)
             } finally {
                 stop()
@@ -76,12 +109,18 @@ internal class MediaProjectionCaptureSession(
         mediaProjection = null
     }
 
-    private fun startProjection(captureSize: DisplayCaptureSize) {
+    private fun startProjection(captureSize: DisplayCaptureSize, packetizer: MediaCodecPacketizer) {
         val projectionManager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         val projection = projectionManager.getMediaProjection(options.resultCode, options.resultData)
             ?: throw IllegalStateException("MediaProjection consent data was rejected by Android.")
         mediaProjection = projection
         Log.i(TAG, "MediaProjection object acquired")
+        packetizer.writeDiagnostic(
+            phase = "mediaprojection_consent",
+            status = "succeeded",
+            message = "Android accepted the MediaProjection consent token.",
+            captureBackend = "mediaprojection",
+        )
 
         projection.registerCallback(object : MediaProjection.Callback() {
             override fun onStop() {
@@ -100,10 +139,30 @@ internal class MediaProjectionCaptureSession(
         val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
         encoder = codec
         Log.i(TAG, "Configuring AVC encoder ${captureSize.width}x${captureSize.height}")
+        packetizer.writeDiagnostic(
+            phase = "encoder_setup",
+            status = "starting",
+            message = "Configuring the Android AVC encoder.",
+            captureBackend = "mediaprojection",
+            codec = "h264",
+            width = captureSize.width,
+            height = captureSize.height,
+            maxFps = options.maxFps,
+            videoBitRate = options.videoBitRate,
+        )
         codec.configure(mediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
         inputSurface = codec.createInputSurface()
         codec.start()
         Log.i(TAG, "AVC encoder started")
+        packetizer.writeDiagnostic(
+            phase = "encoder_setup",
+            status = "succeeded",
+            message = "Android AVC encoder started.",
+            captureBackend = "mediaprojection",
+            codec = "h264",
+            width = captureSize.width,
+            height = captureSize.height,
+        )
 
         virtualDisplay = projection.createVirtualDisplay(
             "LuotsiMediaProjection",
@@ -116,6 +175,14 @@ internal class MediaProjectionCaptureSession(
             null,
         )
         Log.i(TAG, "VirtualDisplay created")
+        packetizer.writeDiagnostic(
+            phase = "virtual_display",
+            status = "succeeded",
+            message = "MediaProjection virtual display is ready.",
+            captureBackend = "mediaprojection",
+            width = captureSize.width,
+            height = captureSize.height,
+        )
     }
 
     private fun drainEncoder(packetizer: MediaCodecPacketizer) {
@@ -125,7 +192,16 @@ internal class MediaProjectionCaptureSession(
         while (!stopped.get()) {
             when (val outputIndex = codec.dequeueOutputBuffer(bufferInfo, 100_000L)) {
                 MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
-                MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> writeFormatConfig(codec.outputFormat, packetizer)
+                MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                    packetizer.writeDiagnostic(
+                        phase = "stream_packet_health",
+                        status = "succeeded",
+                        message = "MediaCodec output format is available.",
+                        captureBackend = "mediaprojection",
+                        codec = "h264",
+                    )
+                    writeFormatConfig(codec.outputFormat, packetizer)
+                }
                 else -> {
                     if (outputIndex >= 0) {
                         packetizer.writeEncodedBuffer(codec, outputIndex, bufferInfo)

@@ -404,7 +404,8 @@ public enum ViewPacketType : byte
     Frame = 2,
     RotationReset = 3,
     StreamEnd = 4,
-    ServerError = 5
+    ServerError = 5,
+    Diagnostic = 6
 }
 
 /// <summary>

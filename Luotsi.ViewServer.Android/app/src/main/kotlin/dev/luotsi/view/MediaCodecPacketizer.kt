@@ -70,6 +70,39 @@ internal class MediaCodecPacketizer(private val output: OutputStream) : Closeabl
 
     fun writeServerError(message: String) = writePacket(TYPE_SERVER_ERROR, false, 0L, message.encodeToByteArray())
 
+    fun writeDiagnostic(
+        phase: String,
+        status: String,
+        message: String,
+        captureBackend: String,
+        detail: String? = null,
+        socketName: String? = null,
+        codec: String? = null,
+        width: Int? = null,
+        height: Int? = null,
+        maxFps: Int? = null,
+        videoBitRate: String? = null,
+        error: String? = null,
+    ) = writePacket(
+        TYPE_DIAGNOSTIC,
+        false,
+        0L,
+        HelperDiagnosticJson.build(
+            phase = phase,
+            status = status,
+            message = message,
+            detail = detail,
+            captureBackend = captureBackend,
+            socketName = socketName,
+            codec = codec,
+            width = width,
+            height = height,
+            maxFps = maxFps,
+            videoBitRate = videoBitRate,
+            error = error,
+        ),
+    )
+
     fun writeStreamEnd() = writePacket(TYPE_STREAM_END, false, 0L, byteArrayOf())
 
     fun flush() = output.flush()
@@ -175,6 +208,7 @@ internal class MediaCodecPacketizer(private val output: OutputStream) : Closeabl
         private const val TYPE_FRAME = 2
         private const val TYPE_STREAM_END = 4
         private const val TYPE_SERVER_ERROR = 5
+        private const val TYPE_DIAGNOSTIC = 6
         private const val STREAM_HEADER_SIZE = 16
         private const val PACKET_HEADER_SIZE = 24
         private val START_CODE = byteArrayOf(0, 0, 0, 1)
