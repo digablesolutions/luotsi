@@ -235,6 +235,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             var recommendedNextActionResult = ReadRecommendedNextAction(recommendedNextAction, packetPath);
             var triageChecklist = ReadTriageChecklist(root, recommendedCommand, packetPath);
             var primaryFailure = ReadPrimaryFailure(root, packetPath);
+            ValidatePrimaryFailureEvidenceFiles(primaryFailure, packetPath, artifacts.Root);
             var failureSnapshot = ReadFailureSnapshot(root, primaryFailure, packetPath);
             var entryPoints = RequireObject(root, "entryPoints", packetPath);
             var indexHtmlPath = RequireString(entryPoints, "indexHtmlPath", packetPath);
@@ -466,6 +467,37 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         if (!runSummaryMarkdown.Contains(primaryFailure.SourceCommand, StringComparison.Ordinal))
         {
             throw new UsageException($"{RunSummaryMarkdownFileName} does not include primaryFailure.sourceCommand from {RunSummaryJsonFileName}. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+    }
+
+    private void ValidatePrimaryFailureEvidenceFiles(
+        ReplayOpenPrimaryFailureResult? primaryFailure,
+        string packetPath,
+        string artifactRoot)
+    {
+        if (primaryFailure is null)
+        {
+            return;
+        }
+
+        ValidatePrimaryFailureEvidenceFile(primaryFailure.TimelinePath, "primaryFailure.timelinePath", packetPath, artifactRoot);
+        ValidatePrimaryFailureEvidenceFile(primaryFailure.FailureCapsulePath, "primaryFailure.failureCapsulePath", packetPath, artifactRoot);
+    }
+
+    private void ValidatePrimaryFailureEvidenceFile(
+        string? evidencePath,
+        string fieldName,
+        string packetPath,
+        string artifactRoot)
+    {
+        if (string.IsNullOrWhiteSpace(evidencePath))
+        {
+            return;
+        }
+
+        if (!_dependencies.FileSystem.FileExists(evidencePath))
+        {
+            throw new UsageException($"{Path.GetFileName(packetPath)} {fieldName} points at missing evidence file '{evidencePath}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
         }
     }
 

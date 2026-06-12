@@ -1707,6 +1707,68 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayPacket_Check_PrimaryFailureWithMissingTimeline_ReturnsUsageError()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var processRunner = new FakeProcessRunner();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = processRunner,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var writeExitCode = await app.RunAsync(["replay", "packet", "--artifacts", replayRoot]);
+        fileSystem.DeleteFile(Path.Join(replayRoot, "session-timeline.jsonl"));
+        console.OutputLines.Clear();
+        var checkExitCode = await app.RunAsync(["replay", "packet", "--check", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, writeExitCode);
+        Assert.Equal(2, checkExitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("primaryFailure.timelinePath points at missing evidence file", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("session-timeline.jsonl", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("Re-run `luotsi replay packet", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Empty(processRunner.Calls);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayPacket_Check_PrimaryFailureWithMissingFailureCapsule_ReturnsUsageError()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var processRunner = new FakeProcessRunner();
+        var replayRoot = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = processRunner,
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var writeExitCode = await app.RunAsync(["replay", "packet", "--artifacts", replayRoot]);
+        fileSystem.DeleteFile(Path.Join(replayRoot, "failure-capsule.json"));
+        console.OutputLines.Clear();
+        var checkExitCode = await app.RunAsync(["replay", "packet", "--check", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, writeExitCode);
+        Assert.Equal(2, checkExitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("primaryFailure.failureCapsulePath points at missing evidence file", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("failure-capsule.json", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("Re-run `luotsi replay packet", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Empty(processRunner.Calls);
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayPacket_Check_MissingPacket_ReturnsUsageError()
     {
         var console = new FakeConsole();
