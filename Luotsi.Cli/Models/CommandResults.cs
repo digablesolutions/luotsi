@@ -483,6 +483,11 @@ public sealed record RunSummaryFailureSnapshotResult(
     string? Action,
     string? Message);
 
+public sealed record RunSummaryEvidenceFileResult(
+    string Kind,
+    string Path,
+    string Description);
+
 public sealed record RunSummaryResult(
     string Schema,
     DateTimeOffset GeneratedAt,
@@ -493,6 +498,7 @@ public sealed record RunSummaryResult(
     int FailureCount,
     IReadOnlyList<RunSummaryChecklistItemResult> TriageChecklist,
     RunSummaryFailureSnapshotResult? FailureSnapshot,
+    IReadOnlyList<RunSummaryEvidenceFileResult> EvidenceFiles,
     ReplayOpenPrimaryFailureResult? PrimaryFailure,
     ReplayOpenNextActionResult RecommendedNextAction,
     RunSummaryEntryPoints EntryPoints,
@@ -523,6 +529,7 @@ public sealed record RunSummaryCheckResult(
     int FailureCount,
     string RecommendedNextActionCommand,
     RunSummaryFailureSnapshotResult? FailureSnapshot,
+    IReadOnlyList<RunSummaryEvidenceFileResult> EvidenceFiles,
     ReplayOpenNextActionResult RecommendedNextAction,
     IReadOnlyList<RunSummaryChecklistItemResult> TriageChecklist,
     ReplayOpenPrimaryFailureResult? PrimaryFailure,

@@ -647,8 +647,13 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
 
     private static string? BuildPrimaryFailureSummary(JsonElement value, JsonElement detailSource)
     {
-        var scenario = TryGetString(value, "scenario") ?? TryGetString(detailSource, "scenario");
-        var step = FormatFailureStep(detailSource);
+        var scenario = TryGetString(value, "scenario")
+            ?? TryGetString(detailSource, "scenario")
+            ?? TryGetString(value, "session_id", "sessionId")
+            ?? TryGetString(detailSource, "session_id", "sessionId");
+        var step = FormatFailureStep(detailSource)
+            ?? TryGetString(value, "reason")
+            ?? TryGetString(detailSource, "reason");
         var message = TryGetNestedString(value, "error", "message")
             ?? TryGetNestedString(detailSource, "error", "message")
             ?? TryGetNestedString(detailSource, "failure_artifacts", "error_message")

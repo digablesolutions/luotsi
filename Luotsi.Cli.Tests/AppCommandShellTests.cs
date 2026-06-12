@@ -492,6 +492,16 @@ public sealed class AppCommandShellTests
                 "wait login button",
                 "waitVisible",
                 "button not visible"),
+            [
+                new RunSummaryEvidenceFileResult(
+                    "timeline",
+                    "session-timeline.jsonl",
+                    "Ordered replay events around the primary failure."),
+                new RunSummaryEvidenceFileResult(
+                    "failure_capsule",
+                    "failure-capsule.json",
+                    "Focused failure capsule with failed scenario, step, artifacts, and error.")
+            ],
             new ReplayOpenPrimaryFailureResult(
                 "scenario",
                 "login-smoke-session",
@@ -566,6 +576,16 @@ public sealed class AppCommandShellTests
                 "wait login button",
                 "waitVisible",
                 "button not visible"),
+            [
+                new RunSummaryEvidenceFileResult(
+                    "timeline",
+                    "session-timeline.jsonl",
+                    "Ordered replay events around the primary failure."),
+                new RunSummaryEvidenceFileResult(
+                    "failure_capsule",
+                    "failure-capsule.json",
+                    "Focused failure capsule with failed scenario, step, artifacts, and error.")
+            ],
             new ReplayOpenNextActionResult(
                 "scrub_failure",
                 "Scrub the failure window",

@@ -1264,6 +1264,11 @@ public sealed partial class AppTests
         Assert.Equal("error", failureSnapshot.GetProperty("reason").GetString());
         Assert.Equal("192.168.0.134:5555", failureSnapshot.GetProperty("target").GetString());
         Assert.Equal("error=transport: Unexpected end of stream", failureSnapshot.GetProperty("message").GetString());
+        var evidenceFiles = data.GetProperty("evidence_files").EnumerateArray().ToArray();
+        Assert.Contains(evidenceFiles, evidence =>
+            evidence.GetProperty("kind").GetString() == "timeline" &&
+            evidence.GetProperty("path").GetString() == "session-timeline.jsonl" &&
+            evidence.GetProperty("description").GetString() == "Ordered replay events around the primary failure.");
         var primaryFailure = data.GetProperty("primary_failure");
         Assert.Equal("view", primaryFailure.GetProperty("session_kind").GetString());
         Assert.Equal("view-session", primaryFailure.GetProperty("session_id").GetString());
@@ -1281,6 +1286,10 @@ public sealed partial class AppTests
         Assert.Equal("error", persistedFailureSnapshot.GetProperty("reason").GetString());
         Assert.Equal("192.168.0.134:5555", persistedFailureSnapshot.GetProperty("target").GetString());
         Assert.Equal("error=transport: Unexpected end of stream", persistedFailureSnapshot.GetProperty("message").GetString());
+        var persistedEvidenceFiles = runSummaryJson.RootElement.GetProperty("evidenceFiles").EnumerateArray().ToArray();
+        Assert.Contains(persistedEvidenceFiles, evidence =>
+            evidence.GetProperty("kind").GetString() == "timeline" &&
+            evidence.GetProperty("path").GetString() == "session-timeline.jsonl");
         var persistedPrimaryFailure = runSummaryJson.RootElement.GetProperty("primaryFailure");
         var persistedChecklist = runSummaryJson.RootElement.GetProperty("triageChecklist").EnumerateArray().ToArray();
         Assert.Equal(3, persistedChecklist.Length);
@@ -1300,6 +1309,9 @@ public sealed partial class AppTests
         Assert.Contains("Reason: `error`", markdown, StringComparison.Ordinal);
         Assert.Contains("Target: `192.168.0.134:5555`", markdown, StringComparison.Ordinal);
         Assert.Contains("Message: `error=transport: Unexpected end of stream`", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Evidence Files", markdown, StringComparison.Ordinal);
+        Assert.Contains("timeline: `session-timeline.jsonl`", markdown, StringComparison.Ordinal);
+        Assert.Contains("Ordered replay events around the primary failure.", markdown, StringComparison.Ordinal);
         Assert.Contains("## Packet Gate", markdown, StringComparison.Ordinal);
         Assert.Contains($"luotsi replay packet --artifacts {replayRoot} --check", markdown, StringComparison.Ordinal);
         Assert.Contains("## Copy-Paste Triage Commands", markdown, StringComparison.Ordinal);
@@ -1311,7 +1323,7 @@ public sealed partial class AppTests
         Assert.Contains("Why: Follow-up commands are useful after the first failure window is clear.", markdown, StringComparison.Ordinal);
         Assert.Contains("## First Action", markdown, StringComparison.Ordinal);
         Assert.Contains("Scrub the failure window", markdown, StringComparison.Ordinal);
-        Assert.Contains("Start with the focused previous/current/next timeline view.", markdown, StringComparison.Ordinal);
+        Assert.Contains("A failure signal was found; start with the smallest timeline window before opening broader artifacts.", markdown, StringComparison.Ordinal);
         Assert.Contains("Session ID", markdown, StringComparison.Ordinal);
         Assert.Contains("view-session", markdown, StringComparison.Ordinal);
         Assert.Contains("Timeline", markdown, StringComparison.Ordinal);
@@ -1403,6 +1415,10 @@ public sealed partial class AppTests
         Assert.Equal("error", failureSnapshot.GetProperty("reason").GetString());
         Assert.Equal("192.168.0.134:5555", failureSnapshot.GetProperty("target").GetString());
         Assert.Equal("error=transport: Unexpected end of stream", failureSnapshot.GetProperty("message").GetString());
+        var evidenceFiles = data.GetProperty("evidence_files").EnumerateArray().ToArray();
+        Assert.Contains(evidenceFiles, evidence =>
+            evidence.GetProperty("kind").GetString() == "timeline" &&
+            evidence.GetProperty("path").GetString() == "session-timeline.jsonl");
         var checklist = data.GetProperty("triage_checklist").EnumerateArray().ToArray();
         Assert.Equal(3, checklist.Length);
         Assert.Equal(data.GetProperty("recommended_next_action_command").GetString(), checklist[0].GetProperty("command").GetString());
@@ -1548,6 +1564,40 @@ public sealed partial class AppTests
         Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
         Assert.Contains("packet identity value", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
         Assert.Contains($"Artifact root: `{replayRoot}`", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("Re-run `luotsi replay packet", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayPacket_Check_MarkdownWithoutEvidenceFilesSection_ReturnsUsageError()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplaySummaryArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = new FakeProcessRunner(),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var writeExitCode = await app.RunAsync(["replay", "packet", "--artifacts", replayRoot]);
+        var markdownPath = Path.Join(replayRoot, "run-summary.md");
+        var markdown = await fileSystem.ReadAllTextAsync(markdownPath);
+        var evidenceSectionIndex = markdown.IndexOf("## Evidence Files", StringComparison.Ordinal);
+        var packetGateSectionIndex = markdown.IndexOf("## Packet Gate", StringComparison.Ordinal);
+        Assert.True(evidenceSectionIndex > 0);
+        Assert.True(packetGateSectionIndex > evidenceSectionIndex);
+        fileSystem.AddFile(markdownPath, markdown.Remove(evidenceSectionIndex, packetGateSectionIndex - evidenceSectionIndex));
+        console.OutputLines.Clear();
+        var checkExitCode = await app.RunAsync(["replay", "packet", "--check", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, writeExitCode);
+        Assert.Equal(2, checkExitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("evidence files section", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
         Assert.Contains("Re-run `luotsi replay packet", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
@@ -2226,10 +2276,16 @@ public sealed partial class AppTests
         var writeExitCode = await app.RunAsync(["replay", "packet", "--artifacts", replayRoot]);
         var markdownPath = Path.Join(replayRoot, "run-summary.md");
         var markdown = await fileSystem.ReadAllTextAsync(markdownPath);
-        fileSystem.AddFile(markdownPath, markdown.Replace(
+        var updatedMarkdown = markdown.Replace(
+            "   - Why: This is the highest-signal next command computed from replay metadata.\r\n",
+            string.Empty,
+            StringComparison.Ordinal);
+        updatedMarkdown = updatedMarkdown.Replace(
             "   - Why: This is the highest-signal next command computed from replay metadata.\n",
             string.Empty,
-            StringComparison.Ordinal));
+            StringComparison.Ordinal);
+        Assert.NotEqual(markdown, updatedMarkdown);
+        fileSystem.AddFile(markdownPath, updatedMarkdown);
         console.OutputLines.Clear();
         var checkExitCode = await app.RunAsync(["replay", "packet", "--check", "--artifacts", replayRoot]);
         using var envelope = console.ParseSingleOutputAsJson();
