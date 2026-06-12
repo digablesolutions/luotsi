@@ -76,6 +76,7 @@ public sealed class ViewPacketStreamReader : IViewPacketStreamReader
             var payload = payloadSize == 0 ? Array.Empty<byte>() : new byte[payloadSize];
             if (payloadSize > 0)
             {
+                var knownTypeName = packetType.HasValue ? packetType.Value.ToString() : $"unknown(0x{headerBuffer[0]:X2})";
                 try
                 {
                     await ReadExactAsync(stream, payload, cancellationToken).ConfigureAwait(false);
@@ -83,12 +84,17 @@ public sealed class ViewPacketStreamReader : IViewPacketStreamReader
                 catch (InvalidOperationException ex) when (ex.Message.Contains("view packet payload", StringComparison.Ordinal))
                 {
                     throw new InvalidOperationException(
-                        $"Unexpected end of stream while reading payload for '{packetType}' packet sequence {sequence} with advertised size {payloadSize}.",
+                        $"Unexpected end of stream while reading payload for '{knownTypeName}' packet sequence {sequence} with advertised size {payloadSize}.",
                         ex);
                 }
             }
 
-            yield return new ViewPacket(packetType, sequence, pts, isKeyFrame, payload);
+            if (!packetType.HasValue)
+            {
+                continue;
+            }
+
+            yield return new ViewPacket(packetType.Value, sequence, pts, isKeyFrame, payload);
         }
     }
 
@@ -125,7 +131,7 @@ public sealed class ViewPacketStreamReader : IViewPacketStreamReader
         _ => throw new InvalidOperationException($"Unsupported view stream codec identifier '{value}'.")
     };
 
-    private static ViewPacketType DecodePacketType(byte value) => value switch
+    private static ViewPacketType? DecodePacketType(byte value) => value switch
     {
         ViewTransportConstants.ConfigPacketTypeId => ViewPacketType.Config,
         ViewTransportConstants.FramePacketTypeId => ViewPacketType.Frame,
@@ -133,6 +139,6 @@ public sealed class ViewPacketStreamReader : IViewPacketStreamReader
         ViewTransportConstants.StreamEndPacketTypeId => ViewPacketType.StreamEnd,
         ViewTransportConstants.ServerErrorPacketTypeId => ViewPacketType.ServerError,
         ViewTransportConstants.DiagnosticPacketTypeId => ViewPacketType.Diagnostic,
-        _ => throw new InvalidOperationException($"Unsupported view packet type '{value}'.")
+        _ => null
     };
 }
