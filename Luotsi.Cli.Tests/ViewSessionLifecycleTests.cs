@@ -58,15 +58,16 @@ public sealed partial class AppTests
             new FakeViewStreamConnector(
                 new ViewPacketStreamHarness()
                     .WriteHeader("h264", 1080, 1920)
-                    .WritePacket(ViewPacketType.Config, 1, 0, false, [0x01, 0x02])
-                    .WritePacket(ViewPacketType.StreamEnd, 2, 33_000, false, [])
+                    .WritePacket(ViewPacketType.Diagnostic, 1, 1_000, false, """{"phase":"encoder_setup","status":"succeeded","message":"Encoder ready.","capture_backend":"screenrecord","width":1080,"height":1920}"""u8.ToArray())
+                    .WritePacket(ViewPacketType.Config, 2, 0, false, [0x01, 0x02])
+                    .WritePacket(ViewPacketType.StreamEnd, 3, 33_000, false, [])
                     .Build()),
             new ViewPacketStreamReader());
 
         var exitCode = await session.RunAsync(new ViewOptions("192.168.0.134:5555", "adb", "h264", "ffmpeg", true, null, 1600, 60, "8M", true, false));
 
         Assert.Equal(0, exitCode);
-        Assert.Equal(2, console.OutputLines.Count);
+        Assert.Equal(3, console.OutputLines.Count);
 
         using var started = JsonDocument.Parse(console.OutputLines[0]);
         Assert.Equal(SessionEventTypes.View.Started, started.RootElement.GetProperty("type").GetString());
@@ -77,10 +78,20 @@ public sealed partial class AppTests
         Assert.True(started.RootElement.GetProperty("headless").GetBoolean());
         Assert.True(started.RootElement.GetProperty("overlay_screen_state").GetBoolean());
 
-        using var ended = JsonDocument.Parse(console.OutputLines[1]);
+        using var diagnostic = JsonDocument.Parse(console.OutputLines[1]);
+        Assert.Equal(SessionEventTypes.View.Diagnostic, diagnostic.RootElement.GetProperty("type").GetString());
+        Assert.Equal("android_helper", diagnostic.RootElement.GetProperty("source").GetString());
+        Assert.Equal("encoder_setup", diagnostic.RootElement.GetProperty("phase").GetString());
+        Assert.Equal("succeeded", diagnostic.RootElement.GetProperty("status").GetString());
+        Assert.Equal("Encoder ready.", diagnostic.RootElement.GetProperty("message").GetString());
+        Assert.Equal(ViewCaptureBackends.Screenrecord, diagnostic.RootElement.GetProperty("capture_backend").GetString());
+        Assert.Equal(1080, diagnostic.RootElement.GetProperty("width").GetInt32());
+
+        using var ended = JsonDocument.Parse(console.OutputLines[2]);
         Assert.Equal(SessionEventTypes.View.Ended, ended.RootElement.GetProperty("type").GetString());
         Assert.Equal("stream_ended", ended.RootElement.GetProperty("reason").GetString());
         Assert.Equal(2, backend.Packets.Count);
+        Assert.DoesNotContain(backend.Packets, static packet => packet.PacketType == ViewPacketType.Diagnostic);
 
         var replayPath = Path.Join(artifacts.Root, "session-replay.json");
         var timelinePath = Path.Join(artifacts.Root, "session-timeline.jsonl");
@@ -92,10 +103,11 @@ public sealed partial class AppTests
         Assert.Equal("view", replay.RootElement.GetProperty("sessionKind").GetString());
         Assert.Equal("192.168.0.134:5555", replay.RootElement.GetProperty("target").GetString());
         Assert.Equal("session-timeline.jsonl", replay.RootElement.GetProperty("timelineFileName").GetString());
-        Assert.Equal(2, replay.RootElement.GetProperty("eventCount").GetInt32());
+        Assert.Equal(3, replay.RootElement.GetProperty("eventCount").GetInt32());
 
         var timeline = await fileSystem.ReadAllTextAsync(timelinePath);
         Assert.Contains(SessionEventTypes.View.Started, timeline, StringComparison.Ordinal);
+        Assert.Contains("encoder_setup", timeline, StringComparison.Ordinal);
         Assert.Contains(SessionEventTypes.View.Ended, timeline, StringComparison.Ordinal);
     }
 
@@ -401,8 +413,9 @@ public sealed partial class AppTests
         var streamConnector = new FakeViewStreamConnector(
             new ViewPacketStreamHarness()
                 .WriteHeader("h264", 1080, 1920)
-                .WritePacket(ViewPacketType.ServerError, 1, 0, false, "MediaCodec preflight failed"u8.ToArray())
-                .WritePacket(ViewPacketType.StreamEnd, 2, 0, false, [])
+                .WritePacket(ViewPacketType.Diagnostic, 1, 0, false, """{"phase":"encoder_setup","status":"failed","message":"Encoder setup failed.","capture_backend":"mediaprojection","error":"preflight"}"""u8.ToArray())
+                .WritePacket(ViewPacketType.ServerError, 2, 0, false, "MediaCodec preflight failed"u8.ToArray())
+                .WritePacket(ViewPacketType.StreamEnd, 3, 0, false, [])
                 .Build(),
             new ViewPacketStreamHarness()
                 .WriteHeader("h264", 1080, 1920)
@@ -427,11 +440,17 @@ public sealed partial class AppTests
         Assert.Single(backend.Packets);
         Assert.Equal(ViewPacketType.StreamEnd, backend.Packets[0].PacketType);
 
-        using var fallback = JsonDocument.Parse(console.OutputLines[0]);
+        using var diagnostic = JsonDocument.Parse(console.OutputLines[0]);
+        Assert.Equal(SessionEventTypes.View.Diagnostic, diagnostic.RootElement.GetProperty("type").GetString());
+        Assert.Equal("android_helper", diagnostic.RootElement.GetProperty("source").GetString());
+        Assert.Equal("encoder_setup", diagnostic.RootElement.GetProperty("phase").GetString());
+        Assert.Equal("failed", diagnostic.RootElement.GetProperty("status").GetString());
+
+        using var fallback = JsonDocument.Parse(console.OutputLines[1]);
         Assert.Equal(SessionEventTypes.View.CaptureBackendFallback, fallback.RootElement.GetProperty("type").GetString());
         Assert.Equal("MediaCodec preflight failed", fallback.RootElement.GetProperty("reason").GetString());
 
-        using var started = JsonDocument.Parse(console.OutputLines[1]);
+        using var started = JsonDocument.Parse(console.OutputLines[2]);
         Assert.Equal(SessionEventTypes.View.Started, started.RootElement.GetProperty("type").GetString());
         Assert.Equal(ViewCaptureBackends.Screenrecord, started.RootElement.GetProperty("capture_backend").GetString());
     }

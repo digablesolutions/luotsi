@@ -67,6 +67,43 @@ public sealed class ViewTransportTests
     }
 
     [Fact]
+    public async Task ReadPacketsAsync_Parses_Diagnostic_Packet()
+    {
+        var payload = """{"phase":"encoder_setup","status":"succeeded"}"""u8.ToArray();
+        var stream = new ViewPacketStreamHarness()
+            .WriteHeader("h264", 1080, 1920)
+            .WritePacket(ViewPacketType.Diagnostic, 7, 123_000, false, payload)
+            .Build();
+        var reader = new ViewPacketStreamReader();
+
+        await reader.ReadHeaderAsync(stream);
+        var packet = Assert.Single(await ReadAllAsync(reader.ReadPacketsAsync(stream)));
+
+        Assert.Equal(ViewPacketType.Diagnostic, packet.PacketType);
+        Assert.Equal(7, packet.Sequence);
+        Assert.Equal(payload, packet.Payload.ToArray());
+    }
+
+    [Fact]
+    public async Task ReadPacketsAsync_Skips_Unknown_Packets_And_Continues()
+    {
+        var stream = new ViewPacketStreamHarness()
+            .WriteHeader("h264", 1080, 1920)
+            .WritePacket((ViewPacketType)99, 6, 111_000, false, [0xCA, 0xFE])
+            .WritePacket(ViewPacketType.Frame, 7, 123_000, true, [0x03, 0x04, 0x05])
+            .Build();
+        var reader = new ViewPacketStreamReader();
+
+        await reader.ReadHeaderAsync(stream);
+        var packet = Assert.Single(await ReadAllAsync(reader.ReadPacketsAsync(stream)));
+
+        Assert.Equal(ViewPacketType.Frame, packet.PacketType);
+        Assert.Equal(7, packet.Sequence);
+        Assert.True(packet.IsKeyFrame);
+        Assert.Equal([0x03, 0x04, 0x05], packet.Payload.ToArray());
+    }
+
+    [Fact]
     public async Task AndroidViewBootstrap_StartAsync_Pushes_Forwards_And_Starts_Helper()
     {
         var adb = new FakeAdbClient();
@@ -932,7 +969,8 @@ public sealed class ViewTransportTests
         await client.ConnectAsync(host, port);
         await WaitForObserverCountAsync(server, 1);
 
-        await server.PublishPacketAsync(new ViewPacket(ViewPacketType.Frame, 1, 33_000, true, new byte[] { 0x01, 0x02, 0x03 }));
+        await server.PublishPacketAsync(new ViewPacket(ViewPacketType.Diagnostic, 1, 16_000, false, """{"phase":"socket_client_connected"}"""u8.ToArray()));
+        await server.PublishPacketAsync(new ViewPacket(ViewPacketType.Frame, 2, 33_000, true, new byte[] { 0x01, 0x02, 0x03 }));
 
         var reader = new ViewPacketStreamReader();
         var stream = client.GetStream();
@@ -941,6 +979,9 @@ public sealed class ViewTransportTests
 
         Assert.Equal("h264", header.Codec);
         Assert.Equal(1080, header.Width);
+        Assert.True(await packets.MoveNextAsync());
+        Assert.Equal(ViewPacketType.Diagnostic, packets.Current.PacketType);
+        Assert.Contains("socket_client_connected", System.Text.Encoding.UTF8.GetString(packets.Current.Payload.Span), StringComparison.Ordinal);
         Assert.True(await packets.MoveNextAsync());
         Assert.Equal(ViewPacketType.Frame, packets.Current.PacketType);
         Assert.Equal(new byte[] { 0x01, 0x02, 0x03 }, packets.Current.Payload.ToArray());

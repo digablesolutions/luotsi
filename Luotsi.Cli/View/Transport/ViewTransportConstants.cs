@@ -79,4 +79,9 @@ public static class ViewTransportConstants
     /// Packet type identifier for server-side error packets.
     /// </summary>
     public const byte ServerErrorPacketTypeId = 5;
+
+    /// <summary>
+    /// Packet type identifier for helper-side diagnostic JSON packets.
+    /// </summary>
+    public const byte DiagnosticPacketTypeId = 6;
 }

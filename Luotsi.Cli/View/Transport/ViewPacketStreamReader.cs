@@ -82,13 +82,19 @@ public sealed class ViewPacketStreamReader : IViewPacketStreamReader
                 }
                 catch (InvalidOperationException ex) when (ex.Message.Contains("view packet payload", StringComparison.Ordinal))
                 {
+                    var knownTypeName = packetType.HasValue ? packetType.Value.ToString() : $"unknown(0x{headerBuffer[0]:X2})";
                     throw new InvalidOperationException(
-                        $"Unexpected end of stream while reading payload for '{packetType}' packet sequence {sequence} with advertised size {payloadSize}.",
+                        $"Unexpected end of stream while reading payload for '{knownTypeName}' packet sequence {sequence} with advertised size {payloadSize}.",
                         ex);
                 }
             }
 
-            yield return new ViewPacket(packetType, sequence, pts, isKeyFrame, payload);
+            if (!packetType.HasValue)
+            {
+                continue;
+            }
+
+            yield return new ViewPacket(packetType.Value, sequence, pts, isKeyFrame, payload);
         }
     }
 
@@ -125,13 +131,14 @@ public sealed class ViewPacketStreamReader : IViewPacketStreamReader
         _ => throw new InvalidOperationException($"Unsupported view stream codec identifier '{value}'.")
     };
 
-    private static ViewPacketType DecodePacketType(byte value) => value switch
+    private static ViewPacketType? DecodePacketType(byte value) => value switch
     {
         ViewTransportConstants.ConfigPacketTypeId => ViewPacketType.Config,
         ViewTransportConstants.FramePacketTypeId => ViewPacketType.Frame,
         ViewTransportConstants.RotationResetPacketTypeId => ViewPacketType.RotationReset,
         ViewTransportConstants.StreamEndPacketTypeId => ViewPacketType.StreamEnd,
         ViewTransportConstants.ServerErrorPacketTypeId => ViewPacketType.ServerError,
-        _ => throw new InvalidOperationException($"Unsupported view packet type '{value}'.")
+        ViewTransportConstants.DiagnosticPacketTypeId => ViewPacketType.Diagnostic,
+        _ => null
     };
 }
