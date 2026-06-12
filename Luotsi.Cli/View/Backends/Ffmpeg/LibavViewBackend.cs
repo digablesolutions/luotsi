@@ -203,6 +203,9 @@ public sealed class LibavViewBackend(ILibavVideoDecoderFactory decoderFactory) :
                 case ViewPacketType.ServerError:
                     throw new InvalidOperationException($"View server error: {System.Text.Encoding.UTF8.GetString(packet.Payload.Span)}");
 
+                case ViewPacketType.Diagnostic:
+                    break;
+
                 default:
                     throw new InvalidOperationException($"Unsupported view packet type '{packet.PacketType}'.");
             }

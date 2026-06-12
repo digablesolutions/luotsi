@@ -19,6 +19,7 @@ object Main {
     private const val TYPE_FRAME = 2
     private const val TYPE_STREAM_END = 4
     private const val TYPE_SERVER_ERROR = 5
+    private const val TYPE_DIAGNOSTIC = 6
     private const val STREAM_HEADER_SIZE = 16
     private const val PACKET_HEADER_SIZE = 24
     private const val SCREENRECORD_TIME_LIMIT_SECONDS = 180
@@ -46,8 +47,28 @@ object Main {
         fun run() {
             val captureSize = DisplayCaptureSize.resolve(options.maxSize)
             packetWriter.writeHeader("h264", captureSize.width, captureSize.height)
+            packetWriter.writeDiagnostic(
+                phase = "socket_client_connected",
+                status = "succeeded",
+                message = "Host stream client connected to the screenrecord helper.",
+                captureBackend = "screenrecord",
+                socketName = options.socketName,
+                codec = options.codec,
+                width = captureSize.width,
+                height = captureSize.height,
+                maxFps = options.maxFps,
+                videoBitRate = options.videoBitRate,
+            )
 
             if (!options.codec.equals("h264", ignoreCase = true)) {
+                packetWriter.writeDiagnostic(
+                    phase = "codec_preflight",
+                    status = "failed",
+                    message = "The screenrecord helper rejected the requested codec.",
+                    captureBackend = "screenrecord",
+                    codec = options.codec,
+                    error = "unsupported_codec",
+                )
                 packetWriter.writeServerError("The Android helper currently supports only h264 capture.")
                 packetWriter.writeStreamEnd()
                 packetWriter.flush()
@@ -56,7 +77,23 @@ object Main {
 
             var captureProcess: Process? = null
             try {
+                packetWriter.writeDiagnostic(
+                    phase = "screenrecord_process",
+                    status = "starting",
+                    message = "Starting Android screenrecord capture.",
+                    captureBackend = "screenrecord",
+                    width = captureSize.width,
+                    height = captureSize.height,
+                    maxFps = options.maxFps,
+                    videoBitRate = options.videoBitRate,
+                )
                 captureProcess = startScreenrecordProcess(captureSize)
+                packetWriter.writeDiagnostic(
+                    phase = "screenrecord_process",
+                    status = "succeeded",
+                    message = "Android screenrecord process started.",
+                    captureBackend = "screenrecord",
+                )
                 val stderrCollector = ProcessStreamCollector(captureProcess.errorStream)
                 stderrCollector.start()
 
@@ -67,6 +104,14 @@ object Main {
                 val exitCode = captureProcess.waitFor()
                 val stderr = stderrCollector.awaitText()
                 if (exitCode != 0) {
+                    packetWriter.writeDiagnostic(
+                        phase = "screenrecord_process",
+                        status = "failed",
+                        message = "Android screenrecord process exited before a clean stream end.",
+                        detail = stderr.ifBlank { null },
+                        captureBackend = "screenrecord",
+                        error = "exit_code_$exitCode",
+                    )
                     packetWriter.writeServerError(
                         buildString {
                             append("screenrecord exited with code ")
@@ -80,6 +125,13 @@ object Main {
                 }
             } catch (error: Exception) {
                 runCatching {
+                    packetWriter.writeDiagnostic(
+                        phase = "screenrecord_process",
+                        status = "failed",
+                        message = "Android screenrecord capture failed.",
+                        captureBackend = "screenrecord",
+                        error = error.message ?: error::class.java.simpleName,
+                    )
                     packetWriter.writeServerError(error.message ?: error::class.java.simpleName)
                 }
             } finally {
@@ -156,6 +208,38 @@ object Main {
         fun writeStreamEnd() = writePacket(TYPE_STREAM_END, false, byteArrayOf())
 
         fun writeServerError(message: String) = writePacket(TYPE_SERVER_ERROR, false, message.encodeToByteArray())
+
+        fun writeDiagnostic(
+            phase: String,
+            status: String,
+            message: String,
+            captureBackend: String,
+            detail: String? = null,
+            socketName: String? = null,
+            codec: String? = null,
+            width: Int? = null,
+            height: Int? = null,
+            maxFps: Int? = null,
+            videoBitRate: String? = null,
+            error: String? = null,
+        ) = writePacket(
+            TYPE_DIAGNOSTIC,
+            false,
+            HelperDiagnosticJson.build(
+                phase = phase,
+                status = status,
+                message = message,
+                detail = detail,
+                captureBackend = captureBackend,
+                socketName = socketName,
+                codec = codec,
+                width = width,
+                height = height,
+                maxFps = maxFps,
+                videoBitRate = videoBitRate,
+                error = error,
+            ),
+        )
 
         fun flush() = output.flush()
     }

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Luotsi.Cli.Artifacts;
@@ -362,7 +363,8 @@ public sealed class ViewSession : IViewSession
                         var sharedPackets = shareServer is null
                             ? sourcePackets
                             : RelayPacketsAsync(sourcePackets, shareServer, sessionCancellation.Token);
-                        var viewTask = viewBackend.RunAsync(sharedPackets, sessionCancellation.Token);
+                        var backendPackets = EmitAndFilterHelperDiagnosticsAsync(sessionId, negotiatedConnection, sharedPackets, sessionCancellation.Token);
+                        var viewTask = viewBackend.RunAsync(backendPackets, sessionCancellation.Token);
                         var reconnectTask = interactionRouter.WaitForReconnectAsync();
                         var windowCloseTask = renderer is not null
                             ? renderer.WaitForCloseAsync(sessionCancellation.Token)
@@ -618,6 +620,71 @@ public sealed class ViewSession : IViewSession
         }
     }
 
+    private async IAsyncEnumerable<ViewPacket> EmitAndFilterHelperDiagnosticsAsync(
+        string sessionId,
+        ViewConnectionInfo connectionInfo,
+        IAsyncEnumerable<ViewPacket> sourcePackets,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await foreach (var packet in sourcePackets.WithCancellation(cancellationToken).ConfigureAwait(false))
+        {
+            if (packet.PacketType == ViewPacketType.Diagnostic)
+            {
+                WriteHelperDiagnosticPacket(sessionId, connectionInfo, packet);
+                continue;
+            }
+
+            yield return packet;
+        }
+    }
+
+    private void WriteHelperDiagnosticPacket(string sessionId, ViewConnectionInfo connectionInfo, ViewPacket packet)
+    {
+        var payloadText = packet.Payload.IsEmpty
+            ? string.Empty
+            : Encoding.UTF8.GetString(packet.Payload.Span);
+        var diagnostic = TryParseHelperDiagnostic(payloadText);
+        WriteJsonLine(new
+        {
+            type = SessionEventTypes.View.Diagnostic,
+            session_id = sessionId,
+            occurred_at = _timeProvider.GetUtcNow(),
+            source = "android_helper",
+            category = diagnostic.Category ?? "helper",
+            phase = diagnostic.Phase,
+            status = diagnostic.Status,
+            message = diagnostic.Message ?? (string.IsNullOrWhiteSpace(payloadText) ? "Android helper diagnostic." : payloadText),
+            detail = diagnostic.Detail,
+            capture_backend = diagnostic.CaptureBackend ?? connectionInfo.CaptureBackend,
+            socket_name = diagnostic.SocketName,
+            codec = diagnostic.Codec ?? connectionInfo.Codec,
+            width = diagnostic.Width,
+            height = diagnostic.Height,
+            max_fps = diagnostic.MaxFps,
+            video_bit_rate = diagnostic.VideoBitRate,
+            error = diagnostic.Error,
+            packet_sequence = packet.Sequence,
+            packet_pts_us = packet.PresentationTimestampUs
+        });
+    }
+
+    private static ViewHelperDiagnosticPayload TryParseHelperDiagnostic(string payloadText)
+    {
+        if (string.IsNullOrWhiteSpace(payloadText))
+        {
+            return new ViewHelperDiagnosticPayload();
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<ViewHelperDiagnosticPayload>(payloadText, OutputJsonOptions) ?? new ViewHelperDiagnosticPayload();
+        }
+        catch (JsonException)
+        {
+            return new ViewHelperDiagnosticPayload(Message: payloadText);
+        }
+    }
+
     private static ViewConnectionInfo BuildSharedConnectionInfo(string joinShareEndpoint)
     {
         var (host, port) = ViewShareEndpointParser.ParseConnect(joinShareEndpoint);
@@ -653,13 +720,26 @@ public sealed class ViewSession : IViewSession
         }
 
         var enumerator = packets.GetAsyncEnumerator(cancellationToken);
-        if (!await enumerator.MoveNextAsync().ConfigureAwait(false))
+        ViewPacket? firstPacket = null;
+        while (await enumerator.MoveNextAsync().ConfigureAwait(false))
+        {
+            var packet = enumerator.Current;
+            if (packet.PacketType == ViewPacketType.Diagnostic)
+            {
+                WriteHelperDiagnosticPacket(sessionId, connectionInfo, packet);
+                continue;
+            }
+
+            firstPacket = packet;
+            break;
+        }
+
+        if (firstPacket is null)
         {
             await enumerator.DisposeAsync().ConfigureAwait(false);
             return (connectionInfo, connection, header, EmptyPackets());
         }
 
-        var firstPacket = enumerator.Current;
         if (firstPacket.PacketType != ViewPacketType.ServerError)
         {
             return (connectionInfo, connection, header, PrependPacket(firstPacket, enumerator, cancellationToken));
@@ -827,6 +907,21 @@ public sealed class ViewSession : IViewSession
         exception is InvalidOperationException invalidOperationException &&
         invalidOperationException.Message.Contains("Unexpected end of stream", StringComparison.Ordinal);
 }
+
+internal sealed record ViewHelperDiagnosticPayload(
+    string? Category = null,
+    string? Phase = null,
+    string? Status = null,
+    string? Message = null,
+    string? Detail = null,
+    string? CaptureBackend = null,
+    string? SocketName = null,
+    string? Codec = null,
+    int? Width = null,
+    int? Height = null,
+    int? MaxFps = null,
+    string? VideoBitRate = null,
+    string? Error = null);
 
 internal sealed record ViewRuntimeDiagnostic(string Category, string Message, string NextCommand)
 {

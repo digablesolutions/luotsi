@@ -132,6 +132,7 @@ public sealed class ViewPacketStreamReader : IViewPacketStreamReader
         ViewTransportConstants.RotationResetPacketTypeId => ViewPacketType.RotationReset,
         ViewTransportConstants.StreamEndPacketTypeId => ViewPacketType.StreamEnd,
         ViewTransportConstants.ServerErrorPacketTypeId => ViewPacketType.ServerError,
+        ViewTransportConstants.DiagnosticPacketTypeId => ViewPacketType.Diagnostic,
         _ => throw new InvalidOperationException($"Unsupported view packet type '{value}'.")
     };
 }
