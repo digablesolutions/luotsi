@@ -1541,6 +1541,42 @@ public sealed partial class AppTests
     }
 
     [Fact]
+    public async Task RunAsync_ReplayPacket_Check_MarkdownWithStaleGeneratedAt_ReturnsUsageError()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplaySummaryArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = new FakeProcessRunner(),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var writeExitCode = await app.RunAsync(["replay", "packet", "--artifacts", replayRoot]);
+        var packet = JsonNode.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "run-summary.json")))!.AsObject();
+        var generatedAt = packet["generatedAt"]!.GetValue<string>();
+        var markdownPath = Path.Join(replayRoot, "run-summary.md");
+        var markdown = await fileSystem.ReadAllTextAsync(markdownPath);
+        fileSystem.AddFile(markdownPath, markdown.Replace(
+            $"Generated: `{generatedAt}`",
+            "Generated: `2026-01-01T00:00:00.0000000+00:00`",
+            StringComparison.Ordinal));
+        console.OutputLines.Clear();
+        var checkExitCode = await app.RunAsync(["replay", "packet", "--check", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, writeExitCode);
+        Assert.Equal(2, checkExitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("packet identity value", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains($"Generated: `{generatedAt}`", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("Re-run `luotsi replay packet", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RunAsync_ReplayPacket_Check_MarkdownWithStaleVerdict_ReturnsUsageError()
     {
         var console = new FakeConsole();
@@ -2396,6 +2432,67 @@ public sealed partial class AppTests
         Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
         Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
         Assert.Contains("verdict", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayPacket_Check_MissingGeneratedAt_ReturnsUsageError()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplaySummaryArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = new FakeProcessRunner(),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var writeExitCode = await app.RunAsync(["replay", "packet", "--artifacts", replayRoot]);
+        var packetPath = Path.Join(replayRoot, "run-summary.json");
+        var packet = JsonNode.Parse(await fileSystem.ReadAllTextAsync(packetPath))!.AsObject();
+        packet.Remove("generatedAt");
+        fileSystem.AddFile(packetPath, packet.ToJsonString());
+        console.OutputLines.Clear();
+        var checkExitCode = await app.RunAsync(["replay", "packet", "--check", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, writeExitCode);
+        Assert.Equal(2, checkExitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("generatedAt", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayPacket_Check_InvalidGeneratedAt_ReturnsUsageError()
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var replayRoot = SeedReplaySummaryArtifacts(fileSystem);
+        var app = new App(new AppDependencies
+        {
+            Console = console,
+            FileSystem = fileSystem,
+            ProcessRunner = new FakeProcessRunner(),
+            DeviceHostFactory = new FakeDeviceHostFactory(new FakeDeviceHost())
+        });
+
+        var writeExitCode = await app.RunAsync(["replay", "packet", "--artifacts", replayRoot]);
+        var packetPath = Path.Join(replayRoot, "run-summary.json");
+        var packet = JsonNode.Parse(await fileSystem.ReadAllTextAsync(packetPath))!.AsObject();
+        packet["generatedAt"] = "not-a-timestamp";
+        fileSystem.AddFile(packetPath, packet.ToJsonString());
+        console.OutputLines.Clear();
+        var checkExitCode = await app.RunAsync(["replay", "packet", "--check", "--artifacts", replayRoot]);
+        using var envelope = console.ParseSingleOutputAsJson();
+
+        Assert.Equal(0, writeExitCode);
+        Assert.Equal(2, checkExitCode);
+        Assert.False(envelope.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("usage_error", envelope.RootElement.GetProperty("error").GetProperty("category").GetString());
+        Assert.Contains("generatedAt", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("RFC 3339 timestamp", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]

@@ -229,6 +229,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
 
             var packetStatus = RequireString(root, "status", packetPath);
             var verdict = RequireString(root, "verdict", packetPath);
+            var generatedAt = RequireDateTimeOffsetString(root, "generatedAt", packetPath);
             var sessionCount = RequireInt32(root, "sessionCount", packetPath);
             var failureCount = RequireInt32(root, "failureCount", packetPath);
             var recommendedNextAction = RequireObject(root, "recommendedNextAction", packetPath);
@@ -269,7 +270,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             }
 
             var runSummaryMarkdown = await _dependencies.FileSystem.ReadAllTextAsync(runSummaryMarkdownPath).ConfigureAwait(false);
-            ValidateMarkdownPacketIdentity(packetStatus, verdict, sessionCount, failureCount, runSummaryMarkdown, artifacts.Root);
+            ValidateMarkdownPacketIdentity(generatedAt, packetStatus, verdict, sessionCount, failureCount, runSummaryMarkdown, artifacts.Root);
             ValidateAtAGlanceSection(primaryFailure, recommendedCommand, runSummaryMarkdown, artifacts.Root);
             var checkCommand = BuildPacketCheckCommand(artifacts.Root);
             if (!runSummaryMarkdown.Contains("## Packet Gate", StringComparison.Ordinal) ||
@@ -418,6 +419,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
     }
 
     private static void ValidateMarkdownPacketIdentity(
+        string generatedAt,
         string packetStatus,
         string verdict,
         int sessionCount,
@@ -427,6 +429,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
     {
         foreach (var value in new[]
                  {
+                     $"Generated: `{EscapeMarkdown(generatedAt)}`",
                      $"Artifact root: `{EscapeMarkdown(artifactRoot)}`",
                      $"Status: `{EscapeMarkdown(packetStatus)}`",
                      $"Verdict: {EscapeMarkdown(verdict)}",
@@ -1300,13 +1303,19 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
 
     private static DateTimeOffset RequireDateTimeOffset(JsonElement element, string propertyName, string sourcePath)
     {
+        var value = RequireDateTimeOffsetString(element, propertyName, sourcePath);
+        return DateTimeOffset.Parse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind);
+    }
+
+    private static string RequireDateTimeOffsetString(JsonElement element, string propertyName, string sourcePath)
+    {
         var value = RequireString(element, propertyName, sourcePath);
-        if (!DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var timestamp))
+        if (!DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out _))
         {
             throw new UsageException($"{Path.GetFileName(sourcePath)} property '{propertyName}' must be an RFC 3339 timestamp.");
         }
 
-        return timestamp;
+        return value;
     }
 
     private static ReplayOutputMode ParseOutputMode(CliOptions options, string commandName)
