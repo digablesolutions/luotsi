@@ -75,7 +75,7 @@ For scripts and CI, treat `ok` plus the process exit code as the first gate, the
 
 To find the next command in structured output, check these fields in order:
 
-1. `data.recommended_next_action_command` or `data.recommendedNextActionCommand` when a check result exposes the direct continuation command.
+1. `data.recommended_next_action_command` when a check result exposes the direct continuation command; command-envelope `data` fields use snake_case.
 2. `data.recommended_next_action.command` when present.
 3. `data.primary_failure.source_command` or `data.primaryFailure.sourceCommand` when a packet/check result has focused failure evidence but no recommended action.
 4. `data.triage_checklist[].command` or `data.triageChecklist[].command` when a packet/check exposes a structured first-minute checklist.

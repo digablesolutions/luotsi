@@ -86,7 +86,7 @@ The artifact root is the handoff point from live control to post-run analysis. U
 
 For one-shot envelopes, pick the next command in this order:
 
-1. `data.recommended_next_action_command` or `data.recommendedNextActionCommand` when a check result exposes the direct continuation command
+1. `data.recommended_next_action_command` when a check result exposes the direct continuation command; command-envelope `data` fields use snake_case
 2. `data.recommended_next_action.command`
 3. Focused packet evidence such as `data.primary_failure.source_command` or `data.primaryFailure.sourceCommand`
 4. Packet checklist commands such as `data.triage_checklist[].command` or `data.triageChecklist[].command`

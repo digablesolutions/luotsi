@@ -275,6 +275,9 @@ public sealed partial class AppTests
         Assert.Contains("run-summary.json", examples, StringComparison.Ordinal);
         Assert.Contains("luotsi-run-summary.v1", examples, StringComparison.Ordinal);
         Assert.Contains("recommendedNextAction.command", examples, StringComparison.Ordinal);
+        Assert.Contains("Check envelopes expose `recommended_next_action_command`", examples, StringComparison.Ordinal);
+        Assert.Contains("command-envelope `data` fields use snake_case", examples, StringComparison.Ordinal);
+        Assert.Contains("parser examples still tolerate camelCase", examples, StringComparison.Ordinal);
         Assert.Contains("docs/schemas/luotsi-run-summary-v1.md", examples, StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --artifacts <artifact-root> --check", examples, StringComparison.Ordinal);
         Assert.Contains("Bad input exits non-zero with an `extract-next-command:` message", examples, StringComparison.Ordinal);
@@ -284,6 +287,7 @@ public sealed partial class AppTests
         Assert.Contains("luotsi help output", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("schema: \"luotsi-command.v1\"", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("data.recommended_next_action_command", aiAgentWorkflows, StringComparison.Ordinal);
+        Assert.Contains("command-envelope `data` fields use snake_case", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("data.recommended_next_action.command", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("data.primary_failure.source_command", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("data.primaryFailure.sourceCommand", aiAgentWorkflows, StringComparison.Ordinal);
@@ -295,6 +299,10 @@ public sealed partial class AppTests
         Assert.Contains("run-summary.json", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", aiAgentWorkflows, StringComparison.Ordinal);
         AssertContainsBefore(aiAgentWorkflows, "luotsi replay packet --artifacts <artifact-root>", "luotsi replay open --artifacts <artifact-root> --dry-run");
+        var firstFiveMinutes = File.ReadAllText(Path.Join(root, "website", "src", "content", "docs", "docs", "getting-started", "first-five-minutes.mdx"));
+        var outputEnvelopes = File.ReadAllText(Path.Join(root, "website", "src", "content", "docs", "docs", "reference", "output-envelopes.mdx"));
+        Assert.Contains("command-envelope `data` fields use snake_case", firstFiveMinutes, StringComparison.Ordinal);
+        Assert.Contains("command-envelope `data` fields use snake_case", outputEnvelopes, StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --last --artifacts", nodeExample, StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --last --artifacts", pythonExample, StringComparison.Ordinal);
         Assert.Contains("extract-next-command.py", examples, StringComparison.Ordinal);
