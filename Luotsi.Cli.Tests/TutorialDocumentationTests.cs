@@ -100,6 +100,12 @@ public sealed partial class AppTests
         Assert.Contains("one JSON envelope or a saved JSONL-style log", markdown, StringComparison.Ordinal);
         Assert.Contains("docs/schemas/luotsi-run-summary-v1.md", markdown, StringComparison.Ordinal);
         Assert.Contains("replay packet --check", markdown, StringComparison.Ordinal);
+        Assert.Contains("focused evidence files", markdown, StringComparison.Ordinal);
+        Assert.Contains("same next action/evidence/checklist handoff", markdown, StringComparison.Ordinal);
+        var replayHelp = Help.GetTopic("replay");
+        Assert.Contains("focused evidence files", replayHelp, StringComparison.Ordinal);
+        Assert.Contains("same next action, evidence", replayHelp, StringComparison.Ordinal);
+        Assert.Contains("files, checklist, primary failure", replayHelp, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -406,6 +412,7 @@ public sealed partial class AppTests
             AssertContainsBefore(name, text, "luotsi replay packet --artifacts <artifact-root>", "luotsi replay open --artifacts <artifact-root> --dry-run");
         }
 
+        Assert.Contains("focused evidence files", distributionPlaybook, StringComparison.Ordinal);
         Assert.Contains("output/replay handoff checked with `luotsi help output`", pullRequestTemplate, StringComparison.Ordinal);
         Assert.Contains("first follow-up command points to `data.recommended_next_action.command`", pullRequestTemplate, StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --artifacts <artifact-root>", pullRequestTemplate, StringComparison.Ordinal);
@@ -522,10 +529,12 @@ public sealed partial class AppTests
             "core-workflows/replay-and-artifacts.mdx",
             "reference/replay-graph-and-clusters.mdx");
 
-        Assert.Contains("The default action list includes `replay open`", markdown, StringComparison.Ordinal);
         Assert.Contains("`replay packet` is the canonical first stop", markdown, StringComparison.Ordinal);
+        Assert.Contains("The public distinction that matters is", markdown, StringComparison.Ordinal);
         Assert.Contains("`replay open` is the browser-free replay front door", markdown, StringComparison.Ordinal);
-        Assert.Contains("At a Glance summary, failure snapshot, packet gate, copy-paste triage commands", markdown, StringComparison.Ordinal);
+        Assert.Contains("At a Glance summary, failure snapshot, focused evidence files", markdown, StringComparison.Ordinal);
+        Assert.Contains("packet gate, copy-paste triage commands", markdown, StringComparison.Ordinal);
+        Assert.Contains("focused evidence files", markdown, StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --artifacts ./artifacts/my-run", markdown, StringComparison.Ordinal);
         Assert.Contains("run-summary.json", markdown, StringComparison.Ordinal);
         Assert.Contains("docs/schemas/luotsi-run-summary-v1.md", markdown, StringComparison.Ordinal);
@@ -621,7 +630,8 @@ public sealed partial class AppTests
         Assert.Contains("GitHub Actions job summary", markdown, StringComparison.Ordinal);
         Assert.Contains("fallback summary", markdown, StringComparison.Ordinal);
         Assert.Contains("scenario run exit code", markdown, StringComparison.Ordinal);
-        Assert.Contains("primary failure", markdown, StringComparison.Ordinal);
+        Assert.Contains("failure snapshot", markdown, StringComparison.Ordinal);
+        Assert.Contains("focused evidence files", markdown, StringComparison.Ordinal);
         Assert.Contains("recommended next action", markdown, StringComparison.Ordinal);
         Assert.Contains("do not yet surface `--claim-wait-sec`, `--device-pool`, or `--require-capabilities`", markdown, StringComparison.Ordinal);
 

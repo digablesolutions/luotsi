@@ -493,9 +493,14 @@ Notes:
   <directory> without re-copying a path.
   Replay packet is the non-interactive packet writer: it refreshes the artifact
   index, writes run-summary.json and run-summary.md, and returns the
-  luotsi-run-summary.v1 packet without launching a browser. Add --check to
+  luotsi-run-summary.v1 packet without launching a browser. The packet starts
+  with status, failure snapshot, focused evidence files, the best next command,
+  and the 60-second checklist before broader replay commands. Add --check to
   validate an existing run-summary.json/run-summary.md pair without rewriting
-  artifacts; missing, malformed, or stale-root packets fail as usage errors.
+  artifacts; missing, malformed, stale-root, or incomplete Markdown handoffs
+  fail as usage errors. A valid check returns the same next action, evidence
+  files, checklist, primary failure, and commands so agents can continue from
+  the check envelope.
   Replay summarize reads session-replay.json and session-timeline.jsonl from an
   existing artifact root. By default it returns the condensed failure timeline
   as a normal JSON command envelope. `--format json` writes the bare summary
