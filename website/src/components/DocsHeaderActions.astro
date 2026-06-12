@@ -23,15 +23,13 @@ const claudeUrl = `https://claude.ai/new?q=${encodeURIComponent(chatPrompt)}`;
 <div class="docs-copy-menu" data-docs-copy-menu>
 	<button
 		type="button"
-		id="docs-copy-trigger"
 		class="docs-copy-trigger"
-		aria-controls="docs-copy-panel"
 		aria-expanded="false"
 		data-docs-copy-trigger
 	>
 		Copy Page
 	</button>
-	<div id="docs-copy-panel" class="docs-copy-panel" aria-labelledby="docs-copy-trigger" data-docs-copy-panel>
+	<div class="docs-copy-panel" data-docs-copy-panel>
 		<button type="button" aria-label={`Copy ${title} as Markdown`} data-copy-source-url={sourceUrl} data-copy-title={title}>
 			Copy as Markdown
 		</button>
@@ -42,6 +40,19 @@ const claudeUrl = `https://claude.ai/new?q=${encodeURIComponent(chatPrompt)}`;
 </div>
 
 <script>
+	document.querySelectorAll<HTMLElement>('[data-docs-copy-menu]').forEach((menu, index) => {
+		const trigger = menu.querySelector<HTMLElement>('[data-docs-copy-trigger]');
+		const panel = menu.querySelector<HTMLElement>('[data-docs-copy-panel]');
+		if (!trigger || !panel) return;
+		const suffix = String(index + 1);
+		const triggerId = `docs-copy-trigger-${suffix}`;
+		const panelId = `docs-copy-panel-${suffix}`;
+		trigger.id = triggerId;
+		trigger.setAttribute('aria-controls', panelId);
+		panel.id = panelId;
+		panel.setAttribute('aria-labelledby', triggerId);
+	});
+
 	const closeMenus = (except?: HTMLElement) => {
 		document.querySelectorAll<HTMLElement>('[data-docs-copy-menu]').forEach((menu) => {
 			if (menu === except) return;
