@@ -1316,6 +1316,11 @@ public sealed partial class AppTests
         Assert.Contains($"luotsi replay packet --artifacts {replayRoot} --check", markdown, StringComparison.Ordinal);
         Assert.Contains("## Copy-Paste Triage Commands", markdown, StringComparison.Ordinal);
         Assert.Contains("```bash", markdown, StringComparison.Ordinal);
+        var normalizedMarkdown = markdown.ReplaceLineEndings("\n");
+        Assert.Contains(
+            $"## Copy-Paste Triage Commands\n\n```bash\nluotsi replay packet --artifacts {replayRoot} --check\n{data.GetProperty("recommended_next_action").GetProperty("command").GetString()}",
+            normalizedMarkdown,
+            StringComparison.Ordinal);
         Assert.Contains("## 60-Second Triage Checklist", markdown, StringComparison.Ordinal);
         Assert.Contains("Why: This is the highest-signal next command computed from replay metadata.", markdown, StringComparison.Ordinal);
         Assert.Contains("Why: Session identity and focused timeline evidence should be understood before broad artifact browsing.", markdown, StringComparison.Ordinal);
@@ -1512,6 +1517,7 @@ public sealed partial class AppTests
         ## Copy-Paste Triage Commands
 
         ```bash
+        luotsi replay packet --artifacts {replayRoot} --check
         {recommendedCommand}
         {primarySourceCommand}
         ```
@@ -1701,6 +1707,7 @@ public sealed partial class AppTests
         ## Copy-Paste Triage Commands
 
         ```bash
+        luotsi replay packet --artifacts {replayRoot} --check
         {recommendedCommand}
         {primarySourceCommand}
         ```
@@ -1758,6 +1765,7 @@ public sealed partial class AppTests
         ## Copy-Paste Triage Commands
 
         ```bash
+        luotsi replay packet --artifacts {replayRoot} --check
         {recommendedCommand}
         {primarySourceCommand}
         ```
@@ -2144,6 +2152,7 @@ public sealed partial class AppTests
         ## Copy-Paste Triage Commands
 
         ```bash
+        luotsi replay packet --artifacts {replayRoot} --check
         luotsi artifacts open /tmp/replay-root
         ```
 
@@ -2238,6 +2247,7 @@ public sealed partial class AppTests
         ## Copy-Paste Triage Commands
 
         ```bash
+        luotsi replay packet --artifacts {replayRoot} --check
         {recommendedCommand}
         {primarySourceCommand}
         ```
@@ -2342,6 +2352,7 @@ public sealed partial class AppTests
         ## Copy-Paste Triage Commands
 
         ```bash
+        luotsi replay packet --artifacts {replayRoot} --check
         {recommendedCommand}
         {primarySourceCommand}
         ```
@@ -2418,6 +2429,7 @@ public sealed partial class AppTests
         ## Copy-Paste Triage Commands
 
         ```bash
+        luotsi replay packet --artifacts {replayRoot} --check
         {recommendedCommand}
         {primarySourceCommand}
         ```

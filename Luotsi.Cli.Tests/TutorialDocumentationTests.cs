@@ -578,6 +578,8 @@ public sealed partial class AppTests
         Assert.Contains("matches `primaryFailure`", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("## Packet Gate", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("packet validation gate command", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("starts with the packet validation gate command", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("copy-paste block that omits the packet validation gate command", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("60-second triage checklist", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("`## Commands` section with every structured command and description", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("identity values for generated timestamp, artifact root, status, verdict, session", schemaGuide, StringComparison.Ordinal);

@@ -286,7 +286,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
                 throw new UsageException($"{RunSummaryMarkdownFileName} is missing the copy-paste triage command block. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
             }
 
-            ValidateCopyPasteTriageCommands(triageChecklist, runSummaryMarkdown, artifacts.Root);
+            ValidateCopyPasteTriageCommands(triageChecklist, runSummaryMarkdown, checkCommand, artifacts.Root);
 
             ValidateFailureSnapshot(primaryFailure, runSummaryMarkdown, artifacts.Root);
             ValidateMarkdownTriageChecklist(triageChecklist, runSummaryMarkdown, artifacts.Root);
@@ -326,12 +326,18 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
     private static void ValidateCopyPasteTriageCommands(
         IReadOnlyList<RunSummaryChecklistItemResult> triageChecklist,
         string runSummaryMarkdown,
+        string checkCommand,
         string artifactRoot)
     {
         var commandBlock = ExtractCopyPasteTriageCommandBlock(runSummaryMarkdown);
         if (string.IsNullOrWhiteSpace(commandBlock))
         {
             throw new UsageException($"{RunSummaryMarkdownFileName} is missing the copy-paste triage command block. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        if (!commandBlock.Contains(checkCommand, StringComparison.Ordinal))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} copy-paste triage command block is missing the packet validation gate command. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
         }
 
         foreach (var command in triageChecklist
@@ -921,6 +927,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         else
         {
             builder.AppendLine("```bash");
+            builder.AppendLine(BuildPacketCheckCommand(result.ArtifactRoot));
             foreach (var command in firstMinuteCommands)
             {
                 builder.AppendLine(command);
