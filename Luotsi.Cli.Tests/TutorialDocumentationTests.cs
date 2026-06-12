@@ -281,6 +281,8 @@ public sealed partial class AppTests
         Assert.Contains("run-summary.json", examples, StringComparison.Ordinal);
         Assert.Contains("luotsi-run-summary.v1", examples, StringComparison.Ordinal);
         Assert.Contains("recommendedNextAction.command", examples, StringComparison.Ordinal);
+        Assert.Contains("evidenceFiles[]", examples, StringComparison.Ordinal);
+        Assert.Contains("evidence_files[]", examples, StringComparison.Ordinal);
         Assert.Contains("Check envelopes expose `recommended_next_action_command`", examples, StringComparison.Ordinal);
         Assert.Contains("command-envelope `data` fields use snake_case", examples, StringComparison.Ordinal);
         Assert.Contains("parser examples still tolerate camelCase", examples, StringComparison.Ordinal);
@@ -297,6 +299,7 @@ public sealed partial class AppTests
         Assert.Contains("data.recommended_next_action.command", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("data.primary_failure.source_command", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("data.primaryFailure.sourceCommand", aiAgentWorkflows, StringComparison.Ordinal);
+        Assert.Contains("data.evidence_files[]", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("data.triage_checklist[].command", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("data.artifact_commands", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("artifacts.artifact_root", aiAgentWorkflows, StringComparison.Ordinal);
@@ -309,6 +312,7 @@ public sealed partial class AppTests
         var outputEnvelopes = File.ReadAllText(Path.Join(root, "website", "src", "content", "docs", "docs", "reference", "output-envelopes.mdx"));
         Assert.Contains("command-envelope `data` fields use snake_case", firstFiveMinutes, StringComparison.Ordinal);
         Assert.Contains("command-envelope `data` fields use snake_case", outputEnvelopes, StringComparison.Ordinal);
+        Assert.Contains("data.evidence_files[]", outputEnvelopes, StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --last --artifacts", nodeExample, StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --last --artifacts", pythonExample, StringComparison.Ordinal);
         Assert.Contains("extract-next-command.py", examples, StringComparison.Ordinal);

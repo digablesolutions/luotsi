@@ -94,7 +94,7 @@ For one-shot envelopes, pick the next command in this order:
 6. `artifacts.artifact_root` as the fallback evidence pointer, then run `luotsi replay packet --artifacts <artifact-root>`
 7. Command arrays such as `data.commands`, `data.artifact_commands`, and `data.recommended_commands` only when there is no artifact root to packetize
 
-Use `replay packet` for this fallback because it writes the durable `run-summary.json` and `run-summary.md` packet that CI and agents can pass forward. Use `luotsi replay packet --artifacts <artifact-root> --check` as the validation gate for an existing packet, and use `luotsi replay open --artifacts <artifact-root> --dry-run` when a human also needs the replay front door response without launching a browser.
+Use `replay packet` for this fallback because it writes the durable `run-summary.json` and `run-summary.md` packet that CI and agents can pass forward. Use `luotsi replay packet --artifacts <artifact-root> --check` as the validation gate for an existing packet, and use `luotsi replay open --artifacts <artifact-root> --dry-run` when a human also needs the replay front door response without launching a browser. After picking the next command, carry packet `evidenceFiles[]` or check-envelope `data.evidence_files[]` forward as the proof-file context for the focused failure.
 
 ## Contracts that matter for agent builders
 
