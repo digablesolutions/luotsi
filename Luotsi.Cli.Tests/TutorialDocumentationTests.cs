@@ -217,6 +217,7 @@ public sealed partial class AppTests
         Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", readme, StringComparison.Ordinal);
         Assert.DoesNotContain("data.triage_checklist", readme, StringComparison.Ordinal);
         Assert.DoesNotContain("examples/agents/extract-next-command.py", readme, StringComparison.Ordinal);
+        Assert.DoesNotContain("examples/agents/extract-next-command.mjs", readme, StringComparison.Ordinal);
         AssertContainsBefore(docsHub, "<Card title=\"First five minutes\">", "<Card title=\"Device readiness\">");
         AssertContainsBefore(docsHub, "<Card title=\"First Five Minutes\">", "<Card title=\"Installation\">");
         AssertContainsBefore(docsHub, "<Card title=\"First five minutes\">", "<Card title=\"Quickstart\">");
