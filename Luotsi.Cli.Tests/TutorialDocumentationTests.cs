@@ -222,20 +222,15 @@ public sealed partial class AppTests
         Assert.Contains("examples/agents/extract-next-command.py", markdown, StringComparison.Ordinal);
         Assert.Contains("examples/agents/extract-next-command.mjs", markdown, StringComparison.Ordinal);
         Assert.DoesNotContain("artifacts.root", markdown, StringComparison.Ordinal);
-        Assert.Contains("\"artifact_root\":", readme, StringComparison.Ordinal);
-        Assert.Contains("\"poll_artifacts\":", readme, StringComparison.Ordinal);
-        AssertContainsBefore(readme, "First five minutes: [docs/getting-started/first-five-minutes]", "Installation: [docs/getting-started/installation]");
-        Assert.Contains("data.recommended_next_action.command", readme, StringComparison.Ordinal);
-        Assert.Contains("data.primary_failure.source_command", readme, StringComparison.Ordinal);
-        Assert.Contains("data.triage_checklist", readme, StringComparison.Ordinal);
-        Assert.Contains("data.artifact_commands", readme, StringComparison.Ordinal);
-        Assert.Contains("Human output leads with the artifact root", readme, StringComparison.Ordinal);
-        Assert.Contains("guide:` reminder that the root is durable evidence", readme, StringComparison.Ordinal);
-        Assert.Contains("luotsi replay packet --artifacts <artifact-root>", readme, StringComparison.Ordinal);
+        AssertContainsBefore(readme, "First five minutes", "Installation");
+        Assert.Contains("Normal commands return one JSON envelope by default.", readme, StringComparison.Ordinal);
+        Assert.Contains("Artifact roots are durable evidence", readme, StringComparison.Ordinal);
+        Assert.Contains("Output envelopes", readme, StringComparison.Ordinal);
+        AssertContainsBefore(readme, "luotsi replay packet --artifacts <artifact-root>", "luotsi replay open --artifacts <artifact-root> --dry-run");
         Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", readme, StringComparison.Ordinal);
-        Assert.Contains("examples/agents/extract-next-command.py", readme, StringComparison.Ordinal);
-        Assert.Contains("examples/agents/extract-next-command.mjs", readme, StringComparison.Ordinal);
-        Assert.Contains("saved JSONL-style log", readme, StringComparison.Ordinal);
+        Assert.DoesNotContain("data.triage_checklist", readme, StringComparison.Ordinal);
+        Assert.DoesNotContain("examples/agents/extract-next-command.py", readme, StringComparison.Ordinal);
+        Assert.DoesNotContain("examples/agents/extract-next-command.mjs", readme, StringComparison.Ordinal);
         AssertContainsBefore(docsHub, "<Card title=\"First five minutes\">", "<Card title=\"Device readiness\">");
         AssertContainsBefore(docsHub, "<Card title=\"First Five Minutes\">", "<Card title=\"Installation\">");
         AssertContainsBefore(docsHub, "<Card title=\"First five minutes\">", "<Card title=\"Quickstart\">");
@@ -292,6 +287,9 @@ public sealed partial class AppTests
         Assert.Contains("artifacts.artifact_root", examples, StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --last --artifacts artifacts/agent-loop", examples, StringComparison.Ordinal);
         Assert.Contains("command -> structured output -> artifact root -> replay command -> next action", aiAgentWorkflows, StringComparison.Ordinal);
+        Assert.Contains(".codex/skills/luotsi-agent", aiAgentWorkflows, StringComparison.Ordinal);
+        Assert.Contains("$luotsi-agent", aiAgentWorkflows, StringComparison.Ordinal);
+        Assert.Contains("Codex, Claude Code, or another skill-aware assistant", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("luotsi help output", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("schema: \"luotsi-command.v1\"", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("data.recommended_next_action_command", aiAgentWorkflows, StringComparison.Ordinal);
@@ -429,9 +427,9 @@ public sealed partial class AppTests
     public void Output_Fallback_Guidance_Is_Replay_First_Across_Entry_Points()
     {
         var root = FindRepositoryRoot();
+        var readme = File.ReadAllText(Path.Join(root, "README.md"));
         var entryPoints = new Dictionary<string, string>
         {
-            ["README.md"] = File.ReadAllText(Path.Join(root, "README.md")),
             ["AGENTS.md"] = File.ReadAllText(Path.Join(root, "AGENTS.md")),
             ["examples/agents/README.md"] = File.ReadAllText(Path.Join(root, "examples", "agents", "README.md")),
             ["first-five-minutes.mdx"] = File.ReadAllText(Path.Join(root, "website", "src", "content", "docs", "docs", "getting-started", "first-five-minutes.mdx")),
@@ -461,7 +459,9 @@ public sealed partial class AppTests
         Assert.Contains("prefer the artifact-root packet fallback before", entryPoints["luotsi help output"], StringComparison.Ordinal);
         Assert.Contains("next: luotsi replay packet --artifacts artifacts/smoke-run/<run-id>", entryPoints["luotsi help output"], StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --last --artifacts artifacts/smoke-run --check", entryPoints["luotsi help output"], StringComparison.Ordinal);
-        Assert.Contains("generic artifact browser", entryPoints["README.md"], StringComparison.Ordinal);
+        Assert.Contains("Output envelopes", readme, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", readme, StringComparison.Ordinal);
+        Assert.Contains("Artifact roots are durable evidence", readme, StringComparison.Ordinal);
         Assert.Contains("generic artifact browser", entryPoints["first-five-minutes.mdx"], StringComparison.Ordinal);
         Assert.Contains("generic artifact browser", entryPoints["output-envelopes.mdx"], StringComparison.Ordinal);
         Assert.Contains("examples/agents/extract-next-command.py", entryPoints["first-five-minutes.mdx"], StringComparison.Ordinal);

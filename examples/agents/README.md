@@ -69,7 +69,7 @@ luotsi replay timeline --artifacts artifacts/agent-loop/<run-id> --type command_
 Use selector fields when text is broad:
 
 ```bash
-node examples/agents/inspect-agent-loop.mjs --device <serial> --text "Files" --text-match exact --resource-id "com.elotouch.home:id/tvAppName" --class-name "android.widget.TextView" --artifacts artifacts/agent-loop
+node examples/agents/inspect-agent-loop.mjs --device <serial> --text "Files" --text-match exact --resource-id "com.example.app:id/itemTitle" --class-name "android.widget.TextView" --artifacts artifacts/agent-loop
 ```
 
 For a non-mutating smoke test, add `--no-tap`. The loop still waits for text, writes a screenshot command, and exits with artifacts.

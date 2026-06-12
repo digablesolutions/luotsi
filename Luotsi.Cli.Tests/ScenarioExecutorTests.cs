@@ -54,7 +54,7 @@ public sealed partial class AppTests
     {
         var fileSystem = new FakeFileSystem();
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
-        var element = new ScreenElement("Files", "Files app", "com.elotouch.home:id/tvAppName", "android.widget.TextView", true, true, 700, 260, 928, 370);
+        var element = new ScreenElement("Files", "Files app", "com.example.app:id/itemTitle", "android.widget.TextView", true, true, 700, 260, 928, 370);
         var host = new FakeDeviceHost(new ScreenState(timeProvider.GetUtcNow(), 1, [element]));
         var scenarios = new ScenarioExecutor(host, fileSystem, timeProvider, new FakeDelay(timeProvider));
         var scenarioPath = "/tmp/selector-scenario.json";
@@ -69,7 +69,7 @@ public sealed partial class AppTests
               "selector": {
                 "text": "Files",
                 "textMatch": "exact",
-                "resourceId": "com.elotouch.home:id/tvAppName",
+                "resourceId": "com.example.app:id/itemTitle",
                 "className": "android.widget.TextView",
                 "region": { "left": 0, "top": 0, "right": 1000, "bottom": 600 }
               }
@@ -79,7 +79,7 @@ public sealed partial class AppTests
               "action": "tapElement",
               "timeoutSec": 7,
               "selector": {
-                "resourceId": "com.elotouch.home:id/tvAppName",
+                "resourceId": "com.example.app:id/itemTitle",
                 "className": "android.widget.TextView",
                 "allowAmbiguous": true
               }
@@ -97,7 +97,7 @@ public sealed partial class AppTests
         Assert.Equal(2, host.SelectorWaitRequests.Count);
         Assert.Equal("Files", host.SelectorWaitRequests[0].Text);
         Assert.Equal(ScreenElementMatchModes.Exact, host.SelectorWaitRequests[0].TextMatch);
-        Assert.Equal("com.elotouch.home:id/tvAppName", host.SelectorWaitRequests[0].ResourceId);
+        Assert.Equal("com.example.app:id/itemTitle", host.SelectorWaitRequests[0].ResourceId);
         Assert.Equal(new Bounds(0, 0, 1000, 600), host.SelectorWaitRequests[0].Region);
         Assert.Single(host.SelectorTapRequests);
         Assert.True(host.SelectorTapRequests[0].AllowAmbiguous);
@@ -109,7 +109,7 @@ public sealed partial class AppTests
     {
         var fileSystem = new FakeFileSystem();
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
-        var element = new ScreenElement("Files", "Files app", "com.elotouch.home:id/tvAppName", "android.widget.TextView", true, true, 700, 260, 928, 370);
+        var element = new ScreenElement("Files", "Files app", "com.example.app:id/itemTitle", "android.widget.TextView", true, true, 700, 260, 928, 370);
         var host = new FakeDeviceHost(new ScreenState(timeProvider.GetUtcNow(), 1, [element]));
         var scenarios = new ScenarioExecutor(host, fileSystem, timeProvider, new FakeDelay(timeProvider));
         var scenarioPath = "/tmp/selector-template-scenario.json";
@@ -120,8 +120,8 @@ public sealed partial class AppTests
             "text": "Files",
             "textMatch": "exact",
             "content": "Files app",
-            "resourcePrefix": "com.elotouch.home",
-            "resourceName": "tvAppName",
+            "resourcePrefix": "com.example.app",
+            "resourceName": "itemTitle",
             "className": "TextView",
             "classMatch": "contains"
           },
@@ -150,7 +150,7 @@ public sealed partial class AppTests
         Assert.Equal("Files", selector.Text);
         Assert.Equal(ScreenElementMatchModes.Exact, selector.TextMatch);
         Assert.Equal("Files app", selector.ContentDescription);
-        Assert.Equal("com.elotouch.home:id/tvAppName", selector.ResourceId);
+        Assert.Equal("com.example.app:id/itemTitle", selector.ResourceId);
         Assert.Equal("android.widget.TextView", selector.ClassName);
         Assert.Equal(ScreenElementMatchModes.Contains, selector.ClassNameMatch);
     }
@@ -975,7 +975,7 @@ public sealed partial class AppTests
         var fileSystem = new FakeFileSystem();
         var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-15T12:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
         var console = new FakeConsole();
-        var element = new ScreenElement("Files", "Files app", "com.elotouch.home:id/tvAppName", "android.widget.TextView", true, true, 700, 260, 928, 370);
+        var element = new ScreenElement("Files", "Files app", "com.example.app:id/itemTitle", "android.widget.TextView", true, true, 700, 260, 928, 370);
         fileSystem.AddFile("/tmp/scenario.json", """
         {
           "name": "selector event",
@@ -986,7 +986,7 @@ public sealed partial class AppTests
               "selector": {
                 "text": "Files",
                 "textMatch": "exact",
-                "resourceId": "com.elotouch.home:id/tvAppName"
+                "resourceId": "com.example.app:id/itemTitle"
               }
             }
           ]
@@ -1014,12 +1014,12 @@ public sealed partial class AppTests
         Assert.Equal("Files", started.GetProperty("selector").GetProperty("text").GetString());
         Assert.Equal("Files", passed.GetProperty("selector").GetProperty("text").GetString());
         Assert.Equal("exact", passed.GetProperty("selector").GetProperty("text_match").GetString());
-        Assert.Equal("com.elotouch.home:id/tvAppName", passed.GetProperty("selector").GetProperty("resource_id").GetString());
+        Assert.Equal("com.example.app:id/itemTitle", passed.GetProperty("selector").GetProperty("resource_id").GetString());
         Assert.NotNull(artifactRoot);
         var timeline = ReadJsonlEvents(fileSystem, Path.Join(artifactRoot!, "session-timeline.jsonl"));
         var timelinePassed = Assert.Single(timeline, static evt => evt.GetProperty("type").GetString() == "scenario_step_passed");
         Assert.Equal("Files", timelinePassed.GetProperty("selector").GetProperty("text").GetString());
-        Assert.Equal("com.elotouch.home:id/tvAppName", timelinePassed.GetProperty("selector").GetProperty("resource_id").GetString());
+        Assert.Equal("com.example.app:id/itemTitle", timelinePassed.GetProperty("selector").GetProperty("resource_id").GetString());
     }
 
     [Fact]

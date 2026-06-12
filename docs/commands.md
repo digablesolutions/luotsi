@@ -316,7 +316,7 @@ Primary inspect events:
 - `protocol_error`
 - `session_error`
 
-For command examples, see README [Inspect mode](../README.md#inspect-mode).
+For command examples, see the public [AI agent workflows](https://digablesolutions.github.io/luotsi/docs/core-workflows/ai-agent-workflows/) guide.
 
 ### View mode events
 
