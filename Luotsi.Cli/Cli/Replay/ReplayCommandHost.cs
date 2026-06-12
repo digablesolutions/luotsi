@@ -236,6 +236,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             var recommendedCommand = RequireString(recommendedNextAction, "command", packetPath);
             var recommendedNextActionResult = ReadRecommendedNextAction(recommendedNextAction, packetPath);
             var triageChecklist = ReadTriageChecklist(root, recommendedCommand, packetPath);
+            var commands = ReadCommandHints(root, packetPath);
             var primaryFailure = ReadPrimaryFailure(root, packetPath);
             ValidatePrimaryFailureEvidenceFiles(primaryFailure, packetPath, artifacts.Root);
             var failureSnapshot = ReadFailureSnapshot(root, primaryFailure, packetPath);
@@ -312,6 +313,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
                 recommendedNextActionResult,
                 triageChecklist,
                 primaryFailure,
+                commands,
                 runSummaryMarkdownPath);
         }
     }
@@ -1175,6 +1177,23 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             RequireString(element, "title", sourcePath),
             RequireString(element, "reason", sourcePath),
             RequireString(element, "command", sourcePath));
+
+    private static IReadOnlyList<ReplayOpenCommandHintResult> ReadCommandHints(JsonElement root, string sourcePath)
+    {
+        if (!root.TryGetProperty("commands", out var commands) ||
+            commands.ValueKind != JsonValueKind.Array ||
+            commands.GetArrayLength() == 0)
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} is missing non-empty array property 'commands'.");
+        }
+
+        return commands.EnumerateArray()
+            .Select(command => new ReplayOpenCommandHintResult(
+                RequireString(command, "kind", sourcePath),
+                RequireString(command, "description", sourcePath),
+                RequireString(command, "command", sourcePath)))
+            .ToArray();
+    }
 
     private static IReadOnlyList<RunSummaryChecklistItemResult> ReadTriageChecklist(JsonElement root, string recommendedCommand, string sourcePath)
     {

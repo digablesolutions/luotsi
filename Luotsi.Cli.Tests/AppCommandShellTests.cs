@@ -593,6 +593,12 @@ public sealed class AppCommandShellTests
                 "session-timeline.jsonl",
                 "failure-capsule.json",
                 "luotsi replay scrub --source-path session-timeline.jsonl --sequence 1 --context 3"),
+            [
+                new ReplayOpenCommandHintResult(
+                    "capsule",
+                    "Write the replay capsule summary and README for this bundle.",
+                    "luotsi replay capsule --artifacts /tmp/replay-root --write-readme --write-json")
+            ],
             "/tmp/replay-root/run-summary.md");
 
         writer.WriteSuccess(
@@ -612,6 +618,7 @@ public sealed class AppCommandShellTests
         Assert.Contains("  next_step: Scrub the failure window", console.OutputLines);
         Assert.Contains("  next: luotsi replay scrub --artifacts /tmp/replay-root --failures --context 3 --write-markdown", console.OutputLines);
         Assert.Contains("  triage_checklist: 1", console.OutputLines);
+        Assert.Contains("  commands: 1", console.OutputLines);
         Assert.Contains("  packet: /tmp/replay-root/run-summary.json", console.OutputLines);
         Assert.Contains("  markdown: /tmp/replay-root/run-summary.md", console.OutputLines);
     }

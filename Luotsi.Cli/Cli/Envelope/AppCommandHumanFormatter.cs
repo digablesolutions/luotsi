@@ -450,8 +450,20 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
         AddNextStepTitle(lines, value);
         AddRecommendedCommandWithFallback(lines, value, artifacts);
         AddTriageChecklistSummary(lines, value);
+        AddCommandHintSummary(lines, value);
         AddRunSummaryEntryPointSummary(lines, value);
         return lines;
+    }
+
+    private static void AddCommandHintSummary(List<string> lines, JsonElement value)
+    {
+        if (!value.TryGetProperty("commands", out var commands) ||
+            commands.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        lines.Add($"commands: {commands.EnumerateArray().Count(static command => command.ValueKind == JsonValueKind.Object)}");
     }
 
     private static void AddTriageChecklistSummary(List<string> lines, JsonElement value)

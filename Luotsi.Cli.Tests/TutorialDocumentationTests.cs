@@ -567,8 +567,9 @@ public sealed partial class AppTests
         Assert.Contains("`recommended_next_action_command`", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("`packet_path`", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("`primary_failure`", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("`commands` | array | Additional exact replay commands copied from the packet", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("with `recommended_next_action_command`, `recommended_next_action`,", schemaGuide, StringComparison.Ordinal);
-        Assert.Contains("repeats `recommended_next_action`, `recommended_next_action_command`, `failure_snapshot`, `triage_checklist`, and `primary_failure`", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("repeats `recommended_next_action`, `recommended_next_action_command`, `failure_snapshot`, `triage_checklist`, `primary_failure`, and `commands`", schemaGuide, StringComparison.Ordinal);
         Assert.DoesNotContain("with `recommendedNextActionCommand`,", schemaGuide, StringComparison.Ordinal);
         Assert.DoesNotContain("repeats `recommendedNextAction`, `recommendedNextActionCommand`", schemaGuide, StringComparison.Ordinal);
         Assert.DoesNotContain("| `recommendedNextActionCommand` |", schemaGuide, StringComparison.Ordinal);
@@ -582,6 +583,7 @@ public sealed partial class AppTests
         Assert.Contains("verifies that the evidence file exists before handoff", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("a primary failure whose `primaryFailure.timelinePath` or `primaryFailure.failureCapsulePath` points at a missing evidence file", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("missing or invalid `generatedAt`", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("missing `commands`", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("Markdown without packet identity values for generated timestamp, artifact root, status, verdict, session count, or failure count", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("Markdown checklist that omits structured checklist actions or rationales", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("Markdown without the first action explanation", schemaGuide, StringComparison.Ordinal);

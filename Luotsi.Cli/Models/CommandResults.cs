@@ -526,6 +526,7 @@ public sealed record RunSummaryCheckResult(
     ReplayOpenNextActionResult RecommendedNextAction,
     IReadOnlyList<RunSummaryChecklistItemResult> TriageChecklist,
     ReplayOpenPrimaryFailureResult? PrimaryFailure,
+    IReadOnlyList<ReplayOpenCommandHintResult> Commands,
     string? RunSummaryMarkdownPath);
 
 public sealed record ReplayScenarioDraftResult(
