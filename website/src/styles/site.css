@@ -98,8 +98,16 @@ a {
 }
 
 :is(a, button, summary):focus-visible {
-	outline: 0;
+	outline: 2px solid transparent;
+	outline-offset: 3px;
 	box-shadow: var(--luotsi-focus);
+}
+
+@media (forced-colors: active) {
+	:is(a, button, summary):focus-visible {
+		outline-color: Highlight;
+		box-shadow: none;
+	}
 }
 
 @supports (backdrop-filter: blur(18px)) {
