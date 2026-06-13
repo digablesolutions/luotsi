@@ -15,6 +15,7 @@ const installHref = `${base}docs/getting-started/installation/`;
 const quickstartHref = `${base}docs/getting-started/quickstart/`;
 const firstFiveMinutesHref = `${base}docs/getting-started/first-five-minutes/`;
 const agentLoopHref = `${base}docs/core-workflows/agent-loop-example/`;
+const replayHref = `${base}docs/core-workflows/replay-and-artifacts/`;
 const githubHref = 'https://github.com/digablesolutions/luotsi';
 const releasesHref = `${githubHref}/releases`;
 const engineeringLeadHref = `${base}docs/use-cases/android-automation-for-engineering-leads/`;
@@ -190,10 +191,10 @@ const proofBadges = [
 ];
 
 const trustSignals = [
-	'Open source CLI',
+	'Open source',
 	'ADB-first',
-	'JSONL control plane',
-	'CI artifact trail',
+	'JSONL sessions',
+	'Replay artifacts',
 ];
 
 const inspectSnippet = [
@@ -248,9 +249,7 @@ const replaySnippet = [
 					<nav class="nav-links" aria-label="Primary navigation">
 						<a href={docsHref}>Docs</a>
 						<a href={quickstartHref}>Quickstart</a>
-						<a href={firstFiveMinutesHref}>First five minutes</a>
-						<a href={agentLoopHref}>Agent loop</a>
-						<a href={releasesHref}>Releases</a>
+						<a href={replayHref}>Replay</a>
 						<a href={githubHref}>GitHub</a>
 					</nav>
 				</header>
@@ -258,14 +257,14 @@ const replaySnippet = [
 				<section class="hero">
 					<div class="hero-copy">
 						<div class="eyebrow">Real-device Android automation for agents and CI</div>
-						<h1 class="display">The control plane for Android work that has to leave evidence.</h1>
+						<h1 class="display">Android automation that leaves evidence.</h1>
 						<p class="lede">
-							Luotsi gives agents, engineers, and CI runners a host-driven way to inspect physical devices, run governed scenarios, and replay failures from durable artifacts after the device session is gone.
+							Luotsi keeps the control loop on your machine: inspect real Android devices, run governed scenarios, and replay failures from durable artifacts after the session ends.
 						</p>
 						<div class="hero-actions">
 							<a class="button-link button-link--primary" href={installHref}>Install Luotsi</a>
 							<a class="button-link button-link--secondary" href={firstFiveMinutesHref}>Understand the output</a>
-							<a class="button-link button-link--secondary" href={agentLoopHref}>See the agent loop</a>
+							<a class="button-link button-link--secondary" href={replayHref}>Replay failures</a>
 						</div>
 						<div class="trust-strip" role="list" aria-label="Luotsi product signals">
 							{trustSignals.map((signal) => (
@@ -275,11 +274,11 @@ const replaySnippet = [
 						<div class="hero-support">
 							<div class="support-card">
 								<strong>Beyond screen sharing</strong>
-								<span>Live view is one surface in a workflow that also emits state, reports, and replay artifacts.</span>
+								<span>Live view is one surface in a workflow that also emits machine-readable state, reports, and replay bundles.</span>
 							</div>
 							<div class="support-card">
-								<strong>Evidence layer, not another farm</strong>
-								<span>Luotsi is the host-side evidence and control layer around real Android device runs.</span>
+								<strong>Host-side by design</strong>
+								<span>Policy, orchestration, diagnostics, and artifacts stay on the engineer, agent, or CI machine.</span>
 							</div>
 						</div>
 					</div>
@@ -295,7 +294,8 @@ session: real-device JSONL
 actions: tap_text, wait_visible, screenshot
 
 $ luotsi replay packet --artifacts ./artifacts/smoke-run
-packet: run-summary.json, run-summary.md`}</code></pre>
+packet: run-summary.json, run-summary.md
+next: focused triage command`}</code></pre>
 						</div>
 						<div class="proof-device">
 							<div class="proof-window-bar">

@@ -18,6 +18,7 @@ export default defineConfig({
 			customCss: ['./src/styles/site.css'],
 			components: {
 				SocialIcons: './src/components/DocsHeaderActions.astro',
+				ThemeSelect: './src/components/ThemeSelect.astro',
 			},
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/digablesolutions/luotsi' }],
 			sidebar: [
@@ -25,7 +26,6 @@ export default defineConfig({
 					label: 'Start Here',
 					items: [
 						{ label: 'Overview', slug: 'docs' },
-						{ label: 'First Five Minutes', slug: 'docs/getting-started/first-five-minutes' },
 						{ label: 'Installation', slug: 'docs/getting-started/installation' },
 						{ label: 'Quickstart', slug: 'docs/getting-started/quickstart' },
 						{ label: 'First Five Minutes', slug: 'docs/getting-started/first-five-minutes' },
