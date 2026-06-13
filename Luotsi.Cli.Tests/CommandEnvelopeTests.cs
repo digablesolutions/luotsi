@@ -353,7 +353,7 @@ public sealed partial class AppTests
         Assert.True(stepCount >= 6, $"Expected at least 6 steps but found {stepCount}.");
         Assert.Contains(console.OutputLines, static line => line.Contains("minute 2; Run the onboarding doctor", StringComparison.Ordinal) &&
             line.Contains("luotsi doctor --device emulator-5554 --package dev.luotsi.demo --fix", StringComparison.Ordinal));
-        Assert.Contains("  proof_checks: 5 (ready=4; needs_input=0; later=1)", console.OutputLines);
+        Assert.Contains("  proof_checks: 6 (ready=4; needs_input=0; later=2)", console.OutputLines);
         Assert.Contains(console.OutputLines, static line => line.Contains("artifact_handoff", StringComparison.Ordinal) &&
             line.Contains("status=ready_to_run", StringComparison.Ordinal) &&
             line.Contains("quickstart --device emulator-5554 --package dev.luotsi.demo --artifacts artifacts/demo --path scenarios --write-json --write-markdown", StringComparison.Ordinal));
@@ -417,10 +417,10 @@ public sealed partial class AppTests
         var data = envelope.RootElement.GetProperty("data");
         Assert.Equal("luotsi-quickstart-verify.v1", data.GetProperty("schema").GetString());
         Assert.Equal("blocked", data.GetProperty("status").GetString());
-        Assert.Equal(5, data.GetProperty("total").GetInt32());
+        Assert.Equal(6, data.GetProperty("total").GetInt32());
         Assert.Equal(3, data.GetProperty("ready_count").GetInt32());
         Assert.Equal(1, data.GetProperty("blocked_count").GetInt32());
-        Assert.Equal(1, data.GetProperty("later_count").GetInt32());
+        Assert.Equal(2, data.GetProperty("later_count").GetInt32());
         Assert.Equal(2, data.GetProperty("local_proof_count").GetInt32());
         Assert.Equal(2, data.GetProperty("passed_local_proof_count").GetInt32());
         Assert.Equal("luotsi version", data.GetProperty("next_command").GetString());
@@ -464,7 +464,7 @@ public sealed partial class AppTests
         Assert.Equal("ready_to_verify", data.GetProperty("status").GetString());
         Assert.Equal(4, data.GetProperty("ready_count").GetInt32());
         Assert.Equal(0, data.GetProperty("blocked_count").GetInt32());
-        Assert.Equal(1, data.GetProperty("later_count").GetInt32());
+        Assert.Equal(2, data.GetProperty("later_count").GetInt32());
         Assert.Equal(2, data.GetProperty("passed_local_proof_count").GetInt32());
         Assert.Equal("luotsi version", data.GetProperty("next_command").GetString());
         Assert.Empty(data.GetProperty("blocked_checks").EnumerateArray());
@@ -486,10 +486,10 @@ public sealed partial class AppTests
         Assert.Empty(console.ErrorLines);
         Assert.Contains(console.OutputLines, static line => line.StartsWith("OK  quickstart-verify completed", StringComparison.Ordinal));
         Assert.Contains("  status: ready_to_verify", console.OutputLines);
-        Assert.Contains("  total: 5", console.OutputLines);
+        Assert.Contains("  total: 6", console.OutputLines);
         Assert.Contains("  ready_count: 4", console.OutputLines);
         Assert.Contains("  blocked_count: 0", console.OutputLines);
-        Assert.Contains("  later_count: 1", console.OutputLines);
+        Assert.Contains("  later_count: 2", console.OutputLines);
         Assert.Contains("  local_proof_count: 2", console.OutputLines);
         Assert.Contains("  passed_local_proof_count: 2", console.OutputLines);
         Assert.Contains("  next_command: luotsi version", console.OutputLines);

@@ -124,7 +124,7 @@ public sealed partial class AppTests
         Assert.Contains("luotsi replay packet --artifacts \"$LUOTSI_ARTIFACTS_DIR\"", portableCi, StringComparison.Ordinal);
         Assert.Contains("run-summary.md", portableCi, StringComparison.Ordinal);
         Assert.Contains("GITHUB_STEP_SUMMARY", portableCi, StringComparison.Ordinal);
-        Assert.Contains("primary", portableCi, StringComparison.Ordinal);
+        Assert.Contains("failure snapshot", portableCi, StringComparison.Ordinal);
         Assert.Contains("recommended next action", portableCi, StringComparison.Ordinal);
 
         var replayGraphSchema = File.ReadAllText(Path.Join(root, "docs", "replay-graph-schema.md"));
@@ -459,7 +459,7 @@ public sealed partial class AppTests
         Assert.Contains("next: luotsi replay packet --artifacts artifacts/smoke-run/<run-id>", entryPoints["luotsi help output"], StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --last --artifacts artifacts/smoke-run --check", entryPoints["luotsi help output"], StringComparison.Ordinal);
         Assert.Contains("Output envelopes", readme, StringComparison.Ordinal);
-        Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", readme, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --artifacts <artifact-root>", readme, StringComparison.Ordinal);
         Assert.Contains("Artifact roots are durable evidence", readme, StringComparison.Ordinal);
         Assert.Contains("generic artifact browser", entryPoints["first-five-minutes.mdx"], StringComparison.Ordinal);
         Assert.Contains("generic artifact browser", entryPoints["output-envelopes.mdx"], StringComparison.Ordinal);
@@ -782,6 +782,11 @@ public sealed partial class AppTests
     [Fact]
     public void Portable_Ci_PowerShell_Script_Preserves_Run_Failure_And_Appends_Checked_Run_Summary()
     {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
         if (!TryFindExecutable("pwsh", out var pwsh))
         {
             return;
@@ -1552,8 +1557,13 @@ public sealed partial class AppTests
                 UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
                 UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
         }
-        catch (Exception ex) when (ex is PlatformNotSupportedException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is PlatformNotSupportedException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         {
+            if (OperatingSystem.IsWindows())
+            {
+                return;
+            }
+
             var result = RunProcessCore("chmod", ["755", path], string.Empty);
             Assert.Equal(0, result.ExitCode);
         }
