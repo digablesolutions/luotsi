@@ -133,6 +133,81 @@ html .site-title img {
 	filter: drop-shadow(0 0 18px rgba(69, 230, 173, 0.24));
 }
 
+html .docs-copy-menu {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+}
+
+html .docs-copy-trigger {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 2.25rem;
+	padding: 0.45rem 0.72rem;
+	border: 1px solid var(--luotsi-border);
+	border-radius: 8px;
+	background: rgba(13, 17, 23, 0.78);
+	color: var(--luotsi-text);
+	font: inherit;
+	font-size: 0.88rem;
+	font-weight: 700;
+	cursor: pointer;
+	transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+html .docs-copy-trigger:hover,
+html .docs-copy-menu[data-open] .docs-copy-trigger {
+	border-color: rgba(69, 230, 173, 0.34);
+	background: rgba(69, 230, 173, 0.1);
+	color: #ffffff;
+}
+
+html .docs-copy-panel {
+	position: absolute;
+	inset-block-start: calc(100% + 0.45rem);
+	inset-inline-end: 0;
+	z-index: 20;
+	display: none;
+	min-width: 13.5rem;
+	padding: 0.35rem;
+	border: 1px solid var(--luotsi-border-strong);
+	border-radius: 8px;
+	background: rgba(7, 10, 14, 0.98);
+	box-shadow: var(--sl-shadow-md);
+}
+
+html .docs-copy-menu[data-open] .docs-copy-panel {
+	display: grid;
+	gap: 0.15rem;
+}
+
+html .docs-copy-panel :is(a, button) {
+	display: flex;
+	align-items: center;
+	width: 100%;
+	min-height: 2.35rem;
+	padding: 0.48rem 0.62rem;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: #d8e1ea;
+	font: inherit;
+	font-size: 0.88rem;
+	font-weight: 700;
+	line-height: 1.2;
+	text-align: start;
+	text-decoration: none;
+	white-space: nowrap;
+	cursor: pointer;
+	transition: background 160ms ease, color 160ms ease;
+}
+
+html .docs-copy-panel :is(a, button):hover {
+	background: rgba(69, 230, 173, 0.1);
+	color: #ffffff;
+}
+
 html .sidebar-pane {
 	border-inline-end-color: var(--luotsi-border);
 	background:
@@ -1075,6 +1150,22 @@ html .pagination-links a:hover {
 		border-radius: 8px;
 		background: rgba(13, 17, 23, 0.78);
 		color: var(--luotsi-text);
+	}
+
+	html .docs-copy-trigger {
+		min-height: 2.75rem;
+		padding-inline: 0.62rem;
+	}
+
+	html .docs-copy-panel {
+		inset-inline-end: 0;
+		min-width: min(13.5rem, calc(100vw - 1.5rem));
+		max-width: min(18rem, calc(100vw - 1.5rem));
+	}
+
+	html .docs-copy-panel :is(a, button) {
+		min-height: 2.75rem;
+		white-space: normal;
 	}
 
 	html .content-panel {
