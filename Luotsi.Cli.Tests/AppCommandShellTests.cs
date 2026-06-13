@@ -546,6 +546,12 @@ public sealed class AppCommandShellTests
         Assert.Contains("  evidence_files: timeline=session-timeline.jsonl; failure_capsule=failure-capsule.json", console.OutputLines);
         Assert.Contains("  next_step: Scrub the failure window", console.OutputLines);
         Assert.Contains("  next: luotsi replay scrub --artifacts /tmp/replay-root --failures --context 3 --write-markdown", console.OutputLines);
+        Assert.Contains(console.OutputLines, static line => line.StartsWith("  copy_paste:", StringComparison.Ordinal));
+        var packetSummary = string.Join(Environment.NewLine, console.OutputLines);
+        Assert.True(
+            packetSummary.IndexOf("  luotsi replay packet --artifacts /tmp/replay-root --check", StringComparison.Ordinal) <
+            packetSummary.IndexOf("  luotsi replay scrub --artifacts /tmp/replay-root --failures --context 3 --write-markdown", StringComparison.Ordinal),
+            packetSummary);
         Assert.Contains("  triage_checklist: 2", console.OutputLines);
         Assert.Contains("    - step=1; action=Run the recommended packet command; command=luotsi replay scrub --artifacts /tmp/replay-root --failures --context 3 --write-markdown", console.OutputLines);
         Assert.Contains("  packet: /tmp/replay-root/run-summary.json", console.OutputLines);
@@ -637,6 +643,12 @@ public sealed class AppCommandShellTests
         Assert.Contains("  evidence_files: timeline=session-timeline.jsonl; failure_capsule=failure-capsule.json", console.OutputLines);
         Assert.Contains("  next_step: Scrub the failure window", console.OutputLines);
         Assert.Contains("  next: luotsi replay scrub --artifacts /tmp/replay-root --failures --context 3 --write-markdown", console.OutputLines);
+        Assert.Contains(console.OutputLines, static line => line.StartsWith("  copy_paste:", StringComparison.Ordinal));
+        var packetCheckSummary = string.Join(Environment.NewLine, console.OutputLines);
+        Assert.True(
+            packetCheckSummary.IndexOf("  luotsi replay packet --artifacts /tmp/replay-root --check", StringComparison.Ordinal) <
+            packetCheckSummary.IndexOf("  luotsi replay scrub --artifacts /tmp/replay-root --failures --context 3 --write-markdown", StringComparison.Ordinal),
+            packetCheckSummary);
         Assert.Contains("  triage_checklist: 1", console.OutputLines);
         Assert.Contains("  commands: 1", console.OutputLines);
         Assert.Contains("  packet: /tmp/replay-root/run-summary.json", console.OutputLines);

@@ -1518,12 +1518,12 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
     private static string RequireDateTimeOffsetString(JsonElement element, string propertyName, string sourcePath)
     {
         var value = RequireString(element, propertyName, sourcePath);
-        if (!DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out _))
+        if (!DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var parsed))
         {
             throw new UsageException($"{Path.GetFileName(sourcePath)} property '{propertyName}' must be an RFC 3339 timestamp.");
         }
 
-        return value;
+        return parsed.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
     }
 
     private static ReplayOutputMode ParseOutputMode(CliOptions options, string commandName)

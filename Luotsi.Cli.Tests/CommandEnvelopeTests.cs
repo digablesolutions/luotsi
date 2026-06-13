@@ -1628,7 +1628,10 @@ public sealed partial class AppTests
 
         var writeExitCode = await app.RunAsync(["replay", "packet", "--artifacts", replayRoot]);
         var packet = JsonNode.Parse(await fileSystem.ReadAllTextAsync(Path.Join(replayRoot, "run-summary.json")))!.AsObject();
-        var generatedAt = packet["generatedAt"]!.GetValue<string>();
+        var generatedAt = DateTimeOffset.Parse(
+            packet["generatedAt"]!.GetValue<string>(),
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.RoundtripKind).ToString("O", System.Globalization.CultureInfo.InvariantCulture);
         var markdownPath = Path.Join(replayRoot, "run-summary.md");
         var markdown = await fileSystem.ReadAllTextAsync(markdownPath);
         fileSystem.AddFile(markdownPath, markdown.Replace(
