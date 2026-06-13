@@ -240,7 +240,7 @@ internal static class QuickstartCommand
                 "Run the artifact handoff or a device/session command before expecting --last to resolve."),
             new QuickstartProofCheckResult(
                 "replay_packet_check",
-                "Captured evidence has a validateable first-minute packet.",
+                "Captured evidence has a validatable first-minute packet.",
                 $"luotsi replay packet --last --artifacts {Quote(artifacts)} --check",
                 "Replay packet --check proves the packet and Markdown companion are present before handoff.",
                 "ready_after_artifact",

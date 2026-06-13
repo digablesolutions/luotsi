@@ -433,7 +433,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
 
         foreach (var item in triageChecklist
                      .OrderBy(static item => item.Step)
-                     .Where(item => !checklistSection.Contains(item.Action, StringComparison.Ordinal)))
+                     .Where(item => !checklistSection.Contains(EscapeMarkdown(item.Action), StringComparison.Ordinal)))
         {
             throw new UsageException($"{RunSummaryMarkdownFileName} 60-second triage checklist is missing checklist action '{item.Action}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
         }
@@ -441,7 +441,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         foreach (var item in triageChecklist
                      .OrderBy(static item => item.Step)
                      .Where(item => !string.IsNullOrWhiteSpace(item.Rationale))
-                     .Where(item => !checklistSection.Contains(item.Rationale, StringComparison.Ordinal)))
+                     .Where(item => !checklistSection.Contains(EscapeMarkdown(item.Rationale), StringComparison.Ordinal)))
         {
             throw new UsageException($"{RunSummaryMarkdownFileName} 60-second triage checklist is missing checklist rationale '{item.Rationale}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
         }
@@ -1371,18 +1371,17 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         string packetPath,
         string artifactRoot)
     {
-        foreach (var evidenceFile in evidenceFiles)
+        foreach (var evidenceFile in evidenceFiles
+                     .Where(evidenceFile => !FileExistsInArtifactRoot(evidenceFile.Path, artifactRoot)))
         {
-            if (!FileExistsInArtifactRoot(evidenceFile.Path, artifactRoot))
-            {
-                throw new UsageException($"{Path.GetFileName(packetPath)} evidenceFiles entry '{evidenceFile.Kind}' points at missing evidence file '{evidenceFile.Path}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
-            }
+            throw new UsageException($"{Path.GetFileName(packetPath)} evidenceFiles entry '{evidenceFile.Kind}' points at missing evidence file '{evidenceFile.Path}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
         }
     }
 
     private bool FileExistsInArtifactRoot(string path, string artifactRoot) =>
-        _dependencies.FileSystem.FileExists(path) ||
-        (!Path.IsPathRooted(path) && _dependencies.FileSystem.FileExists(Path.Join(artifactRoot, path)));
+        Path.IsPathRooted(path)
+            ? _dependencies.FileSystem.FileExists(path)
+            : _dependencies.FileSystem.FileExists(Path.Join(artifactRoot, path));
 
     private static IReadOnlyList<RunSummaryChecklistItemResult> ReadTriageChecklist(JsonElement root, string recommendedCommand, string sourcePath)
     {
