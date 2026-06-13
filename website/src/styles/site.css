@@ -1159,6 +1159,7 @@ html .pagination-links a:hover {
 
 	html .docs-copy-panel {
 		inset-inline-end: 0;
+		min-width: min(13.5rem, calc(100vw - 1.5rem));
 		max-width: min(18rem, calc(100vw - 1.5rem));
 	}
 
