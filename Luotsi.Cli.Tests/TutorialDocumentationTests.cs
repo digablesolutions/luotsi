@@ -1549,6 +1549,11 @@ public sealed partial class AppTests
 
     private static void MakeExecutable(string path)
     {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
         try
         {
             File.SetUnixFileMode(
@@ -1559,11 +1564,6 @@ public sealed partial class AppTests
         }
         catch (Exception ex) when (ex is PlatformNotSupportedException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         {
-            if (OperatingSystem.IsWindows())
-            {
-                return;
-            }
-
             var result = RunProcessCore("chmod", ["755", path], string.Empty);
             Assert.Equal(0, result.ExitCode);
         }
