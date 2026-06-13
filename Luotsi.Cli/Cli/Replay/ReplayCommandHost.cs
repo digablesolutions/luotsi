@@ -228,13 +228,19 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             }
 
             var packetStatus = RequireString(root, "status", packetPath);
+            var verdict = RequireString(root, "verdict", packetPath);
+            var generatedAt = RequireDateTimeOffsetString(root, "generatedAt", packetPath);
             var sessionCount = RequireInt32(root, "sessionCount", packetPath);
             var failureCount = RequireInt32(root, "failureCount", packetPath);
             var recommendedNextAction = RequireObject(root, "recommendedNextAction", packetPath);
             var recommendedCommand = RequireString(recommendedNextAction, "command", packetPath);
             var recommendedNextActionResult = ReadRecommendedNextAction(recommendedNextAction, packetPath);
             var triageChecklist = ReadTriageChecklist(root, recommendedCommand, packetPath);
+            var commands = ReadCommandHints(root, packetPath);
             var primaryFailure = ReadPrimaryFailure(root, packetPath);
+            var evidenceFiles = ReadEvidenceFiles(root, packetPath);
+            ValidatePrimaryFailureEvidenceFiles(primaryFailure, evidenceFiles, packetPath, artifacts.Root);
+            ValidateEvidenceFiles(evidenceFiles, packetPath, artifacts.Root);
             var failureSnapshot = ReadFailureSnapshot(root, primaryFailure, packetPath);
             var entryPoints = RequireObject(root, "entryPoints", packetPath);
             var indexHtmlPath = RequireString(entryPoints, "indexHtmlPath", packetPath);
@@ -280,20 +286,22 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
                 throw new UsageException($"{RunSummaryMarkdownFileName} is missing the copy-paste triage command block. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
             }
 
-            ValidateCopyPasteTriageCommands(triageChecklist, runSummaryMarkdown, artifacts.Root);
+            ValidateCopyPasteTriageCommands(triageChecklist, runSummaryMarkdown, checkCommand, artifacts.Root);
 
-            if (!runSummaryMarkdown.Contains("## 60-Second Triage Checklist", StringComparison.Ordinal))
-            {
-                throw new UsageException($"{RunSummaryMarkdownFileName} is missing the 60-second triage checklist. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
-            }
+            ValidateFailureSnapshot(primaryFailure, runSummaryMarkdown, artifacts.Root);
+            ValidateMarkdownTriageChecklist(triageChecklist, runSummaryMarkdown, artifacts.Root);
+            ValidateFirstActionSection(recommendedNextActionResult, runSummaryMarkdown, artifacts.Root);
 
             if (!runSummaryMarkdown.Contains(recommendedCommand, StringComparison.Ordinal))
             {
                 throw new UsageException($"{RunSummaryMarkdownFileName} does not include the recommended next action command from {RunSummaryJsonFileName}. Re-run `luotsi replay packet --artifacts {Quote(artifacts.Root)}`.");
             }
 
-            ValidateFailureSnapshot(primaryFailure, runSummaryMarkdown, artifacts.Root);
             ValidatePrimaryFailureHandoff(primaryFailure, triageChecklist, runSummaryMarkdown, packetPath, artifacts.Root);
+            ValidatePrimaryFailureSection(primaryFailure, runSummaryMarkdown, artifacts.Root);
+            ValidateMarkdownEvidenceFiles(evidenceFiles, runSummaryMarkdown, artifacts.Root);
+            ValidateMarkdownCommands(commands, runSummaryMarkdown, artifacts.Root);
+            ValidateMarkdownPacketIdentity(generatedAt, packetStatus, verdict, sessionCount, failureCount, runSummaryMarkdown, artifacts.Root);
 
             return new RunSummaryCheckResult(
                 ResultSchemas.RunSummaryCheck,
@@ -306,9 +314,11 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
                 failureCount,
                 recommendedCommand,
                 failureSnapshot,
+                evidenceFiles,
                 recommendedNextActionResult,
                 triageChecklist,
                 primaryFailure,
+                commands,
                 runSummaryMarkdownPath);
         }
     }
@@ -316,12 +326,21 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
     private static void ValidateCopyPasteTriageCommands(
         IReadOnlyList<RunSummaryChecklistItemResult> triageChecklist,
         string runSummaryMarkdown,
+        string checkCommand,
         string artifactRoot)
     {
         var commandBlock = ExtractCopyPasteTriageCommandBlock(runSummaryMarkdown);
         if (string.IsNullOrWhiteSpace(commandBlock))
         {
             throw new UsageException($"{RunSummaryMarkdownFileName} is missing the copy-paste triage command block. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        var firstCommand = commandBlock
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault();
+        if (!string.Equals(firstCommand, checkCommand, StringComparison.Ordinal))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} copy-paste triage command block must start with the packet validation gate command. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
         }
 
         foreach (var command in triageChecklist
@@ -333,6 +352,124 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
                      .Where(command => !commandBlock.Contains(command, StringComparison.Ordinal)))
         {
             throw new UsageException($"{RunSummaryMarkdownFileName} copy-paste triage command block is missing checklist command '{command}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+    }
+
+    private static void ValidateMarkdownCommands(
+        IReadOnlyList<ReplayOpenCommandHintResult> commands,
+        string runSummaryMarkdown,
+        string artifactRoot)
+    {
+        var commandsSection = ExtractMarkdownSection(runSummaryMarkdown, "## Commands");
+        if (string.IsNullOrWhiteSpace(commandsSection))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} is missing the commands section. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        foreach (var command in commands
+                     .Where(command => !commandsSection.Contains(EscapeMarkdown(command.Command), StringComparison.Ordinal)))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} commands section is missing command '{command.Command}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        foreach (var command in commands
+                     .Where(command => !commandsSection.Contains(EscapeMarkdown(command.Description), StringComparison.Ordinal)))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} commands section is missing command description '{command.Description}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+    }
+
+    private static void ValidateMarkdownEvidenceFiles(
+        IReadOnlyList<RunSummaryEvidenceFileResult> evidenceFiles,
+        string runSummaryMarkdown,
+        string artifactRoot)
+    {
+        var evidenceSection = ExtractMarkdownSection(runSummaryMarkdown, "## Evidence Files");
+        if (evidenceFiles.Count == 0)
+        {
+            if (string.IsNullOrWhiteSpace(evidenceSection) ||
+                !evidenceSection.Contains("No focused evidence files", StringComparison.Ordinal))
+            {
+                throw new UsageException($"{RunSummaryMarkdownFileName} evidence files section must state that no focused evidence files were found. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+            }
+
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(evidenceSection))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} is missing the evidence files section. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        foreach (var evidenceFile in evidenceFiles
+                     .Where(evidenceFile => !evidenceSection.Contains(EscapeMarkdown(evidenceFile.Kind), StringComparison.Ordinal)))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} evidence files section is missing evidence kind '{evidenceFile.Kind}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        foreach (var evidenceFile in evidenceFiles
+                     .Where(evidenceFile => !evidenceSection.Contains(EscapeMarkdown(evidenceFile.Path), StringComparison.Ordinal)))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} evidence files section is missing evidence path '{evidenceFile.Path}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        foreach (var evidenceFile in evidenceFiles
+                     .Where(evidenceFile => !evidenceSection.Contains(EscapeMarkdown(evidenceFile.Description), StringComparison.Ordinal)))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} evidence files section is missing evidence description '{evidenceFile.Description}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+    }
+
+    private static void ValidateMarkdownTriageChecklist(
+        IReadOnlyList<RunSummaryChecklistItemResult> triageChecklist,
+        string runSummaryMarkdown,
+        string artifactRoot)
+    {
+        var checklistSection = ExtractMarkdownSection(runSummaryMarkdown, "## 60-Second Triage Checklist");
+        if (string.IsNullOrWhiteSpace(checklistSection))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} is missing the 60-second triage checklist. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        foreach (var item in triageChecklist
+                     .OrderBy(static item => item.Step)
+                     .Where(item => !checklistSection.Contains(EscapeMarkdown(item.Action), StringComparison.Ordinal)))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} 60-second triage checklist is missing checklist action '{item.Action}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        foreach (var item in triageChecklist
+                     .OrderBy(static item => item.Step)
+                     .Where(item => !string.IsNullOrWhiteSpace(item.Rationale))
+                     .Where(item => !checklistSection.Contains(EscapeMarkdown(item.Rationale), StringComparison.Ordinal)))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} 60-second triage checklist is missing checklist rationale '{item.Rationale}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+    }
+
+    private static void ValidateFirstActionSection(
+        ReplayOpenNextActionResult recommendedNextAction,
+        string runSummaryMarkdown,
+        string artifactRoot)
+    {
+        var firstActionSection = ExtractMarkdownSection(runSummaryMarkdown, "## First Action");
+        if (string.IsNullOrWhiteSpace(firstActionSection))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} is missing the first action explanation. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        foreach (var value in new[]
+                 {
+                     recommendedNextAction.Title,
+                     recommendedNextAction.Kind,
+                     recommendedNextAction.Reason,
+                     recommendedNextAction.Command
+                 }
+                 .Where(static value => !string.IsNullOrWhiteSpace(value))
+                 .Select(static value => value!)
+                 .Where(value => !firstActionSection.Contains(EscapeMarkdown(value), StringComparison.Ordinal)))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} first action explanation is missing recommended action value '{value}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
         }
     }
 
@@ -362,6 +499,30 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         }
     }
 
+    private static void ValidateMarkdownPacketIdentity(
+        string generatedAt,
+        string packetStatus,
+        string verdict,
+        int sessionCount,
+        int failureCount,
+        string runSummaryMarkdown,
+        string artifactRoot)
+    {
+        foreach (var value in new[]
+                 {
+                     $"Generated: `{EscapeMarkdown(generatedAt)}`",
+                     $"Artifact root: `{EscapeMarkdown(artifactRoot)}`",
+                     $"Status: `{EscapeMarkdown(packetStatus)}`",
+                     $"Verdict: {EscapeMarkdown(verdict)}",
+                     $"Sessions: `{sessionCount.ToString(System.Globalization.CultureInfo.InvariantCulture)}`",
+                     $"Failures: `{failureCount.ToString(System.Globalization.CultureInfo.InvariantCulture)}`"
+                 }
+                 .Where(value => !runSummaryMarkdown.Contains(value, StringComparison.Ordinal)))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} is missing packet identity value '{value}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+    }
+
     private static string? ExtractCopyPasteTriageCommandBlock(string runSummaryMarkdown)
     {
         const string heading = "## Copy-Paste Triage Commands";
@@ -380,6 +541,21 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         blockStart += "```bash".Length;
         var blockEnd = runSummaryMarkdown.IndexOf("```", blockStart, StringComparison.Ordinal);
         return blockEnd < 0 ? null : runSummaryMarkdown[blockStart..blockEnd];
+    }
+
+    private static string? ExtractMarkdownSection(string markdown, string heading)
+    {
+        var headingIndex = markdown.IndexOf(heading, StringComparison.Ordinal);
+        if (headingIndex < 0)
+        {
+            return null;
+        }
+
+        var contentStart = headingIndex + heading.Length;
+        var nextSectionIndex = markdown.IndexOf("\n## ", contentStart, StringComparison.Ordinal);
+        return nextSectionIndex < 0
+            ? markdown[contentStart..]
+            : markdown[contentStart..nextSectionIndex];
     }
 
     private static void ValidatePrimaryFailureHandoff(
@@ -407,6 +583,109 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         if (!runSummaryMarkdown.Contains(primaryFailure.SourceCommand, StringComparison.Ordinal))
         {
             throw new UsageException($"{RunSummaryMarkdownFileName} does not include primaryFailure.sourceCommand from {RunSummaryJsonFileName}. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+    }
+
+    private void ValidatePrimaryFailureEvidenceFiles(
+        ReplayOpenPrimaryFailureResult? primaryFailure,
+        IReadOnlyList<RunSummaryEvidenceFileResult> evidenceFiles,
+        string packetPath,
+        string artifactRoot)
+    {
+        if (primaryFailure is null)
+        {
+            if (evidenceFiles.Count > 0)
+            {
+                throw new UsageException($"{Path.GetFileName(packetPath)} evidenceFiles must be empty when primaryFailure is null. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+            }
+
+            return;
+        }
+
+        ValidatePrimaryFailureEvidenceFile(primaryFailure.TimelinePath, "primaryFailure.timelinePath", packetPath, artifactRoot);
+        ValidatePrimaryFailureEvidenceFile(primaryFailure.FailureCapsulePath, "primaryFailure.failureCapsulePath", packetPath, artifactRoot);
+        ValidatePrimaryFailureEvidenceFileHandoff(primaryFailure.TimelinePath, "timeline", evidenceFiles, packetPath, artifactRoot);
+        ValidatePrimaryFailureEvidenceFileHandoff(primaryFailure.FailureCapsulePath, "failure_capsule", evidenceFiles, packetPath, artifactRoot);
+    }
+
+    private void ValidatePrimaryFailureEvidenceFile(
+        string? evidencePath,
+        string fieldName,
+        string packetPath,
+        string artifactRoot)
+    {
+        if (string.IsNullOrWhiteSpace(evidencePath))
+        {
+            return;
+        }
+
+        if (!FileExistsInArtifactRoot(evidencePath, artifactRoot))
+        {
+            throw new UsageException($"{Path.GetFileName(packetPath)} {fieldName} points at missing evidence file '{evidencePath}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+    }
+
+    private static void ValidatePrimaryFailureEvidenceFileHandoff(
+        string? evidencePath,
+        string kind,
+        IReadOnlyList<RunSummaryEvidenceFileResult> evidenceFiles,
+        string packetPath,
+        string artifactRoot)
+    {
+        if (string.IsNullOrWhiteSpace(evidencePath))
+        {
+            return;
+        }
+
+        if (!evidenceFiles.Any(file =>
+                string.Equals(file.Kind, kind, StringComparison.Ordinal) &&
+                string.Equals(file.Path, evidencePath, StringComparison.Ordinal)))
+        {
+            throw new UsageException($"{Path.GetFileName(packetPath)} evidenceFiles must include {kind} path '{evidencePath}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+    }
+
+    private static void ValidatePrimaryFailureSection(
+        ReplayOpenPrimaryFailureResult? primaryFailure,
+        string runSummaryMarkdown,
+        string artifactRoot)
+    {
+        var primaryFailureSection = ExtractMarkdownSection(runSummaryMarkdown, "## Primary Failure");
+        if (string.IsNullOrWhiteSpace(primaryFailureSection))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} is missing the primary failure detail section. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+
+        if (primaryFailure is null)
+        {
+            if (!primaryFailureSection.Contains("No primary failure", StringComparison.Ordinal))
+            {
+                throw new UsageException($"{RunSummaryMarkdownFileName} primary failure detail section must state that no primary failure was found. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+            }
+
+            return;
+        }
+
+        foreach (var value in new[]
+                 {
+                     primaryFailure.SessionKind,
+                     primaryFailure.SessionId,
+                     primaryFailure.Reason,
+                     primaryFailure.ExitCode.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                     primaryFailure.Target,
+                     primaryFailure.Scenario,
+                     primaryFailure.Step,
+                     primaryFailure.Action,
+                     primaryFailure.Message,
+                     primaryFailure.TimelinePath,
+                     primaryFailure.FailureCapsulePath,
+                     primaryFailure.SourceCommand
+                 }
+                 .Where(static value => !string.IsNullOrWhiteSpace(value))
+                 .Select(static value => value!)
+                 .Where(value => !primaryFailureSection.Contains(EscapeMarkdown(value), StringComparison.Ordinal)))
+        {
+            throw new UsageException($"{RunSummaryMarkdownFileName} primary failure detail section is missing primary failure value '{value}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
         }
     }
 
@@ -530,6 +809,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             failureCount,
             triageChecklist,
             CreateFailureSnapshot(primaryFailure),
+            BuildEvidenceFiles(primaryFailure),
             primaryFailure,
             recommendedNextAction,
             new RunSummaryEntryPoints(
@@ -623,6 +903,10 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         builder.AppendLine();
         AppendFailureSnapshot(builder, result.PrimaryFailure);
         builder.AppendLine();
+        builder.AppendLine("## Evidence Files");
+        builder.AppendLine();
+        AppendEvidenceFiles(builder, result.EvidenceFiles);
+        builder.AppendLine();
         builder.AppendLine("## Packet Gate");
         builder.AppendLine();
         builder.AppendLine("Run this first when the packet came from CI, support, or another agent.");
@@ -646,6 +930,7 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         else
         {
             builder.AppendLine("```bash");
+            builder.AppendLine(BuildPacketCheckCommand(result.ArtifactRoot));
             foreach (var command in firstMinuteCommands)
             {
                 builder.AppendLine(command);
@@ -667,6 +952,8 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             {
                 builder.AppendLine($"{item.Step}. {EscapeMarkdown(item.Action)} `{EscapeMarkdown(item.Command)}`");
             }
+
+            builder.AppendLine($"   - Why: {EscapeMarkdown(item.Rationale)}");
         }
 
         builder.AppendLine();
@@ -738,6 +1025,21 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         AppendField(builder, "Message", primaryFailure.Message);
     }
 
+    private static void AppendEvidenceFiles(StringBuilder builder, IReadOnlyList<RunSummaryEvidenceFileResult> evidenceFiles)
+    {
+        if (evidenceFiles.Count == 0)
+        {
+            builder.AppendLine("No focused evidence files were found in replay metadata.");
+            return;
+        }
+
+        foreach (var evidenceFile in evidenceFiles)
+        {
+            builder.AppendLine($"- {EscapeMarkdown(evidenceFile.Kind)}: `{EscapeMarkdown(evidenceFile.Path)}`");
+            builder.AppendLine($"  {EscapeMarkdown(evidenceFile.Description)}");
+        }
+    }
+
     private static void AppendField(StringBuilder builder, string label, string? value)
     {
         if (!string.IsNullOrWhiteSpace(value))
@@ -777,6 +1079,33 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             summary.TimelinePath,
             summary.FailureCapsulePath,
             BuildPrimaryFailureSourceCommand(artifactRoot, summary, failureHighlight));
+    }
+
+    private static IReadOnlyList<RunSummaryEvidenceFileResult> BuildEvidenceFiles(ReplayOpenPrimaryFailureResult? primaryFailure)
+    {
+        if (primaryFailure is null)
+        {
+            return [];
+        }
+
+        var evidenceFiles = new List<RunSummaryEvidenceFileResult>();
+        if (!string.IsNullOrWhiteSpace(primaryFailure.TimelinePath))
+        {
+            evidenceFiles.Add(new RunSummaryEvidenceFileResult(
+                "timeline",
+                primaryFailure.TimelinePath,
+                "Ordered replay events around the primary failure."));
+        }
+
+        if (!string.IsNullOrWhiteSpace(primaryFailure.FailureCapsulePath))
+        {
+            evidenceFiles.Add(new RunSummaryEvidenceFileResult(
+                "failure_capsule",
+                primaryFailure.FailureCapsulePath,
+                "Focused failure capsule with failed scenario, step, artifacts, and error."));
+        }
+
+        return evidenceFiles;
     }
 
     private static string? BuildPrimaryFailureSourceCommand(
@@ -1004,6 +1333,56 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
             RequireString(element, "reason", sourcePath),
             RequireString(element, "command", sourcePath));
 
+    private static IReadOnlyList<ReplayOpenCommandHintResult> ReadCommandHints(JsonElement root, string sourcePath)
+    {
+        if (!root.TryGetProperty("commands", out var commands) ||
+            commands.ValueKind != JsonValueKind.Array ||
+            commands.GetArrayLength() == 0)
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} is missing non-empty array property 'commands'.");
+        }
+
+        return commands.EnumerateArray()
+            .Select(command => new ReplayOpenCommandHintResult(
+                RequireString(command, "kind", sourcePath),
+                RequireString(command, "description", sourcePath),
+                RequireString(command, "command", sourcePath)))
+            .ToArray();
+    }
+
+    private static IReadOnlyList<RunSummaryEvidenceFileResult> ReadEvidenceFiles(JsonElement root, string sourcePath)
+    {
+        if (!root.TryGetProperty("evidenceFiles", out var evidenceFiles) ||
+            evidenceFiles.ValueKind != JsonValueKind.Array)
+        {
+            throw new UsageException($"{Path.GetFileName(sourcePath)} is missing array property 'evidenceFiles'.");
+        }
+
+        return evidenceFiles.EnumerateArray()
+            .Select(evidenceFile => new RunSummaryEvidenceFileResult(
+                RequireString(evidenceFile, "kind", sourcePath),
+                RequireString(evidenceFile, "path", sourcePath),
+                RequireString(evidenceFile, "description", sourcePath)))
+            .ToArray();
+    }
+
+    private void ValidateEvidenceFiles(
+        IReadOnlyList<RunSummaryEvidenceFileResult> evidenceFiles,
+        string packetPath,
+        string artifactRoot)
+    {
+        foreach (var evidenceFile in evidenceFiles
+                     .Where(evidenceFile => !FileExistsInArtifactRoot(evidenceFile.Path, artifactRoot)))
+        {
+            throw new UsageException($"{Path.GetFileName(packetPath)} evidenceFiles entry '{evidenceFile.Kind}' points at missing evidence file '{evidenceFile.Path}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+        }
+    }
+
+    private bool FileExistsInArtifactRoot(string path, string artifactRoot) =>
+        Path.IsPathRooted(path)
+            ? _dependencies.FileSystem.FileExists(path)
+            : _dependencies.FileSystem.FileExists(Path.Join(artifactRoot, path));
+
     private static IReadOnlyList<RunSummaryChecklistItemResult> ReadTriageChecklist(JsonElement root, string recommendedCommand, string sourcePath)
     {
         if (!root.TryGetProperty("triageChecklist", out var checklist) ||
@@ -1131,13 +1510,19 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
 
     private static DateTimeOffset RequireDateTimeOffset(JsonElement element, string propertyName, string sourcePath)
     {
+        var value = RequireDateTimeOffsetString(element, propertyName, sourcePath);
+        return DateTimeOffset.Parse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind);
+    }
+
+    private static string RequireDateTimeOffsetString(JsonElement element, string propertyName, string sourcePath)
+    {
         var value = RequireString(element, propertyName, sourcePath);
-        if (!DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var timestamp))
+        if (!DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var parsed))
         {
             throw new UsageException($"{Path.GetFileName(sourcePath)} property '{propertyName}' must be an RFC 3339 timestamp.");
         }
 
-        return timestamp;
+        return parsed.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
     }
 
     private static ReplayOutputMode ParseOutputMode(CliOptions options, string commandName)

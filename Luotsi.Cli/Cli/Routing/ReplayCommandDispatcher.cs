@@ -80,6 +80,14 @@ internal sealed class ReplayCommandDispatcher(IFileSystem fileSystem)
         var commands = new List<ReplaySummaryCommandHintResult>
         {
             new(
+                "write_replay_packet",
+                "Write the durable first-minute packet for the artifact root.",
+                $"luotsi replay packet --artifacts {Quote(artifactRoot)}"),
+            new(
+                "check_replay_packet",
+                "Validate the durable packet before handoff or deeper replay.",
+                $"luotsi replay packet --artifacts {Quote(artifactRoot)} --check"),
+            new(
                 "open_replay_front_door",
                 "Open the replay front door for the artifact root.",
                 $"luotsi replay open --artifacts {Quote(artifactRoot)}"),

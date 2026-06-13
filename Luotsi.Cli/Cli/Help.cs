@@ -242,6 +242,8 @@ Common workflows:
     luotsi discover --device <adb serial> --package <app.id> --budget 5m
 
   Resume the latest local triage bundle
+    luotsi replay packet --last --artifacts artifacts
+    luotsi replay packet --last --artifacts artifacts --check
     luotsi artifacts open --last --artifacts artifacts
     luotsi replay open --last --artifacts artifacts --dry-run
 
@@ -491,9 +493,14 @@ Notes:
   <directory> without re-copying a path.
   Replay packet is the non-interactive packet writer: it refreshes the artifact
   index, writes run-summary.json and run-summary.md, and returns the
-  luotsi-run-summary.v1 packet without launching a browser. Add --check to
+  luotsi-run-summary.v1 packet without launching a browser. The packet starts
+  with status, failure snapshot, focused evidence files, the best next command,
+  and the 60-second checklist before broader replay commands. Add --check to
   validate an existing run-summary.json/run-summary.md pair without rewriting
-  artifacts; missing, malformed, or stale-root packets fail as usage errors.
+  artifacts; missing, malformed, stale-root, or incomplete Markdown handoffs
+  fail as usage errors. A valid check returns the same next action, evidence
+  files, checklist, primary failure, and commands so agents can continue from
+  the check envelope.
   Replay summarize reads session-replay.json and session-timeline.jsonl from an
   existing artifact root. By default it returns the condensed failure timeline
   as a normal JSON command envelope. `--format json` writes the bare summary
@@ -547,8 +554,8 @@ Notes:
   understand what failed and what to do next. With --format json or --format
   jsonl, replay graph writes raw machine output instead of the command envelope.
   With --write-jsonl, it persists replay-graph.jsonl for CI and agent consumers.
-  Graph actions start with replay open so semantic context can
-  route back to the canonical front door.
+  Graph actions start with replay packet and replay packet --check so semantic
+  context can be handed off before routing back to the canonical front door.
   Use --failed, --node-kind, --edge-kind, --action, --selector, --contains,
   --insight, --evidence, --fact,
   --severity, --node,
@@ -611,8 +618,8 @@ Examples:
 Artifacts:
   Runs can emit JSONL lifecycle events, JSON summaries, JUnit XML, failure
   bundles, screenshots, recordings, and a browsable artifact index. Successful
-  run results also include artifact_commands with exact replay open,
-  artifacts open, and artifacts pack commands for the run artifact root. With
+  run results also include artifact_commands with exact replay packet,
+  replay open, artifacts open, and artifacts pack commands for the run artifact root. With
   --human or --console-output human, failed runs are rendered as a compact
   triage capsule that surfaces the primary failure, evidence counts, and next
   command. JSON reports, JSONL lifecycle events, and failed run payloads also

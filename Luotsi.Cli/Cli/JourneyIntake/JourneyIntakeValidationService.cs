@@ -164,7 +164,7 @@ internal sealed class JourneyIntakeValidationService(IFileSystem fileSystem)
                 var dryRun = RequireCommand(value, "dryRunCommand", "$.luotsiHandoff.dryRunCommand", "luotsi run ", errors);
                 var run = RequireCommand(value, "runCommand", "$.luotsiHandoff.runCommand", "luotsi run ", errors);
                 var claimedRun = RequireCommand(value, "claimedRunCommand", "$.luotsiHandoff.claimedRunCommand", "luotsi run ", errors);
-                var replay = RequireCommand(value, "replayCommand", "$.luotsiHandoff.replayCommand", "luotsi replay open ", errors);
+                var replay = RequireCommand(value, "replayCommand", "$.luotsiHandoff.replayCommand", ["luotsi replay packet ", "luotsi replay open "], errors);
                 if (dryRun is not null && !HasOptionToken(dryRun, "--dry-run"))
                 {
                     errors.Add("$.luotsiHandoff.dryRunCommand must include ' --dry-run'.");
@@ -228,6 +228,8 @@ internal sealed class JourneyIntakeValidationService(IFileSystem fileSystem)
         {
             $"luotsi scenario-validate --file {Quote(output)}",
             $"luotsi run --file {Quote(output)} --validate-only",
+            $"luotsi replay packet --artifacts <artifact-root>",
+            $"luotsi replay packet --artifacts <artifact-root> --check",
             $"luotsi replay open --artifacts <artifact-root> --dry-run"
         };
         return new JourneyIntakeDraftScenarioResult(
@@ -431,7 +433,7 @@ internal sealed class JourneyIntakeValidationService(IFileSystem fileSystem)
                 $"luotsi run --file {Quote(scenario)} --device {Quote(deviceToken)} --dry-run",
                 $"luotsi run --file {Quote(scenario)} --device {Quote(deviceToken)} --output-dir {Quote(runArtifactRoot)} --report-junit {Quote($"{runArtifactRoot}/junit.xml")}",
                 $"luotsi run --file {Quote(scenario)} --device-query {Quote(deviceQuery)} --claim-device --claim-wait-sec 60 --output-dir {Quote(runArtifactRoot)} --report-junit {Quote($"{runArtifactRoot}/junit.xml")}",
-                $"luotsi replay open --artifacts {Quote(runArtifactRoot)} --dry-run"),
+                $"luotsi replay packet --artifacts {Quote(runArtifactRoot)}"),
             new JourneyIntakeInitReview(string.Empty, string.Empty, string.Empty));
     }
 
@@ -453,8 +455,8 @@ internal sealed class JourneyIntakeValidationService(IFileSystem fileSystem)
         builder.AppendLine($"4. Draft a reviewed scenario: `{document.LuotsiHandoff.DraftCommand}`");
         builder.AppendLine($"5. Dry-run the scenario: `{document.LuotsiHandoff.DryRunCommand}`");
         builder.AppendLine($"6. Run through the lab-safe path: `{document.LuotsiHandoff.ClaimedRunCommand}`");
-        builder.AppendLine($"7. Reopen evidence: `{document.LuotsiHandoff.ReplayCommand}`");
-        builder.AppendLine($"8. Write a replay packet: `luotsi replay packet --artifacts {Quote(runArtifactRoot)}`");
+        builder.AppendLine($"7. Write a replay packet: `{document.LuotsiHandoff.ReplayCommand}`");
+        builder.AppendLine($"8. Check the replay packet: `luotsi replay packet --artifacts {Quote(runArtifactRoot)} --check`");
         builder.AppendLine($"9. Write a replay capsule: `luotsi replay capsule --artifacts {Quote(runArtifactRoot)} --write-readme --write-json`");
         builder.AppendLine();
         builder.AppendLine("## Review Guardrails");
@@ -514,6 +516,17 @@ internal sealed class JourneyIntakeValidationService(IFileSystem fileSystem)
         if (command is not null && !command.StartsWith(expectedPrefix, StringComparison.Ordinal))
         {
             errors.Add($"{path} must start with '{expectedPrefix}'.");
+        }
+
+        return command;
+    }
+
+    private static string? RequireCommand(JsonElement root, string propertyName, string path, string[] expectedPrefixes, List<string> errors)
+    {
+        var command = RequireString(root, propertyName, path, errors);
+        if (command is not null && !expectedPrefixes.Any(prefix => command.StartsWith(prefix, StringComparison.Ordinal)))
+        {
+            errors.Add($"{path} must start with one of: {string.Join(", ", expectedPrefixes.Select(prefix => $"'{prefix}'"))}.");
         }
 
         return command;

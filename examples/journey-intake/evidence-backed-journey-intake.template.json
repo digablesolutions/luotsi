@@ -57,7 +57,7 @@
     "dryRunCommand": "luotsi run --file scenarios/from-journey.json --device <serial> --dry-run",
     "runCommand": "luotsi run --file scenarios/from-journey.json --device <serial> --output-dir artifacts/from-journey-run --report-junit artifacts/from-journey-run/junit.xml",
     "claimedRunCommand": "luotsi run --file scenarios/from-journey.json --device-query \"state=online,type=physical,availability=available\" --claim-device --claim-wait-sec 60 --output-dir artifacts/from-journey-run --report-junit artifacts/from-journey-run/junit.xml",
-    "replayCommand": "luotsi replay open --artifacts artifacts/from-journey-run --dry-run"
+    "replayCommand": "luotsi replay packet --artifacts artifacts/from-journey-run"
   },
   "review": {
     "owner": "",

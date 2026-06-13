@@ -96,7 +96,7 @@ The artifact root is the handoff point from live control to post-run analysis. U
 
 For one-shot envelopes, pick the next command in this order:
 
-1. `data.recommended_next_action_command` or `data.recommendedNextActionCommand` when a check result exposes the direct continuation command
+1. `data.recommended_next_action_command` when a check result exposes the direct continuation command; command-envelope `data` fields use snake_case
 2. `data.recommended_next_action.command`
 3. Focused packet evidence such as `data.primary_failure.source_command` or `data.primaryFailure.sourceCommand`
 4. Packet checklist commands such as `data.triage_checklist[].command` or `data.triageChecklist[].command`
@@ -104,7 +104,7 @@ For one-shot envelopes, pick the next command in this order:
 6. `artifacts.artifact_root` as the fallback evidence pointer, then run `luotsi replay packet --artifacts <artifact-root>`
 7. Command arrays such as `data.commands`, `data.artifact_commands`, and `data.recommended_commands` only when there is no artifact root to packetize
 
-Use `replay packet` for this fallback because it writes the durable `run-summary.json` and `run-summary.md` packet that CI and agents can pass forward. Use `luotsi replay packet --artifacts <artifact-root> --check` as the validation gate for an existing packet, and use `luotsi replay open --artifacts <artifact-root> --dry-run` when a human also needs the replay front door response without launching a browser.
+Use `replay packet` for this fallback because it writes the durable `run-summary.json` and `run-summary.md` packet that CI and agents can pass forward. Use `luotsi replay packet --artifacts <artifact-root> --check` as the validation gate for an existing packet, and use `luotsi replay open --artifacts <artifact-root> --dry-run` when a human also needs the replay front door response without launching a browser. After picking the next command, carry packet `evidenceFiles[]` or check-envelope `data.evidence_files[]` forward as the proof-file context for the focused failure.
 
 ## Contracts that matter for agent builders
 

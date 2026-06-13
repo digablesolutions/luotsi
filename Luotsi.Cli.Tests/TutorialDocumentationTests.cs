@@ -100,6 +100,12 @@ public sealed partial class AppTests
         Assert.Contains("one JSON envelope or a saved JSONL-style log", markdown, StringComparison.Ordinal);
         Assert.Contains("docs/schemas/luotsi-run-summary-v1.md", markdown, StringComparison.Ordinal);
         Assert.Contains("replay packet --check", markdown, StringComparison.Ordinal);
+        Assert.Contains("focused evidence files", markdown, StringComparison.Ordinal);
+        Assert.Contains("same next action/evidence/checklist handoff", markdown, StringComparison.Ordinal);
+        var replayHelp = Help.GetTopic("replay");
+        Assert.Contains("focused evidence files", replayHelp, StringComparison.Ordinal);
+        Assert.Contains("same next action, evidence", replayHelp, StringComparison.Ordinal);
+        Assert.Contains("files, checklist, primary failure", replayHelp, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -118,7 +124,7 @@ public sealed partial class AppTests
         Assert.Contains("luotsi replay packet --artifacts \"$LUOTSI_ARTIFACTS_DIR\"", portableCi, StringComparison.Ordinal);
         Assert.Contains("run-summary.md", portableCi, StringComparison.Ordinal);
         Assert.Contains("GITHUB_STEP_SUMMARY", portableCi, StringComparison.Ordinal);
-        Assert.Contains("primary", portableCi, StringComparison.Ordinal);
+        Assert.Contains("failure snapshot", portableCi, StringComparison.Ordinal);
         Assert.Contains("recommended next action", portableCi, StringComparison.Ordinal);
 
         var replayGraphSchema = File.ReadAllText(Path.Join(root, "docs", "replay-graph-schema.md"));
@@ -167,12 +173,14 @@ public sealed partial class AppTests
         Assert.Contains("artifacts open --last", markdown, StringComparison.Ordinal);
         Assert.Contains("replay open --last", markdown, StringComparison.Ordinal);
         AssertContainsBefore(markdown, "luotsi replay open --artifacts ./artifacts/my-run", "luotsi artifacts open ./artifacts/my-run");
-        AssertContainsBefore(autonomousDiscovery, "luotsi replay open --last --artifacts artifacts --dry-run", "luotsi artifacts open --last --artifacts artifacts");
+        AssertContainsBefore(autonomousDiscovery, "luotsi replay packet --last --artifacts artifacts", "luotsi replay open --last --artifacts artifacts --dry-run");
+        AssertContainsBefore(autonomousDiscovery, "luotsi replay packet --last --artifacts artifacts --check", "luotsi replay open --last --artifacts artifacts --dry-run");
         AssertContainsBefore(cliCommandGroups, "luotsi replay open --last --artifacts ./artifacts --dry-run", "luotsi artifacts open --last --artifacts ./artifacts");
-        AssertContainsBefore(markdown, "`replay open --last` for the latest replay-specific next actions", "`artifacts open --last` only when you specifically need the latest generic browser");
-        AssertContainsBefore(markdown, "start replay-specific triage with `replay open`", "Use `artifacts open` only when you specifically need the generic browser");
+        AssertContainsBefore(markdown, "`replay packet --last` to write the durable first-minute packet", "`artifacts open --last` only when you specifically need the latest generic browser");
+        AssertContainsBefore(markdown, "Start with `replay packet` after discovery", "Use `artifacts open --last` only when you specifically need to browse every captured file.");
+        AssertContainsBefore(markdown, "start replay-specific triage with `replay packet`", "Use `artifacts open` only when you specifically need the generic browser");
         AssertContainsBefore(replayAndArtifacts, "`replay packet` is the canonical first stop", "`replay capsule` is the deeper operator and CI handoff");
-        Assert.Contains("Start with `replay open --dry-run` after discovery", markdown, StringComparison.Ordinal);
+        AssertContainsBefore(replayAndArtifacts, "luotsi replay packet --artifacts ./artifacts/failing-run", "luotsi replay open --artifacts ./artifacts/failing-run --dry-run");
     }
 
     [Fact]
@@ -196,7 +204,11 @@ public sealed partial class AppTests
         Assert.Contains("One JSON envelope", markdown, StringComparison.Ordinal);
         Assert.Contains("JSONL session stream", markdown, StringComparison.Ordinal);
         Assert.Contains("Replay artifact root", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --last --artifacts ./artifacts/smoke-run", markdown, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --last --artifacts ./artifacts/smoke-run --check", markdown, StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --last --artifacts ./artifacts/smoke-run --dry-run", markdown, StringComparison.Ordinal);
+        AssertContainsBefore(markdown, "luotsi replay packet --last --artifacts ./artifacts/smoke-run", "luotsi replay open --last --artifacts ./artifacts/smoke-run --dry-run");
+        AssertContainsBefore(markdown, "luotsi replay packet --last --artifacts ./artifacts/smoke-run --check", "luotsi replay open --last --artifacts ./artifacts/smoke-run --dry-run");
         AssertContainsBefore(markdown, "luotsi replay open --artifacts ./artifacts/demo-run --dry-run", "luotsi replay summarize --artifacts ./artifacts/demo-run");
         AssertContainsBefore(markdown, "luotsi replay open --artifacts ./artifacts/buggy-demo --dry-run", "luotsi replay summarize --artifacts ./artifacts/buggy-demo");
         Assert.Contains("primary failure, recommended next action, and follow-up commands", markdown, StringComparison.Ordinal);
@@ -214,7 +226,7 @@ public sealed partial class AppTests
         Assert.Contains("Normal commands return one JSON envelope by default.", readme, StringComparison.Ordinal);
         Assert.Contains("Artifact roots are durable evidence", readme, StringComparison.Ordinal);
         Assert.Contains("Output envelopes", readme, StringComparison.Ordinal);
-        Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", readme, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --artifacts <artifact-root>", readme, StringComparison.Ordinal);
         Assert.DoesNotContain("data.triage_checklist", readme, StringComparison.Ordinal);
         Assert.DoesNotContain("examples/agents/extract-next-command.py", readme, StringComparison.Ordinal);
         Assert.DoesNotContain("examples/agents/extract-next-command.mjs", readme, StringComparison.Ordinal);
@@ -263,6 +275,11 @@ public sealed partial class AppTests
         Assert.Contains("run-summary.json", examples, StringComparison.Ordinal);
         Assert.Contains("luotsi-run-summary.v1", examples, StringComparison.Ordinal);
         Assert.Contains("recommendedNextAction.command", examples, StringComparison.Ordinal);
+        Assert.Contains("evidenceFiles[]", examples, StringComparison.Ordinal);
+        Assert.Contains("evidence_files[]", examples, StringComparison.Ordinal);
+        Assert.Contains("Check envelopes expose `recommended_next_action_command`", examples, StringComparison.Ordinal);
+        Assert.Contains("command-envelope `data` fields use snake_case", examples, StringComparison.Ordinal);
+        Assert.Contains("parser examples still tolerate camelCase", examples, StringComparison.Ordinal);
         Assert.Contains("docs/schemas/luotsi-run-summary-v1.md", examples, StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --artifacts <artifact-root> --check", examples, StringComparison.Ordinal);
         Assert.Contains("Bad input exits non-zero with an `extract-next-command:` message", examples, StringComparison.Ordinal);
@@ -275,9 +292,11 @@ public sealed partial class AppTests
         Assert.Contains("luotsi help output", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("schema: \"luotsi-command.v1\"", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("data.recommended_next_action_command", aiAgentWorkflows, StringComparison.Ordinal);
+        Assert.Contains("command-envelope `data` fields use snake_case", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("data.recommended_next_action.command", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("data.primary_failure.source_command", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("data.primaryFailure.sourceCommand", aiAgentWorkflows, StringComparison.Ordinal);
+        Assert.Contains("data.evidence_files[]", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("data.triage_checklist[].command", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("data.artifact_commands", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("artifacts.artifact_root", aiAgentWorkflows, StringComparison.Ordinal);
@@ -286,6 +305,11 @@ public sealed partial class AppTests
         Assert.Contains("run-summary.json", aiAgentWorkflows, StringComparison.Ordinal);
         Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", aiAgentWorkflows, StringComparison.Ordinal);
         AssertContainsBefore(aiAgentWorkflows, "luotsi replay packet --artifacts <artifact-root>", "luotsi replay open --artifacts <artifact-root> --dry-run");
+        var firstFiveMinutes = File.ReadAllText(Path.Join(root, "website", "src", "content", "docs", "docs", "getting-started", "first-five-minutes.mdx"));
+        var outputEnvelopes = File.ReadAllText(Path.Join(root, "website", "src", "content", "docs", "docs", "reference", "output-envelopes.mdx"));
+        Assert.Contains("command-envelope `data` fields use snake_case", firstFiveMinutes, StringComparison.Ordinal);
+        Assert.Contains("command-envelope `data` fields use snake_case", outputEnvelopes, StringComparison.Ordinal);
+        Assert.Contains("data.evidence_files[]", outputEnvelopes, StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --last --artifacts", nodeExample, StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --last --artifacts", pythonExample, StringComparison.Ordinal);
         Assert.Contains("extract-next-command.py", examples, StringComparison.Ordinal);
@@ -389,6 +413,7 @@ public sealed partial class AppTests
             AssertContainsBefore(name, text, "luotsi replay packet --artifacts <artifact-root>", "luotsi replay open --artifacts <artifact-root> --dry-run");
         }
 
+        Assert.Contains("focused evidence files", distributionPlaybook, StringComparison.Ordinal);
         Assert.Contains("output/replay handoff checked with `luotsi help output`", pullRequestTemplate, StringComparison.Ordinal);
         Assert.Contains("first follow-up command points to `data.recommended_next_action.command`", pullRequestTemplate, StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --artifacts <artifact-root>", pullRequestTemplate, StringComparison.Ordinal);
@@ -434,7 +459,7 @@ public sealed partial class AppTests
         Assert.Contains("next: luotsi replay packet --artifacts artifacts/smoke-run/<run-id>", entryPoints["luotsi help output"], StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --last --artifacts artifacts/smoke-run --check", entryPoints["luotsi help output"], StringComparison.Ordinal);
         Assert.Contains("Output envelopes", readme, StringComparison.Ordinal);
-        Assert.Contains("luotsi replay open --artifacts <artifact-root> --dry-run", readme, StringComparison.Ordinal);
+        Assert.Contains("luotsi replay packet --artifacts <artifact-root>", readme, StringComparison.Ordinal);
         Assert.Contains("Artifact roots are durable evidence", readme, StringComparison.Ordinal);
         Assert.Contains("generic artifact browser", entryPoints["first-five-minutes.mdx"], StringComparison.Ordinal);
         Assert.Contains("generic artifact browser", entryPoints["output-envelopes.mdx"], StringComparison.Ordinal);
@@ -507,10 +532,13 @@ public sealed partial class AppTests
             "core-workflows/replay-and-artifacts.mdx",
             "reference/replay-graph-and-clusters.mdx");
 
-        Assert.Contains("The default action list includes `replay open`", markdown, StringComparison.Ordinal);
         Assert.Contains("`replay packet` is the canonical first stop", markdown, StringComparison.Ordinal);
+        Assert.Contains("The public distinction that matters is", markdown, StringComparison.Ordinal);
         Assert.Contains("`replay open` is the browser-free replay front door", markdown, StringComparison.Ordinal);
-        Assert.Contains("At a Glance summary, failure snapshot, packet gate, copy-paste triage commands", markdown, StringComparison.Ordinal);
+        Assert.Contains("At a Glance summary, failure snapshot, focused evidence files", markdown, StringComparison.Ordinal);
+        Assert.Contains("packet gate, copy-paste triage commands", markdown, StringComparison.Ordinal);
+        Assert.Contains("copy_paste` block that starts with the packet validation gate command", markdown, StringComparison.Ordinal);
+        Assert.Contains("focused evidence files", markdown, StringComparison.Ordinal);
         Assert.Contains("luotsi replay packet --artifacts ./artifacts/my-run", markdown, StringComparison.Ordinal);
         Assert.Contains("run-summary.json", markdown, StringComparison.Ordinal);
         Assert.Contains("docs/schemas/luotsi-run-summary-v1.md", markdown, StringComparison.Ordinal);
@@ -518,7 +546,8 @@ public sealed partial class AppTests
         Assert.Contains("browser-free replay front door", markdown, StringComparison.Ordinal);
         Assert.Contains("before raw artifact browsing", markdown, StringComparison.Ordinal);
         Assert.Contains("`replay capsule` is the shareable CI-triage summary after the replay front door", markdown, StringComparison.Ordinal);
-        AssertContainsBefore(markdown, "luotsi replay open --artifacts ./artifacts/my-run --dry-run", "luotsi replay graph --artifacts ./artifacts/my-run");
+        AssertContainsBefore(markdown, "luotsi replay packet --artifacts ./artifacts/my-run", "luotsi replay open --artifacts ./artifacts/my-run --dry-run");
+        AssertContainsBefore(markdown, "luotsi replay packet --artifacts ./artifacts/my-run --check", "luotsi replay open --artifacts ./artifacts/my-run --dry-run");
         AssertContainsBefore(markdown, "luotsi replay open --artifacts ./artifacts/failing-run --dry-run", "luotsi replay capsule --artifacts ./artifacts/failing-run");
         Assert.DoesNotContain("`replay capsule` is the operator-facing entry point", markdown, StringComparison.Ordinal);
         Assert.DoesNotContain("`replay capsule` is the CI-triage entry point", markdown, StringComparison.Ordinal);
@@ -539,16 +568,52 @@ public sealed partial class AppTests
         Assert.Contains("## At a Glance", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("## Failure Snapshot", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("`failureSnapshot`", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("\"failureSnapshot\": {", schemaGuide, StringComparison.Ordinal);
+        AssertContainsBefore(schemaGuide, "\"failureSnapshot\": {", "\"primaryFailure\": {");
+        Assert.Contains("## Evidence Files", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("`evidenceFiles`", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("\"evidenceFiles\": [", schemaGuide, StringComparison.Ordinal);
+        AssertContainsBefore(schemaGuide, "\"failureSnapshot\": {", "\"evidenceFiles\": [");
+        AssertContainsBefore(schemaGuide, "\"evidenceFiles\": [", "\"primaryFailure\": {");
         Assert.Contains("matches `primaryFailure`", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("## Packet Gate", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("packet validation gate command", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("starts with the packet validation gate command", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("copy-paste block that omits the packet validation gate command", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("60-second triage checklist", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("`## Commands` section with every structured command and description", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("identity values for generated timestamp, artifact root, status, verdict, session", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("`luotsi-run-summary-check.v1`", schemaGuide, StringComparison.Ordinal);
-        Assert.Contains("recommendedNextActionCommand", schemaGuide, StringComparison.Ordinal);
-        Assert.Contains("packetPath", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("Because the check result is returned inside the normal Luotsi command envelope", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("`recommended_next_action_command`", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("`packet_path`", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("`primary_failure`", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("`evidence_files` | array | Focused evidence files copied from the packet", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("`commands` | array | Additional exact replay commands copied from the packet", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("`recommended_next_action`, `failure_snapshot`", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("repeats `recommended_next_action`, `recommended_next_action_command`, `failure_snapshot`, `evidence_files`, `triage_checklist`, `primary_failure`, and `commands`", schemaGuide, StringComparison.Ordinal);
+        Assert.DoesNotContain("with `recommendedNextActionCommand`,", schemaGuide, StringComparison.Ordinal);
+        Assert.DoesNotContain("repeats `recommendedNextAction`, `recommendedNextActionCommand`", schemaGuide, StringComparison.Ordinal);
+        Assert.DoesNotContain("| `recommendedNextActionCommand` |", schemaGuide, StringComparison.Ordinal);
+        Assert.DoesNotContain("| `packetPath` |", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("Consumers should accept both camelCase artifact JSON fields and snake_case command-envelope fields", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("replay packet --check", schemaGuide, StringComparison.Ordinal);
         Assert.Contains("must exit non-zero for missing JSON", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("Markdown checklist contains the structured checklist actions and rationales", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("`## First Action` section repeats the recommended action title, kind", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("`## Primary Failure` section carries the", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("verifies that the evidence file exists before handoff", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("listed in `evidenceFiles`", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("a primary failure whose `primaryFailure.timelinePath` or `primaryFailure.failureCapsulePath` points at a missing evidence file", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("missing or invalid `generatedAt`", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("missing `commands`", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("missing `evidenceFiles`", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("Markdown without packet identity values for generated timestamp, artifact root, status, verdict, session count, or failure count", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("Markdown checklist that omits structured checklist actions or rationales", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("Markdown without the evidence files section or any structured evidence file value", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("Markdown without the commands section or any structured command value", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("Markdown without the first action explanation", schemaGuide, StringComparison.Ordinal);
+        Assert.Contains("Markdown without the primary failure detail section", schemaGuide, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -571,7 +636,8 @@ public sealed partial class AppTests
         Assert.Contains("GitHub Actions job summary", markdown, StringComparison.Ordinal);
         Assert.Contains("fallback summary", markdown, StringComparison.Ordinal);
         Assert.Contains("scenario run exit code", markdown, StringComparison.Ordinal);
-        Assert.Contains("primary failure", markdown, StringComparison.Ordinal);
+        Assert.Contains("failure snapshot", markdown, StringComparison.Ordinal);
+        Assert.Contains("focused evidence files", markdown, StringComparison.Ordinal);
         Assert.Contains("recommended next action", markdown, StringComparison.Ordinal);
         Assert.Contains("do not yet surface `--claim-wait-sec`, `--device-pool`, or `--require-capabilities`", markdown, StringComparison.Ordinal);
 
@@ -601,6 +667,231 @@ public sealed partial class AppTests
         Assert.Contains("Add-RunSummaryToGitHubStepSummary", powershellScript, StringComparison.Ordinal);
         Assert.Contains("GITHUB_STEP_SUMMARY", powershellScript, StringComparison.Ordinal);
         Assert.DoesNotContain("Invoke-Luotsi replay summarize", powershellScript, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Portable_Ci_Bash_Script_Preserves_Run_Failure_And_Appends_Checked_Run_Summary()
+    {
+        if (!TryFindExecutable("bash", out var bash))
+        {
+            return;
+        }
+
+        var root = FindRepositoryRoot();
+        var tempRoot = Path.Join(Path.GetTempPath(), $"luotsi-ci-script-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempRoot);
+        try
+        {
+            var fakeLuotsi = Path.Join(tempRoot, "luotsi-fake");
+            var commandLog = Path.Join(tempRoot, "commands.log");
+            var stepSummary = Path.Join(tempRoot, "github-step-summary.md");
+            File.WriteAllText(fakeLuotsi, """
+                #!/usr/bin/env bash
+                set -euo pipefail
+
+                printf '%s\n' "$*" >> "$LUOTSI_FAKE_LOG"
+
+                artifact_root=""
+                previous=""
+                for argument in "$@"; do
+                  if [[ "$previous" == "--artifacts" ]]; then
+                    artifact_root="$argument"
+                  fi
+                  previous="$argument"
+                done
+
+                if [[ "$1" == "version" || "$1 $2" == "lab status" || "$1 $2" == "lab plan" || "$1" == "scenario-validate" ]]; then
+                  exit 0
+                fi
+
+                if [[ "$1" == "run" ]]; then
+                  mkdir -p "$artifact_root"
+                  exit 23
+                fi
+
+                if [[ "$1 $2" == "replay packet" ]]; then
+                  mkdir -p "$artifact_root"
+                  if [[ " $* " == *" --check "* ]]; then
+                    test -f "$artifact_root/run-summary.md"
+                    exit 0
+                  fi
+
+                  cat > "$artifact_root/run-summary.md" <<'SUMMARY'
+                # Luotsi Run Summary
+
+                ## At a Glance
+
+                - Status: `needs_triage`
+                - Next command: `luotsi replay scrub --artifacts artifacts/luotsi-lab --failures --context 3 --write-markdown`
+
+                ## Packet Gate
+
+                ```bash
+                luotsi replay packet --artifacts artifacts/luotsi-lab --check
+                ```
+
+                ## 60-Second Triage Checklist
+
+                1. Run the recommended packet command.
+                SUMMARY
+                  exit 0
+                fi
+
+                echo "unexpected fake luotsi command: $*" >&2
+                exit 64
+                """);
+            MakeExecutable(fakeLuotsi);
+
+            var result = RunProcessCore(
+                bash,
+                [Path.Join(root, "eng", "ci", "run-lab-scenarios.sh")],
+                string.Empty,
+                tempRoot,
+                new Dictionary<string, string?>
+                {
+                    ["LUOTSI_BIN"] = fakeLuotsi,
+                    ["LUOTSI_FAKE_LOG"] = commandLog,
+                    ["LUOTSI_ARTIFACTS_DIR"] = "artifacts/luotsi-lab",
+                    ["LUOTSI_SCENARIO_PATH"] = "scenarios",
+                    ["LUOTSI_DEVICE_QUERY"] = "state=online",
+                    ["GITHUB_STEP_SUMMARY"] = stepSummary
+                });
+
+            Assert.Equal(23, result.ExitCode);
+            var log = File.ReadAllText(commandLog);
+            Assert.Contains("run --path scenarios --device-query state=online --claim-device", log, StringComparison.Ordinal);
+            Assert.Contains("replay packet --artifacts artifacts/luotsi-lab", log, StringComparison.Ordinal);
+            Assert.Contains("replay packet --artifacts artifacts/luotsi-lab --check", log, StringComparison.Ordinal);
+            AssertContainsBefore(log, "run --path scenarios", "replay packet --artifacts artifacts/luotsi-lab");
+            AssertContainsBefore(log, "replay packet --artifacts artifacts/luotsi-lab", "replay packet --artifacts artifacts/luotsi-lab --check");
+            var summary = File.ReadAllText(stepSummary);
+            Assert.Contains("## Luotsi Run Summary", summary, StringComparison.Ordinal);
+            Assert.Contains("## At a Glance", summary, StringComparison.Ordinal);
+            Assert.Contains("## Packet Gate", summary, StringComparison.Ordinal);
+            Assert.Contains("## 60-Second Triage Checklist", summary, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void Portable_Ci_PowerShell_Script_Preserves_Run_Failure_And_Appends_Checked_Run_Summary()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        if (!TryFindExecutable("pwsh", out var pwsh))
+        {
+            return;
+        }
+
+        var root = FindRepositoryRoot();
+        var tempRoot = Path.Join(Path.GetTempPath(), $"luotsi-ci-script-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempRoot);
+        try
+        {
+            var fakeLuotsi = Path.Join(tempRoot, "luotsi-fake");
+            var commandLog = Path.Join(tempRoot, "commands.log");
+            var stepSummary = Path.Join(tempRoot, "github-step-summary.md");
+            File.WriteAllText(fakeLuotsi, """
+                #!/usr/bin/env bash
+                set -euo pipefail
+
+                printf '%s\n' "$*" >> "$LUOTSI_FAKE_LOG"
+
+                artifact_root=""
+                previous=""
+                for argument in "$@"; do
+                  if [[ "$previous" == "--artifacts" ]]; then
+                    artifact_root="$argument"
+                  fi
+                  previous="$argument"
+                done
+
+                if [[ "$1" == "version" || "$1 $2" == "lab status" || "$1 $2" == "lab plan" || "$1" == "scenario-validate" ]]; then
+                  exit 0
+                fi
+
+                if [[ "$1" == "run" ]]; then
+                  mkdir -p "$artifact_root"
+                  exit 23
+                fi
+
+                if [[ "$1 $2" == "replay packet" ]]; then
+                  mkdir -p "$artifact_root"
+                  if [[ " $* " == *" --check "* ]]; then
+                    test -f "$artifact_root/run-summary.md"
+                    exit 0
+                  fi
+
+                  cat > "$artifact_root/run-summary.md" <<'SUMMARY'
+                # Luotsi Run Summary
+
+                ## At a Glance
+
+                - Status: `needs_triage`
+                - Next command: `luotsi replay scrub --artifacts artifacts/luotsi-lab --failures --context 3 --write-markdown`
+
+                ## Packet Gate
+
+                ```bash
+                luotsi replay packet --artifacts artifacts/luotsi-lab --check
+                ```
+
+                ## 60-Second Triage Checklist
+
+                1. Run the recommended packet command.
+                SUMMARY
+                  exit 0
+                fi
+
+                echo "unexpected fake luotsi command: $*" >&2
+                exit 64
+                """);
+            MakeExecutable(fakeLuotsi);
+
+            var result = RunProcessCore(
+                pwsh,
+                ["-NoLogo", "-NoProfile", "-File", Path.Join(root, "eng", "ci", "run-lab-scenarios.ps1")],
+                string.Empty,
+                tempRoot,
+                new Dictionary<string, string?>
+                {
+                    ["LUOTSI_BIN"] = fakeLuotsi,
+                    ["LUOTSI_FAKE_LOG"] = commandLog,
+                    ["LUOTSI_ARTIFACTS_DIR"] = "artifacts/luotsi-lab",
+                    ["LUOTSI_SCENARIO_PATH"] = "scenarios",
+                    ["LUOTSI_DEVICE_QUERY"] = "state=online",
+                    ["GITHUB_STEP_SUMMARY"] = stepSummary
+                });
+
+            Assert.Equal(23, result.ExitCode);
+            var log = File.ReadAllText(commandLog);
+            Assert.Contains("run --path scenarios --device-query state=online --claim-device", log, StringComparison.Ordinal);
+            Assert.Contains("replay packet --artifacts artifacts/luotsi-lab", log, StringComparison.Ordinal);
+            Assert.Contains("replay packet --artifacts artifacts/luotsi-lab --check", log, StringComparison.Ordinal);
+            AssertContainsBefore(log, "run --path scenarios", "replay packet --artifacts artifacts/luotsi-lab");
+            AssertContainsBefore(log, "replay packet --artifacts artifacts/luotsi-lab", "replay packet --artifacts artifacts/luotsi-lab --check");
+            var summary = File.ReadAllText(stepSummary);
+            Assert.Contains("## Luotsi Run Summary", summary, StringComparison.Ordinal);
+            Assert.Contains("## At a Glance", summary, StringComparison.Ordinal);
+            Assert.Contains("## Packet Gate", summary, StringComparison.Ordinal);
+            Assert.Contains("## 60-Second Triage Checklist", summary, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
     }
 
     [Fact]
@@ -734,6 +1025,12 @@ public sealed partial class AppTests
             """{"schema":"luotsi-command.v1","ok":true,"data":{"artifact_commands":[{"kind":"replay_open","command":"luotsi replay open --artifacts /tmp/before-packet"}]},"artifacts":{"artifact_root":"/tmp/before-packet"}}""",
             runSummaryJson
         ]);
+        var looseJsonlLog = string.Join(Environment.NewLine, [
+            "agent preface",
+            """{"ok":true,"data":{},"artifacts":{"artifact_root":"/tmp/loose-jsonl-root"}}""",
+            """{"type":"command_result","id":"tap-1","ok":true}"""
+        ]);
+        const string expectedFromLooseJsonlLog = "luotsi replay packet --artifacts /tmp/loose-jsonl-root";
 
         var executed = 0;
         if (TryFindExecutable("python3", "python", out var python))
@@ -751,6 +1048,7 @@ public sealed partial class AppTests
             Assert.Equal(expectedFromRunSummaryChecklistOnly, RunProcess(python, [script], runSummaryChecklistOnlyJson));
             Assert.Equal(expectedFromRunSummaryCheck, RunProcess(python, [script], runSummaryCheckEnvelopeJson));
             Assert.Equal(expectedFromRunSummary, RunProcess(python, [script], runSummaryJsonlLog));
+            Assert.Equal(expectedFromLooseJsonlLog, RunProcess(python, [script], looseJsonlLog));
             var failure = RunProcessExpectingFailure(python, [script], "not json");
             Assert.Contains("extract-next-command: stdin did not contain a Luotsi command envelope or run summary", failure.StandardError, StringComparison.Ordinal);
             Assert.DoesNotContain("Traceback", failure.StandardError, StringComparison.Ordinal);
@@ -772,6 +1070,7 @@ public sealed partial class AppTests
             Assert.Equal(expectedFromRunSummaryChecklistOnly, RunProcess(node, [script], runSummaryChecklistOnlyJson));
             Assert.Equal(expectedFromRunSummaryCheck, RunProcess(node, [script], runSummaryCheckEnvelopeJson));
             Assert.Equal(expectedFromRunSummary, RunProcess(node, [script], runSummaryJsonlLog));
+            Assert.Equal(expectedFromLooseJsonlLog, RunProcess(node, [script], looseJsonlLog));
             var failure = RunProcessExpectingFailure(node, [script], "not json");
             Assert.Contains("extract-next-command: stdin did not contain a Luotsi command envelope or run summary", failure.StandardError, StringComparison.Ordinal);
             Assert.DoesNotContain("Error:", failure.StandardError, StringComparison.Ordinal);
@@ -1204,6 +1503,16 @@ public sealed partial class AppTests
 
     private static ScriptProcessResult RunProcessCore(string executable, IReadOnlyList<string> arguments, string standardInput)
     {
+        return RunProcessCore(executable, arguments, standardInput, workingDirectory: null, environment: null);
+    }
+
+    private static ScriptProcessResult RunProcessCore(
+        string executable,
+        IReadOnlyList<string> arguments,
+        string standardInput,
+        string? workingDirectory,
+        IReadOnlyDictionary<string, string?>? environment)
+    {
         var startInfo = new ProcessStartInfo(executable)
         {
             RedirectStandardInput = true,
@@ -1211,6 +1520,19 @@ public sealed partial class AppTests
             RedirectStandardError = true,
             UseShellExecute = false
         };
+        if (!string.IsNullOrWhiteSpace(workingDirectory))
+        {
+            startInfo.WorkingDirectory = workingDirectory;
+        }
+
+        if (environment is not null)
+        {
+            foreach (var (name, value) in environment)
+            {
+                startInfo.Environment[name] = value;
+            }
+        }
+
         foreach (var argument in arguments)
         {
             startInfo.ArgumentList.Add(argument);
@@ -1223,6 +1545,28 @@ public sealed partial class AppTests
         var stderr = process.StandardError.ReadToEnd();
         Assert.True(process.WaitForExit(10_000), $"{executable} did not exit within 10 seconds.");
         return new ScriptProcessResult(process.ExitCode, stdout, stderr);
+    }
+
+    private static void MakeExecutable(string path)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        try
+        {
+            File.SetUnixFileMode(
+                path,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+                UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+                UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+        }
+        catch (Exception ex) when (ex is PlatformNotSupportedException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        {
+            var result = RunProcessCore("chmod", ["755", path], string.Empty);
+            Assert.Equal(0, result.ExitCode);
+        }
     }
 
     private static ProcessProbeResult RunProcessForProbe(string executable, IReadOnlyList<string> arguments)

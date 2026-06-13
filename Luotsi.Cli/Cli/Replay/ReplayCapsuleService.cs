@@ -142,6 +142,8 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
         bool scenarioDraftAvailable,
         ReplayCapsuleScenarioDraftArtifacts scenarioDraftArtifacts)
     {
+        yield return new ReplayCapsuleCommandHint($"luotsi replay packet --artifacts {Quote(artifactRoot)}", "Write the durable first-minute packet for this artifact root.");
+        yield return new ReplayCapsuleCommandHint($"luotsi replay packet --artifacts {Quote(artifactRoot)} --check", "Validate the durable packet before handoff or deeper replay.");
         yield return new ReplayCapsuleCommandHint($"luotsi replay open --artifacts {Quote(artifactRoot)}", "Open the replay front door with primary failure, next action, and follow-up commands.");
         yield return new ReplayCapsuleCommandHint($"luotsi replay summarize --artifacts {Quote(artifactRoot)}", "Read session summaries and failure capsule links.");
         yield return new ReplayCapsuleCommandHint(
@@ -248,6 +250,26 @@ internal sealed class ReplayCapsuleService(IFileSystem fileSystem)
             {
                 yield return cluster;
             }
+        }
+
+        var packet = new ReplayCapsuleNextStep(
+            "replay_packet",
+            "Write the first-minute packet",
+            "Use this before broad replay so humans and agents share the same durable run-summary files.",
+            $"luotsi replay packet --artifacts {Quote(artifactRoot)}");
+        if (TryMarkRecommendedStep(packet, emittedKinds, emittedCommands))
+        {
+            yield return packet;
+        }
+
+        var packetCheck = new ReplayCapsuleNextStep(
+            "replay_packet_check",
+            "Validate the first-minute packet",
+            "Use this when the bundle came from CI, support, or another agent.",
+            $"luotsi replay packet --artifacts {Quote(artifactRoot)} --check");
+        if (TryMarkRecommendedStep(packetCheck, emittedKinds, emittedCommands))
+        {
+            yield return packetCheck;
         }
 
         var open = new ReplayCapsuleNextStep(

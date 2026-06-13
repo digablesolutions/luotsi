@@ -51,7 +51,7 @@ def read_envelope(text: str) -> dict[str, Any]:
             item = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if is_command_envelope(item) or is_run_summary(item):
+        if is_command_envelope(item) or is_run_summary(item) or is_loose_jsonl_command_envelope(item):
             envelopes.append(item)
 
     if envelopes:
@@ -71,6 +71,10 @@ def is_loose_command_envelope(value: Any) -> bool:
         or "data" in value
         or "artifacts" in value
     )
+
+
+def is_loose_jsonl_command_envelope(value: Any) -> bool:
+    return isinstance(value, dict) and ("data" in value or "artifacts" in value)
 
 
 def is_run_summary(value: Any) -> bool:

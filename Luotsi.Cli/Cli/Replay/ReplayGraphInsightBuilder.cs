@@ -24,6 +24,8 @@ internal static class ReplayGraphInsightBuilder
     {
         var actions = new List<ReplayGraphActionResult>
         {
+            new("write_replay_packet", "Write run-summary.json and run-summary.md for the durable first-minute packet.", $"luotsi replay packet --artifacts {Quote(artifactRoot)}"),
+            new("check_replay_packet", "Validate the durable first-minute packet before handoff.", $"luotsi replay packet --artifacts {Quote(artifactRoot)} --check"),
             new("open_replay_front_door", "Open the replay front door with primary failure, artifacts, and recommended next steps.", $"luotsi replay open --artifacts {Quote(artifactRoot)} --dry-run"),
             new("write_replay_capsule", "Write the replay capsule README and JSON summary.", $"luotsi replay capsule --artifacts {Quote(artifactRoot)} --write-readme --write-json"),
             new("scrub_failures", "Review the failure timeline with previous/focused/next context.", $"luotsi replay scrub --artifacts {Quote(artifactRoot)} --failures --context 3 --write-markdown"),

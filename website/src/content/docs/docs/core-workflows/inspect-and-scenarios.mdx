@@ -72,7 +72,7 @@ Use `inspect` first when the flow is still changing and needs step-by-step agent
 
 ## Where replay fits
 
-Scenario runs and long-lived sessions write artifact roots on purpose. Once a flow has been codified, use `luotsi artifacts list` to rediscover recent runs, then start replay-specific triage with `replay open`, `replay summarize`, or `replay timeline` after the device session ends. Use `artifacts open` only when you specifically need the generic browser.
+Scenario runs and long-lived sessions write artifact roots on purpose. Once a flow has been codified, use `luotsi artifacts list` to rediscover recent runs, then start replay-specific triage with `replay packet` so the run has a durable `run-summary.json` and `run-summary.md` before moving into `replay open`, `replay summarize`, or `replay timeline`. Use `artifacts open` only when you specifically need the generic browser.
 
 ## Next steps
 

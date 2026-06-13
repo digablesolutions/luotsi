@@ -230,6 +230,16 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
         }
 
         hints.Add(new ReplayFailureClusterHintResult(
+            "write_best_replay_packet",
+            "Write the durable first-minute packet for the best representative failure.",
+            $"luotsi replay packet --artifacts {Quote(representativeRoot)}"));
+
+        hints.Add(new ReplayFailureClusterHintResult(
+            "check_best_replay_packet",
+            "Validate the durable packet before handing off or opening broader replay surfaces.",
+            $"luotsi replay packet --artifacts {Quote(representativeRoot)} --check"));
+
+        hints.Add(new ReplayFailureClusterHintResult(
             "inspect_best_failure_graph",
             "Open the semantic graph for the best representative failure in this cluster.",
             $"luotsi replay graph --artifacts {Quote(representativeRoot)} --failed --write-json --write-markdown"));
@@ -582,6 +592,18 @@ internal sealed class ReplayClusterService(IFileSystem fileSystem)
         builder.AppendLine($"- Similarity: `{EscapeMarkdown(cluster.Intelligence.Similarity)}` (`{cluster.Intelligence.SimilarityScore:0.##}`)");
         builder.AppendLine($"- Likely cause: {EscapeMarkdown(cluster.Intelligence.LikelyCause)}");
         builder.AppendLine($"- Best replay bundle: `{EscapeMarkdown(cluster.Intelligence.BestReplayArtifactRoot)}`");
+        var packetHint = cluster.Hints.FirstOrDefault(static hint => string.Equals(hint.Kind, "write_best_replay_packet", StringComparison.Ordinal));
+        if (packetHint is not null)
+        {
+            builder.AppendLine($"- Write packet: `{EscapeMarkdown(packetHint.Command)}`");
+        }
+
+        var packetCheckHint = cluster.Hints.FirstOrDefault(static hint => string.Equals(hint.Kind, "check_best_replay_packet", StringComparison.Ordinal));
+        if (packetCheckHint is not null)
+        {
+            builder.AppendLine($"- Check packet: `{EscapeMarkdown(packetCheckHint.Command)}`");
+        }
+
         var openHint = cluster.Hints.FirstOrDefault(static hint => string.Equals(hint.Kind, "open_best_replay", StringComparison.Ordinal));
         if (openHint is not null)
         {

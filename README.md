@@ -81,7 +81,7 @@ luotsi doctor --device <serial> --package <app.id> --fix
 | Human/operator device loop | `luotsi view --device <serial>` | [Live view](https://digablesolutions.github.io/luotsi/docs/core-workflows/live-view/) |
 | AI agent exploration | `luotsi inspect --device <serial>` | [AI agent workflows](https://digablesolutions.github.io/luotsi/docs/core-workflows/ai-agent-workflows/) |
 | Repeatable scenario CI | `luotsi scenario-init`, `luotsi scenario-validate`, `luotsi run` | [Scenario playbooks](https://digablesolutions.github.io/luotsi/docs/reference/scenario-playbooks/) |
-| Evidence review after a run | `luotsi replay open --artifacts <artifact-root> --dry-run` | [Replay and artifacts](https://digablesolutions.github.io/luotsi/docs/core-workflows/replay-and-artifacts/) |
+| Evidence review after a run | `luotsi replay packet --artifacts <artifact-root>` | [Replay and artifacts](https://digablesolutions.github.io/luotsi/docs/core-workflows/replay-and-artifacts/) |
 | Shared lab execution | `luotsi run --claim-device --claim-wait-sec 60 ...` | [Shared lab operations](https://digablesolutions.github.io/luotsi/docs/reference/shared-lab-operations/) |
 | Android CLI Journey handoff | `luotsi journey-intake init ...` | [Evidence-backed Android Journeys](https://digablesolutions.github.io/luotsi/docs/core-workflows/evidence-backed-android-journeys/) |
 
@@ -103,7 +103,7 @@ luotsi artifacts verify <artifact.zip> --require-lab-safe --sha256 <digest>
 
 ## Output Model
 
-Normal commands return one JSON envelope by default. Human output is available with `--human` or `--console-output human`; JSONL sessions are used by `inspect` and `view`. Artifact roots are durable evidence, and replay commands reopen them later.
+Normal commands return one JSON envelope by default. Human output is available with `--human` or `--console-output human`; JSONL sessions are used by `inspect` and `view`. Artifact roots are durable evidence, and `luotsi replay packet --artifacts <artifact-root>` writes the first-minute investigation packet before replay commands reopen them later.
 
 Read the full model in [Output envelopes](https://digablesolutions.github.io/luotsi/docs/reference/output-envelopes/).
 

@@ -25,7 +25,7 @@ Luotsi has three main output shapes.
 |---|---|---|
 | One JSON envelope | Most commands, including `devices`, `doctor`, `screen-state`, and normal `run` output | Check `ok`, then inspect `data`, `artifacts`, `provenance`, and `error`. |
 | JSONL session stream | `inspect`, and `view --json` / `view -o jsonl` | Read each line as an event. Match command responses by `id`. |
-| Replay artifact root | Scenario runs, inspect sessions, view sessions, and captured failure bundles | Reopen it later with `replay open`, `replay summarize`, `replay timeline`, or `replay graph`. |
+| Replay artifact root | Scenario runs, inspect sessions, view sessions, and captured failure bundles | Packet it later with `replay packet`, validate it with `replay packet --check`, then move into `replay open`, `replay summarize`, `replay timeline`, or `replay graph`. |
 
 If you are not sure what to do next, look for an artifact path first. Luotsi is designed so live device work can turn into replayable evidence.
 
@@ -75,7 +75,7 @@ For scripts and CI, treat `ok` plus the process exit code as the first gate, the
 
 To find the next command in structured output, check these fields in order:
 
-1. `data.recommended_next_action_command` or `data.recommendedNextActionCommand` when a check result exposes the direct continuation command.
+1. `data.recommended_next_action_command` when a check result exposes the direct continuation command; command-envelope `data` fields use snake_case.
 2. `data.recommended_next_action.command` when present.
 3. `data.primary_failure.source_command` or `data.primaryFailure.sourceCommand` when a packet/check result has focused failure evidence but no recommended action.
 4. `data.triage_checklist[].command` or `data.triageChecklist[].command` when a packet/check exposes a structured first-minute checklist.
@@ -134,6 +134,8 @@ When a scenario fails, do not start by rerunning blindly. Start from the artifac
 
 ```bash
 luotsi run --file scenarios/smoke.json --device <serial> --artifacts ./artifacts/smoke-run
+luotsi replay packet --last --artifacts ./artifacts/smoke-run
+luotsi replay packet --last --artifacts ./artifacts/smoke-run --check
 luotsi replay open --last --artifacts ./artifacts/smoke-run --dry-run
 luotsi replay summarize --artifacts ./artifacts/smoke-run/<run-id>
 luotsi replay graph --artifacts ./artifacts/smoke-run/<run-id> --failed --write-markdown
@@ -155,7 +157,7 @@ Use this sequence to answer:
 | Human debugging live | `view`, `screen-state`, human summaries, artifact browser | What do I see, and where are the artifacts? |
 | AI agent exploring | `inspect` JSONL and artifact roots | What event arrived, and what command should I send next? |
 | CI job | JSON envelopes, JUnit, policy fields, replay summaries | Did the run pass, and what evidence should be uploaded? |
-| Reviewer after failure | `replay open`, `replay graph`, capsules, timelines | What proof explains the failure without reconnecting the device? |
+| Reviewer after failure | `replay packet`, `replay open`, graphs, capsules, timelines | What proof explains the failure without reconnecting the device? |
 
 ## Command Map
 
@@ -176,6 +178,8 @@ luotsi inspect --device <serial> --artifacts artifacts/inspect
 luotsi run --file scenarios/smoke.json --device <serial> --artifacts ./artifacts/smoke-run
 
 # Reopen saved evidence.
+luotsi replay packet --last --artifacts ./artifacts/smoke-run
+luotsi replay packet --last --artifacts ./artifacts/smoke-run --check
 luotsi replay open --last --artifacts ./artifacts/smoke-run --dry-run
 luotsi replay graph --artifacts ./artifacts/smoke-run/<run-id> --failed
 ```

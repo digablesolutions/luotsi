@@ -50,7 +50,7 @@ export function readEnvelope(text) {
 
     try {
       const item = JSON.parse(line);
-      if (isCommandEnvelope(item) || isRunSummary(item)) {
+      if (isCommandEnvelope(item) || isRunSummary(item) || isLooseJsonlCommandEnvelope(item)) {
         envelopes.push(item);
       }
     } catch {
@@ -102,6 +102,10 @@ function isLooseCommandEnvelope(value) {
     'ok' in value ||
     'data' in value ||
     'artifacts' in value));
+}
+
+function isLooseJsonlCommandEnvelope(value) {
+  return isObject(value) && ('data' in value || 'artifacts' in value);
 }
 
 function extractNextCommandFromObject(value, fallbackArtifactRoot = null) {

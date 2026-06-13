@@ -7,31 +7,38 @@ for CI job summaries, PR comments, and agent loops when a failed run needs to be
 understood before opening raw artifacts.
 
 `run-summary.md` is the human-readable companion generated from the same model.
-It starts with an At a Glance summary, then a failure snapshot, then a packet
-validation gate, then a copy-paste command block followed by a 60-second triage
-checklist so a new reviewer can see what failed, prove the packet is current,
-run the first command, and avoid broad artifact browsing until the focused
-failure window is understood. Agents should prefer `run-summary.json`; humans can start with the
-Markdown job summary and then follow the same command fields.
+It starts with an At a Glance summary, then a failure snapshot, then focused
+evidence files, then a packet validation gate, then a copy-paste command block
+followed by a 60-second triage checklist so a new reviewer can see what failed,
+which files prove it, prove the packet is current, copy one self-contained
+command block, and avoid broad artifact browsing until the focused failure
+window is understood.
+Agents should prefer `run-summary.json`; humans can start with the Markdown job
+summary and then follow the same command fields.
 
 Use `luotsi replay packet --artifacts <artifact-root> --check` when CI, support,
 or an agent receives an artifact root and needs to prove that the existing
 packet is present, readable, points at the checked artifact root, and has a
 Markdown companion before continuing. The check also verifies that the refreshed
-artifact index entry points exist and that `run-summary.md` contains the
-`## At a Glance` section with the status, recommended next command, and focused
-evidence command when a primary failure exists, the `## Failure Snapshot`
-section with the primary failure's session, reason, target, scenario, step,
-action, and message values when present, the `## Packet Gate` section with the exact
-`luotsi replay packet --artifacts <artifact-root> --check` command, the
-copy-paste triage command block, the non-null checklist commands inside that
-block, the 60-second triage checklist, and the same recommended command as
-`run-summary.json`. When `primaryFailure` is present, the check also requires
-`primaryFailure.sourceCommand` to be present in both the structured checklist
-and Markdown packet. A successful check returns `luotsi-run-summary-check.v1`
-with `recommendedNextActionCommand`, `recommendedNextAction`,
-`triageChecklist`, and `primaryFailure` copied from the packet so validation can
-feed directly into the next agent command.
+artifact index entry points exist and that `run-summary.md` contains the packet
+identity values for generated timestamp, artifact root, status, verdict, session
+count, and failure count, the `## At a Glance` section with the status,
+recommended next command, and focused evidence command when a primary failure
+exists, the `## Failure Snapshot` section with the primary failure's session,
+reason, target, scenario, step, action, and message values when present, the
+`## Evidence Files` section with every structured evidence kind, path, and
+description, the existence of each structured evidence file,
+`## Packet Gate` section with the exact `luotsi replay packet --artifacts
+<artifact-root> --check` command, the copy-paste triage command block, the
+packet validation gate command plus non-null checklist commands inside that
+block, the 60-second triage checklist,
+the `## Commands` section with every structured command and description, and the
+same recommended command as `run-summary.json`. When `primaryFailure` is present, the check also requires
+`primaryFailure.sourceCommand` to be present in both the structured checklist and
+Markdown packet. A successful check returns `luotsi-run-summary-check.v1` with
+`recommended_next_action_command`, `recommended_next_action`, `failure_snapshot`,
+`evidence_files`, `triage_checklist`, and `primary_failure` copied from the
+packet so validation can feed directly into the next agent command.
 
 ## Top-level fields
 
@@ -46,6 +53,7 @@ feed directly into the next agent command.
 | `failureCount` | integer | yes | Number of replay sessions with failure signals. |
 | `triageChecklist` | array | yes | Ordered machine-readable version of the 60-second triage checklist. |
 | `failureSnapshot` | object or null | yes | Compact first-screen summary copied from `primaryFailure` for agents and human job summaries. |
+| `evidenceFiles` | array | yes | Focused evidence files that prove or explain the primary failure. Empty when no primary failure exists. |
 | `primaryFailure` | object or null | yes | Best first failure to inspect, or `null` when no primary failure was found. |
 | `recommendedNextAction` | object | yes | One best next command for the first minute of triage. |
 | `entryPoints` | object | yes | Durable files written for this artifact root. |
@@ -56,26 +64,32 @@ feed directly into the next agent command.
 `luotsi replay packet --artifacts <artifact-root> --check` returns a normal
 Luotsi command envelope whose `data.schema` is `luotsi-run-summary-check.v1`.
 The check result is intentionally shaped like a continuation packet: agents can
-validate the existing files and keep following `recommendedNextAction.command`,
-`primaryFailure.sourceCommand`, or `triageChecklist[].command` without reopening
-`run-summary.json`.
+validate the existing files and keep following `recommended_next_action.command`,
+`primary_failure.source_command`, `triage_checklist[].command`, or `commands[]`
+without reopening `run-summary.json`.
+
+Because the check result is returned inside the normal Luotsi command envelope,
+its `data` fields use snake_case. The persisted `run-summary.json` packet uses
+the camelCase fields documented in the rest of this page.
 
 | Field | Type | Meaning |
 |---|---|---|
 | `schema` | string | Exact schema identifier. Current value: `luotsi-run-summary-check.v1`. |
-| `checkedAt` | string | RFC 3339 timestamp for when validation ran. |
-| `artifactRoot` | string | Artifact root that was checked. |
-| `packetPath` | string | Validated `run-summary.json` path. |
+| `checked_at` | string | RFC 3339 timestamp for when validation ran. |
+| `artifact_root` | string | Artifact root that was checked. |
+| `packet_path` | string | Validated `run-summary.json` path. |
 | `status` | string | Check status. Current success value: `valid`. |
-| `packetStatus` | string | Original packet `status`, such as `needs_triage`. |
-| `sessionCount` | integer | Session count copied from the packet. |
-| `failureCount` | integer | Failure count copied from the packet. |
-| `recommendedNextActionCommand` | string | Convenience copy of `recommendedNextAction.command`. |
-| `failureSnapshot` | object or null | Compact failure snapshot copied from the packet. |
-| `recommendedNextAction` | object | Next action copied from the packet. |
-| `triageChecklist` | array | Checklist copied from the packet. |
-| `primaryFailure` | object or null | Primary failure copied from the packet. |
-| `runSummaryMarkdownPath` | string | Validated `run-summary.md` path. |
+| `packet_status` | string | Original packet `status`, such as `needs_triage`. |
+| `session_count` | integer | Session count copied from the packet. |
+| `failure_count` | integer | Failure count copied from the packet. |
+| `recommended_next_action_command` | string | Convenience copy of `recommended_next_action.command`. |
+| `failure_snapshot` | object or null | Compact failure snapshot copied from the packet. |
+| `evidence_files` | array | Focused evidence files copied from the packet. |
+| `recommended_next_action` | object | Next action copied from the packet. |
+| `triage_checklist` | array | Checklist copied from the packet. |
+| `primary_failure` | object or null | Primary failure copied from the packet. |
+| `commands` | array | Additional exact replay commands copied from the packet. |
+| `run_summary_markdown_path` | string | Validated `run-summary.md` path. |
 
 ## `status`
 
@@ -95,13 +109,20 @@ or `entryPoints.indexHtmlPath`."
 the same 60-second path as humans.
 
 The Markdown packet starts with `## At a Glance`, then `## Failure Snapshot`,
-then `## Packet Gate`, a fenced `bash` block containing the exact
+then `## Evidence Files`, then `## Packet Gate`, a fenced `bash` block containing the exact
 `luotsi replay packet --artifacts <artifact-root> --check` command for this
 artifact root. It is followed by `## Copy-Paste Triage Commands`, a fenced
-`bash` block containing the non-null checklist commands in order. This is the
-fastest human handoff surface. `replay packet --check` verifies that the
-at-a-glance summary, snapshot, and gate command exist and that every non-null
-checklist command appears in the copy-paste block.
+`bash` block that starts with the packet validation gate command, followed by
+the non-null checklist commands in order. This is the fastest human handoff
+surface. `replay packet --check` verifies that the at-a-glance summary,
+snapshot, evidence files, and gate command exist and that the copy-paste block
+starts with the packet validation gate command and includes every non-null
+checklist command. It also
+verifies that the Markdown checklist contains the structured checklist actions and rationales,
+that the `## First Action` section repeats the recommended action title, kind,
+reason, and command, and that the `## Primary Failure` section carries the
+detailed primary failure values or explicitly says that no primary failure was
+found.
 
 Each checklist item uses:
 
@@ -135,6 +156,27 @@ present, verifies that it matches `primaryFailure`, and repeats it in
 `luotsi-run-summary-check.v1` so an agent can answer "what failed?" directly
 from the check envelope.
 
+## `evidenceFiles`
+
+`evidenceFiles` is the explicit first-minute file handoff for the focused
+failure. It is empty when `primaryFailure` is `null`. When timeline or failure
+capsule paths are present on `primaryFailure`, they must also appear here so
+agents do not need to infer which files matter from the larger primary failure
+object.
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `kind` | string | yes | Stable evidence kind, currently `timeline` or `failure_capsule`. |
+| `path` | string | yes | Exact path to the focused evidence file. |
+| `description` | string | yes | Why this file belongs in the first-minute packet. |
+
+`replay packet --check` requires `evidenceFiles` to be present, verifies each
+listed file exists, verifies that any `primaryFailure.timelinePath` and
+`primaryFailure.failureCapsulePath` are represented in the list, repeats the
+array in `luotsi-run-summary-check.v1`, and checks that `run-summary.md`
+contains a `## Evidence Files` section with every structured kind, path, and
+description.
+
 ## `primaryFailure`
 
 When present, `primaryFailure` identifies the replay session and the focused
@@ -157,12 +199,16 @@ failure evidence:
 | `failureCapsulePath` | Failure capsule JSON path when the run captured one. |
 | `sourceCommand` | Best available command to reopen the focused evidence. Prefer an exact timeline event command when available; otherwise Luotsi falls back to a capsule or timeline command so the primary failure remains actionable. |
 
+When `timelinePath` or `failureCapsulePath` is present, `replay packet --check`
+verifies that the evidence file exists before handoff and that the same path is
+listed in `evidenceFiles`.
+
 When `primaryFailure` is present, `run-summary.md` also starts with
-`## At a Glance` and `## Failure Snapshot` so a human reviewer sees the status,
-next command, focused evidence command, session, reason, target, scenario, step,
-action, and message before broader command lists. `replay packet --check`
-verifies that every non-empty value in that snapshot appears in the Markdown
-companion.
+`## At a Glance`, `## Failure Snapshot`, and `## Evidence Files` so a human
+reviewer sees the status, next command, focused evidence command, session,
+reason, target, scenario, step, action, message, and evidence file paths before
+broader command lists. `replay packet --check` verifies that every non-empty
+value in that snapshot and evidence list appears in the Markdown companion.
 
 ## `recommendedNextAction`
 
@@ -239,6 +285,27 @@ belongs in the broader command list. Consumers should still prefer
       "rationale": "Follow-up commands are useful after the first failure window is clear."
     }
   ],
+  "failureSnapshot": {
+    "sessionId": "checkout-20260610",
+    "reason": "failed",
+    "target": "emulator-5554",
+    "scenario": "checkout",
+    "step": "submit payment",
+    "action": "tap",
+    "message": "Expected confirmation text was not visible."
+  },
+  "evidenceFiles": [
+    {
+      "kind": "timeline",
+      "path": "session-timeline.jsonl",
+      "description": "Ordered replay events around the primary failure."
+    },
+    {
+      "kind": "failure_capsule",
+      "path": "failure-capsule.json",
+      "description": "Focused failure capsule with failed scenario, step, artifacts, and error."
+    }
+  ],
   "primaryFailure": {
     "sessionKind": "scenario",
     "sessionId": "checkout-20260610",
@@ -293,5 +360,5 @@ belongs in the broader command list. Consumers should still prefer
 - If `primaryFailure` is `null`, do not assume the run passed. Check `status`, `verdict`, and `sessionCount`.
 - If `primaryFailure.sourceCommand` is present, use it as the focused evidence command after `recommendedNextAction.command`. It should not be treated as broad artifact browsing; it is the packet's best path back to the failure evidence.
 - If `runSummaryJsonPath` or `runSummaryMarkdownPath` is `null`, the packet was returned in-memory by a command path that did not persist both files. Run `luotsi replay packet --artifacts <artifact-root>` to write them.
-- A successful `luotsi-run-summary-check.v1` result repeats `recommendedNextAction`, `recommendedNextActionCommand`, `failureSnapshot`, `triageChecklist`, and `primaryFailure` from the packet so consumers can continue from the check envelope without reopening `run-summary.json`.
-- `replay packet --check` is the contract gate for an existing packet. It must exit non-zero for missing JSON, invalid JSON, unsupported schema, stale `artifactRoot`, missing index entry points, missing `triageChecklist`, a first checklist item that does not point at `recommendedNextAction.command`, missing `recommendedNextAction.command`, a primary failure without `failureSnapshot`, a `failureSnapshot` that does not match `primaryFailure`, a primary failure without `primaryFailure.sourceCommand`, a checklist that omits `primaryFailure.sourceCommand`, missing `entryPoints.runSummaryJsonPath`, missing `entryPoints.runSummaryMarkdownPath`, a missing Markdown companion, Markdown without the at-a-glance summary, Markdown whose at-a-glance summary omits the recommended command or primary failure evidence command, Markdown without the failure snapshot, Markdown without the packet validation gate command, Markdown without the copy-paste triage command block, a copy-paste block that omits any non-null checklist command, Markdown without the 60-second triage checklist, Markdown that omits the JSON packet's recommended command, or Markdown that omits `primaryFailure.sourceCommand`.
+- A successful `luotsi-run-summary-check.v1` result repeats `recommended_next_action`, `recommended_next_action_command`, `failure_snapshot`, `evidence_files`, `triage_checklist`, `primary_failure`, and `commands` from the packet so consumers can continue from the check envelope without reopening `run-summary.json`.
+- `replay packet --check` is the contract gate for an existing packet. It must exit non-zero for missing JSON, invalid JSON, unsupported schema, stale `artifactRoot`, missing or invalid `generatedAt`, missing index entry points, missing `triageChecklist`, missing `commands`, missing `evidenceFiles`, a first checklist item that does not point at `recommendedNextAction.command`, missing `recommendedNextAction.command`, a primary failure without `failureSnapshot`, a `failureSnapshot` that does not match `primaryFailure`, a primary failure without `primaryFailure.sourceCommand`, a primary failure whose `primaryFailure.timelinePath` or `primaryFailure.failureCapsulePath` points at a missing evidence file or is omitted from `evidenceFiles`, a checklist that omits `primaryFailure.sourceCommand`, missing `entryPoints.runSummaryJsonPath`, missing `entryPoints.runSummaryMarkdownPath`, a missing Markdown companion, Markdown without packet identity values for generated timestamp, artifact root, status, verdict, session count, or failure count, Markdown without the at-a-glance summary, Markdown whose at-a-glance summary omits the recommended command or primary failure evidence command, Markdown without the failure snapshot, Markdown without the evidence files section or any structured evidence file value, Markdown without the packet validation gate command, Markdown without the copy-paste triage command block, a copy-paste block that omits the packet validation gate command, a copy-paste block that omits any non-null checklist command, Markdown without the 60-second triage checklist, a Markdown checklist that omits structured checklist actions or rationales, Markdown without the commands section or any structured command value, Markdown without the first action explanation or any recommended action value in that section, Markdown without the primary failure detail section or required primary failure detail values, Markdown that omits the JSON packet's recommended command, or Markdown that omits `primaryFailure.sourceCommand`.

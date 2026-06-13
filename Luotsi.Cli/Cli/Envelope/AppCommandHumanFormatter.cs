@@ -8,7 +8,7 @@ namespace Luotsi.Cli.Cli.Envelope;
 
 internal sealed class AppCommandHumanFormatter(IConsoleIo console)
 {
-    private const int MaxScalarLines = 16;
+    private const int MaxScalarLines = 24;
     private const int MaxArrayItems = 5;
 
     private readonly IConsoleIo _console = console ?? throw new ArgumentNullException(nameof(console));
@@ -449,9 +449,56 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
         AddPrimaryFailureSummaryFromProperty(lines, value, "primary_failure");
         AddNextStepTitle(lines, value);
         AddRecommendedCommandWithFallback(lines, value, artifacts);
+        AddRunSummaryCopyPasteCommands(lines, value, artifacts);
         AddTriageChecklistSummary(lines, value);
+        AddCommandHintSummary(lines, value);
         AddRunSummaryEntryPointSummary(lines, value);
         return lines;
+    }
+
+    private static void AddRunSummaryCopyPasteCommands(List<string> lines, JsonElement value, ArtifactData artifacts)
+    {
+        var artifactRoot = TryGetString(value, "artifact_root", "artifactRoot") ?? artifacts.ArtifactRoot;
+        if (string.IsNullOrWhiteSpace(artifactRoot))
+        {
+            return;
+        }
+
+        var commands = new List<string>
+        {
+            $"luotsi replay packet --artifacts {Quote(artifactRoot)} --check"
+        };
+        if (value.TryGetProperty("triage_checklist", out var checklist) &&
+            checklist.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var command in checklist.EnumerateArray()
+                         .Where(static item => item.ValueKind == JsonValueKind.Object)
+                         .Select(static item => TryGetString(item, "command"))
+                         .Where(static command => !string.IsNullOrWhiteSpace(command))
+                         .Select(static command => command!)
+                         .Distinct(StringComparer.Ordinal)
+                         .Take(3))
+            {
+                commands.Add(command);
+            }
+        }
+
+        lines.Add("copy_paste:");
+        foreach (var command in commands)
+        {
+            lines.Add($"  {command}");
+        }
+    }
+
+    private static void AddCommandHintSummary(List<string> lines, JsonElement value)
+    {
+        if (!value.TryGetProperty("commands", out var commands) ||
+            commands.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        lines.Add($"commands: {commands.EnumerateArray().Count(static command => command.ValueKind == JsonValueKind.Object)}");
     }
 
     private static void AddTriageChecklistSummary(List<string> lines, JsonElement value)
@@ -602,12 +649,46 @@ internal sealed class AppCommandHumanFormatter(IConsoleIo console)
         {
             lines.Add($"evidence: {sourceCommand}");
         }
+
+        AddPrimaryFailureEvidenceFiles(lines, value, detailSource);
+    }
+
+    private static void AddPrimaryFailureEvidenceFiles(List<string> lines, JsonElement value, JsonElement detailSource)
+    {
+        var parts = new List<string>();
+        AddPrimaryFailureEvidenceFilePart(parts, value, detailSource, "timeline", "timeline_path", "timelinePath");
+        AddPrimaryFailureEvidenceFilePart(parts, value, detailSource, "failure_capsule", "failure_capsule_path", "failureCapsulePath");
+        if (parts.Count > 0)
+        {
+            lines.Add("evidence_files: " + string.Join("; ", parts));
+        }
+    }
+
+    private static void AddPrimaryFailureEvidenceFilePart(
+        List<string> parts,
+        JsonElement value,
+        JsonElement detailSource,
+        string label,
+        string snakeCasePropertyName,
+        string camelCasePropertyName)
+    {
+        var path = TryGetString(value, snakeCasePropertyName, camelCasePropertyName)
+            ?? TryGetString(detailSource, snakeCasePropertyName, camelCasePropertyName);
+        if (!string.IsNullOrWhiteSpace(path))
+        {
+            parts.Add($"{label}={path}");
+        }
     }
 
     private static string? BuildPrimaryFailureSummary(JsonElement value, JsonElement detailSource)
     {
-        var scenario = TryGetString(value, "scenario") ?? TryGetString(detailSource, "scenario");
-        var step = FormatFailureStep(detailSource);
+        var scenario = TryGetString(value, "scenario")
+            ?? TryGetString(detailSource, "scenario")
+            ?? TryGetString(value, "session_id", "sessionId")
+            ?? TryGetString(detailSource, "session_id", "sessionId");
+        var step = FormatFailureStep(detailSource)
+            ?? TryGetString(value, "reason")
+            ?? TryGetString(detailSource, "reason");
         var message = TryGetNestedString(value, "error", "message")
             ?? TryGetNestedString(detailSource, "error", "message")
             ?? TryGetNestedString(detailSource, "failure_artifacts", "error_message")

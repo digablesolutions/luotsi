@@ -492,6 +492,16 @@ public sealed class AppCommandShellTests
                 "wait login button",
                 "waitVisible",
                 "button not visible"),
+            [
+                new RunSummaryEvidenceFileResult(
+                    "timeline",
+                    "session-timeline.jsonl",
+                    "Ordered replay events around the primary failure."),
+                new RunSummaryEvidenceFileResult(
+                    "failure_capsule",
+                    "failure-capsule.json",
+                    "Focused failure capsule with failed scenario, step, artifacts, and error.")
+            ],
             new ReplayOpenPrimaryFailureResult(
                 "scenario",
                 "login-smoke-session",
@@ -533,8 +543,15 @@ public sealed class AppCommandShellTests
         Assert.Contains("  triage: 1 failure signal across 1 session", console.OutputLines);
         Assert.Contains("  primary_failure: login smoke / wait login button (waitVisible) / button not visible", console.OutputLines);
         Assert.Contains("  evidence: luotsi replay scrub --source-path session-timeline.jsonl --sequence 1 --context 3", console.OutputLines);
+        Assert.Contains("  evidence_files: timeline=session-timeline.jsonl; failure_capsule=failure-capsule.json", console.OutputLines);
         Assert.Contains("  next_step: Scrub the failure window", console.OutputLines);
         Assert.Contains("  next: luotsi replay scrub --artifacts /tmp/replay-root --failures --context 3 --write-markdown", console.OutputLines);
+        Assert.Contains(console.OutputLines, static line => line.StartsWith("  copy_paste:", StringComparison.Ordinal));
+        var packetSummary = string.Join(Environment.NewLine, console.OutputLines);
+        Assert.True(
+            packetSummary.IndexOf("  luotsi replay packet --artifacts /tmp/replay-root --check", StringComparison.Ordinal) <
+            packetSummary.IndexOf("  luotsi replay scrub --artifacts /tmp/replay-root --failures --context 3 --write-markdown", StringComparison.Ordinal),
+            packetSummary);
         Assert.Contains("  triage_checklist: 2", console.OutputLines);
         Assert.Contains("    - step=1; action=Run the recommended packet command; command=luotsi replay scrub --artifacts /tmp/replay-root --failures --context 3 --write-markdown", console.OutputLines);
         Assert.Contains("  packet: /tmp/replay-root/run-summary.json", console.OutputLines);
@@ -565,6 +582,16 @@ public sealed class AppCommandShellTests
                 "wait login button",
                 "waitVisible",
                 "button not visible"),
+            [
+                new RunSummaryEvidenceFileResult(
+                    "timeline",
+                    "session-timeline.jsonl",
+                    "Ordered replay events around the primary failure."),
+                new RunSummaryEvidenceFileResult(
+                    "failure_capsule",
+                    "failure-capsule.json",
+                    "Focused failure capsule with failed scenario, step, artifacts, and error.")
+            ],
             new ReplayOpenNextActionResult(
                 "scrub_failure",
                 "Scrub the failure window",
@@ -592,6 +619,12 @@ public sealed class AppCommandShellTests
                 "session-timeline.jsonl",
                 "failure-capsule.json",
                 "luotsi replay scrub --source-path session-timeline.jsonl --sequence 1 --context 3"),
+            [
+                new ReplayOpenCommandHintResult(
+                    "capsule",
+                    "Write the replay capsule summary and README for this bundle.",
+                    "luotsi replay capsule --artifacts /tmp/replay-root --write-readme --write-json")
+            ],
             "/tmp/replay-root/run-summary.md");
 
         writer.WriteSuccess(
@@ -607,9 +640,17 @@ public sealed class AppCommandShellTests
         Assert.Contains("  triage: 1 failure signal across 1 session", console.OutputLines);
         Assert.Contains("  primary_failure: login smoke / wait login button (waitVisible) / button not visible", console.OutputLines);
         Assert.Contains("  evidence: luotsi replay scrub --source-path session-timeline.jsonl --sequence 1 --context 3", console.OutputLines);
+        Assert.Contains("  evidence_files: timeline=session-timeline.jsonl; failure_capsule=failure-capsule.json", console.OutputLines);
         Assert.Contains("  next_step: Scrub the failure window", console.OutputLines);
         Assert.Contains("  next: luotsi replay scrub --artifacts /tmp/replay-root --failures --context 3 --write-markdown", console.OutputLines);
+        Assert.Contains(console.OutputLines, static line => line.StartsWith("  copy_paste:", StringComparison.Ordinal));
+        var packetCheckSummary = string.Join(Environment.NewLine, console.OutputLines);
+        Assert.True(
+            packetCheckSummary.IndexOf("  luotsi replay packet --artifacts /tmp/replay-root --check", StringComparison.Ordinal) <
+            packetCheckSummary.IndexOf("  luotsi replay scrub --artifacts /tmp/replay-root --failures --context 3 --write-markdown", StringComparison.Ordinal),
+            packetCheckSummary);
         Assert.Contains("  triage_checklist: 1", console.OutputLines);
+        Assert.Contains("  commands: 1", console.OutputLines);
         Assert.Contains("  packet: /tmp/replay-root/run-summary.json", console.OutputLines);
         Assert.Contains("  markdown: /tmp/replay-root/run-summary.md", console.OutputLines);
     }

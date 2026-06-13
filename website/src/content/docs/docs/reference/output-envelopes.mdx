@@ -27,7 +27,7 @@ For local terminal readability, one-shot commands also accept `--human` or `--co
 
 When an agent or CI job needs the next action, read command hints in this order:
 
-1. `data.recommended_next_action_command` or `data.recommendedNextActionCommand` when a check result exposes the direct continuation command.
+1. `data.recommended_next_action_command` when a check result exposes the direct continuation command; command-envelope `data` fields use snake_case.
 2. `data.recommended_next_action.command` when the command can name one best action.
 3. `data.primary_failure.source_command` or `data.primaryFailure.sourceCommand` when a packet/check result has focused failure evidence but no recommended action.
 4. `data.triage_checklist[].command` or `data.triageChecklist[].command` when a packet/check result exposes a structured first-minute checklist.
@@ -35,7 +35,7 @@ When an agent or CI job needs the next action, read command hints in this order:
 6. `artifacts.artifact_root` as the fallback evidence pointer; run `replay packet` first so the loop has `run-summary.json` and `run-summary.md`.
 7. `data.commands[]`, `data.artifact_commands[]`, or `data.recommended_commands[]` only when there is no artifact root to packetize; use `artifacts open` only when you specifically need the generic artifact browser.
 
-The source tree includes executable examples of this priority order at `examples/agents/extract-next-command.py` and `examples/agents/extract-next-command.mjs`. The same parsers accept persisted `run-summary.json` packets with schema `luotsi-run-summary.v1`; the source contract is documented at `docs/schemas/luotsi-run-summary-v1.md`, and `replay packet --check` is the pass/fail gate for an existing packet.
+The source tree includes executable examples of this priority order at `examples/agents/extract-next-command.py` and `examples/agents/extract-next-command.mjs`. The same parsers accept persisted `run-summary.json` packets with schema `luotsi-run-summary.v1`; the source contract is documented at `docs/schemas/luotsi-run-summary-v1.md`, and `replay packet --check` is the pass/fail gate for an existing packet. After choosing the command, use packet `evidenceFiles[]` or check-envelope `data.evidence_files[]` as proof-file context for the focused failure rather than scraping Markdown.
 
 When an artifact root has a persisted package intake audit, human output for `artifacts info` and `replay capsule` includes a compact `intake:` line with status, share-safety, SHA verification, and package path. Received-package handoffs from `artifacts info`, `artifacts verify`, `artifacts unpack`, and `artifacts intake` include a `replay packet --check` command so humans and agents validate `run-summary.json` before opening broader replay surfaces.
 
