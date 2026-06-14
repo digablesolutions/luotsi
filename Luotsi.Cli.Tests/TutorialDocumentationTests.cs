@@ -672,7 +672,7 @@ public sealed partial class AppTests
     [Fact]
     public void Portable_Ci_Bash_Script_Preserves_Run_Failure_And_Appends_Checked_Run_Summary()
     {
-        if (!TryFindExecutable("bash", out var bash))
+        if (!TryFindPortableBash(out var bash))
         {
             return;
         }
@@ -1468,6 +1468,40 @@ public sealed partial class AppTests
 
     private static bool TryFindExecutable(string candidate, out string executable) =>
         TryFindExecutable([candidate], out executable);
+
+    private static bool TryFindPortableBash(out string executable)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            foreach (var candidate in EnumerateWindowsBashCandidates())
+            {
+                if (RunProcessForProbe(candidate, ["--version"]).ExitCode == 0)
+                {
+                    executable = candidate;
+                    return true;
+                }
+            }
+        }
+
+        return TryFindExecutable("bash", out executable);
+    }
+
+    private static IEnumerable<string> EnumerateWindowsBashCandidates()
+    {
+        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        if (!string.IsNullOrWhiteSpace(programFiles))
+        {
+            yield return Path.Join(programFiles, "Git", "bin", "bash.exe");
+            yield return Path.Join(programFiles, "Git", "usr", "bin", "bash.exe");
+        }
+
+        var programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+        if (!string.IsNullOrWhiteSpace(programFilesX86))
+        {
+            yield return Path.Join(programFilesX86, "Git", "bin", "bash.exe");
+            yield return Path.Join(programFilesX86, "Git", "usr", "bin", "bash.exe");
+        }
+    }
 
     private static bool TryFindExecutable(IReadOnlyList<string> candidates, out string executable)
     {
