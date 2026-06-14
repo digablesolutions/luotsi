@@ -4,6 +4,7 @@ description: Mirror a real Android device into a local SDL window and keep strea
 ---
 
 import commandsScreenshot from '../../../../assets/tutorials/buggy-controller-live-demo/commands-final.png';
+import liveViewPathSequenceDiagram from '../../../../assets/concepts/architecture/luotsi-live-view-path-sequence.webp';
 
 `luotsi view` opens a long-lived session that mirrors a connected Android device into a local SDL window while also emitting structured JSONL events on stdout.
 
@@ -16,6 +17,13 @@ luotsi view --last
 <figure>
 	<img src={commandsScreenshot.src} alt="Representative device content mirrored through Luotsi during the Buggy Controller walkthrough." />
 	<figcaption>The operator window is the visible part of the workflow, but the same session also writes replay metadata and JSONL events that stay useful after the device disconnects.</figcaption>
+</figure>
+
+## Runtime path
+
+<figure class="architecture-diagram">
+	<img src={liveViewPathSequenceDiagram.src} alt="Luotsi live view sequence diagram separating video packets, host-routed control input, JSONL event artifacts, read-only observer sessions, and replay metadata." loading="lazy" decoding="async" />
+	<figcaption>The live view path separates video transport, host-routed input, JSONL session events, artifact capture, and read-only observer joins so replay can start from saved evidence later.</figcaption>
 </figure>
 
 ## What it is good at

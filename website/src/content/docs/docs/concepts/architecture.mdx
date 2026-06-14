@@ -3,7 +3,22 @@ title: Architecture
 description: Understand Luotsi as a host-first Android automation runtime built around adb, structured outputs, lab-aware device use, and replayable artifacts.
 ---
 
+import topLevelArchitectureDiagram from '../../../../assets/concepts/architecture/luotsi-top-level-architecture.webp';
+import liveViewPathSequenceDiagram from '../../../../assets/concepts/architecture/luotsi-live-view-path-sequence.webp';
+
 Luotsi is a host-first .NET CLI for Android automation. It drives real devices through adb, keeps device work behind typed host abstractions, and turns useful runs into structured output plus replayable artifacts.
+
+## Architecture diagrams
+
+<figure class="architecture-diagram">
+	<img src={topLevelArchitectureDiagram.src} alt="Top-level Luotsi architecture showing command flow, JSON envelopes, JSONL sessions, adb device control, lab governance, scenarios, telemetry, artifacts, packaging, replay, and live view internals." loading="lazy" decoding="async" />
+	<figcaption>Top-level runtime architecture: one-shot commands, long-lived JSONL sessions, adb-backed device control, and artifact roots that remain useful after the device session ends.</figcaption>
+</figure>
+
+<figure class="architecture-diagram">
+	<img src={liveViewPathSequenceDiagram.src} alt="Luotsi live view sequence diagram separating video packets, host-routed control input, JSONL event artifacts, read-only observer sessions, and replay metadata." loading="lazy" decoding="async" />
+	<figcaption>Live view sequence and data flow: adb bootstrap, helper capture, private H.264 packet stream, libav decode, SDL3 rendering, host-routed input, read-only sharing, and replayable session artifacts.</figcaption>
+</figure>
 
 ## Runtime shape
 

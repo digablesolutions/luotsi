@@ -327,6 +327,34 @@ html .starlight-aside {
 	border-inline-start-width: 3px;
 }
 
+html .sl-markdown-content figure.architecture-diagram:not(:where(.not-content *)) {
+	width: min(94vw, 78rem);
+	max-width: calc(100vw - 2rem);
+	margin: 2rem 0 2.5rem 50%;
+	padding: 0.75rem;
+	transform: translateX(-50%);
+	border: 1px solid var(--luotsi-border);
+	border-radius: 8px;
+	background: rgba(244, 247, 251, 0.04);
+	box-shadow: var(--sl-shadow-md);
+}
+
+html .sl-markdown-content figure.architecture-diagram img:not(:where(.not-content *)) {
+	display: block;
+	width: 100%;
+	height: auto;
+	border-radius: 6px;
+	background: #ffffff;
+}
+
+html .sl-markdown-content figure.architecture-diagram figcaption:not(:where(.not-content *)) {
+	margin-top: 0.85rem;
+	color: #98a6b6;
+	font-size: 0.92rem;
+	line-height: 1.55;
+	text-align: center;
+}
+
 html .card {
 	position: relative;
 	overflow: hidden;
