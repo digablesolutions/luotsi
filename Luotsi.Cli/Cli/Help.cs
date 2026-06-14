@@ -682,7 +682,8 @@ Notes:
 Luotsi help: view
 
 Usage:
-  luotsi view --device <adb serial> [--profile <name>] [--preset safe|balanced|high-quality|low-latency]
+  luotsi view (--device <adb serial> | --join-share <host:port> | --last)
+              [--profile <name>] [--preset safe|balanced|high-quality|low-latency]
               [--capture-backend auto|screenrecord|mediaprojection] [--decoder ffmpeg|wmf]
               [--share-bind <host:port>] [--read-only] [--headless] [--record <file>]
               [-o|--output human|json|jsonl] [--json] [--quiet]
@@ -692,6 +693,8 @@ Usage:
 
 Examples:
   luotsi view --device emulator-5554
+  luotsi view --join-share 192.168.0.10:9000
+  luotsi view --last
   luotsi view setup --device emulator-5554 --capture-backend mediaprojection
   luotsi view-doctor --device emulator-5554 --fix
 

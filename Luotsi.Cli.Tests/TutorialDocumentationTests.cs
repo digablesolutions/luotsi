@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -1473,13 +1474,14 @@ public sealed partial class AppTests
     {
         if (OperatingSystem.IsWindows())
         {
-            foreach (var candidate in EnumerateWindowsBashCandidates())
+            var portableBash = EnumerateWindowsBashCandidates()
+                .Where(static candidate => RunProcessForProbe(candidate, ["--version"]).ExitCode == 0)
+                .FirstOrDefault();
+
+            if (!string.IsNullOrEmpty(portableBash))
             {
-                if (RunProcessForProbe(candidate, ["--version"]).ExitCode == 0)
-                {
-                    executable = candidate;
-                    return true;
-                }
+                executable = portableBash;
+                return true;
             }
         }
 
