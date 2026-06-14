@@ -57,7 +57,7 @@ Prefer exact text and structured selectors:
   "command": "tap_text",
   "text": "Files",
   "text_match": "exact",
-  "resource_id": "com.elotouch.home:id/tvAppName",
+  "resource_id": "com.example.app:id/itemTitle",
   "class_name": "android.widget.TextView"
 }
 ```

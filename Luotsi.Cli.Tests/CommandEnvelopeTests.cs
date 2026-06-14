@@ -58,7 +58,7 @@ public sealed partial class AppTests
         Assert.Empty(console.OutputLines);
         Assert.Single(console.ErrorLines);
         Assert.Contains("Luotsi help: view", console.ErrorLines[0], StringComparison.Ordinal);
-        Assert.Contains("luotsi view --device <adb serial>", console.ErrorLines[0], StringComparison.Ordinal);
+        Assert.Contains("luotsi view (--device <adb serial> | --join-share <host:port> | --last)", console.ErrorLines[0], StringComparison.Ordinal);
     }
 
     [Fact]
