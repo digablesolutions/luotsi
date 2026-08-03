@@ -23,7 +23,7 @@
     <PackageReference Include="Microsoft.NET.ILLink.Tasks" Version="10.0.10" PrivateAssets="all" />
     <PackageReference Include="Polly.Extensions" Version="8.7.0" />
     <PackageReference Include="ppy.SDL3-CS" Version="2026.520.0" />
-    <PackageReference Include="Scriban" Version="7.2.5" />
+    <PackageReference Include="Scriban" Version="7.2.6" />
   </ItemGroup>
 
   <ItemGroup>
