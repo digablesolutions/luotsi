@@ -50,9 +50,9 @@
       },
       "ppy.SDL3-CS": {
         "type": "Direct",
-        "requested": "[2026.520.0, )",
-        "resolved": "2026.520.0",
-        "contentHash": "p20Tmo8hyyXCMyvyZiNpSUoY66e+CWRvJDQN/fI67Nua2Tw0PagVyrKpoCDuc7PDA+xoEU09UYDlA/n/WXVA5w=="
+        "requested": "[2026.722.0, )",
+        "resolved": "2026.722.0",
+        "contentHash": "Sof8ihhvW7z4YTVGoSjrAEeRiddIbvb9zXbEIfBoqRw38suzo6R5V+4krRVb4JwzyahS0tGFnNOxW2hHRr18Dg=="
       },
       "Scriban": {
         "type": "Direct",
@@ -200,33 +200,33 @@
     "net10.0/linux-x64": {
       "ppy.SDL3-CS": {
         "type": "Direct",
-        "requested": "[2026.520.0, )",
-        "resolved": "2026.520.0",
-        "contentHash": "p20Tmo8hyyXCMyvyZiNpSUoY66e+CWRvJDQN/fI67Nua2Tw0PagVyrKpoCDuc7PDA+xoEU09UYDlA/n/WXVA5w=="
+        "requested": "[2026.722.0, )",
+        "resolved": "2026.722.0",
+        "contentHash": "Sof8ihhvW7z4YTVGoSjrAEeRiddIbvb9zXbEIfBoqRw38suzo6R5V+4krRVb4JwzyahS0tGFnNOxW2hHRr18Dg=="
       }
     },
     "net10.0/osx-arm64": {
       "ppy.SDL3-CS": {
         "type": "Direct",
-        "requested": "[2026.520.0, )",
-        "resolved": "2026.520.0",
-        "contentHash": "p20Tmo8hyyXCMyvyZiNpSUoY66e+CWRvJDQN/fI67Nua2Tw0PagVyrKpoCDuc7PDA+xoEU09UYDlA/n/WXVA5w=="
+        "requested": "[2026.722.0, )",
+        "resolved": "2026.722.0",
+        "contentHash": "Sof8ihhvW7z4YTVGoSjrAEeRiddIbvb9zXbEIfBoqRw38suzo6R5V+4krRVb4JwzyahS0tGFnNOxW2hHRr18Dg=="
       }
     },
     "net10.0/osx-x64": {
       "ppy.SDL3-CS": {
         "type": "Direct",
-        "requested": "[2026.520.0, )",
-        "resolved": "2026.520.0",
-        "contentHash": "p20Tmo8hyyXCMyvyZiNpSUoY66e+CWRvJDQN/fI67Nua2Tw0PagVyrKpoCDuc7PDA+xoEU09UYDlA/n/WXVA5w=="
+        "requested": "[2026.722.0, )",
+        "resolved": "2026.722.0",
+        "contentHash": "Sof8ihhvW7z4YTVGoSjrAEeRiddIbvb9zXbEIfBoqRw38suzo6R5V+4krRVb4JwzyahS0tGFnNOxW2hHRr18Dg=="
       }
     },
     "net10.0/win-x64": {
       "ppy.SDL3-CS": {
         "type": "Direct",
-        "requested": "[2026.520.0, )",
-        "resolved": "2026.520.0",
-        "contentHash": "p20Tmo8hyyXCMyvyZiNpSUoY66e+CWRvJDQN/fI67Nua2Tw0PagVyrKpoCDuc7PDA+xoEU09UYDlA/n/WXVA5w=="
+        "requested": "[2026.722.0, )",
+        "resolved": "2026.722.0",
+        "contentHash": "Sof8ihhvW7z4YTVGoSjrAEeRiddIbvb9zXbEIfBoqRw38suzo6R5V+4krRVb4JwzyahS0tGFnNOxW2hHRr18Dg=="
       }
     }
   }
