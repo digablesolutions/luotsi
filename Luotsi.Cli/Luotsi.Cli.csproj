@@ -18,12 +18,12 @@
 
   <ItemGroup>
     <PackageReference Include="FFmpeg.AutoGen" Version="8.1.0" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
-    <PackageReference Include="Microsoft.Extensions.Resilience" Version="10.8.0" />
-    <PackageReference Include="Microsoft.NET.ILLink.Tasks" Version="10.0.10" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Resilience" Version="10.9.0" />
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" Version="10.0.11" PrivateAssets="all" />
     <PackageReference Include="Polly.Extensions" Version="8.7.0" />
-    <PackageReference Include="ppy.SDL3-CS" Version="2026.520.0" />
-    <PackageReference Include="Scriban" Version="7.2.5" />
+    <PackageReference Include="ppy.SDL3-CS" Version="2026.722.0" />
+    <PackageReference Include="Scriban" Version="7.2.6" />
   </ItemGroup>
 
   <ItemGroup>
