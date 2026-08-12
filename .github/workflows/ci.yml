@@ -289,6 +289,8 @@ jobs:
       - name: Stage FFmpeg native libraries
         if: ${{ matrix.stage_ffmpeg == true }}
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: >
           ./ffmpeg/download-ffmpeg.ps1
           -Platform ${{ matrix.rid }}
