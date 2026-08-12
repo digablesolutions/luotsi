@@ -135,6 +135,29 @@ function Expand-ArchiveByExtension {
     throw "Unsupported archive format: $ArchivePath"
 }
 
+function Get-GitHubApiHeaders {
+    $headers = @{
+        "Accept" = "application/vnd.github+json"
+        "User-Agent" = "luotsi-ffmpeg-stager"
+        "X-GitHub-Api-Version" = "2022-11-28"
+    }
+
+    $token = $null
+    foreach ($name in @("GITHUB_TOKEN", "GH_TOKEN", "GITHUB_PAT")) {
+        $value = [Environment]::GetEnvironmentVariable($name)
+        if (-not [string]::IsNullOrWhiteSpace($value)) {
+            $token = $value
+            break
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($token)) {
+        $headers["Authorization"] = "Bearer $token"
+    }
+
+    return $headers
+}
+
 function Resolve-GitHubReleaseAsset {
     param(
         [string]$Owner,
@@ -143,13 +166,29 @@ function Resolve-GitHubReleaseAsset {
     )
 
     $releaseUri = "https://api.github.com/repos/$Owner/$Repository/releases/latest"
-    $headers = @{
-        "Accept" = "application/vnd.github+json"
-        "User-Agent" = "luotsi-ffmpeg-stager"
-        "X-GitHub-Api-Version" = "2022-11-28"
+    $headers = Get-GitHubApiHeaders
+
+    try {
+        $release = Invoke-RestMethod -Uri $releaseUri -Headers $headers
+    }
+    catch {
+        $tokenSource = @(
+            "GITHUB_TOKEN",
+            "GH_TOKEN",
+            "GITHUB_PAT"
+        ) | Where-Object { -not [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) } | Select-Object -First 1
+
+        if ($_.Exception.Message -match "rate limit exceeded|API rate limit exceeded") {
+            if ($null -eq $tokenSource) {
+                throw "GitHub API rate limit exceeded while resolving FFmpeg assets. Set GITHUB_TOKEN/GH_TOKEN before running ffmpeg/download-ffmpeg.ps1 or provide a GitHub token via workflow env."
+            }
+
+            throw "GitHub API rate limit exceeded while resolving FFmpeg assets even with '$tokenSource' configured. The token may be expired or the API limit may still be exhausted."
+        }
+
+        throw
     }
 
-    $release = Invoke-RestMethod -Uri $releaseUri -Headers $headers
     $asset = @($release.assets | Where-Object { $_.name -match $AssetPattern } | Select-Object -First 1)
     if (-not $asset) {
         throw "Could not find a GitHub release asset matching '$AssetPattern' in $Owner/$Repository latest release '$($release.tag_name)'."
