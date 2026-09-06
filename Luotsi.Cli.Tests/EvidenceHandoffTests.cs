@@ -32,6 +32,29 @@ public sealed partial class AppTests
     }
 
     [Theory]
+    [InlineData("../outside.json")]
+    [InlineData("/tmp/outside.json")]
+    public async Task RunAsync_ReplayPacket_Check_Rejects_Evidence_Outside_Artifact_Root(string evidencePath)
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        var root = SeedReplayCapsuleArtifacts(fileSystem);
+        var app = new App(new AppDependencies { Console = console, FileSystem = fileSystem });
+        Assert.Equal(0, await app.RunAsync(["replay", "packet", "--artifacts", root]));
+
+        var summaryPath = Path.Join(root, "run-summary.json");
+        var summary = (await fileSystem.ReadAllTextAsync(summaryPath)).Replace("session-timeline.jsonl", evidencePath, StringComparison.Ordinal);
+        fileSystem.AddFile(summaryPath, summary);
+        fileSystem.AddFile("/tmp/outside.json", "outside artifact root");
+        console.OutputLines.Clear();
+
+        Assert.Equal(2, await app.RunAsync(["replay", "packet", "--artifacts", root, "--check"]));
+        using var envelope = console.ParseSingleOutputAsJson();
+        Assert.Contains("must", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("inside artifact root", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Theory]
     [InlineData("/tmp/received")]
     [InlineData("/tmp/received with spaces")]
     public async Task RunAsync_ArtifactsIntake_Offers_Regeneration_Before_Relocated_Packet_Check(string restoredRoot)
