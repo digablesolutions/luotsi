@@ -151,8 +151,8 @@ install_view_extras() {
 
     case "$rid" in
         linux-x64)
-            archive_name='ffmpeg-n8.1-latest-linux64-lgpl-shared-8.1.tar.xz'
-            archive_url='https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.1-latest-linux64-lgpl-shared-8.1.tar.xz'
+            archive_name='ffmpeg-n9.0-latest-linux64-lgpl-shared-9.0.tar.xz'
+            archive_url='https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-linux64-lgpl-shared-9.0.tar.xz'
             ;;
         *)
             return 0

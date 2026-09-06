@@ -3,6 +3,11 @@ title: Architecture
 description: Understand Luotsi as a host-first Android automation runtime built around adb, structured outputs, lab-aware device use, and replayable artifacts.
 ---
 
+Native FFmpeg must match the managed binding ABI. AutoGen 9 requires `avcodec` 63,
+`avutil` 61 and `swscale` 10; the source stager and Linux installer select FFmpeg 9.0.
+Re-stage an older checkout with `./ffmpeg/download-ffmpeg.ps1 -Force` instead of
+reusing FFmpeg 8.1 libraries. Native decoding still needs host-specific validation.
+
 import topLevelArchitectureDiagram from '../../../../assets/concepts/architecture/luotsi-top-level-architecture.webp';
 import liveViewPathSequenceDiagram from '../../../../assets/concepts/architecture/luotsi-live-view-path-sequence.webp';
 
