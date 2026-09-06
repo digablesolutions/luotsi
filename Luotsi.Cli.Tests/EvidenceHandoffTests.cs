@@ -34,6 +34,7 @@ public sealed partial class AppTests
     [Theory]
     [InlineData("../outside.json")]
     [InlineData("/tmp/outside.json")]
+    [InlineData("../../outside.json")]
     public async Task RunAsync_ReplayPacket_Check_Rejects_Evidence_Outside_Artifact_Root(string evidencePath)
     {
         var console = new FakeConsole();
@@ -52,6 +53,49 @@ public sealed partial class AppTests
         using var envelope = console.ParseSingleOutputAsJson();
         Assert.Contains("must", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
         Assert.Contains("inside artifact root", envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("relative-replay-root")]
+    [InlineData("/tmp/replay-root")]
+    public async Task RunAsync_ReplayPacket_Check_Preserves_Artifact_Root_Path_Spelling(string root)
+    {
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        SeedReplayCapsuleArtifacts(fileSystem, root);
+        var app = new App(new AppDependencies { Console = console, FileSystem = fileSystem });
+        Assert.Equal(0, await app.RunAsync(["replay", "packet", "--artifacts", root]));
+        console.OutputLines.Clear();
+
+        Assert.True(await app.RunAsync(["replay", "packet", "--artifacts", root, "--check"]) == 0,
+            string.Join(Environment.NewLine, console.OutputLines));
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplayPacket_Check_Rejects_Case_Distinct_Sibling_On_Unix()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return; // Windows path comparison is case-insensitive.
+        }
+
+        var console = new FakeConsole();
+        var fileSystem = new FakeFileSystem();
+        const string root = "/tmp/replay-root";
+        SeedReplayCapsuleArtifacts(fileSystem, root);
+        var app = new App(new AppDependencies { Console = console, FileSystem = fileSystem });
+        Assert.Equal(0, await app.RunAsync(["replay", "packet", "--artifacts", root]));
+        var summaryPath = Path.Join(root, "run-summary.json");
+        var summary = (await fileSystem.ReadAllTextAsync(summaryPath)).Replace(
+            "session-timeline.jsonl", "../REPLAY-ROOT/session-timeline.jsonl", StringComparison.Ordinal);
+        fileSystem.AddFile(summaryPath, summary);
+        fileSystem.AddFile("/tmp/REPLAY-ROOT/session-timeline.jsonl", "outside evidence");
+        console.OutputLines.Clear();
+
+        Assert.Equal(2, await app.RunAsync(["replay", "packet", "--artifacts", root, "--check"]));
+        using var envelope = console.ParseSingleOutputAsJson();
+        Assert.Contains("must stay inside artifact root",
+            envelope.RootElement.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
     [Theory]

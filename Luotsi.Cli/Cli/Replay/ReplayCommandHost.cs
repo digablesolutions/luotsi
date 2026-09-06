@@ -1419,13 +1419,16 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         var rootWithSeparator = fullRoot.EndsWith(Path.DirectorySeparatorChar) || fullRoot.EndsWith(Path.AltDirectorySeparatorChar)
             ? fullRoot
             : fullRoot + Path.DirectorySeparatorChar;
-        if (!fullPath.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(fullPath, fullRoot, StringComparison.OrdinalIgnoreCase))
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (!fullPath.StartsWith(rootWithSeparator, comparison) &&
+            !string.Equals(fullPath, fullRoot, comparison))
         {
             throw new UsageException($"Evidence path '{path}' must stay inside artifact root '{artifactRoot}'.");
         }
 
-        return fullPath;
+        // Validate canonical paths, but preserve the caller's root spelling for
+        // IFileSystem implementations, as ArtifactEvidenceDetailReader does.
+        return Path.Join(artifactRoot, Path.GetRelativePath(fullRoot, fullPath));
     }
 
     private static IReadOnlyList<RunSummaryChecklistItemResult> ReadTriageChecklist(JsonElement root, string recommendedCommand, string sourcePath)
