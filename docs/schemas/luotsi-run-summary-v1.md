@@ -353,6 +353,9 @@ belongs in the broader command list. Consumers should still prefer
 
 ## Compatibility rules
 
+- Referenced evidence files must exist and contain at least one byte. A packet with no evidence sessions remains structurally valid; an empty file cited as failure evidence does not. This bounded check does not parse all evidence content, detect partial truncation, or authenticate extracted files. Verify the original ZIP against an independently supplied expected SHA-256 for package byte integrity.
+- After moving or restoring an artifact root, explicitly regenerate its packet before checking it. Regenerated summaries are local navigation metadata; preserve the original package as source evidence.
+
 - Unknown fields must be ignored.
 - New required semantics should use a new `schema` value rather than changing the meaning of existing required fields in place.
 - Consumers should accept both camelCase artifact JSON fields and snake_case command-envelope fields when they parse either persisted `run-summary.json` or the `data` object returned by `luotsi replay packet`.

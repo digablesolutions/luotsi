@@ -344,6 +344,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             verification,
             [
                 new ArtifactRecommendedCommandResult("info_artifacts", "Inspect the unpacked artifact root without mutating it.", $"luotsi artifacts info {Quote(outputDirectory)}"),
+                CreateRestoredPacketCommand("replay_packet", outputDirectory),
                 new ArtifactRecommendedCommandResult("replay_packet_check", "Validate the restored run summary packet before triage.", BuildReplayPacketCheckCommand(outputDirectory)),
                 new ArtifactRecommendedCommandResult("open_artifacts", "Open the unpacked artifact root.", $"luotsi artifacts open {Quote(outputDirectory)}"),
                 new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench for the unpacked artifact root.", $"luotsi replay open --artifacts {Quote(outputDirectory)}"),
@@ -494,6 +495,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             CreateCategoryCounts(relativeFiles),
             [
                 new ArtifactRecommendedCommandResult("info_artifacts", "Inspect the unpacked artifact root without opening it.", "luotsi artifacts info <unpacked-artifact-root>"),
+                CreateRestoredPacketCommand("replay_packet", "<unpacked-artifact-root>"),
                 new ArtifactRecommendedCommandResult("replay_packet_check", "Validate the restored run summary packet before triage.", "luotsi replay packet --artifacts <unpacked-artifact-root> --check"),
                 new ArtifactRecommendedCommandResult("open_artifacts", "Open the unpacked artifact root locally.", "luotsi artifacts open <unpacked-artifact-root>"),
                 new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench for the unpacked artifact root.", "luotsi replay open --artifacts <unpacked-artifact-root>"),
@@ -1114,6 +1116,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         [
             new ArtifactRecommendedCommandResult("unpack_artifacts", "Restore this verified package locally after verifying its SHA-256.", unpackCommand),
             new ArtifactRecommendedCommandResult("info_artifacts", "Inspect the restored artifact root after unpacking.", $"luotsi artifacts info {Quote(outputDirectory)}"),
+            CreateRestoredPacketCommand("replay_packet", outputDirectory),
             new ArtifactRecommendedCommandResult("replay_packet_check", "Validate the restored run summary packet before triage.", BuildReplayPacketCheckCommand(outputDirectory)),
             new ArtifactRecommendedCommandResult("replay_open", "Open the replay workbench after unpacking.", $"luotsi replay open --artifacts {Quote(outputDirectory)}"),
             CreateReplayCapsuleCommand("replay_capsule", "Write a replay capsule summary after unpacking.", outputDirectory)
@@ -1128,6 +1131,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
             new("verify_artifacts", "Validate this package explicitly before handoff or restore.", $"luotsi artifacts verify {Quote(packagePath)} --output {Quote(outputDirectory)}{labSafeGate} --sha256 {sha256}"),
             new("unpack_artifacts", "Restore this validated package locally after verifying its SHA-256.", $"luotsi artifacts unpack {Quote(packagePath)} --output {Quote(outputDirectory)}{unpackForce}{labSafeGate} --sha256 {sha256}"),
             new("unpack_artifacts_dry_run", "Re-run package validation and SHA-256 verification without writing files.", $"luotsi artifacts unpack {Quote(packagePath)} --output {Quote(outputDirectory)}{unpackForce}{labSafeGate} --dry-run --sha256 {sha256}"),
+            CreateRestoredPacketCommand("replay_packet_after_unpack", outputDirectory),
             new("replay_packet_check_after_unpack", "Validate the restored run summary packet before triage.", BuildReplayPacketCheckCommand(outputDirectory)),
             new("open_artifacts_after_unpack", "Open the restored artifact root after unpacking.", $"luotsi artifacts open {Quote(outputDirectory)}"),
             new("replay_open_after_unpack", "Open the replay workbench after unpacking.", $"luotsi replay open --artifacts {Quote(outputDirectory)}"),
@@ -1140,6 +1144,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         var commands = new List<ArtifactRecommendedCommandResult>
         {
             new("info_artifacts", "Inspect the restored artifact root without mutating it.", $"luotsi artifacts info {Quote(outputDirectory)}"),
+            CreateRestoredPacketCommand("replay_packet", outputDirectory),
             new("replay_packet_check", "Validate the restored run summary packet before triage.", BuildReplayPacketCheckCommand(outputDirectory)),
             new("replay_open", "Open the replay workbench for the restored artifact root.", $"luotsi replay open --artifacts {Quote(outputDirectory)}"),
             CreateReplayCapsuleCommand("replay_capsule", "Write a replay capsule summary for handoff triage.", outputDirectory)
@@ -1154,7 +1159,7 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
         }
         else if (!opened)
         {
-            commands.Insert(1, new ArtifactRecommendedCommandResult("open_artifacts", "Open the restored artifact root.", $"luotsi artifacts open {Quote(outputDirectory)}"));
+            commands.Insert(3, new ArtifactRecommendedCommandResult("open_artifacts", "Open the restored artifact root.", $"luotsi artifacts open {Quote(outputDirectory)}"));
         }
 
         return commands;
@@ -1165,6 +1170,10 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
 
     private static string BuildReplayPacketCheckCommand(string artifactRoot) =>
         $"luotsi replay packet --artifacts {Quote(artifactRoot)} --check";
+
+    private static ArtifactRecommendedCommandResult CreateRestoredPacketCommand(string kind, string artifactRoot) =>
+        new(kind, "Regenerate local navigation metadata for the restored root; retain the original ZIP as source evidence.",
+            $"luotsi replay packet --artifacts {Quote(artifactRoot)}");
 
     private static string BuildIntakeReadme(ArtifactIntakeResult result)
     {
@@ -1184,6 +1193,9 @@ internal sealed class ArtifactCommandService(IFileSystem fileSystem, IArtifactFo
 
         builder.AppendLine();
         builder.AppendLine("## Next Commands");
+        builder.AppendLine();
+        builder.AppendLine("After restore, regenerate the packet at the new root before checking it. This writes local navigation metadata, not a new device run. Retain the original ZIP and expected SHA-256 as source evidence. Commands below are suggestions and are not executed by intake.");
+        builder.AppendLine();
         foreach (var command in result.RecommendedCommands)
         {
             builder.AppendLine($"- **{EscapeMarkdown(command.Summary)}** (`{EscapeMarkdown(command.Kind)}`)");

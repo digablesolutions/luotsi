@@ -1371,17 +1371,65 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         string packetPath,
         string artifactRoot)
     {
-        foreach (var evidenceFile in evidenceFiles
-                     .Where(evidenceFile => !FileExistsInArtifactRoot(evidenceFile.Path, artifactRoot)))
+        foreach (var evidenceFile in evidenceFiles)
         {
-            throw new UsageException($"{Path.GetFileName(packetPath)} evidenceFiles entry '{evidenceFile.Kind}' points at missing evidence file '{evidenceFile.Path}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+            if (!FileExistsInArtifactRoot(evidenceFile.Path, artifactRoot))
+            {
+                throw new UsageException($"{Path.GetFileName(packetPath)} evidenceFiles entry '{evidenceFile.Kind}' points at missing evidence file '{evidenceFile.Path}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+            }
+
+            var evidencePath = ResolveArtifactEvidencePath(evidenceFile.Path, artifactRoot);
+            Stream stream;
+            try
+            {
+                stream = _dependencies.FileSystem.OpenRead(evidencePath);
+            }
+            catch (IOException ex)
+            {
+                throw new UsageException($"{Path.GetFileName(packetPath)} evidenceFiles entry '{evidenceFile.Kind}' could not open evidence file '{evidenceFile.Path}': {ex.Message}");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                throw new UsageException($"{Path.GetFileName(packetPath)} evidenceFiles entry '{evidenceFile.Kind}' could not open evidence file '{evidenceFile.Path}': {ex.Message}");
+            }
+
+            using (stream)
+            {
+                // Bounded non-empty check, not payload parsing or integrity verification.
+                if (stream.ReadByte() == -1)
+                {
+                    throw new UsageException($"{Path.GetFileName(packetPath)} evidenceFiles entry '{evidenceFile.Kind}' points at empty evidence file '{evidenceFile.Path}'. Restore the evidence from the original package before checking the packet again.");
+                }
+            }
         }
     }
 
     private bool FileExistsInArtifactRoot(string path, string artifactRoot) =>
-        Path.IsPathRooted(path)
-            ? _dependencies.FileSystem.FileExists(path)
-            : _dependencies.FileSystem.FileExists(Path.Join(artifactRoot, path));
+        _dependencies.FileSystem.FileExists(ResolveArtifactEvidencePath(path, artifactRoot));
+
+    private static string ResolveArtifactEvidencePath(string path, string artifactRoot)
+    {
+        if (string.IsNullOrWhiteSpace(path) || Path.IsPathRooted(path))
+        {
+            throw new UsageException($"Evidence path '{path}' must be relative and stay inside artifact root '{artifactRoot}'.");
+        }
+
+        var fullRoot = Path.GetFullPath(artifactRoot);
+        var fullPath = Path.GetFullPath(Path.Join(fullRoot, path));
+        var rootWithSeparator = fullRoot.EndsWith(Path.DirectorySeparatorChar) || fullRoot.EndsWith(Path.AltDirectorySeparatorChar)
+            ? fullRoot
+            : fullRoot + Path.DirectorySeparatorChar;
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (!fullPath.StartsWith(rootWithSeparator, comparison) &&
+            !string.Equals(fullPath, fullRoot, comparison))
+        {
+            throw new UsageException($"Evidence path '{path}' must stay inside artifact root '{artifactRoot}'.");
+        }
+
+        // Validate canonical paths, but preserve the caller's root spelling for
+        // IFileSystem implementations, as ArtifactEvidenceDetailReader does.
+        return Path.Join(artifactRoot, Path.GetRelativePath(fullRoot, fullPath));
+    }
 
     private static IReadOnlyList<RunSummaryChecklistItemResult> ReadTriageChecklist(JsonElement root, string recommendedCommand, string sourcePath)
     {
