@@ -47,8 +47,8 @@
       },
       "FFmpeg.AutoGen": {
         "type": "Transitive",
-        "resolved": "8.1.0",
-        "contentHash": "j7YbmE4QGst6OPk0w1D/EMBv7Ig1CoCnAVtSEYh/88q9MAVEzhu3FjgVFGYqH83jhz2opvaqZe90qG73RLMBWQ=="
+        "resolved": "9.0.1.1",
+        "contentHash": "+BLh0C8VET4aMUorxr/LMZAgmKl2PYSoY7Qm4PJ4eePx/LT2gIHkxOUnlGM91QETgfsnSZajHx9rK0d67ilpgw=="
       },
       "Microsoft.Bcl.AsyncInterfaces": {
         "type": "Transitive",
@@ -298,7 +298,7 @@
       "luotsi": {
         "type": "Project",
         "dependencies": {
-          "FFmpeg.AutoGen": "[8.1.0, )",
+          "FFmpeg.AutoGen": "[9.0.1.1, )",
           "Microsoft.Extensions.DependencyInjection": "[10.0.11, )",
           "Microsoft.Extensions.Resilience": "[10.9.0, )",
           "Polly.Extensions": "[8.7.0, )",
