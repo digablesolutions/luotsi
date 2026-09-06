@@ -4,9 +4,9 @@
     "net10.0": {
       "FFmpeg.AutoGen": {
         "type": "Direct",
-        "requested": "[8.1.0, )",
-        "resolved": "8.1.0",
-        "contentHash": "j7YbmE4QGst6OPk0w1D/EMBv7Ig1CoCnAVtSEYh/88q9MAVEzhu3FjgVFGYqH83jhz2opvaqZe90qG73RLMBWQ=="
+        "requested": "[9.0.1.1, )",
+        "resolved": "9.0.1.1",
+        "contentHash": "+BLh0C8VET4aMUorxr/LMZAgmKl2PYSoY7Qm4PJ4eePx/LT2gIHkxOUnlGM91QETgfsnSZajHx9rK0d67ilpgw=="
       },
       "Microsoft.Extensions.DependencyInjection": {
         "type": "Direct",

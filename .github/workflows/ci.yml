@@ -66,6 +66,10 @@ jobs:
           --warnaserror
           /bl:artifacts/binlogs/build.binlog
 
+      - name: Validate FFmpeg staging ABI contract
+        shell: pwsh
+        run: ./ffmpeg/test-native-abi.ps1
+
       - name: Test
         shell: pwsh
         run: >

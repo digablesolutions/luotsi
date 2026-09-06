@@ -10,7 +10,7 @@
     ffmpeg/bin.
 
 .PARAMETER Version
-    FFmpeg release line to provision. Defaults to 8.1.
+    FFmpeg release line to provision. Defaults to 9.0 for FFmpeg.AutoGen 9.
 
 .PARAMETER Platform
     Optional host override. Defaults to the current OS/architecture.
@@ -22,11 +22,11 @@
 .EXAMPLE
     .\ffmpeg\download-ffmpeg.ps1
     .\ffmpeg\download-ffmpeg.ps1 -Platform osx-arm64 -Force
-    .\ffmpeg\download-ffmpeg.ps1 -Version 8.1 -Force
+    .\ffmpeg\download-ffmpeg.ps1 -Version 9.0 -Force
 #>
 
 param(
-    [string]$Version = "8.1",
+    [string]$Version = "9.0",
     [ValidateSet("win-x64", "win-arm64", "linux-x64", "linux-arm64", "osx-x64", "osx-arm64")]
     [string]$Platform,
     [switch]$Force
@@ -86,6 +86,26 @@ function Reset-BinDirectory {
     }
 
     New-Item -ItemType Directory -Force -Path $Directory | Out-Null
+}
+
+function Test-RequiredNativeLibraries {
+    param([string]$Directory, [string]$ResolvedPlatform)
+
+    # Must match the FFmpeg.AutoGen 9 ABI, not just any files with a native suffix.
+    $required = if ($ResolvedPlatform.StartsWith("win-")) {
+        @("avcodec-63.dll", "avutil-61.dll", "swscale-10.dll")
+    } elseif ($ResolvedPlatform.StartsWith("linux-")) {
+        @("libavcodec.so.63", "libavutil.so.61", "libswscale.so.10")
+    } else {
+        @("libavcodec.63.dylib", "libavutil.61.dylib", "libswscale.10.dylib")
+    }
+
+    foreach ($name in $required) {
+        if (-not (Test-Path -LiteralPath (Join-Path $Directory $name) -PathType Leaf)) {
+            return $false
+        }
+    }
+    return $true
 }
 
 function Copy-NativeLibraries {
@@ -310,6 +330,9 @@ if ($Plan.PSObject.Properties.Name -contains "GitHubOwner") {
 }
 
 if ((Get-ExistingLibraryCount -Directory $BinDir -Patterns $Plan.FilePatterns) -gt 0 -and -not $Force) {
+    if (-not (Test-RequiredNativeLibraries -Directory $BinDir -ResolvedPlatform $ResolvedPlatform)) {
+        throw "Existing FFmpeg libraries do not match AutoGen 9 (avcodec 63, avutil 61, swscale 10). Re-run with -Force to re-stage FFmpeg 9."
+    }
     Write-Host "FFmpeg native libraries already exist in $BinDir"
     Write-Host "Re-run with -Force to overwrite them."
     exit 0
@@ -338,6 +361,9 @@ try {
             throw "Expected Homebrew FFmpeg library directory was not found: $librarySource"
         }
 
+        if (-not (Test-RequiredNativeLibraries -Directory $librarySource -ResolvedPlatform $ResolvedPlatform)) {
+            throw "Homebrew FFmpeg does not provide the AutoGen 9 native ABI (avcodec 63, avutil 61, swscale 10). Existing staged libraries were not replaced."
+        }
         Reset-BinDirectory -Directory $BinDir
         $copiedCount = Copy-NativeLibraries -SourceDirectory $librarySource -DestinationDirectory $BinDir -Patterns $Plan.FilePatterns
         if ($copiedCount -eq 0) {
@@ -367,6 +393,9 @@ try {
         throw "Expected FFmpeg library directory was not found: $librarySource"
     }
 
+    if (-not (Test-RequiredNativeLibraries -Directory $librarySource -ResolvedPlatform $ResolvedPlatform)) {
+        throw "Downloaded FFmpeg does not provide the AutoGen 9 native ABI (avcodec 63, avutil 61, swscale 10). Existing staged libraries were not replaced."
+    }
     Reset-BinDirectory -Directory $BinDir
     $copiedCount = Copy-NativeLibraries -SourceDirectory $librarySource -DestinationDirectory $BinDir -Patterns $Plan.FilePatterns
     if ($copiedCount -eq 0) {

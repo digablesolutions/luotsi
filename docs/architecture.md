@@ -277,6 +277,14 @@ Diagnostics are first-class:
 
 The live renderer uses SDL3 and native FFmpeg/libav through `FFmpeg.AutoGen`.
 
+The AutoGen 9 bindings require the FFmpeg 9 ABI (`avcodec` 63, `avutil` 61,
+`swscale` 10). The PowerShell stager and Linux installer select FFmpeg 9.0.
+When upgrading an existing checkout, re-stage native libraries with
+`./ffmpeg/download-ffmpeg.ps1 -Force`; an existing FFmpeg 8.1 directory is not
+compatible. macOS Homebrew installations must also provide these library majors.
+Compilation alone does not validate native decoding; exercise the native backend
+on each supported host before release.
+
 Resolution order for FFmpeg libraries:
 
 1. `LUOTSI_FFMPEG_ROOT`
