@@ -18,6 +18,11 @@
       "command": "luotsi artifacts info <unpacked-artifact-root>"
     },
     {
+      "kind": "replay_packet",
+      "summary": "Regenerate local navigation metadata for the restored root; retain the original ZIP as source evidence.",
+      "command": "luotsi replay packet --artifacts <unpacked-artifact-root>"
+    },
+    {
       "kind": "replay_packet_check",
       "summary": "Validate the restored run summary packet before triage.",
       "command": "luotsi replay packet --artifacts <unpacked-artifact-root> --check"

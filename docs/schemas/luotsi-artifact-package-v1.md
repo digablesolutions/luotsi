@@ -73,14 +73,14 @@ Each `recommended_commands` item is an object with:
   },
   "recommended_commands": [
     {
-      "kind": "replay_open",
-      "summary": "Open the replay front door for the unpacked artifact root.",
-      "command": "luotsi replay open --artifacts <unpacked-artifact-root>"
-    },
-    {
       "kind": "info_artifacts",
       "summary": "Inspect the unpacked artifact root without opening it.",
       "command": "luotsi artifacts info <unpacked-artifact-root>"
+    },
+    {
+      "kind": "replay_packet",
+      "summary": "Regenerate local navigation metadata for the restored root; retain the original ZIP as source evidence.",
+      "command": "luotsi replay packet --artifacts <unpacked-artifact-root>"
     },
     {
       "kind": "replay_packet_check",
@@ -108,7 +108,7 @@ Each `recommended_commands` item is an object with:
 ## Compatibility rules
 
 - Unknown fields must be ignored.
-- Use `info_artifacts` for a non-mutating file/category check, then `replay_packet_check` to validate the restored `run-summary.json` before broad triage.
+- Use `info_artifacts` for a non-mutating file/category check, `replay_packet` to regenerate local navigation metadata at the restored root, then `replay_packet_check` to validate the restored `run-summary.json` before broad triage. Regeneration is an explicit caller action, not automatic execution of packaged commands. Retain the original ZIP and expected SHA-256 as source evidence; generated summaries describe the local review location, not a new device run.
 - Use `replay_open` for the replay workbench, and `open_artifacts` only when you specifically need the generic artifact browser.
 - Missing `redaction` means the package was created before redaction metadata existed or with the default exact-copy policy.
 - `artifacts verify --require-lab-safe` treats missing `redaction` or any non-`lab-safe` mode as a blocked handoff gate and exits non-zero while still reporting manifest/SHA details.

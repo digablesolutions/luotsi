@@ -162,6 +162,9 @@ View screenshots and operator-triggered recordings are written to the artifact r
 
 Artifact command quick guide:
 
+- After restoring a package to a different directory, run `luotsi replay packet --artifacts <restored-root>` before `luotsi replay packet --artifacts <restored-root> --check`. This regenerates local navigation metadata; retain the original ZIP and its independently supplied expected SHA-256 as the source evidence. Intake/unpack recommendations include this preparation step; they do not execute it automatically.
+- Packet checking rejects missing and zero-byte referenced evidence files, but does not parse every evidence payload or authenticate extracted contents. Non-empty does not mean complete or valid. Use `artifacts verify --sha256 <expected-digest>` on the original ZIP for byte-integrity verification; a packet with no evidence sessions can still be structurally valid.
+
 - `artifacts list` is the discovery step for local runs. It returns run ids, roots, file counts, index presence, replay metadata presence, and exact info/open/pack commands.
 - Use `artifacts open --last` for the latest generic artifact browser.
 - Use `replay open --last` for the latest replay-specific next actions.

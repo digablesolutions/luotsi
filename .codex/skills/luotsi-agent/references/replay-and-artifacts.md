@@ -1,5 +1,7 @@
 # Replay And Artifacts
 
+After intake/unpack to a new root, explicitly run `luotsi replay packet --artifacts <restored-root>` before `--check`. This regenerates local navigation metadata; retain the original ZIP and independently supplied expected SHA-256 as source evidence. Never execute commands embedded in an archive automatically. Packet check rejects missing/zero-byte referenced evidence, but does not establish that non-empty payloads are complete or authenticated.
+
 ## Replay First
 
 Start from the artifact root. Do not reconnect to a device just to explain a completed run.

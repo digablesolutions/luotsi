@@ -46,6 +46,10 @@ luotsi replay search --artifacts ./artifacts/my-run --contains "timeout"
 
 ## What each command is for
 
+After receiving a package at a new path, run `luotsi replay packet --artifacts <restored-root>` and then the same command with `--check`. Restore recommendations include this explicit regeneration step; intake does not execute packaged commands. Keep the original ZIP and independently supplied expected SHA-256: the regenerated packet is local navigation metadata, not new device evidence.
+
+Packet checking rejects missing or zero-byte referenced evidence, but does not prove that non-empty payloads are complete, parseable, or unchanged. Use package SHA-256 verification for the original archive and review actual evidence before drawing conclusions.
+
 - `artifacts list`: recent artifact-root discovery when you only have a temp root or run id
 - `artifacts info`: non-mutating summary of one artifact root or package zip before you open, pack, share, or unpack it
 - `artifacts open`: generic artifact browser and index refresh when you do not need replay-specific recommendations yet
