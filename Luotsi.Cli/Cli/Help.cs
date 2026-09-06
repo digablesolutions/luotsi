@@ -454,6 +454,11 @@ Examples:
   luotsi replay open --artifacts artifacts/20260518-100000-view --write-json --write-markdown
   luotsi replay packet --artifacts artifacts/20260518-100000-run
   luotsi replay packet --artifacts artifacts/20260518-100000-run --check
+
+  After package restore, regenerate the packet at the new root before --check.
+  Regeneration writes local navigation metadata; retain the original ZIP and SHA-256.
+  --check rejects missing/zero-byte evidence references, not all invalid payloads.
+  Use artifacts verify --sha256 <expected-digest> for original package integrity.
   luotsi replay open --last --artifacts artifacts --dry-run
   luotsi replay summarize --artifacts artifacts/20260518-100000-view
   luotsi replay summarize --artifacts artifacts/20260518-100000-view --format json

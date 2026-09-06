@@ -1371,10 +1371,22 @@ internal sealed class ReplayCommandHost(ReplayCommandHostDependencies dependenci
         string packetPath,
         string artifactRoot)
     {
-        foreach (var evidenceFile in evidenceFiles
-                     .Where(evidenceFile => !FileExistsInArtifactRoot(evidenceFile.Path, artifactRoot)))
+        foreach (var evidenceFile in evidenceFiles)
         {
-            throw new UsageException($"{Path.GetFileName(packetPath)} evidenceFiles entry '{evidenceFile.Kind}' points at missing evidence file '{evidenceFile.Path}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+            if (!FileExistsInArtifactRoot(evidenceFile.Path, artifactRoot))
+            {
+                throw new UsageException($"{Path.GetFileName(packetPath)} evidenceFiles entry '{evidenceFile.Kind}' points at missing evidence file '{evidenceFile.Path}'. Re-run `luotsi replay packet --artifacts {Quote(artifactRoot)}`.");
+            }
+
+            var evidencePath = Path.IsPathRooted(evidenceFile.Path)
+                ? evidenceFile.Path
+                : Path.Join(artifactRoot, evidenceFile.Path);
+            using var stream = _dependencies.FileSystem.OpenRead(evidencePath);
+            // Bounded non-empty check, not payload parsing or integrity verification.
+            if (stream.ReadByte() == -1)
+            {
+                throw new UsageException($"{Path.GetFileName(packetPath)} evidenceFiles entry '{evidenceFile.Kind}' points at empty evidence file '{evidenceFile.Path}'. Restore the evidence from the original package before checking the packet again.");
+            }
         }
     }
 
