@@ -3,7 +3,25 @@ using Luotsi.Cli.Infrastructure.Contracts;
 
 namespace Luotsi.Cli.Hosts.Android.View;
 
-internal sealed class AndroidMediaProjectionConsentApprover(IAdbClient adbClient)
+/// <summary>
+/// How MediaProjection consent was obtained, or that it was not.
+/// </summary>
+internal enum MediaProjectionConsentOutcome
+{
+    /// <summary>No prompt was approved and the capture service never started.</summary>
+    NotApproved,
+
+    /// <summary>The approver tapped the Android consent prompt.</summary>
+    ApprovedViaPrompt,
+
+    /// <summary>
+    /// Android granted consent without showing a prompt (some OEM builds and
+    /// Android 8.x devices do), detected by the helper's capture service running.
+    /// </summary>
+    GrantedWithoutPrompt
+}
+
+internal sealed class AndroidMediaProjectionConsentApprover(IAdbClient adbClient, string captureServiceComponent)
 {
     private const int MaxAttempts = 40;
     private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(250);
@@ -11,13 +29,32 @@ internal sealed class AndroidMediaProjectionConsentApprover(IAdbClient adbClient
     private const string MediaProjectionPermissionActivity = "MediaProjectionPermissionActivity";
 
     private readonly IAdbClient _adbClient = adbClient ?? throw new ArgumentNullException(nameof(adbClient));
+    private readonly string _captureServiceComponent = string.IsNullOrWhiteSpace(captureServiceComponent)
+        ? throw new ArgumentException("Capture service component must be provided.", nameof(captureServiceComponent))
+        : captureServiceComponent;
 
-    public async Task<bool> TryApproveAsync(CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Waits for MediaProjection consent, tapping the Android prompt when one appears.
+    /// </summary>
+    /// <remarks>
+    /// The helper starts its capture service only after <c>RESULT_OK</c>, so a running
+    /// capture service is proof of consent whether or not a prompt was ever shown. The
+    /// caller must make sure no capture service from an earlier session is still running
+    /// before the consent activity starts, or this reports a false grant.
+    /// </remarks>
+    public async Task<MediaProjectionConsentOutcome> TryApproveAsync(CancellationToken cancellationToken = default)
     {
         var tappedApproval = false;
         for (var attempt = 0; attempt < MaxAttempts; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (await IsCaptureServiceRunningAsync(_adbClient, _captureServiceComponent, cancellationToken).ConfigureAwait(false))
+            {
+                return tappedApproval
+                    ? MediaProjectionConsentOutcome.ApprovedViaPrompt
+                    : MediaProjectionConsentOutcome.GrantedWithoutPrompt;
+            }
+
             var uiXml = await DumpUiHierarchyAsync(cancellationToken).ConfigureAwait(false);
             if (uiXml is null)
             {
@@ -52,7 +89,7 @@ internal sealed class AndroidMediaProjectionConsentApprover(IAdbClient adbClient
                 var promptFocused = await TryGetMediaProjectionPromptFocusedAsync(cancellationToken).ConfigureAwait(false);
                 if (promptFocused == false)
                 {
-                    return true;
+                    return MediaProjectionConsentOutcome.ApprovedViaPrompt;
                 }
 
                 if (promptFocused == true &&
@@ -67,8 +104,29 @@ internal sealed class AndroidMediaProjectionConsentApprover(IAdbClient adbClient
             await Task.Delay(RetryDelay, cancellationToken).ConfigureAwait(false);
         }
 
-        return false;
+        return MediaProjectionConsentOutcome.NotApproved;
     }
+
+    /// <summary>
+    /// Whether the helper's capture service is running on the device.
+    /// </summary>
+    internal static async Task<bool> IsCaptureServiceRunningAsync(
+        IAdbClient adbClient,
+        string captureServiceComponent,
+        CancellationToken cancellationToken)
+    {
+        var services = await adbClient.RunAsync(["shell", "dumpsys", "activity", "services", captureServiceComponent], cancellationToken).ConfigureAwait(false);
+        return services.ExitCode == 0 && IsCaptureServiceRecordPresent(services.Stdout, captureServiceComponent);
+    }
+
+    /// <summary>
+    /// A running service prints <c>ServiceRecord{… dev.luotsi.view/.CaptureService}</c>;
+    /// an idle one prints <c>(nothing)</c>.
+    /// </summary>
+    internal static bool IsCaptureServiceRecordPresent(string dumpsysOutput, string captureServiceComponent) =>
+        dumpsysOutput.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(line => line.Contains("ServiceRecord{", StringComparison.Ordinal) &&
+                         line.Contains(captureServiceComponent, StringComparison.Ordinal));
 
     private async Task<string?> DumpUiHierarchyAsync(CancellationToken cancellationToken)
     {

@@ -41,6 +41,38 @@ Published Luotsi bundles include the Android view helper APK used for MediaProje
 | `screenrecord` | Legacy Android screen recording; 180-second session limit |
 | `mediaprojection` | Requires screen-capture consent on the device; supports `--codec h264` |
 
+### MediaProjection consent
+
+The helper starts its capture service only after Android returns `RESULT_OK` for
+the screen-capture request. Startup treats a running capture service
+(`dumpsys activity services dev.luotsi.view/.CaptureService`) as proof of
+consent, so it does not depend on a prompt ever being shown:
+
+- When Android shows the consent prompt, Luotsi taps it and reports
+  `mediaprojection_consent` as "Android MediaProjection consent was approved."
+- Some devices (seen on an Android 8.1 device) grant consent
+  **without any prompt**. Startup then reports "Android MediaProjection consent
+  was granted without a prompt." instead of waiting for a dialog that never
+  appears.
+
+Before starting the consent activity, startup checks for a capture service left
+running by an earlier session that ended without cleanup (for example a killed
+host process). It stops it with `am force-stop dev.luotsi.view` and reports
+`mediaprojection_leftover`, so the old service cannot be mistaken for this
+session's consent. Android allows one active MediaProjection, so a new session
+would end the old projection anyway. Today the helper install (`adb install -r`)
+already force-stops the package, so this guard mainly protects consent
+detection if that install ever becomes conditional. Other
+`localabstract:luotsi_view_*` forwards are still only reported, never removed:
+`adb forward --list` spans every device and screenrecord sessions share the
+prefix, so they may belong to a live session.
+
+`session-timeline.jsonl` and the other artifact files written through the
+artifact session are opened for shared reading. Luotsi's own readers, and tools
+that open files allowing concurrent writers (`tail -f`, `Get-Content -Wait`),
+can read the timeline while a session is still running, for example to
+diagnose a stuck startup.
+
 ---
 
 ## Profiles

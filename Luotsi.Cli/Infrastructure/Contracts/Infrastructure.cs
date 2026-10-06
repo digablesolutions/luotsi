@@ -20,6 +20,13 @@ public interface IFileSystem
     Task<byte[]> ReadAllBytesAsync(string path, CancellationToken cancellationToken = default);
     Stream OpenRead(string path);
     Stream OpenWrite(string path, bool overwrite = true);
+
+    /// <summary>
+    /// Opens <paramref name="path"/> for writing while still letting other processes
+    /// read it, for long-lived logs such as a session timeline that operators tail
+    /// while the session runs. Other writers stay excluded.
+    /// </summary>
+    Stream OpenWriteShared(string path, bool overwrite = true) => OpenWrite(path, overwrite);
     void DeleteFile(string path);
     bool FileExists(string path);
     void CopyFile(string sourcePath, string destinationPath, bool overwrite);

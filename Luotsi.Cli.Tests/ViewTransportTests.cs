@@ -264,6 +264,8 @@ public sealed class ViewTransportTests
         adb.EnqueueRunResult(new ProcessResult(0, "dev.luotsi.view/.ConsentActivity\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "Service dev.luotsi.view.CaptureService:\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "38543\n", string.Empty));
+        // Leftover capture-service check before consent: none running.
+        adb.EnqueueRunResult(NoCaptureServiceRunning());
         adb.EnqueueRunResult(new ProcessResult(0, "device-1 tcp:38543 localabstract:luotsi_view_session123\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "Starting: Intent { cmp=dev.luotsi.view/.ConsentActivity }\n", string.Empty));
@@ -284,13 +286,14 @@ public sealed class ViewTransportTests
         Assert.Equal(["shell", "cmd", "package", "resolve-activity", "--brief", "dev.luotsi.view/.ConsentActivity"], adb.RunCommands[1]);
         Assert.Equal(["shell", "pm", "dump", "dev.luotsi.view"], adb.RunCommands[2]);
         Assert.Equal(["forward", "tcp:0", "localabstract:luotsi_view_session123"], adb.RunCommands[3]);
-        Assert.Equal(["forward", "--list"], adb.RunCommands[4]);
-        Assert.Equal(["shell", "dumpsys", "window"], adb.RunCommands[5]);
-        Assert.Equal("shell", adb.RunCommands[6][0]);
-        Assert.Equal("am", adb.RunCommands[6][1]);
-        Assert.Equal("start", adb.RunCommands[6][2]);
-        Assert.Contains("dev.luotsi.view/.ConsentActivity", adb.RunCommands[6], StringComparer.Ordinal);
-        Assert.Contains("luotsi_view_session123", adb.RunCommands[6], StringComparer.Ordinal);
+        Assert.Equal(["shell", "dumpsys", "activity", "services", "dev.luotsi.view/.CaptureService"], adb.RunCommands[4]);
+        Assert.Equal(["forward", "--list"], adb.RunCommands[5]);
+        Assert.Equal(["shell", "dumpsys", "window"], adb.RunCommands[6]);
+        Assert.Equal("shell", adb.RunCommands[7][0]);
+        Assert.Equal("am", adb.RunCommands[7][1]);
+        Assert.Equal("start", adb.RunCommands[7][2]);
+        Assert.Contains("dev.luotsi.view/.ConsentActivity", adb.RunCommands[7], StringComparer.Ordinal);
+        Assert.Contains("luotsi_view_session123", adb.RunCommands[7], StringComparer.Ordinal);
         Assert.Contains("uiautomator dump /data/local/tmp/luotsi-view-window.xml", adb.ShellCommands[0], StringComparison.Ordinal);
         Assert.Contains("cat /data/local/tmp/luotsi-view-window.xml", adb.ShellCommands[0], StringComparison.Ordinal);
         Assert.Equal("input tap 1276 665", adb.ShellCommands[1]);
@@ -304,6 +307,8 @@ public sealed class ViewTransportTests
         adb.EnqueueRunResult(new ProcessResult(0, "dev.luotsi.view/.ConsentActivity\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "Service dev.luotsi.view.CaptureService:\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "38543\n", string.Empty));
+        // Leftover capture-service check before consent: none running.
+        adb.EnqueueRunResult(NoCaptureServiceRunning());
         adb.EnqueueRunResult(new ProcessResult(0, "device-1 tcp:38543 localabstract:luotsi_view_session123\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "Starting: Intent { cmp=dev.luotsi.view/.ConsentActivity }\n", string.Empty));
@@ -338,6 +343,8 @@ public sealed class ViewTransportTests
         adb.EnqueueRunResult(new ProcessResult(0, "dev.luotsi.view/.ConsentActivity\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "Service dev.luotsi.view.CaptureService:\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "38543\n", string.Empty));
+        // Leftover capture-service check before consent: none running.
+        adb.EnqueueRunResult(NoCaptureServiceRunning());
         adb.EnqueueRunResult(new ProcessResult(0, "device-1 tcp:38543 localabstract:luotsi_view_session123\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "Starting: Intent { cmp=dev.luotsi.view/.ConsentActivity }\n", string.Empty));
@@ -367,6 +374,8 @@ public sealed class ViewTransportTests
         adb.EnqueueRunResult(new ProcessResult(0, "dev.luotsi.view/.ConsentActivity\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "Service dev.luotsi.view.CaptureService:\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "38543\n", string.Empty));
+        // Leftover capture-service check before consent: none running.
+        adb.EnqueueRunResult(NoCaptureServiceRunning());
         adb.EnqueueRunResult(new ProcessResult(0, "device-1 tcp:38543 localabstract:luotsi_view_session123\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "mCurrentFocus=Window{aa19178 u0 Sys2009:com.android.systemui/com.android.systemui.media.MediaProjectionPermissionActivity}\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "Starting: Intent { cmp=dev.luotsi.view/.ConsentActivity }\n", string.Empty));
@@ -398,6 +407,8 @@ public sealed class ViewTransportTests
         adb.EnqueueRunResult(new ProcessResult(0, "dev.luotsi.view/.ConsentActivity\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "Service dev.luotsi.view.CaptureService:\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "38543\n", string.Empty));
+        // Leftover capture-service check before consent: none running.
+        adb.EnqueueRunResult(NoCaptureServiceRunning());
         adb.EnqueueRunResult(new ProcessResult(0, "device-1 tcp:38543 localabstract:luotsi_view_session123\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "Starting: Intent { cmp=dev.luotsi.view/.ConsentActivity }\n", string.Empty));
@@ -425,6 +436,8 @@ public sealed class ViewTransportTests
         adb.EnqueueRunResult(new ProcessResult(0, "dev.luotsi.view/.ConsentActivity\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "Service dev.luotsi.view.CaptureService:\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "38543\n", string.Empty));
+        // Leftover capture-service check before consent: none running.
+        adb.EnqueueRunResult(NoCaptureServiceRunning());
         adb.EnqueueRunResult(new ProcessResult(0, "device-1 tcp:38543 localabstract:luotsi_view_session123\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "Starting: Intent { cmp=dev.luotsi.view/.ConsentActivity }\n", string.Empty));
@@ -455,6 +468,8 @@ public sealed class ViewTransportTests
         adb.EnqueueRunResult(new ProcessResult(0, "dev.luotsi.view/.ConsentActivity\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "Service dev.luotsi.view.CaptureService:\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "38543\n", string.Empty));
+        // Leftover capture-service check before consent: none running.
+        adb.EnqueueRunResult(NoCaptureServiceRunning());
         adb.EnqueueRunResult(new ProcessResult(0, "device-1 tcp:38543 localabstract:luotsi_view_session123\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "Starting: Intent { cmp=dev.luotsi.view/.ConsentActivity }\n", string.Empty));
@@ -485,6 +500,8 @@ public sealed class ViewTransportTests
         adb.EnqueueRunResult(new ProcessResult(0, "dev.luotsi.view/.ConsentActivity\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "Service dev.luotsi.view.CaptureService:\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "38543\n", string.Empty));
+        // Leftover capture-service check before consent: none running.
+        adb.EnqueueRunResult(NoCaptureServiceRunning());
         adb.EnqueueRunResult(new ProcessResult(0, "device-1 tcp:38543 localabstract:luotsi_view_session123\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "Starting: Intent { cmp=dev.luotsi.view/.ConsentActivity }\n", string.Empty));
@@ -505,6 +522,130 @@ public sealed class ViewTransportTests
 
         Assert.Contains("MediaProjection consent", error.Message, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task AndroidViewBootstrap_StartAsync_Accepts_MediaProjection_Consent_Granted_Without_A_Prompt()
+    {
+        // #206: on an Android 8.1 device consent came back RESULT_OK with no
+        // dialog, the helper's capture service started, and the host waited for a prompt
+        // that never appeared until it gave up. The running capture service is the proof.
+        var adb = new FakeAdbClient();
+        adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "dev.luotsi.view/.ConsentActivity\n", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "Service dev.luotsi.view.CaptureService:\n", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "38543\n", string.Empty));
+        adb.EnqueueRunResult(NoCaptureServiceRunning());
+        adb.EnqueueRunResult(new ProcessResult(0, "device-1 tcp:38543 localabstract:luotsi_view_session123\n", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "Starting: Intent { cmp=dev.luotsi.view/.ConsentActivity }\n", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "PROJECT_MEDIA: allow\n", string.Empty));
+        // First attempt: the service has not started yet, and the screen shows the
+        // foreground app -- no prompt anywhere.
+        adb.EnqueueRunResult(NoCaptureServiceRunning());
+        adb.EnqueueShellResult(new ProcessResult(0, """
+            <?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+            <hierarchy>
+              <node text="Foreground app" resource-id="" bounds="[32,240][820,360]" />
+            </hierarchy>
+            """, string.Empty));
+        // Second attempt: consent was granted silently and the service is up.
+        adb.EnqueueRunResult(CaptureServiceRunning());
+        var phases = new List<ViewStartupPhase>();
+        var locator = new FakeAndroidViewHelperPackageLocator(new AndroidViewHelperPackage("C:/tmp/helper.apk", "/data/local/tmp/luotsi-view-server.apk", "dev.luotsi.view.Main", "test-helper"));
+        var bootstrap = new AndroidViewBootstrap(new FakeAdbClientFactory(adb), new DefaultProcessRunner(), locator, new FakeUniqueIdGenerator("session123"));
+
+        var connection = await bootstrap.StartAsync(new ViewStartRequest("adb", "device-1", 1280, 30, "8M", "h264", ViewCaptureBackends.MediaProjection), phases.Add);
+
+        Assert.Equal(ViewCaptureBackends.MediaProjection, connection.CaptureBackend);
+        Assert.DoesNotContain(adb.ShellCommands, static command => command.StartsWith("input tap", StringComparison.Ordinal));
+        Assert.Equal(1, adb.ShellCommands.Count(static command => command.Contains("uiautomator dump", StringComparison.Ordinal)));
+        var consent = Assert.Single(phases, static phase => phase is {Phase: "mediaprojection_consent", Status: ViewStartupPhaseStatus.Succeeded});
+        Assert.Contains("without a prompt", consent.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain(phases, static phase => phase.Phase == "mediaprojection_leftover");
+    }
+
+    [Fact]
+    public async Task AndroidViewBootstrap_StartAsync_Stops_Leftover_Capture_Service_Before_Consent_And_Keeps_Other_Forwards()
+    {
+        // A killed view session leaves its capture service running; unstopped, it would
+        // read as this session's consent. Other luotsi forwards are never removed:
+        // `adb forward --list` spans every device (device-2 below) and screenrecord
+        // sessions share the socket prefix, so any of them may be live.
+        var adb = new FakeAdbClient();
+        adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "dev.luotsi.view/.ConsentActivity\n", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "Service dev.luotsi.view.CaptureService:\n", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "38543\n", string.Empty));
+        adb.EnqueueRunResult(CaptureServiceRunning());
+        adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "device-1 tcp:40001 localabstract:luotsi_view_oldsession\ndevice-2 tcp:40002 localabstract:luotsi_view_othersession\ndevice-1 tcp:38543 localabstract:luotsi_view_session123\n", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "Starting: Intent { cmp=dev.luotsi.view/.ConsentActivity }\n", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "PROJECT_MEDIA: allow\n", string.Empty));
+        adb.EnqueueRunResult(CaptureServiceRunning());
+        var phases = new List<ViewStartupPhase>();
+        var locator = new FakeAndroidViewHelperPackageLocator(new AndroidViewHelperPackage("C:/tmp/helper.apk", "/data/local/tmp/luotsi-view-server.apk", "dev.luotsi.view.Main", "test-helper"));
+        var bootstrap = new AndroidViewBootstrap(new FakeAdbClientFactory(adb), new DefaultProcessRunner(), locator, new FakeUniqueIdGenerator("session123"));
+
+        await bootstrap.StartAsync(new ViewStartRequest("adb", "device-1", 1280, 30, "8M", "h264", ViewCaptureBackends.MediaProjection), phases.Add);
+
+        var forceStop = adb.RunCommands.FindIndex(static args => args.SequenceEqual(["shell", "am", "force-stop", "dev.luotsi.view"]));
+        var consentStart = adb.RunCommands.FindIndex(static args => args.Length > 2 && args[1] == "am" && args[2] == "start");
+        Assert.True(forceStop >= 0, "the leftover capture service was not stopped");
+        Assert.True(forceStop < consentStart, "the leftover must be stopped before the consent activity starts");
+        Assert.DoesNotContain(adb.RunCommands, static args => args.Length > 1 && args[0] == "forward" && args[1] == "--remove");
+        Assert.Contains(phases, static phase => phase is {Phase: "mediaprojection_leftover", Status: ViewStartupPhaseStatus.Succeeded});
+        var cleanup = Assert.Single(phases, static phase => phase.Phase == "adb_forward_cleanup" && phase.Status != ViewStartupPhaseStatus.Started);
+        Assert.Equal(ViewStartupPhaseStatus.Skipped, cleanup.Status);
+        Assert.Contains("tcp:40002", cleanup.Detail!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AndroidViewBootstrap_StartAsync_Leaves_Other_Forwards_When_No_Leftover_Capture_Service_Runs()
+    {
+        // Without a stopped leftover, another forward may belong to a live session.
+        var adb = new FakeAdbClient();
+        adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "dev.luotsi.view/.ConsentActivity\n", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "Service dev.luotsi.view.CaptureService:\n", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "38543\n", string.Empty));
+        adb.EnqueueRunResult(NoCaptureServiceRunning());
+        adb.EnqueueRunResult(new ProcessResult(0, "device-1 tcp:40001 localabstract:luotsi_view_oldsession\ndevice-1 tcp:38543 localabstract:luotsi_view_session123\n", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "Starting: Intent { cmp=dev.luotsi.view/.ConsentActivity }\n", string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "PROJECT_MEDIA: allow\n", string.Empty));
+        adb.EnqueueRunResult(CaptureServiceRunning());
+        var phases = new List<ViewStartupPhase>();
+        var locator = new FakeAndroidViewHelperPackageLocator(new AndroidViewHelperPackage("C:/tmp/helper.apk", "/data/local/tmp/luotsi-view-server.apk", "dev.luotsi.view.Main", "test-helper"));
+        var bootstrap = new AndroidViewBootstrap(new FakeAdbClientFactory(adb), new DefaultProcessRunner(), locator, new FakeUniqueIdGenerator("session123"));
+
+        await bootstrap.StartAsync(new ViewStartRequest("adb", "device-1", 1280, 30, "8M", "h264", ViewCaptureBackends.MediaProjection), phases.Add);
+
+        Assert.DoesNotContain(adb.RunCommands, static args => args.Length > 1 && args[0] == "forward" && args[1] == "--remove");
+        Assert.DoesNotContain(adb.RunCommands, static args => args.SequenceEqual(["shell", "am", "force-stop", "dev.luotsi.view"]));
+        Assert.Contains(phases, static phase => phase is {Phase: "adb_forward_cleanup", Status: ViewStartupPhaseStatus.Skipped} && phase.Summary.Contains("left in place", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("ACTIVITY MANAGER SERVICES (dumpsys activity services)\n  (nothing)\n", false)]
+    [InlineData("  * ServiceRecord{919527c u0 dev.luotsi.view/.CaptureService}\n", true)]
+    [InlineData("  * ServiceRecord{1 u0 com.example/.OtherService}\n", false)]
+    [InlineData("", false)]
+    public void ConsentApprover_Recognises_Only_The_Helper_Capture_Service_Record(string dumpsys, bool expected)
+    {
+        Assert.Equal(expected, AndroidMediaProjectionConsentApprover.IsCaptureServiceRecordPresent(dumpsys, "dev.luotsi.view/.CaptureService"));
+    }
+
+    private static ProcessResult NoCaptureServiceRunning() =>
+        new(0, "ACTIVITY MANAGER SERVICES (dumpsys activity services)\n  (nothing)\n", string.Empty);
+
+    private static ProcessResult CaptureServiceRunning() =>
+        new(0, """
+            ACTIVITY MANAGER SERVICES (dumpsys activity services)
+              User 0 active services:
+              * ServiceRecord{919527c u0 dev.luotsi.view/.CaptureService}
+                intent={act=dev.luotsi.view.action.START_CAPTURE cmp=dev.luotsi.view/.CaptureService}
+            """, string.Empty);
 
     private static string MediaProjectionConsentPromptDump() =>
         """

@@ -74,11 +74,16 @@ public sealed class AndroidViewBootstrap(
             var localPort = await ResolveForwardedLocalPortAsync(adbClient, forward, socketName, cancellationToken).ConfigureAwait(false);
             Report(reportPhase, "adb_forward", ViewStartupPhaseStatus.Succeeded, "ADB forward is ready.", $"local=tcp:{localPort}; remote=localabstract:{socketName}");
             _localPort = localPort;
+            if (string.Equals(activeBackend, ViewCaptureBackends.MediaProjection, StringComparison.Ordinal))
+            {
+                await StopLeftoverCaptureServiceAsync(adbClient, package, reportPhase, cancellationToken).ConfigureAwait(false);
+            }
+
             await RemoveStaleViewForwardsAsync(adbClient, $"tcp:{localPort}", reportPhase, cancellationToken).ConfigureAwait(false);
 
             if (string.Equals(activeBackend, ViewCaptureBackends.MediaProjection, StringComparison.Ordinal))
             {
-                var consentApprover = new AndroidMediaProjectionConsentApprover(adbClient);
+                var consentApprover = new AndroidMediaProjectionConsentApprover(adbClient, package.CaptureService);
                 await DismissStaleMediaProjectionPromptAsync(adbClient, reportPhase, cancellationToken).ConfigureAwait(false);
                 Report(reportPhase, "mediaprojection_activity", ViewStartupPhaseStatus.Started, "Starting Android MediaProjection consent activity.", package.ConsentActivity);
                 var start = await adbClient.RunAsync([
@@ -107,15 +112,22 @@ public sealed class AndroidViewBootstrap(
                 Report(reportPhase, "mediaprojection_activity", ViewStartupPhaseStatus.Succeeded, "Android MediaProjection consent activity started.", start.Stdout.Trim());
                 await ReportMediaProjectionAppOpsAsync(adbClient, package.PackageName, reportPhase, cancellationToken).ConfigureAwait(false);
                 Report(reportPhase, "mediaprojection_consent", ViewStartupPhaseStatus.Started, "Waiting for Android MediaProjection consent prompt.", "uiautomator=start-now");
-                var approved = await consentApprover.TryApproveAsync(cancellationToken).ConfigureAwait(false);
-                if (!approved)
+                var consent = await consentApprover.TryApproveAsync(cancellationToken).ConfigureAwait(false);
+                if (consent == MediaProjectionConsentOutcome.NotApproved)
                 {
                     const string message = "MediaProjection consent prompt was not approved or could not be detected.";
                     Report(reportPhase, "mediaprojection_consent", ViewStartupPhaseStatus.Failed, message, null, "Approve the Android screen-capture prompt on the device, or use --capture-backend auto/screenrecord.");
                     throw new MediaProjectionConsentException(message);
                 }
 
-                Report(reportPhase, "mediaprojection_consent", ViewStartupPhaseStatus.Succeeded, "Android MediaProjection consent was approved.");
+                Report(
+                    reportPhase,
+                    "mediaprojection_consent",
+                    ViewStartupPhaseStatus.Succeeded,
+                    consent == MediaProjectionConsentOutcome.GrantedWithoutPrompt
+                        ? "Android MediaProjection consent was granted without a prompt."
+                        : "Android MediaProjection consent was approved.",
+                    consent == MediaProjectionConsentOutcome.GrantedWithoutPrompt ? "capture service running; no prompt was shown" : null);
             }
             else
             {
@@ -176,6 +188,47 @@ public sealed class AndroidViewBootstrap(
             back.ExitCode == 0 ? null : (string.IsNullOrWhiteSpace(back.Stderr) ? back.Stdout : back.Stderr),
             back.ExitCode == 0 ? null : "Dismiss the Android screen-capture prompt manually, then retry luotsi view.");
         await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Stops a capture service left running by an earlier view session that ended
+    /// without cleanup (for example a killed host process).
+    /// </summary>
+    /// <remarks>
+    /// Consent detection treats a running capture service as proof that this session's
+    /// consent was granted, so a leftover would read as a false grant. Stopping it is
+    /// safe: Android allows one active MediaProjection, so starting a new one ends any
+    /// older projection anyway, and only the helper package is stopped.
+    /// Today the preceding <c>adb install -r</c> already force-stops the package, so
+    /// this mainly keeps consent detection honest if the install ever becomes
+    /// conditional (for example skipped when the installed helper already matches).
+    /// </remarks>
+    private static async Task StopLeftoverCaptureServiceAsync(
+        IAdbClient adbClient,
+        AndroidViewHelperPackage package,
+        Action<ViewStartupPhase>? reportPhase,
+        CancellationToken cancellationToken)
+    {
+        if (!await AndroidMediaProjectionConsentApprover.IsCaptureServiceRunningAsync(adbClient, package.CaptureService, cancellationToken).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        Report(reportPhase, "mediaprojection_leftover", ViewStartupPhaseStatus.Started, "Stopping a leftover Luotsi capture service from an earlier view session.", package.CaptureService);
+        var stop = await adbClient.RunAsync(["shell", "am", "force-stop", package.PackageName], cancellationToken).ConfigureAwait(false);
+        if (stop.ExitCode != 0)
+        {
+            Report(
+                reportPhase,
+                "mediaprojection_leftover",
+                ViewStartupPhaseStatus.Failed,
+                "Could not stop the leftover Luotsi capture service.",
+                string.IsNullOrWhiteSpace(stop.Stderr) ? stop.Stdout.Trim() : stop.Stderr.Trim(),
+                $"Run `adb shell am force-stop {package.PackageName}`, then retry luotsi view.");
+            throw new InvalidOperationException($"view helper leftover capture service stop failed: {package.PackageName}");
+        }
+
+        Report(reportPhase, "mediaprojection_leftover", ViewStartupPhaseStatus.Succeeded, "Stopped a leftover Luotsi capture service from an earlier view session.", package.PackageName);
     }
 
     private static string? ExtractMediaProjectionFocusLine(string output)
