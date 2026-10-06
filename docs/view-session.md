@@ -60,16 +60,18 @@ running by an earlier session that ended without cleanup (for example a killed
 host process). It stops it with `am force-stop dev.luotsi.view` and reports
 `mediaprojection_leftover`, so the old service cannot be mistaken for this
 session's consent. Android allows one active MediaProjection, so a new session
-would end the old projection anyway. Only after a leftover is stopped does
-`adb_forward_cleanup` remove the other `localabstract:luotsi_view_*` forwards;
-otherwise they are reported and left in place, because they might belong to a
-live session. Today the helper install (`adb install -r`) already force-stops
-the package, so this guard mainly protects consent detection if that install
-ever becomes conditional.
+would end the old projection anyway. Today the helper install (`adb install -r`)
+already force-stops the package, so this guard mainly protects consent
+detection if that install ever becomes conditional. Other
+`localabstract:luotsi_view_*` forwards are still only reported, never removed:
+`adb forward --list` spans every device and screenrecord sessions share the
+prefix, so they may belong to a live session.
 
 `session-timeline.jsonl` and the other artifact files written through the
-artifact session are opened for shared reading, so you can tail the timeline
-while a session is still running, for example to diagnose a stuck startup.
+artifact session are opened for shared reading. Luotsi's own readers, and tools
+that open files allowing concurrent writers (`tail -f`, `Get-Content -Wait`),
+can read the timeline while a session is still running, for example to
+diagnose a stuck startup.
 
 ---
 

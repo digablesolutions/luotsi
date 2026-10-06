@@ -17,18 +17,30 @@ public sealed class PhysicalFileSystem : IFileSystem
     public Task WriteAllTextAsync(string path, string text, Encoding encoding, CancellationToken cancellationToken = default) =>
         File.WriteAllTextAsync(path, text, encoding, cancellationToken);
 
-    public Task<string> ReadAllTextAsync(string path, CancellationToken cancellationToken = default) =>
-        File.ReadAllTextAsync(path, cancellationToken);
+    // Reads share Read+Write so they work while a session is still appending to a
+    // file opened with OpenWriteShared. Files opened with OpenWrite (FileShare.None)
+    // still refuse them, so exclusive writers keep their guarantee.
+    public async Task<string> ReadAllTextAsync(string path, CancellationToken cancellationToken = default)
+    {
+        await using var stream = OpenRead(path);
+        using var reader = new StreamReader(stream, detectEncodingFromByteOrderMarks: true);
+        return await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+    }
 
-    public Task<byte[]> ReadAllBytesAsync(string path, CancellationToken cancellationToken = default) =>
-        File.ReadAllBytesAsync(path, cancellationToken);
+    public async Task<byte[]> ReadAllBytesAsync(string path, CancellationToken cancellationToken = default)
+    {
+        await using var stream = OpenRead(path);
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
+        return buffer.ToArray();
+    }
 
     public Stream OpenRead(string path) =>
         new FileStream(path, new FileStreamOptions
         {
             Mode = FileMode.Open,
             Access = FileAccess.Read,
-            Share = FileShare.Read,
+            Share = FileShare.ReadWrite,
             BufferSize = DefaultBufferSize,
             Options = FileOptions.Asynchronous | FileOptions.SequentialScan
         });

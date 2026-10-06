@@ -74,9 +74,12 @@ public sealed class AndroidViewBootstrap(
             var localPort = await ResolveForwardedLocalPortAsync(adbClient, forward, socketName, cancellationToken).ConfigureAwait(false);
             Report(reportPhase, "adb_forward", ViewStartupPhaseStatus.Succeeded, "ADB forward is ready.", $"local=tcp:{localPort}; remote=localabstract:{socketName}");
             _localPort = localPort;
-            var stoppedLeftover = string.Equals(activeBackend, ViewCaptureBackends.MediaProjection, StringComparison.Ordinal) &&
+            if (string.Equals(activeBackend, ViewCaptureBackends.MediaProjection, StringComparison.Ordinal))
+            {
                 await StopLeftoverCaptureServiceAsync(adbClient, package, reportPhase, cancellationToken).ConfigureAwait(false);
-            await RemoveStaleViewForwardsAsync(adbClient, $"tcp:{localPort}", stoppedLeftover, reportPhase, cancellationToken).ConfigureAwait(false);
+            }
+
+            await RemoveStaleViewForwardsAsync(adbClient, $"tcp:{localPort}", reportPhase, cancellationToken).ConfigureAwait(false);
 
             if (string.Equals(activeBackend, ViewCaptureBackends.MediaProjection, StringComparison.Ordinal))
             {
@@ -200,7 +203,7 @@ public sealed class AndroidViewBootstrap(
     /// this mainly keeps consent detection honest if the install ever becomes
     /// conditional (for example skipped when the installed helper already matches).
     /// </remarks>
-    private static async Task<bool> StopLeftoverCaptureServiceAsync(
+    private static async Task StopLeftoverCaptureServiceAsync(
         IAdbClient adbClient,
         AndroidViewHelperPackage package,
         Action<ViewStartupPhase>? reportPhase,
@@ -208,7 +211,7 @@ public sealed class AndroidViewBootstrap(
     {
         if (!await AndroidMediaProjectionConsentApprover.IsCaptureServiceRunningAsync(adbClient, package.CaptureService, cancellationToken).ConfigureAwait(false))
         {
-            return false;
+            return;
         }
 
         Report(reportPhase, "mediaprojection_leftover", ViewStartupPhaseStatus.Started, "Stopping a leftover Luotsi capture service from an earlier view session.", package.CaptureService);
@@ -226,7 +229,6 @@ public sealed class AndroidViewBootstrap(
         }
 
         Report(reportPhase, "mediaprojection_leftover", ViewStartupPhaseStatus.Succeeded, "Stopped a leftover Luotsi capture service from an earlier view session.", package.PackageName);
-        return true;
     }
 
     private static string? ExtractMediaProjectionFocusLine(string output)
@@ -277,7 +279,6 @@ public sealed class AndroidViewBootstrap(
     private static async Task RemoveStaleViewForwardsAsync(
         IAdbClient adbClient,
         string currentLocal,
-        bool leftoverCaptureServiceStopped,
         Action<ViewStartupPhase>? reportPhase,
         CancellationToken cancellationToken)
     {
@@ -292,33 +293,6 @@ public sealed class AndroidViewBootstrap(
         var otherLuotsiLocals = ParseStaleViewForwardLocals(list.Stdout)
             .Where(local => !string.Equals(local, currentLocal, StringComparison.OrdinalIgnoreCase))
             .ToArray();
-
-        if (otherLuotsiLocals.Length > 0 && leftoverCaptureServiceStopped)
-        {
-            // The helper serves one projection at a time and its leftover service was
-            // just stopped, so these forwards can only point at a dead socket.
-            var removed = new List<string>();
-            foreach (var local in otherLuotsiLocals)
-            {
-                var remove = await adbClient.RunAsync(["forward", "--remove", local], cancellationToken).ConfigureAwait(false);
-                if (remove.ExitCode == 0)
-                {
-                    removed.Add(local);
-                }
-            }
-
-            var kept = otherLuotsiLocals.Except(removed, StringComparer.OrdinalIgnoreCase).ToArray();
-            Report(
-                reportPhase,
-                "adb_forward_cleanup",
-                kept.Length == 0 ? ViewStartupPhaseStatus.Succeeded : ViewStartupPhaseStatus.Skipped,
-                kept.Length == 0
-                    ? "Removed stale Luotsi adb forwards left by an earlier view session."
-                    : "Some stale Luotsi adb forwards could not be removed.",
-                string.Join(", ", kept.Length == 0 ? removed : kept),
-                kept.Length == 0 ? null : "Run `adb forward --remove <local>` for the listed forwards, or restart adb.");
-            return;
-        }
 
         Report(
             reportPhase,

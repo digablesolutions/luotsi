@@ -884,9 +884,20 @@ public sealed partial class AppTests
             {
                 await writer.WriteLineAsync("{\"type\":\"view_startup_phase\"}");
 
-                await using var reader = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                using var text = new StreamReader(reader);
-                Assert.Contains("view_startup_phase", await text.ReadToEndAsync(), StringComparison.Ordinal);
+                // Luotsi's own readers (replay, summaries) go through these, not a
+                // hand-picked FileShare.ReadWrite -- they must work too.
+                Assert.Contains("view_startup_phase", await fileSystem.ReadAllTextAsync(path), StringComparison.Ordinal);
+                Assert.NotEmpty(await fileSystem.ReadAllBytesAsync(path));
+                await using (var reader = fileSystem.OpenRead(path))
+                {
+                    using var text = new StreamReader(reader);
+                    Assert.Contains("view_startup_phase", await text.ReadToEndAsync(), StringComparison.Ordinal);
+                }
+
+                // And tail-style tools that allow a concurrent writer.
+                await using var tail = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                using var tailText = new StreamReader(tail);
+                Assert.Contains("view_startup_phase", await tailText.ReadToEndAsync(), StringComparison.Ordinal);
 
                 // Readers yes, a second writer no.
                 Assert.Throws<IOException>(() => new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.ReadWrite));
@@ -906,9 +917,11 @@ public sealed partial class AppTests
         try
         {
             var path = Path.Join(directory.FullName, "lease.json");
-            using var writer = new PhysicalFileSystem().OpenWrite(path);
+            var fileSystem = new PhysicalFileSystem();
+            using var writer = fileSystem.OpenWrite(path);
 
             Assert.Throws<IOException>(() => new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite));
+            Assert.Throws<IOException>(() => fileSystem.OpenRead(path));
         }
         finally
         {
@@ -929,11 +942,7 @@ public sealed partial class AppTests
             replay.RecordSerializedEvent("{\"type\":\"view_startup_phase\"}");
 
             var path = Path.Join(directory.FullName, SessionReplayArtifacts.TimelineFileName);
-            await using (var reader = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-            {
-                using var text = new StreamReader(reader);
-                Assert.Contains("view_startup_phase", await text.ReadToEndAsync(), StringComparison.Ordinal);
-            }
+            Assert.Contains("view_startup_phase", await new PhysicalFileSystem().ReadAllTextAsync(path), StringComparison.Ordinal);
 
             await replay.PersistAsync(DateTimeOffset.UtcNow, "test", 0);
         }

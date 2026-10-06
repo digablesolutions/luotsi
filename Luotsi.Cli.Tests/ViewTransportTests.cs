@@ -565,10 +565,12 @@ public sealed class ViewTransportTests
     }
 
     [Fact]
-    public async Task AndroidViewBootstrap_StartAsync_Stops_Leftover_Capture_Service_And_Its_Forwards_Before_Consent()
+    public async Task AndroidViewBootstrap_StartAsync_Stops_Leftover_Capture_Service_Before_Consent_And_Keeps_Other_Forwards()
     {
-        // A killed view session leaves its capture service running. Unstopped, it would
-        // read as this session's consent; its forward points at a dead socket.
+        // A killed view session leaves its capture service running; unstopped, it would
+        // read as this session's consent. Other luotsi forwards are never removed:
+        // `adb forward --list` spans every device (device-2 below) and screenrecord
+        // sessions share the socket prefix, so any of them may be live.
         var adb = new FakeAdbClient();
         adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "dev.luotsi.view/.ConsentActivity\n", string.Empty));
@@ -576,8 +578,7 @@ public sealed class ViewTransportTests
         adb.EnqueueRunResult(new ProcessResult(0, "38543\n", string.Empty));
         adb.EnqueueRunResult(CaptureServiceRunning());
         adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
-        adb.EnqueueRunResult(new ProcessResult(0, "device-1 tcp:40001 localabstract:luotsi_view_oldsession\ndevice-1 tcp:38543 localabstract:luotsi_view_session123\n", string.Empty));
-        adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
+        adb.EnqueueRunResult(new ProcessResult(0, "device-1 tcp:40001 localabstract:luotsi_view_oldsession\ndevice-2 tcp:40002 localabstract:luotsi_view_othersession\ndevice-1 tcp:38543 localabstract:luotsi_view_session123\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, string.Empty, string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "Starting: Intent { cmp=dev.luotsi.view/.ConsentActivity }\n", string.Empty));
         adb.EnqueueRunResult(new ProcessResult(0, "PROJECT_MEDIA: allow\n", string.Empty));
@@ -592,12 +593,11 @@ public sealed class ViewTransportTests
         var consentStart = adb.RunCommands.FindIndex(static args => args.Length > 2 && args[1] == "am" && args[2] == "start");
         Assert.True(forceStop >= 0, "the leftover capture service was not stopped");
         Assert.True(forceStop < consentStart, "the leftover must be stopped before the consent activity starts");
-        Assert.Contains(adb.RunCommands, static args => args.SequenceEqual(["forward", "--remove", "tcp:40001"]));
-        Assert.DoesNotContain(adb.RunCommands, static args => args.SequenceEqual(["forward", "--remove", "tcp:38543"]));
+        Assert.DoesNotContain(adb.RunCommands, static args => args.Length > 1 && args[0] == "forward" && args[1] == "--remove");
         Assert.Contains(phases, static phase => phase is {Phase: "mediaprojection_leftover", Status: ViewStartupPhaseStatus.Succeeded});
         var cleanup = Assert.Single(phases, static phase => phase.Phase == "adb_forward_cleanup" && phase.Status != ViewStartupPhaseStatus.Started);
-        Assert.Equal(ViewStartupPhaseStatus.Succeeded, cleanup.Status);
-        Assert.Contains("tcp:40001", cleanup.Detail!, StringComparison.Ordinal);
+        Assert.Equal(ViewStartupPhaseStatus.Skipped, cleanup.Status);
+        Assert.Contains("tcp:40002", cleanup.Detail!, StringComparison.Ordinal);
     }
 
     [Fact]
