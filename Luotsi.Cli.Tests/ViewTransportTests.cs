@@ -526,7 +526,7 @@ public sealed class ViewTransportTests
     [Fact]
     public async Task AndroidViewBootstrap_StartAsync_Accepts_MediaProjection_Consent_Granted_Without_A_Prompt()
     {
-        // #206: on a Philips 10BDL4551T (Android 8.1) consent came back RESULT_OK with no
+        // #206: on an Android 8.1 device consent came back RESULT_OK with no
         // dialog, the helper's capture service started, and the host waited for a prompt
         // that never appeared until it gave up. The running capture service is the proof.
         var adb = new FakeAdbClient();
@@ -545,7 +545,7 @@ public sealed class ViewTransportTests
         adb.EnqueueShellResult(new ProcessResult(0, """
             <?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
             <hierarchy>
-              <node text="Check in now" resource-id="" bounds="[32,240][820,360]" />
+              <node text="Foreground app" resource-id="" bounds="[32,240][820,360]" />
             </hierarchy>
             """, string.Empty));
         // Second attempt: consent was granted silently and the service is up.

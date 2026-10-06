@@ -50,7 +50,7 @@ consent, so it does not depend on a prompt ever being shown:
 
 - When Android shows the consent prompt, Luotsi taps it and reports
   `mediaprojection_consent` as "Android MediaProjection consent was approved."
-- Some devices (seen on a Philips 10BDL4551T, Android 8.1) grant consent
+- Some devices (seen on an Android 8.1 device) grant consent
   **without any prompt**. Startup then reports "Android MediaProjection consent
   was granted without a prompt." instead of waiting for a dialog that never
   appears.
