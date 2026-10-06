@@ -32,6 +32,8 @@ luotsi view setup --device <serial> --fix
 - `view-doctor` reports decoder, helper, capture-backend, MediaProjection, and recording readiness without opening a stream.
 - `view setup --fix` is the first-stop repair path when the helper APK or local decoder assets are missing.
 - If `--capture-backend mediaprojection` cannot start because consent was not granted, unlock the device and accept the capture dialog. `--capture-backend auto` can fall back to `screenrecord` when MediaProjection is unavailable.
+- Some devices grant MediaProjection consent without showing a dialog. Startup detects this from the helper's running capture service and reports "Android MediaProjection consent was granted without a prompt."
+- To see what a running or stuck `view` startup is doing, tail `session-timeline.jsonl` in its artifact root; it stays readable while the session runs.
 
 ## Wireless pairing is awkward on purpose
 

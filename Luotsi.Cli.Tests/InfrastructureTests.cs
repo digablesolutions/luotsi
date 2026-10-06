@@ -870,4 +870,76 @@ public sealed partial class AppTests
         Assert.Equal("status=restored | entries=7 | share_safety=lab_safe | lab_safe_required=true | sha256=abc123 | sha_verified=true | recommended_commands=1", detail);
     }
 
+    [Fact]
+    public async Task PhysicalFileSystem_OpenWriteShared_Lets_Readers_Tail_A_File_While_It_Is_Written()
+    {
+        // #206: a stuck `view` could not be diagnosed because session-timeline.jsonl was
+        // opened exclusively. A timeline must be readable while the session still runs.
+        var directory = Directory.CreateTempSubdirectory("luotsi-share-");
+        try
+        {
+            var path = Path.Join(directory.FullName, "session-timeline.jsonl");
+            var fileSystem = new PhysicalFileSystem();
+            await using (var writer = new StreamWriter(fileSystem.OpenWriteShared(path)) { AutoFlush = true })
+            {
+                await writer.WriteLineAsync("{\"type\":\"view_startup_phase\"}");
+
+                await using var reader = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                using var text = new StreamReader(reader);
+                Assert.Contains("view_startup_phase", await text.ReadToEndAsync(), StringComparison.Ordinal);
+
+                // Readers yes, a second writer no.
+                Assert.Throws<IOException>(() => new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.ReadWrite));
+            }
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void PhysicalFileSystem_OpenWrite_Stays_Exclusive()
+    {
+        // Lease and policy files rely on the exclusive open; only OpenWriteShared relaxes it.
+        var directory = Directory.CreateTempSubdirectory("luotsi-share-");
+        try
+        {
+            var path = Path.Join(directory.FullName, "lease.json");
+            using var writer = new PhysicalFileSystem().OpenWrite(path);
+
+            Assert.Throws<IOException>(() => new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite));
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task SessionReplayArtifacts_Timeline_Is_Readable_While_The_Session_Runs()
+    {
+        // #206: the real pipeline -- ArtifactSession on the physical file system, the
+        // same writer every view/inspect/run session uses.
+        var directory = Directory.CreateTempSubdirectory("luotsi-timeline-");
+        try
+        {
+            var artifacts = ArtifactSession.AttachExisting(directory.FullName, new PhysicalFileSystem());
+            var replay = new SessionReplayArtifacts(artifacts, "view", "session-1", DateTimeOffset.UtcNow);
+            replay.RecordSerializedEvent("{\"type\":\"view_startup_phase\"}");
+
+            var path = Path.Join(directory.FullName, SessionReplayArtifacts.TimelineFileName);
+            await using (var reader = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            {
+                using var text = new StreamReader(reader);
+                Assert.Contains("view_startup_phase", await text.ReadToEndAsync(), StringComparison.Ordinal);
+            }
+
+            await replay.PersistAsync(DateTimeOffset.UtcNow, "test", 0);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
 }

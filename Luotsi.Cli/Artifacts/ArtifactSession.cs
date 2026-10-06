@@ -131,7 +131,7 @@ public sealed class ArtifactSession
     public ArtifactData ToData() => new(Root, ToOptionValue(UiPollArtifactPolicy));
 
     internal Stream OpenArtifactWrite(string name, bool overwrite = true) =>
-        _fileSystem.OpenWrite(GetArtifactPath(name), overwrite);
+        _fileSystem.OpenWriteShared(GetArtifactPath(name), overwrite);
 
     private string GetArtifactPath(string name)
     {

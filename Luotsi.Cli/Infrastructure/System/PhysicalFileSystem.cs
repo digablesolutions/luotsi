@@ -43,6 +43,16 @@ public sealed class PhysicalFileSystem : IFileSystem
             Options = FileOptions.Asynchronous
         });
 
+    public Stream OpenWriteShared(string path, bool overwrite = true) =>
+        new FileStream(path, new FileStreamOptions
+        {
+            Mode = overwrite ? FileMode.Create : FileMode.CreateNew,
+            Access = FileAccess.Write,
+            Share = FileShare.Read,
+            BufferSize = DefaultBufferSize,
+            Options = FileOptions.Asynchronous
+        });
+
     public void DeleteFile(string path)
     {
         if (File.Exists(path))
