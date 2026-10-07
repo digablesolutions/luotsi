@@ -292,6 +292,16 @@ Resolution order for FFmpeg libraries:
 3. app-base candidates in published layouts
 4. process/path probing
 
+Each candidate directory is checked for the library files the bindings need
+before anything is bound: `avutil`, `swresample` (an avcodec dependency),
+`avcodec` and `swscale` at the bound FFmpeg majors, for example
+`avutil-61.dll` on Windows or `libavutil.so.61` on Linux. Directories that lack
+any of them are skipped. This matters because FFmpeg.AutoGen 9 cannot recover from a
+failed bind in the same process: one attempt against the wrong directory would
+make every later candidate fail too. If a directory has the files but still
+fails to bind, loading stops there and reports that error. When nothing loads,
+the error lists the required files and, per probed directory, which were missing.
+
 `ffmpeg/download-ffmpeg.ps1` is the source-checkout helper for staging host
 libraries. Published bundles carry the app plus platform-specific native
 assets; CI publishes `win-x64`, `linux-x64`, `osx-arm64`, and `osx-x64`
