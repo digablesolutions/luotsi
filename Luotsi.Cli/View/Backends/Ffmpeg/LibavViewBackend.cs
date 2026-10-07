@@ -34,10 +34,14 @@ public interface ILibavNativeLibraryBinder
 /// </summary>
 public sealed class DefaultLibavNativeLibraryBinder : ILibavNativeLibraryBinder
 {
-    // The libraries Bind touches. Their versions come from the bindings themselves, so
-    // a directory holding another FFmpeg major (for example a stale FFmpeg 8 stage)
-    // reads as missing instead of being bound.
-    private static readonly string[] BoundLibraries = ["avutil", "avcodec", "swscale"];
+    // The libraries Bind touches plus their dependency closure, in load order. AutoGen
+    // loads avcodec's dependencies (avutil, swresample) from RootPath first, and
+    // avcodec imports swresample directly, so a directory without swresample would pass
+    // a three-file check, fail to bind, and poison the bindings. Keep this in step with
+    // FFmpeg.AutoGen's (private) LibraryDependenciesMap when the package is bumped.
+    // Versions come from the bindings themselves, so a directory holding another FFmpeg
+    // major (for example a stale FFmpeg 8 stage) reads as missing instead of being bound.
+    private static readonly string[] BoundLibraries = ["avutil", "swresample", "avcodec", "swscale"];
 
     /// <inheritdoc />
     public IReadOnlyList<string> RequiredLibraries { get; } =

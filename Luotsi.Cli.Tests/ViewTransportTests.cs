@@ -834,10 +834,10 @@ public sealed class ViewTransportTests
 
         var error = Assert.Throws<InvalidOperationException>(loader.EnsureLoaded);
 
-        Assert.Contains("Required: avutil-61.dll, avcodec-63.dll, swscale-10.dll", error.Message, StringComparison.Ordinal);
-        Assert.Contains($"{configured} (missing avutil-61.dll, avcodec-63.dll, swscale-10.dll)", error.Message, StringComparison.Ordinal);
+        Assert.Contains("Required: avutil-61.dll, swresample-7.dll, avcodec-63.dll, swscale-10.dll", error.Message, StringComparison.Ordinal);
+        Assert.Contains($"{configured} (missing avutil-61.dll, swresample-7.dll, avcodec-63.dll, swscale-10.dll)", error.Message, StringComparison.Ordinal);
         Assert.Contains("<process-path> (bind failed: DllNotFoundException", error.Message, StringComparison.Ordinal);
-        Assert.Contains("No probed directory contains avutil-61.dll, avcodec-63.dll, swscale-10.dll", error.Message, StringComparison.Ordinal);
+        Assert.Contains("No probed directory contains avutil-61.dll, swresample-7.dll, avcodec-63.dll, swscale-10.dll", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -847,6 +847,7 @@ public sealed class ViewTransportTests
         var expected = new[]
         {
             DefaultLibavNativeLibraryBinder.NativeLibraryFileName("avutil", ffmpeg.LibraryVersionMap["avutil"]),
+            DefaultLibavNativeLibraryBinder.NativeLibraryFileName("swresample", ffmpeg.LibraryVersionMap["swresample"]),
             DefaultLibavNativeLibraryBinder.NativeLibraryFileName("avcodec", ffmpeg.LibraryVersionMap["avcodec"]),
             DefaultLibavNativeLibraryBinder.NativeLibraryFileName("swscale", ffmpeg.LibraryVersionMap["swscale"]),
         };
@@ -1653,7 +1654,7 @@ internal sealed class FakeLibavNativeLibraryBinder : ILibavNativeLibraryBinder
     /// </summary>
     public bool PoisonAfterFirstFailure { get; init; }
 
-    public IReadOnlyList<string> RequiredLibraries { get; } = ["avutil-61.dll", "avcodec-63.dll", "swscale-10.dll"];
+    public IReadOnlyList<string> RequiredLibraries { get; } = ["avutil-61.dll", "swresample-7.dll", "avcodec-63.dll", "swscale-10.dll"];
 
     /// <summary>The root holds the libraries and binds.</summary>
     public void SucceedFor(string? rootPath)
