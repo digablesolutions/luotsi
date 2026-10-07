@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Net.Sockets;
+using FFmpeg.AutoGen;
 using Luotsi.Cli.Errors;
 using Luotsi.Cli.Hosts.Android.View;
 using Luotsi.Cli.Infrastructure.Processes;
@@ -735,7 +736,9 @@ public sealed class ViewTransportTests
         var resolvedRoot = loader.EnsureLoaded();
 
         Assert.Equal(expectedRoot, resolvedRoot);
-        Assert.Equal([configuredRoot, expectedRoot], binder.AttemptedRoots);
+        // The home folder holds no libraries, so it is skipped rather than bound: a failed
+        // bind would poison FFmpeg.AutoGen 9's bindings for bin/ as well (#207).
+        Assert.Equal([expectedRoot], binder.AttemptedRoots);
     }
 
     [Fact]
@@ -766,6 +769,126 @@ public sealed class ViewTransportTests
 
         Assert.Contains("LUOTSI_FFMPEG_ROOT", error.Message, StringComparison.Ordinal);
         Assert.Contains("ffmpeg", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void LibavNativeLibraryLoader_Falls_Back_Past_A_Candidate_Without_Libraries_When_Bindings_Poison()
+    {
+        // #207: with FFmpeg.AutoGen 9 one failed bind poisons every later bind, so the
+        // loader must never bind a candidate that lacks the library files.
+        var configured = Path.GetFullPath("C:\\ffmpeg-missing");
+        var appFfmpeg = Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "ffmpeg", "bin"));
+        var binder = new FakeLibavNativeLibraryBinder { PoisonAfterFirstFailure = true };
+        binder.SucceedFor(appFfmpeg);
+        var loader = new LibavNativeLibraryLoader(
+            new FakeEnvironmentVariables(new Dictionary<string, string>
+            {
+                ["LUOTSI_FFMPEG_ROOT"] = configured
+            }),
+            binder);
+
+        var resolvedRoot = loader.EnsureLoaded();
+
+        Assert.Equal(appFfmpeg, resolvedRoot);
+        Assert.DoesNotContain(configured, binder.AttemptedRoots);
+        Assert.Equal([appFfmpeg], binder.AttemptedRoots);
+    }
+
+    [Fact]
+    public void LibavNativeLibraryLoader_Stops_At_The_First_Bind_Failure_And_Reports_Its_Cause()
+    {
+        // The files are there but do not bind (a broken or mismatched library). Later
+        // candidates would only fail with poisoned NotSupportedExceptions, so stop here
+        // and surface the real error.
+        var broken = Path.GetFullPath("C:\\ffmpeg-broken");
+        var appFfmpeg = Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "ffmpeg", "bin"));
+        var binder = new FakeLibavNativeLibraryBinder { PoisonAfterFirstFailure = true };
+        binder.PresentButBrokenFor(broken);
+        binder.SucceedFor(appFfmpeg);
+        var loader = new LibavNativeLibraryLoader(
+            new FakeEnvironmentVariables(new Dictionary<string, string>
+            {
+                ["LUOTSI_FFMPEG_ROOT"] = broken
+            }),
+            binder);
+
+        var error = Assert.Throws<InvalidOperationException>(loader.EnsureLoaded);
+
+        Assert.Equal([broken], binder.AttemptedRoots);
+        Assert.Contains($"Binding failed for {broken}", error.Message, StringComparison.Ordinal);
+        Assert.Contains("DllNotFoundException", error.Message, StringComparison.Ordinal);
+        Assert.Contains("Missing native libraries", error.Message, StringComparison.Ordinal);
+        Assert.IsType<DllNotFoundException>(error.InnerException);
+    }
+
+    [Fact]
+    public void LibavNativeLibraryLoader_Error_Names_The_Required_Libraries_And_Why_Each_Candidate_Was_Skipped()
+    {
+        var configured = Path.GetFullPath("C:\\ffmpeg-missing");
+        var loader = new LibavNativeLibraryLoader(
+            new FakeEnvironmentVariables(new Dictionary<string, string>
+            {
+                ["LUOTSI_FFMPEG_ROOT"] = configured
+            }),
+            new FakeLibavNativeLibraryBinder());
+
+        var error = Assert.Throws<InvalidOperationException>(loader.EnsureLoaded);
+
+        Assert.Contains("Required: avutil-61.dll, avcodec-63.dll, swscale-10.dll", error.Message, StringComparison.Ordinal);
+        Assert.Contains($"{configured} (missing avutil-61.dll, avcodec-63.dll, swscale-10.dll)", error.Message, StringComparison.Ordinal);
+        Assert.Contains("<process-path> (bind failed: DllNotFoundException", error.Message, StringComparison.Ordinal);
+        Assert.Contains("No probed directory contains avutil-61.dll, avcodec-63.dll, swscale-10.dll", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DefaultLibavNativeLibraryBinder_Reports_Missing_Library_Files_By_Their_Platform_Names()
+    {
+        var binder = new DefaultLibavNativeLibraryBinder();
+        var expected = new[]
+        {
+            DefaultLibavNativeLibraryBinder.NativeLibraryFileName("avutil", ffmpeg.LibraryVersionMap["avutil"]),
+            DefaultLibavNativeLibraryBinder.NativeLibraryFileName("avcodec", ffmpeg.LibraryVersionMap["avcodec"]),
+            DefaultLibavNativeLibraryBinder.NativeLibraryFileName("swscale", ffmpeg.LibraryVersionMap["swscale"]),
+        };
+        Assert.Equal(expected, binder.RequiredLibraries);
+
+        var directory = Directory.CreateTempSubdirectory("luotsi-ffmpeg-");
+        try
+        {
+            Assert.Equal(expected, binder.GetMissingLibraries(directory.FullName));
+
+            foreach (var file in expected)
+            {
+                File.WriteAllBytes(Path.Join(directory.FullName, file), []);
+            }
+
+            Assert.Empty(binder.GetMissingLibraries(directory.FullName));
+
+            File.Delete(Path.Join(directory.FullName, expected[1]));
+            Assert.Equal([expected[1]], binder.GetMissingLibraries(directory.FullName));
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void DefaultLibavNativeLibraryBinder_Uses_The_FFmpeg_AutoGen_Platform_File_Names()
+    {
+        var name = DefaultLibavNativeLibraryBinder.NativeLibraryFileName("avutil", 61);
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Equal("avutil-61.dll", name);
+        }
+        else if (OperatingSystem.IsMacOS())
+        {
+            Assert.Equal("libavutil.61.dylib", name);
+        }
+        else
+        {
+            Assert.Equal("libavutil.so.61", name);
+        }
     }
 
     [Fact]
@@ -1519,19 +1642,46 @@ internal sealed class FakeViewWindowSurface : IViewWindowSurface
 internal sealed class FakeLibavNativeLibraryBinder : ILibavNativeLibraryBinder
 {
     private readonly HashSet<string?> _successfulRoots = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string?> _presentRoots = new(StringComparer.OrdinalIgnoreCase);
+    private bool _poisoned;
 
     public List<string?> AttemptedRoots { get; } = [];
 
-    public void SucceedFor(string? rootPath) => _successfulRoots.Add(rootPath);
+    /// <summary>
+    /// Models FFmpeg.AutoGen 9: once a bind fails, every later bind in the process throws
+    /// <see cref="NotSupportedException"/>, whatever root it is given.
+    /// </summary>
+    public bool PoisonAfterFirstFailure { get; init; }
+
+    public IReadOnlyList<string> RequiredLibraries { get; } = ["avutil-61.dll", "avcodec-63.dll", "swscale-10.dll"];
+
+    /// <summary>The root holds the libraries and binds.</summary>
+    public void SucceedFor(string? rootPath)
+    {
+        _successfulRoots.Add(rootPath);
+        _presentRoots.Add(rootPath);
+    }
+
+    /// <summary>The root holds the library files, but binding them fails.</summary>
+    public void PresentButBrokenFor(string rootPath) => _presentRoots.Add(rootPath);
+
+    public IReadOnlyList<string> GetMissingLibraries(string rootPath) =>
+        _presentRoots.Contains(rootPath) ? [] : RequiredLibraries;
 
     public void Bind(string? rootPath)
     {
         AttemptedRoots.Add(rootPath);
+        if (_poisoned)
+        {
+            throw new NotSupportedException("Specified method is not supported.");
+        }
+
         if (_successfulRoots.Contains(rootPath))
         {
             return;
         }
 
+        _poisoned = PoisonAfterFirstFailure;
         throw new DllNotFoundException($"Missing native libraries for '{rootPath ?? "<process-path>"}'.");
     }
 }

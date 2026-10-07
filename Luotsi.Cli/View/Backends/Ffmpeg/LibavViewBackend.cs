@@ -11,6 +11,18 @@ namespace Luotsi.Cli.View.Backends.Ffmpeg;
 public interface ILibavNativeLibraryBinder
 {
     /// <summary>
+    /// File names of the native libraries <see cref="Bind"/> needs, for this host's platform
+    /// and the FFmpeg ABI the bindings were generated for (for example <c>avutil-61.dll</c>).
+    /// </summary>
+    IReadOnlyList<string> RequiredLibraries { get; }
+
+    /// <summary>
+    /// Returns the entries of <see cref="RequiredLibraries"/> that are not present in
+    /// <paramref name="rootPath"/>; empty when the directory has them all.
+    /// </summary>
+    IReadOnlyList<string> GetMissingLibraries(string rootPath);
+
+    /// <summary>
     /// Binds FFmpeg native libraries from the provided root path.
     /// </summary>
     /// <param name="rootPath">Directory containing FFmpeg native libraries, or <see langword="null"/> to use the process path.</param>
@@ -22,6 +34,19 @@ public interface ILibavNativeLibraryBinder
 /// </summary>
 public sealed class DefaultLibavNativeLibraryBinder : ILibavNativeLibraryBinder
 {
+    // The libraries Bind touches. Their versions come from the bindings themselves, so
+    // a directory holding another FFmpeg major (for example a stale FFmpeg 8 stage)
+    // reads as missing instead of being bound.
+    private static readonly string[] BoundLibraries = ["avutil", "avcodec", "swscale"];
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> RequiredLibraries { get; } =
+        BoundLibraries.Select(static name => NativeLibraryFileName(name, ffmpeg.LibraryVersionMap[name])).ToArray();
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> GetMissingLibraries(string rootPath) =>
+        RequiredLibraries.Where(file => !File.Exists(Path.Join(rootPath, file))).ToArray();
+
     /// <inheritdoc />
     public void Bind(string? rootPath)
     {
@@ -30,13 +55,38 @@ public sealed class DefaultLibavNativeLibraryBinder : ILibavNativeLibraryBinder
         _ = ffmpeg.avcodec_version();
         _ = ffmpeg.swscale_version();
     }
+
+    /// <summary>
+    /// The file name FFmpeg.AutoGen's platform resolver loads for a library and major version.
+    /// </summary>
+    internal static string NativeLibraryFileName(string name, int version)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return $"{name}-{version}.dll";
+        }
+
+        return OperatingSystem.IsMacOS()
+            ? $"lib{name}.{version}.dylib"
+            : $"lib{name}.so.{version}";
+    }
 }
 
 /// <summary>
 /// Resolves and probes libav native libraries for the current host.
 /// </summary>
+/// <remarks>
+/// FFmpeg.AutoGen resolves each function once: a failed lookup permanently installs a stub
+/// that throws <see cref="NotSupportedException"/>, and changing <c>ffmpeg.RootPath</c>
+/// afterwards does not reset it. So a failed bind cannot be followed by a successful one in
+/// the same process. The loader therefore binds only a candidate that holds every required
+/// library file, and stops at the first bind failure instead of trying more candidates.
+/// </remarks>
 public sealed class LibavNativeLibraryLoader(IEnvironmentVariables environment, ILibavNativeLibraryBinder? binder = null)
 {
+    private const string LoadFailurePrefix =
+        "Unable to load FFmpeg native libraries. Set LUOTSI_FFMPEG_ROOT to a directory containing the host-native FFmpeg shared libraries or place them under ffmpeg/bin next to the repo or published app";
+
     private readonly ILibavNativeLibraryBinder _binder = binder ?? new DefaultLibavNativeLibraryBinder();
     private readonly ViewHostPathResolver _pathResolver = new(environment ?? throw new ArgumentNullException(nameof(environment)));
     private bool _loaded;
@@ -53,10 +103,23 @@ public sealed class LibavNativeLibraryLoader(IEnvironmentVariables environment, 
             return _loadedRootPath ?? string.Empty;
         }
 
-        Exception? lastError = null;
-        var candidates = _pathResolver.GetFfmpegLibraryRootCandidates().ToArray();
-        foreach (var candidate in candidates)
+        var required = string.Join(", ", _binder.RequiredLibraries);
+        var probed = new List<string>();
+        foreach (var candidate in _pathResolver.GetFfmpegLibraryRootCandidates())
         {
+            if (candidate is not null)
+            {
+                var missing = _binder.GetMissingLibraries(candidate);
+                if (missing.Count > 0)
+                {
+                    // Never bind a directory that cannot succeed: the failure would poison
+                    // the bindings for every later candidate.
+                    probed.Add($"{candidate} (missing {string.Join(", ", missing)})");
+                    continue;
+                }
+            }
+
+            var label = candidate ?? "<process-path>";
             try
             {
                 _binder.Bind(candidate);
@@ -64,17 +127,25 @@ public sealed class LibavNativeLibraryLoader(IEnvironmentVariables environment, 
                 _loadedRootPath = candidate;
                 return candidate ?? string.Empty;
             }
-            catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException or NotSupportedException)
+            catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException or NotSupportedException or EntryPointNotFoundException)
             {
-                lastError = ex;
+                // The bindings are now poisoned for this process; another candidate cannot
+                // succeed, so report this one's real cause instead of trying more.
+                var cause = $"{ex.GetType().Name}: {ex.Message.TrimEnd('.')}";
+                probed.Add($"{label} (bind failed: {cause})");
+                // The process path is the last resort, reached only when no probed directory
+                // held the files; lead with that rather than with the loader's bare error.
+                var summary = candidate is null
+                    ? $"No probed directory contains {required}, and the system loader could not provide them ({cause})"
+                    : $"Binding failed for {label}: {cause}";
+                throw new InvalidOperationException(
+                    $"{LoadFailurePrefix}. Required: {required}. {summary}. Probed: {string.Join("; ", probed)}.",
+                    ex);
             }
         }
 
-        var renderedCandidates = string.Join(", ",
-            candidates.Select(static candidate => string.IsNullOrWhiteSpace(candidate) ? "<process-path>" : candidate));
         throw new InvalidOperationException(
-            $"Unable to load FFmpeg native libraries. Set LUOTSI_FFMPEG_ROOT to a directory containing the host-native FFmpeg shared libraries or place them under ffmpeg/bin next to the repo or published app. Probed: {renderedCandidates}.",
-            lastError);
+            $"{LoadFailurePrefix}. Required: {required}. Probed: {string.Join("; ", probed)}.");
     }
 }
 
