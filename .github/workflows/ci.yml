@@ -125,7 +125,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: test-results
           path: artifacts/test-results
@@ -133,7 +133,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: coverage-report
           path: artifacts/coverage-report
@@ -141,7 +141,7 @@ jobs:
 
       - name: Upload MSBuild binlogs
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: msbuild-binlogs
           path: artifacts/binlogs
@@ -225,7 +225,7 @@ jobs:
           }
 
       - name: Upload Android helper APK
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: android-helper-apk
           path: Luotsi.ViewServer.Android/app/build/outputs/apk/release/app-release.apk
@@ -337,7 +337,7 @@ jobs:
           }
 
       - name: Upload packaged CLI
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: luotsi-cli-${{ matrix.rid }}
           path: artifacts/packages/luotsi-cli-${{ matrix.rid }}.${{ matrix.archive_ext }}
@@ -346,7 +346,7 @@ jobs:
       - name: Upload publish binlog
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: publish-binlog-${{ matrix.rid }}
           path: |
